@@ -62,6 +62,11 @@ def load_theme(path):
     return Theme(data.get("tags") or data)
 
 
+def _notes_marker_font(out_defaults):
+    """注释注码字体：output.notes_marker_font，旧键 marker_font 回退（None=Times New Roman）。"""
+    return out_defaults.get("notes_marker_font", out_defaults.get("marker_font"))
+
+
 def _annotations_source(config_path, presets):
     """annotations 配置来源（P6）：显式 --config 用其 presets；
     否则读内置 pycbeta/config.json——与其他 output.* 默认来源一致，
@@ -117,8 +122,8 @@ def render_one(w, fmt, out_dir, out_name, args, theme):
                             gaiji_fonts=getattr(args, "gaiji_fonts", None),
                             gaiji_lang=getattr(args, "gaiji_lang", "zh-Hant"),
                            vertical=getattr(args, "vertical", False),
-                           marker_font=getattr(args, "marker_font", None),
-                           font_scale=getattr(args, "font_scale", 1.0),
+                           notes_marker_font=getattr(args, "notes_marker_font",
+                               getattr(args, "marker_font", None)),
                            annotations=ann) \
               .render_work(w, out_dir, filename=out_name)
         if isinstance(res, list):
@@ -173,8 +178,8 @@ def render_one(w, fmt, out_dir, out_name, args, theme):
                                     gaiji_fonts=getattr(args, "gaiji_fonts", None),
                                     gaiji_lang=getattr(args, "gaiji_lang", "zh-Hant"),
                                     vertical=getattr(args, "vertical", False),
-                                    marker_font=getattr(args, "marker_font", None),
-                                    font_scale=getattr(args, "font_scale", 1.0),
+                                    notes_marker_font=getattr(args, "notes_marker_font",
+                                        getattr(args, "marker_font", None)),
                                     annotations=ann) \
                 .render_work(w, out_dir, filename=base + ".docx")
 
@@ -469,7 +474,7 @@ def main(argv=None):
         ap.error(f"--font-scale 必须为正数: {args.font_scale!r}")
     args.series_title = out_defaults.get("series_title") or {}
     args.footnote_separator = (cfg_docx := out_defaults.get("docx") or {}).get("footnoteSeparator")
-    args.marker_font = out_defaults.get("marker_font")  # 注释注码字体（output.marker_font，None=Times New Roman）
+    args.notes_marker_font = _notes_marker_font(out_defaults)  # 注释注码字体（旧键 marker_font 回退）
     args.gaiji_fonts = cfg_docx.get("gaijiFonts")  # 缺字字体链 {zh-Hant:[...], zh-Hans:[...]}，渲染时懒解析首个已装
     # 难字注音（P6）：config-only（无 CLI 开关），顶层 annotations；装载为 {"table","scheme"} 或 None
     from .annotate import resolve_annotations

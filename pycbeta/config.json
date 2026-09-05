@@ -126,7 +126,7 @@
     "inline_brackets": "fullwidth", // [docx|html|md] inline 注记括号形态：halfwidth="()" 对齐CBETA官方，fullwidth="（）"（默认全角）
     "footnote_per_page": true,   // [docx] true=脚注每页重新编号（默认）；false=全文连续编号
     "show_notes": true,          // [docx|pdf|html|epub|md] true=显示注释（默认）；false=全部关闭注释
-    "marker_font": "Times New Roman", // [docx] 注释注码字体（正文 [N]/文末 [N]/脚注编号上标；如 "宋体, SimSun"；字号恒为正文字号×note-ref 比例，不随标题段放大、不随 font_scale 放大）
+    "notes_marker_font": "Times New Roman", // [docx] 注释注码字体（正文 [N]/文末 [N]/脚注编号上标；如 "宋体, SimSun"；字号恒为正文字号×0.75，不随标题段放大，随 font_scale 等比放大）
     "t2s": false,               // [所有格式] true=OpenCC t2s 简体输出（正文/注释/元数据；未指定 --font-set 时自动套 default:zh-Hans 字体；校验时官方基线同步转简体后比对）
     "suppress_title_notes": false, // [docx] true=压制卷名/品名校勘注码（标题干净，默认 false 保留）
     "pdf_zoom": 1.0,               // [pdf/仅chromium] HTML→PDF 整页缩放（Playwright page.pdf scale，不重排；范围 0.1-2.0，1.0=原尺寸；与 font_scale 正交可叠加）

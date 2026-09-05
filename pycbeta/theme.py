@@ -232,10 +232,14 @@ def _hex6(color: object):
 
 
 def _scale_font_size(value: object, factor: float) -> Optional[str]:
-    """把单个 font-size 值（pt/em/%）等比缩放；非数值格式返回 None（保持原值）。"""
+    """把单个 font-size 值等比缩放：只放绝对单位 pt；em/% 是相对单位，
+    随其基准（段落字号/父元素）自动放大，不在此乘——否则与放大的基准相乘造成双重放大
+    （2026-09-06 实锤：1.5 下注码 1em×18pt=27pt，而非 18pt）。非数值格式返回 None（保持原值）。"""
     m = re.match(r"^\s*([\d.]+)\s*(pt|em|%)\s*$", value or "")
     if not m:
         return None
+    if m.group(2) != "pt":
+        return f"{float(m.group(1)):g}{m.group(2)}"  # 相对单位原样返回
     num = float(m.group(1)) * factor
     text = f"{num:.4f}".rstrip("0").rstrip(".")
     return f"{text}{m.group(2)}"
@@ -474,7 +478,8 @@ class Theme:
         return self
 
     def scale_font_sizes(self, factor: float) -> "Theme":
-        """等比缩放全部标签字号（pt/em/%），用于大字版；版心/边距不动。
+        """等比缩放全部标签字号（仅绝对单位 pt；em/% 相对单位随基准自动放大，不在此乘）。
+        用于大字版；版心/边距不动。
 
         - DOCX: tags 的 font-size 直接参与 docx_run/docx_para
         - PDF/HTML: 同步追加逐标签 font-size 覆盖规则到 raw_css

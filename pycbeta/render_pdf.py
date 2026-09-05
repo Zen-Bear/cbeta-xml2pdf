@@ -514,7 +514,6 @@ div.lg {{ display: table; margin-left: 2em; }}
 div.lg-cell {{ display: table-cell; padding: 0 0.5em; }}
 div.lg-row {{ display: table-row; }}
 .juan-break {{ break-before: page; }}
-sup.note-ref {{ font-size: 0.75em; }}
 .endnotes {{ break-before: page; }}
 .endnote {{ text-indent: 0; }}"""
         if self.footnotes and not self.vertical:

@@ -175,10 +175,10 @@ a.noteAnchor.star { color: #cc0000; }
   margin: 0.0em 0 0 0;           /* 段前/段后 */
 
 }
-/* 注码（正文上标序号 / sup.note-ref）：font-size 决定 DOCX 序号字号（9pt=适中），
-   想改字号改这里（勿删）；颜色也在此控制，去掉注释启用 */
+/* 注码（正文上标序号 / sup.note-ref）：font-size 决定 DOCX 序号字号（0.75em=9pt 适中，
+   随 font_scale 等比放大）；颜色也在此控制，去掉注释启用 */
 sup.note-ref, sup.footnote-call {
-  font-size: 1em; /* 12pt; */
+  font-size: 0.75em;
   /* color: #0066cc; */
 }
 

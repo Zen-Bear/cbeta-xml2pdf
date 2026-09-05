@@ -11,7 +11,10 @@ from pycbeta.theme import FONT_SETS, Theme, _scale_font_size, combo_latin, resol
 class TestScaleHelper(unittest.TestCase):
     def test_pt_em(self):
         self.assertEqual(_scale_font_size("12pt", 1.5), "18pt")
-        self.assertEqual(_scale_font_size("0.7em", 1.5), "1.05em")
+        # em/% 相对单位不乘（随基准自动放大，乘了会双重放大）
+        self.assertEqual(_scale_font_size("0.7em", 1.5), "0.7em")
+        self.assertEqual(_scale_font_size("0.75em", 1.5), "0.75em")
+        self.assertEqual(_scale_font_size("80%", 1.5), "80%")
         self.assertEqual(_scale_font_size("9pt", 4 / 3), "12pt")
 
     def test_non_numeric_kept(self):
@@ -24,11 +27,11 @@ class TestScaleFontSizes(unittest.TestCase):
     def test_tags_scaled(self):
         t = Theme().scale_font_sizes(1.5)
         # 注意：title 取 CSS 合并后的有效值（h1.title 30pt）；
-        # note-ref 取用户 CSS 值（现为 1em，随资源走，旧 9pt 已作废）
+        # note-ref 取用户 CSS 值（现为 0.75em，随资源走，旧 9pt 已作废）
         self.assertEqual(t.tags["p"]["font-size"], "18pt")
         self.assertEqual(t.tags["title"]["font-size"], "45pt")
         self.assertEqual(t.tags["footnote"]["font-size"], "13.5pt")
-        self.assertEqual(t.tags["note-ref"]["font-size"], "1.5em")
+        self.assertEqual(t.tags["note-ref"]["font-size"], "0.75em")
         self.assertEqual(t.tags["verse"]["font-size"], "18pt")
 
     def test_font_family_untouched(self):

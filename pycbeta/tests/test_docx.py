@@ -379,20 +379,26 @@ class TestGaijiFonts(unittest.TestCase):
 
 
 class TestMarker(unittest.TestCase):
-    """注释注码（2026-09-06）：字体 output.marker_font 可配（默认 Times New Roman）；
-    字号恒为未放大的正文字号×note-ref 比例——不随标题段放大，不随 font_scale 放大。"""
+    """注释注码（2026-09-06）：字体 output.notes_marker_font 可配（默认 Times New Roman）；
+    字号=正文字号×0.75（12pt 正文下 9pt）——不随标题段放大，随 font_scale 等比放大。"""
 
     def test_default_font(self):
         r = DocxRenderer()
-        self.assertEqual(r.marker_font, "Times New Roman")
+        self.assertEqual(r.notes_marker_font, "Times New Roman")
         self.assertIn('w:ascii="Times New Roman"', r._marker_rpr())
 
     def test_custom_font(self):
         import re
-        r = DocxRenderer(marker_font="宋体, SimSun")
+        r = DocxRenderer(notes_marker_font="宋体, SimSun")
         self.assertIn('w:ascii="宋体, SimSun"', r._marker_rpr())
         # 空白回退默认
-        self.assertEqual(DocxRenderer(marker_font="  ").marker_font, "Times New Roman")
+        self.assertEqual(DocxRenderer(notes_marker_font="  ").notes_marker_font,
+                         "Times New Roman")
+
+    def test_default_size_9pt(self):
+        import re
+        sz = re.search(r'<w:sz w:val="(\d+)"', DocxRenderer()._marker_rpr()).group(1)
+        self.assertEqual(sz, "18")  # 12pt 正文×0.75=9pt
 
     def test_size_ignores_paragraph(self):
         import re
@@ -404,15 +410,14 @@ class TestMarker(unittest.TestCase):
         sz_head = re.search(r'<w:sz w:val="(\d+)"', r._marker_rpr()).group(1)
         self.assertEqual(sz_p, sz_head)
 
-    def test_size_ignores_font_scale(self):
+    def test_size_follows_font_scale(self):
         import re
         from pycbeta.theme import Theme
-        base = re.search(r'<w:sz w:val="(\d+)"', DocxRenderer()._marker_rpr()).group(1)
         th = Theme()
         th.scale_font_sizes(1.5)
         big = re.search(r'<w:sz w:val="(\d+)"',
-                        DocxRenderer(theme=th, font_scale=1.5)._marker_rpr()).group(1)
-        self.assertEqual(base, big)  # 1.5 下注码仍是 1.0 尺寸（如 24=12pt）
+                        DocxRenderer(theme=th)._marker_rpr()).group(1)
+        self.assertEqual(big, "27")  # 9pt×1.5=13.5pt，随大字版等比放大
 
     def test_render_uses_marker_font(self):
         import zipfile
@@ -423,10 +428,24 @@ class TestMarker(unittest.TestCase):
                  body=body, notes_by_n={}, apps=[], simplified=False)
         tmp = tempfile.mkdtemp()
         self.addCleanup(__import__("shutil").rmtree, tmp, True)
-        fn = DocxRenderer(notes="endnote", marker_font="宋体").render_work(w, tmp, "mk.docx")
+        fn = DocxRenderer(notes="endnote", notes_marker_font="宋体").render_work(
+            w, tmp, "mk.docx")
         with zipfile.ZipFile(fn) as z:
             xml = z.read("word/document.xml").decode("utf-8")
         self.assertIn('w:ascii="宋体"', xml)
+
+    def test_config_key_and_legacy_fallback(self):
+        import os as _os
+        from pycbeta.cli import _notes_marker_font
+        from pycbeta.theme import load_presets
+        cfg = load_presets(_os.path.join(
+            _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
+            "config.json")).get("output", {})
+        self.assertEqual(cfg.get("notes_marker_font"), "Times New Roman")
+        self.assertEqual(_notes_marker_font({}), None)
+        self.assertEqual(_notes_marker_font({"marker_font": "旧"}), "旧")
+        self.assertEqual(
+            _notes_marker_font({"notes_marker_font": "新", "marker_font": "旧"}), "新")
 
 
 class TestDocxVertical(unittest.TestCase):
