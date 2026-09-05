@@ -35,7 +35,9 @@ _ZIP_FORMATS = {"html", "docx", "txt", "txt_notes", "odt"}
 
 DEFAULT_SOURCE = {
     "xml_dir": r"E:\dev\cbeta\test",
-    "catalog": r"E:\dev\cbeta\publish\mulu\sutra_mapping.txt",
+    # catalog 默认用仓内版（cbeta/data/sutra_mapping.txt，随包更新；publish 原件仅作上游备份）
+    "catalog": os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                            "cbeta", "data", "sutra_mapping.txt"),
     "download_dir": r"E:\dev\cbeta\test",
 }
 DEFAULT_DOWNLOADS = {

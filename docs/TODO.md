@@ -20,6 +20,7 @@
 
 - [x] **已完成** 单元测试数据路径迁移（`CBETA` 常量 → `E:\dev\cbeta\test`；`TestRenderYP0012` → `TestRenderYP0019`；`_body` 归一化剥 `<style>`/border span/style 属性/标签空白）
 - [x] **已完成** `parser.py:221` charDecl `xml:id` 命名空间缺陷修复（`{NS_XML}id`）；并调整 `_resolve_gaiji` 优先级为 **gaiji_db → charDecl → raw**（官方 html 与 gaiji_db 一致，charDecl composition 非真实字符，仅作兜底）
+- [ ] **P8 低** 官方数据更新（上游：缺字庫 https://github.com/cbeta-org/cbeta_gaiji ／ 補充字型 https://github.com/cbeta-org/cbeta-fonts，步骤见 `cbeta/data/README.md`）
 - [ ] **P3 低** 双轨校验 — XML 文本基线（异构 `lxml itertext`）作为渲染基线的辅轨
   - 背景：`IR` 自比对（两侧同走 `pycbeta/parser.py:40 P5Parser`）会掩盖 `lb/ed`、`charDecl`、`wit` 等解析缺陷
   - 方案：`html/txt/docx` 渲染基线保持主轨（`pycbeta/verify.py:248 verify_one` 现行）；新增 `verify --baseline xml` 辅轨：官方侧 `lxml.etree.itertext(official.xml)` 直抽，生成侧 `work_text(Work)` 线性化，两侧经 `normalize:18` 后 `diff_stats` 对比
