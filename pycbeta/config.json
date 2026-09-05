@@ -126,6 +126,7 @@
     "inline_brackets": "fullwidth", // [docx|html|md] inline 注记括号形态：halfwidth="()" 对齐CBETA官方，fullwidth="（）"（默认全角）
     "footnote_per_page": true,   // [docx] true=脚注每页重新编号（默认）；false=全文连续编号
     "show_notes": true,          // [docx|pdf|html|epub|md] true=显示注释（默认）；false=全部关闭注释
+    "marker_font": "Times New Roman", // [docx] 注释注码字体（正文 [N]/文末 [N]/脚注编号上标；如 "宋体, SimSun"；字号恒为正文字号×note-ref 比例，不随标题段放大、不随 font_scale 放大）
     "t2s": false,               // [所有格式] true=OpenCC t2s 简体输出（正文/注释/元数据；未指定 --font-set 时自动套 default:zh-Hans 字体；校验时官方基线同步转简体后比对）
     "suppress_title_notes": false, // [docx] true=压制卷名/品名校勘注码（标题干净，默认 false 保留）
     "pdf_zoom": 1.0,               // [pdf/仅chromium] HTML→PDF 整页缩放（Playwright page.pdf scale，不重排；范围 0.1-2.0，1.0=原尺寸；与 font_scale 正交可叠加）
@@ -195,7 +196,7 @@
     // 词形匹配发生在 t2s（简体）与 gaiji 解析之后，词表词形须与渲染文本逐字一致。
     // verify 校验默认忽略注音（html <rt>、docx w:rt 在提取时剥除，md 〔〕括注由 normalize 剥除），
     // 故开启注音不影响回归基线比对。
-    "enabled": false,                    // true=开启注音（默认 false）
+    "enabled": true,                    // true=开启注音（默认 false）
     "scheme": "pinyin",                  // "pinyin"（拼音）或 "zhuyin"（注音符号）
     "style": "field",                   // 注音位置："ruby"=汉字上方（html/epub <ruby>、docx w:ruby；仅浏览器/Word 可见，
                                          //   LibreOffice/WPS 整段丢弃注音含原文）；"inline"=汉字右侧行内括注（所有阅读器可见，默认 inline）；

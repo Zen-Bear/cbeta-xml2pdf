@@ -161,10 +161,11 @@ class DocxRenderer:
                  suppress_jhead_dup=True,
                  inline_brackets="fullwidth",
                  footnote_per_page=True, show_notes=True,
-                 suppress_title_notes=False, footnote_separator=None,
-                 series_title=None, pagination=None, latin_font: Optional[str] = None,
-                 annotations=None, gaiji_fonts=None, gaiji_lang: str = "zh-Hant",
-                 vertical: bool = False):
+                  suppress_title_notes=False, footnote_separator=None,
+                  series_title=None, pagination=None, latin_font: Optional[str] = None,
+                  annotations=None, gaiji_fonts=None, gaiji_lang: str = "zh-Hant",
+                  vertical: bool = False, marker_font: Optional[str] = None,
+                  font_scale: float = 1.0):
         self.gaiji_db = gaiji_db if gaiji_db is not None else GaijiDb()
         self.theme = theme if theme is not None else Theme()
         self.ignore_xml_style = ignore_xml_style  # 忽略 <p style> 的 margin-left 脏数据
@@ -189,6 +190,13 @@ class DocxRenderer:
         self.gaiji_fonts = gaiji_fonts or {}
         self.gaiji_lang = gaiji_lang or "zh-Hant"
         self._gaiji_font_resolved = None  # None=未解析；解析后为字体名字符串
+        self.marker_font = (marker_font or "").strip() or "Times New Roman"  # 注释注码字体（[N]/脚注编号上标，output.marker_font 可配）
+        try:
+            self.font_scale = float(font_scale or 1.0)
+        except (TypeError, ValueError):
+            self.font_scale = 1.0
+        if self.font_scale <= 0:
+            self.font_scale = 1.0
         # 难字注音（P6）：None 或 {"table", "scheme"}（CLI 已由 resolve_annotations 装载；渲染器内不做 IO）
         self._annotations = _ann_active(annotations)
         self._ann_seen = set()  # repeat first/page 已注词集合（_reset_state 起始终置零）
@@ -391,25 +399,29 @@ class DocxRenderer:
         return "".join(out)
 
     def _marker_rpr(self) -> str:
-        """注码 run 属性：字号跟随主题 note-ref 的 font-size（pt/em 均可，
-        缺省=所在段落字号）+ note-ref 颜色 + 上标。
+        """注码 run 属性：字号=未放大的正文字号×note-ref 比例（默认 12pt）+ note-ref 颜色 + 上标。
+        两不随：不随所在段落放大（序标题注码不再 31.5pt），不随 font_scale 放大
+        （大字版注码保持原尺寸，2026-09-06 用户报 1.5 下正文 27pt/序 31.5pt 巨大；
+        主题已被 scale_font_sizes 放大，pt 值与 em 比例同时除以 font_scale 还原，
+        CLI 保证 theme 与 font_scale 同源配对）。
         注：纵排注码保持横躺（WPS/LO 忽略 w:fitText，全角化又拉长版面，见 TODO 实锤链）。"""
-        base = self._tag_base_pt(self._current_tag())
+        body = self._tag_base_pt(("p",)) / self.font_scale  # 主题已被 scale，注码按 1.0 基准
         fs = (self.theme.tags.get("note-ref") or {}).get("font-size") or ""
         m = re.match(r"([\d.]+)pt", fs)
         if m:
-            sz = int(float(m.group(1)) * 2)
+            sz = int(float(m.group(1)) / self.font_scale * 2)
         else:
             m = re.match(r"([\d.]+)em", fs)
             if m:
-                sz = int(float(m.group(1)) * base * 2)
+                sz = int(float(m.group(1)) / self.font_scale * body * 2)
             else:
-                sz = int(base * 2)
+                sz = int(body * 2)
         color = _hex6((self.theme.tags.get("note-ref") or {}).get("color"))
         rpr = f'<w:color w:val="{color}"/>' if color else ""
+        font = _x(self.marker_font)
         return (f"<w:rPr><w:sz w:val=\"{sz}\"/><w:szCs w:val=\"{sz}\"/>{rpr}"
                 '<w:vertAlign w:val="superscript"/>'
-                '<w:rFonts w:ascii="Times New Roman"/></w:rPr>')
+                f'<w:rFonts w:ascii="{font}"/></w:rPr>')
 
     def _fn_ref(self, fid: int) -> str:
         return f'<w:r>{self._marker_rpr()}<w:footnoteReference w:id="{fid}"/></w:r>'

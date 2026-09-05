@@ -378,6 +378,57 @@ class TestGaijiFonts(unittest.TestCase):
         self.assertEqual(cfg["zh-Hans"], ["SimSunExtB", "CBETA Supplement"])
 
 
+class TestMarker(unittest.TestCase):
+    """注释注码（2026-09-06）：字体 output.marker_font 可配（默认 Times New Roman）；
+    字号恒为未放大的正文字号×note-ref 比例——不随标题段放大，不随 font_scale 放大。"""
+
+    def test_default_font(self):
+        r = DocxRenderer()
+        self.assertEqual(r.marker_font, "Times New Roman")
+        self.assertIn('w:ascii="Times New Roman"', r._marker_rpr())
+
+    def test_custom_font(self):
+        import re
+        r = DocxRenderer(marker_font="宋体, SimSun")
+        self.assertIn('w:ascii="宋体, SimSun"', r._marker_rpr())
+        # 空白回退默认
+        self.assertEqual(DocxRenderer(marker_font="  ").marker_font, "Times New Roman")
+
+    def test_size_ignores_paragraph(self):
+        import re
+        r = DocxRenderer()
+        r._tag_stack = ["p"]
+        r._div_stack = []
+        sz_p = re.search(r'<w:sz w:val="(\d+)"', r._marker_rpr()).group(1)
+        r._tag_stack = ["head"]  # 标题段基数大，注码不跟
+        sz_head = re.search(r'<w:sz w:val="(\d+)"', r._marker_rpr()).group(1)
+        self.assertEqual(sz_p, sz_head)
+
+    def test_size_ignores_font_scale(self):
+        import re
+        from pycbeta.theme import Theme
+        base = re.search(r'<w:sz w:val="(\d+)"', DocxRenderer()._marker_rpr()).group(1)
+        th = Theme()
+        th.scale_font_sizes(1.5)
+        big = re.search(r'<w:sz w:val="(\d+)"',
+                        DocxRenderer(theme=th, font_scale=1.5)._marker_rpr()).group(1)
+        self.assertEqual(base, big)  # 1.5 下注码仍是 1.0 尺寸（如 24=12pt）
+
+    def test_render_uses_marker_font(self):
+        import zipfile
+        from pycbeta.model import Work, Note, NoteRef
+        body = [E(tag="p", attrs={}, children=[
+            Text(text="文"), NoteRef(notes=[Note(children=[Text(text="注")])])])]
+        w = Work(id="T", source_file="", metadata={"title": "t", "author": ""},
+                 body=body, notes_by_n={}, apps=[], simplified=False)
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(__import__("shutil").rmtree, tmp, True)
+        fn = DocxRenderer(notes="endnote", marker_font="宋体").render_work(w, tmp, "mk.docx")
+        with zipfile.ZipFile(fn) as z:
+            xml = z.read("word/document.xml").decode("utf-8")
+        self.assertIn('w:ascii="宋体"', xml)
+
+
 class TestDocxVertical(unittest.TestCase):
     """纵排：vertical=True 时每节 sectPr 写 textDirection tbRl；默认无。"""
 

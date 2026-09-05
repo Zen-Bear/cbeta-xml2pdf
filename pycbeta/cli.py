@@ -116,9 +116,11 @@ def render_one(w, fmt, out_dir, out_name, args, theme):
                             series_title=args.series_title,
                             gaiji_fonts=getattr(args, "gaiji_fonts", None),
                             gaiji_lang=getattr(args, "gaiji_lang", "zh-Hant"),
-                            vertical=getattr(args, "vertical", False),
-                            annotations=ann) \
-             .render_work(w, out_dir, filename=out_name)
+                           vertical=getattr(args, "vertical", False),
+                           marker_font=getattr(args, "marker_font", None),
+                           font_scale=getattr(args, "font_scale", 1.0),
+                           annotations=ann) \
+              .render_work(w, out_dir, filename=out_name)
         if isinstance(res, list):
             print(f"{w.id}: docx({note_mode}, split) -> {len(res)} file(s)")
         else:
@@ -171,6 +173,8 @@ def render_one(w, fmt, out_dir, out_name, args, theme):
                                     gaiji_fonts=getattr(args, "gaiji_fonts", None),
                                     gaiji_lang=getattr(args, "gaiji_lang", "zh-Hant"),
                                     vertical=getattr(args, "vertical", False),
+                                    marker_font=getattr(args, "marker_font", None),
+                                    font_scale=getattr(args, "font_scale", 1.0),
                                     annotations=ann) \
                 .render_work(w, out_dir, filename=base + ".docx")
 
@@ -465,6 +469,7 @@ def main(argv=None):
         ap.error(f"--font-scale 必须为正数: {args.font_scale!r}")
     args.series_title = out_defaults.get("series_title") or {}
     args.footnote_separator = (cfg_docx := out_defaults.get("docx") or {}).get("footnoteSeparator")
+    args.marker_font = out_defaults.get("marker_font")  # 注释注码字体（output.marker_font，None=Times New Roman）
     args.gaiji_fonts = cfg_docx.get("gaijiFonts")  # 缺字字体链 {zh-Hant:[...], zh-Hans:[...]}，渲染时懒解析首个已装
     # 难字注音（P6）：config-only（无 CLI 开关），顶层 annotations；装载为 {"table","scheme"} 或 None
     from .annotate import resolve_annotations
