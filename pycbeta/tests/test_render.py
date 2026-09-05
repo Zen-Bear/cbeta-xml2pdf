@@ -1,0 +1,107 @@
+import os
+import re
+import shutil
+import sys
+import tempfile
+import unittest
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from pycbeta.parser import P5Parser
+from pycbeta.model import E
+from pycbeta.render_docx import DocxRenderer
+from pycbeta.render_html import HtmlRenderer
+from pycbeta.render_md import MdRenderer
+from pycbeta.verify import normalize
+
+CBETA = r"E:\dev\cbeta\test"
+
+
+def _body(html):
+    """剥 <style>/<script>、官方 head 边框 span、style 属性、标签间空白后比较正文
+    （官方 CSS/模板装饰差异不计，如校注说明注释、<span class="border">、lg 内联样式、缩进换行）。"""
+    html = re.sub(r"<(style|script)[^>]*>.*?</\1>", "", html, flags=re.S | re.I)
+    html = re.sub(r'<span class="border">|</span>', "", html)
+    html = re.sub(r'\sstyle="[^"]*"', "", html)
+    html = re.sub(r">\s+<", "><", html)
+    return html.split("<div id='cbeta-copyright'>")[0]
+
+
+class TestRenderX1116(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        xml = os.path.join(CBETA, "X1116 毗尼日用切要香乳記", "X60n1116.xml")
+        cls.work = P5Parser().parse(xml)
+        cls.tmp = tempfile.mkdtemp()
+        # inline 括号 halfwidth 对齐 CBETA 官方（官方 html 用半角括号）
+        cls.files = HtmlRenderer(inline_brackets="halfwidth").render_work(cls.work, cls.tmp)
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def test_files(self):
+        self.assertEqual(self.files, ["X1116_001.html", "X1116_002.html"])
+
+    def test_matches_official(self):
+        base = os.path.join(CBETA, "X1116 毗尼日用切要香乳記")
+        for f in self.files:
+            with open(os.path.join(self.tmp, f), encoding="utf-8") as fh:
+                mine = fh.read()
+            with open(os.path.join(base, f), encoding="utf-8") as fh:
+                official = fh.read()
+            mine_body = _body(mine)
+            off_body = _body(official)
+            self.assertEqual(mine_body, off_body, f"body differs from official for {f}")
+
+
+class TestRenderYP0019(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        xml = os.path.join(CBETA, "YP0019 毘尼日用切要講記", "YP0019.xml")
+        cls.work = P5Parser().parse(xml)
+        cls.tmp = tempfile.mkdtemp()
+        # inline 括号 halfwidth 对齐 CBETA 官方（官方 html 用半角括号）
+        cls.files = HtmlRenderer(inline_brackets="halfwidth").render_work(cls.work, cls.tmp)
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def test_files(self):
+        self.assertEqual(self.files, ["YP0019_001.html", "YP0019_002.html"])
+
+    def test_matches_official(self):
+        base = os.path.join(CBETA, "YP0019 毘尼日用切要講記")
+        for f in ("YP0019_001.html", "YP0019_002.html"):
+            with open(os.path.join(self.tmp, f), encoding="utf-8") as fh:
+                mine = fh.read()
+            with open(os.path.join(base, f), encoding="utf-8") as fh:
+                official = fh.read()
+            mine_body = _body(mine)
+            off_body = _body(official)
+            self.assertEqual(mine_body, off_body, f"body differs from official for {f}")
+
+
+class TestUnclear(unittest.TestCase):
+    """<unclear>（文字无法辨析）渲染为标准虚缺符号 □（U+25A1），四格式一致。"""
+
+    def test_html(self):
+        self.assertEqual(HtmlRenderer()._render_misc(E(tag="unclear")), "□")
+
+    def test_docx(self):
+        out = DocxRenderer()._render_e(E(tag="unclear"))
+        self.assertIn("□", out)
+        self.assertIn("<w:t", out)
+
+    def test_md(self):
+        self.assertEqual(MdRenderer()._render_e(E(tag="unclear")), "□")
+
+    def test_verify_normalize_unifies(self):
+        # 官方基线用 ▆，本管线用 □：归一后两侧一致
+        self.assertEqual(normalize("▆□▆"), "□□□")
+        self.assertIn("□", normalize("傾向傾向▆▆演培"))
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

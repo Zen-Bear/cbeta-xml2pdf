@@ -1,0 +1,25 @@
+# pycbeta: CBETA XML P5 -> HTML / PDF / DOCX / EPUB converter
+#
+# Core
+lxml>=6.1            # XML parsing (CBETA XML P5 -> IR)
+tinycss2>=1.5        # theme CSS parsing (Theme.from_css / default.css)
+fontTools>=4.50      # cmap coverage (font-check) + supplement cmap (annotations rare_font)
+playwright>=1.61     # Chromium headless PDF engine (horizontal + vertical)
+                     #   + `playwright install chromium` required
+
+# PDF verification / golden testing (optional, dev only)
+pymupdf>=1.28        # extract text from generated PDFs in tests
+
+# DOCX -> PDF (optional engine): LibreOffice (soffice), MS Word or WPS installed
+#   Word / WPS 走 COM，需要 pywin32：
+# pywin32>=310
+
+# Alternative PDF engine (optional): requires GTK/Pango runtime on Windows
+# weasyprint>=69
+
+# Rare-character auto annotation (optional): annotations.rare_zones/rare_font non-empty requires it;
+# missing -> auto skipped silently (manual table unaffected)
+# pypinyin>=0.50
+
+# GUI (optional): independent window + reusable panel (pycbeta.gui)
+# PySide6>=6.6

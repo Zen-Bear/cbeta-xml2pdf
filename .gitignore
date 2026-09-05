@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+
+# 产物（可再生）
+out/
+test/out*/
+[Ee]gg-info/
+
+# GUI 用户槽（本机状态，不入库；出厂 pycbeta/config.json 入库）
+config.user.json
+config.last.json
+
+# 系统
+.DS_Store
+Thumbs.db

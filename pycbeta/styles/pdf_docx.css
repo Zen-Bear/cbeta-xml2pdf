@@ -1,0 +1,218 @@
+/* pycbeta PDF/DOCX 默认主题（pdf/docx 默认加载；html/epub 用 cbeta_golden.css）
+   基于 CBETA P5 语义 type 暴露的 CSS 钩子。
+   属性均可被用户主题（--theme xxx.css）替换。 */
+
+/* ============ 基础 ============ */
+/* 字体：本文件是"繁体方案"（书名標楷體/正文新細明體/偈颂標楷體/脚注新細明體…）。
+   简体方案用 --font-set zh-Hans（宋体/楷体/黑体/仿宋），会逐标签覆盖。
+   字体栈统一在 config.json font_sets 维护，本文件只保留字号/颜色/边距等版式属性；
+   例外：body 的字体栈也在 font_sets.body（见下）。 */
+body {
+  line-height: 1.8;   /* 全局行距（1.8倍）；DOCX 由各标签 line-height 覆盖 */
+}
+/* body 字体栈（config.json font_sets.body，繁体五段回退）：
+   微軟正黑體（Win 繁体首选）→ 新細明體（Win 繁体兜底，生僻字覆盖多）
+   → Songti TC（macOS 繁体）→ Times New Roman（拉丁字母/数字）
+   → sans-serif（通用族兜底，永不加引号，保证不断字）。
+   简体栈同理：黑体 → 宋体 → Times New Roman → sans-serif。
+   DOCX 只取首个中文字体作 eastAsia，西文另走 pages.latin_font。 */
+a { text-decoration: none; }
+
+/* rend 字体由 config.json font_sets 统一提供：kaiti/heiti/fangsong/mingti（含简体）。
+   源 XML 的 rend 属性（如 <p rend="kaiti">）按 theme.py TAG_SELECTOR 映射到同名标签，
+   与块级标签正交叠加；DOCX 经 docx_run 合并进 w:rFonts，PDF 经追加规则生效。 */
+
+/* ============ 标题 ============ */
+/* 书名（<title level="m">）：全书最大字号，居中加粗，段后空 1 行。 */
+h1.title {
+  font-size: 30pt;
+  font-weight: bold;
+  text-align: center;
+  margin-bottom: 1em;        /* 书名段后 1 行 */
+}
+/* 署名行（<byline cb:type="author"> / cb:type="Translator">）：灰色小字居中，
+   段前 0.5em、段后 2em，与书名拉开距离。逗号分组共享（译者特有覆盖写在下块，顺序勿换）。 */
+p.author, p.translator {
+  font-size: 12pt;
+  text-align: center;
+  /*color: #444444;*/
+  /*margin: 0.5em 0;*/        /* 段前/段后 0.5em 段前段后不一样需要 4 值或 margin-top/margin-bottom。）*/
+  margin-top: 0.5em;
+  margin-bottom: 2em;
+}
+/* 译者署名特有覆盖（示例，默认空）：如译者改右对齐，取消下行注释即可。
+   独立标签以便分别换字体（font_sets author/translator）。 */
+/* p.translator {
+  text-align: right;
+} */
+
+/* 标题层级缩进（数据出自 head 的 data-head-level） */
+p.head[data-head-level="1"] { margin-left: 0em; font-size: 16pt; font-weight: bold; }
+p.head[data-head-level="2"] { margin-left: 1em;  font-size: 15pt; font-weight: bold; }
+p.head[data-head-level="3"] { margin-left: 2em;  font-size: 14pt; font-weight: bold; }
+p.head[data-head-level="4"] { margin-left: 3em;  font-size: 13pt; font-weight: bold; }
+p.head[data-head-level="5"] { margin-left: 4em;  font-size: 12pt; font-weight: bold; }
+p.head[data-head-level="6"] { margin-left: 5em;  font-size: 12pt; font-weight: bold; }
+/* 以下 4 处（head/juan/verse/list）的值来自 theme.py 的 DEFAULT_THEME（Python 兜底）。
+   想覆盖请【改这里的值】，不要删除整条——删除会回退到兜底。 */
+
+p.head {
+  font-size: 14pt;        /* 兜底值；想覆盖改这里（勿删） */
+  font-weight: bold;      /* 兜底值；想覆盖改这里（勿删） */
+  color: #0000a0;         /* 兜底值；想覆盖改这里（勿删） */
+  text-align: center;     /* 标题居中（含品名等 head） */
+}
+
+/* ============ 卷 / 品 ============ */
+/* 卷名（<cb:juan><cb:jhead>）：楷体 20pt 蓝色居中，上下各空 1 行；
+   智能分页（output.pagination.juan）以卷为单位换页。 */
+p.juan {
+  font-size: 20pt;
+  font-weight: bold;
+  text-align: center;
+  color: #0000ff;        /* #0000ff 兜底值；想覆盖改这里（勿删） */
+  margin-top: 1em;       /* 卷名段前 1 行 */
+  margin-bottom: 1em;       /* 卷名段前 1 行 */
+}
+/* 品名（<cb:jhead type="pin">，如“方便品第二”）：深蓝加粗居中，上下各空 2em；
+   DOCX 同时挂 outlineLvl=1（导航窗格二级目录，挂在卷之下）。 */
+p.pin {
+  font-size: 14pt;
+  font-weight: bold;
+  text-align: center;
+  color: #0000a0;        /* #0000a0 兜底值；想覆盖改这里（勿删） */
+  margin: 2em 0;         /* 品名段前/段后 1em */
+}
+
+/* ============ 段落 ============ */
+/* 正文（<p>）：12pt 两端对齐，首行缩进 2 字符，段前 0.5em、段后 0.3em。
+   注意 line-height: 1 在此表示 1 倍行距（Word 映射为 w:lineRule="auto"）。 */
+p {
+  font-size: 12pt;
+  text-indent: 2em;          /* 段前缩进（首行 2 字符） */
+  line-height: 1;            /* 行距（1倍） */
+  margin-top: 0.5em;         /* 正文段前 0.5 */
+  margin-bottom: 0.3em;      /* 段后 */
+  text-align: justify;
+}
+/* 咒语（<p type="dharani">，如陀罗尼）：继承正文字号，不加粗；
+   不居中：对齐官方 HTML（golden 无 p.dharani 规则，咒语不居中） */
+p.dharani {
+  /* 不居中：对齐官方 HTML（golden 无 p.dharani 规则，咒语不居中） */
+}
+/* 格式段（<p type="form">，如仪轨程式）：加粗、不缩进，以示与正文区别。 */
+p.form {
+  font-weight: bold;
+  text-indent: 0;
+}
+/* 预排段（<pre>）：保留源换行，不缩进（DOCX 拆成多 run + <w:br/>）。 */
+pre {
+  text-indent: 0;
+}
+
+/* ============ 偈颂 ============ */
+/* 偈颂块（<lg>）：楷体绿色，左缩进 2em；用 table 布局实现偈句对齐
+   （lg-row=行，lg-cell=格，见下）。 */
+div.lg {
+  font-size: 12pt;         /* 兜底值；想覆盖改这里（勿删） */
+  display: table;
+  color: #008040;
+  margin-left: 2em;
+}
+/* 偈颂 table 布局三件套：lg=表，lg-row=行，lg-cell=格（左右各留 0.5em）。 */
+div.lg-cell {
+  display: table-cell;
+  padding: 0 0.5em;
+}
+div.lg-row {
+  display: table-row;
+}
+/* 注记类偈行（lg type="note1/note2"，如夹注偈）：青灰色以示区别。 */
+div.lg.note1,
+div.lg.note2 {
+  color: #408080;
+}
+
+/* ============ div 类型（章节结构） ============ */
+/* <div type="..."> 语义钩子：只管外观，不管分页。div 属性优先于其内 p
+   （见 theme.py docx_para：div 标签靠前合并优先）。 */
+div.div-orig { font-weight: bold; }         /* 原文（官方 golden 同样加粗） */
+div.div-commentary { font-weight: normal; } /* 解釋 */
+div.div-xu { color: #000000; margin-top: 1em; margin-bottom: 1em; } /* 序：段前段后间距。PDF 按块生效；DOCX 对序内每个段落生效（命名样式不含 div 上下文，见 render_docx._para 内联追加） */
+/* 序内标题（<head> 在 div-xu 内，如"新譯大乘入楞伽經序"）：颜色覆盖 p.head 的蓝色；
+   font-family 换序标题字体（改这一行即可，如换宋体写 宋体, SimSun, serif）。
+   后代选择器（仅两段）：DOCX 经 theme 后代匹配生效；HTML/PDF 浏览器原生支持。 */
+div.div-xu p.head { color: #0000a0}
+/* div.div-jing 不加粗：经 = 正文主体，官方 golden 无此规则 */
+div.div-w { color: #777777; }                  /* 附文 */
+div.div-note { color: #666666; }               /* 注记类 div（灰色，与正文区分） */
+
+/* ============ 校勘注释 ============ */
+/* 双行夹注（<note place="inline"> 的双行形态）：0.8em 紫色，DOCX 渲染为双行小字。 */
+span.doube-line-note {
+  font-size: 0.8em;
+  color: #800080;
+}
+/* 单行夹注：同上，单行形态。 */
+span.interlinear-note {
+  font-size: 0.8em;
+  color: #800080;
+}
+/* 校勘注锚（正文中的 [n] 链接）：默认蓝色；按校勘类型着色——
+   .add 新增（红）、.mod 改字（橙）、.orig 原文（紫灰）、.star 星号（红）。
+   DOCX 侧注码字号/颜色另由 sup.note-ref 控制（见下）。 */
+a.noteAnchor { color: #0066cc; }
+a.noteAnchor.add { color: #cc0000; }
+a.noteAnchor.mod { color: #cc6600; }
+a.noteAnchor.orig { color: #6666cc; }
+a.noteAnchor.star { color: #cc0000; }
+/* .footnote/.endnote 映射到 footnote 标签：DOCX 翻译成脚注文字 rPr，
+   PDF 对 class="footnote"/"endnote" 元素原样生效 */
+.footnote, .endnote {
+  font-size: 9pt;
+  /*color: #333333;*/
+  line-height: 1;            /* 行距（1倍） */
+  margin: 0.0em 0 0 0;           /* 段前/段后 */
+
+}
+/* 注码（正文上标序号 / sup.note-ref）：font-size 决定 DOCX 序号字号（9pt=适中），
+   想改字号改这里（勿删）；颜色也在此控制，去掉注释启用 */
+sup.note-ref, sup.footnote-call {
+  font-size: 1em; /* 12pt; */
+  /* color: #0066cc; */
+}
+
+/* 括号夹注（--notes inline） */
+span.note-inline {
+  font-size: 0.9em;
+  color: #666666;
+}
+
+/* ============ byline（作者/译者，<byline cb:type="author"> / cb:type="Translator">） ============ */
+p.byline {
+  font-size: 12pt;
+  text-align: right;
+  color: #408080;
+  margin: 0.5em 0;        /* 作者/译者段前/段后 0.5em */
+}
+
+/* ============ 表格 / 列表 ============ */
+/* 双语对照表（<tt> 对照块）：左缩进 1em；cell 左右各留 0.5em。 */
+div.bip-table { margin-left: 1em; }
+div.bip-table-row { display: table-row; }
+div.bip-table-cell { padding: 0 0.5em; }
+/* 列表：左缩进 1em；默认无标记（list-style-type 兜底 none，DOCX 无编号；
+   PDF 想显示项目符号改 disc，勿删整条）。 */
+ul, ol { margin-left: 1em; list-style-type: none; }   /* 列表（DOCX 按 list-style-type 映射编号）。
+                                                           list-style-type 兜底值 none（DOCX 无标记）；
+                                                           PDF 想显示项目符号改 disc，勿删 */
+ul.no-marker { list-style-type: none; }   /* 无标记列表（对齐官方格式） */
+li { text-indent: 0; }                     /* 列表项不缩进（覆盖 p 的 2em 首行缩进） */
+li > p { text-indent: 0; }     /* 列表内段落不缩进（对齐官方格式） */
+
+/* ============ 行号 ============ */
+/* 行首行号（<span class="lineInfo">，如 T12n0349_p0001a01）：默认隐藏；
+   想显示改 display:inline（DOCX 侧忽略此选择器）。 */
+span.lineInfo {
+  display: none;
+}

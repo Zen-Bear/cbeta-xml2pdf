@@ -1,0 +1,218 @@
+{
+  // ============================================================
+  // pycbeta 全局配置（复制本文件修改后，用 --presets-file 指定）
+  // 支持 // 行注释；生效格式标注在每条注释尾部
+  // ============================================================
+
+  "font_sets": {
+    // 字体方案：每个组合为 {标签: [繁体字体, 简体字体]}，另有组合级 "latin" 西文字体对
+    // --font-set default 用第一项（繁体）；--font-set default:zh-Hans 用第二项（简体）
+    // python -m pycbeta.cli --list-fonts "kaiti" → KaiTi（楷体） | C:\WINDOWS\Fonts\simkai.ttf
+    "default": {
+      // latin：西文字体（DOCX docDefaults ascii/hAnsi），随组合语言切换
+      "latin": ["Calibri", "Calibri"],
+      // body/pin 由 pdf_docx.css 迁入：body 为 PDF/DOCX 文档级默认字体，pin 为品名
+      "body": ["新細明體, Songti TC, Times New Roman, sans-serif",
+               "宋体, SimSun, Times New Roman, sans-serif"],
+      "title": ["標楷體, DFKaiShu", "楷体, KaiTi"],
+      "author": ["新細明體, PMingLiU", "宋体, SimSun"],
+      "translator": ["新細明體, PMingLiU", "宋体, SimSun"],
+      "byline": ["新細明體, PMingLiU", "宋体, SimSun"],
+      "head": ["微軟正黑體, 新細明體", "黑体, SimHei"],
+      "juan": ["標楷體, DFKaiShu", "楷体, KaiTi"],
+      "pin": ["新細明體, PMingLiU", "宋体, SimSun"],
+      // 序标题（div.div-xu 内 head）：后代组合键，与 pdf_docx.css 互抄；
+      // --font-set 切换繁简时覆盖 CSS 文件值（默认不指定时走 CSS）
+      "div.div-xu p.head": ["標楷體, KaiTi, serif", "楷体, serif"],
+      "p": ["新細明體, PMingLiU", "宋体, SimSun"],
+      "verse": ["標楷體, DFKaiShu", "楷体, KaiTi"],
+      "form": ["新細明體, PMingLiU", "宋体, SimSun"],
+      "dharani": ["新細明體, PMingLiU", "宋体, SimSun"],
+      "footnote": ["新細明體, PMingLiU", "宋体, SimSun"],
+      "note-inline": ["新細明體, PMingLiU", "宋体, SimSun"],
+      "kaiti": ["標楷體, DFKaiShu", "楷体, KaiTi"],
+      "heiti": ["黑體, SimHei", "黑体, SimHei"],
+      "fangsong": ["仿宋, FangSong", "仿宋, FangSong"],
+      "mingti": ["新細明體, PMingLiU", "宋体, SimSun"],
+      "series": ["隸書, LiSu", "隶书, LiSu"]
+    }
+  },
+
+  "pages": {
+    // 页面方案：--page 选名字（只管几何：尺寸/边距/兜底字号；字体统一走 font_sets）
+    // size=[宽mm,高mm]；margins=上下左右 mm；doc_size=DOCX 文档兜底字号(pt)
+    "a4": {
+      "size": [210, 297],
+      "margins": { "top": 25.4, "right": 25.4, "bottom": 25.4, "left": 25.4 },
+      "doc_size": 11
+    },
+    "a5": {
+      "size": [148, 210],
+      "margins": { "top": 25.4, "right": 25.4, "bottom": 25.4, "left": 25.4 },
+      "doc_size": 11
+    },
+    "letter": {
+      "size": [216, 279],
+      "margins": { "top": 25.4, "right": 25.4, "bottom": 25.4, "left": 25.4 },
+      "doc_size": 11
+    },
+    "phone": {
+      "size": [100, 178],
+      "margins": { "top": 20, "right": 15, "bottom": 20, "left": 15 },
+      "doc_size": 11
+    },
+    "tablet": {
+      "size": [148, 210],
+      "margins": { "top": 20, "right": 20, "bottom": 20, "left": 20 },
+      "doc_size": 11
+    },
+    "monitor": {
+      "size": [210, 297],
+      "margins": { "top": 20, "right": 20, "bottom": 20, "left": 20 },
+      "doc_size": 11
+    },
+    "book": {
+      "size": [155, 235],
+      "margins": { "top": 20, "right": 20, "bottom": 20, "left": 20 },
+      "doc_size": 11
+    }
+  },
+
+  "engines": {
+    // 转换引擎配置（命令行 --engine / --pdf-engine 优先于此处）
+    // html2pdf：HTML -> PDF 管线
+    // chain = 引擎链（按序尝试，第一个成功者出 PDF）；--engine 强制指定单个时覆盖
+    "html2pdf": {
+      "chain": ["chromium", "cbetapdf"]
+      // chromium | prince | weasyprint | docx2pdf | 及 external 注册的外部引擎
+    },
+    // docx2pdf：DOCX -> PDF 后端链（按序尝试）
+    "docx2pdf": {
+      "chain": ["msword", "wps", "docbuilder", "libreoffice", "minipdf"]
+      // msword = MS Word(COM)、wps = WPS(COM)、libreoffice = soffice 命令行；
+      // docbuilder / minipdf 为外部引擎（见 external/paths，未安装自动跳过）
+    },
+    // 外部引擎注册表与路径（两条管线共用）
+    "external": {
+      "minipdf": {
+        "executable": "engines/minipdf.exe",
+        "arguments": "convert \"{input}\" -o \"{output}\"",
+        "timeoutSeconds": 120
+      },
+      "cbetapdf": {
+        "executable": "engines/cbetapdf.exe",
+        "arguments": "\"{input}\" -o \"{output}\"",
+        "timeoutSeconds": 300
+      }
+    },
+    "paths": {
+      "docbuilder": "C:\\Dev\\DocBuilder8.2\\docbuilder.exe",
+      "libreoffice": "C:\\Apps\\LibreOffice\\program\\soffice.com"
+    }
+  },
+
+  "output": {
+    // 输出处理规则
+    "ignore_xml_style": false,   // [docx|pdf|html|epub] true=忽略 XML 里 <p style="margin-left:…"> 脏数据，缩进统一走 CSS
+    "ignore_xml_space": false,   // [docx|pdf|html|epub] true=忽略文本首尾多余空格（含全角 \u3000，如目录行首的空格）
+    "verse_caesura": "　　",     // [docx] 偈颂 <caesura/> 分隔符（默认两个全角空格，可改）
+    "verse_strip_quotes": false, // [docx] true=去掉偈颂首尾的「『 』」引号，并忽略 lg 的 text-indent 悬挂
+    "grayscale": false,          // [docx|pdf] true=全局黑白输出，忽略所有颜色（程序与 CSS 定义的颜色一律不输出）
+    "page_border": false,        // [docx|pdf] true=每页四周加框（页面边框）
+    "bookmarks": true,           // [docx|pdf] true=按卷加目录书签（PDF 侧栏大纲；DOCX 书签+导航窗格大纲，默认用卷号/卷标题）
+    "split_juan": false,         // [docx|pdf] true=按卷输出多个文档（每卷一个文件，文件名带「_卷N」）；默认不分卷
+    "show_close_juan": false,    // [docx] true=显示结束卷标题（<cb:juan fun="close">，默认隐藏且不加书签）
+    "suppress_jhead_dup": true,  // [docx] true=仅 jhead 去重（卷头 <title> 与书名重复时去重，head 保留书名，默认 true）
+    "inline_brackets": "fullwidth", // [docx|html|md] inline 注记括号形态：halfwidth="()" 对齐CBETA官方，fullwidth="（）"（默认全角）
+    "footnote_per_page": true,   // [docx] true=脚注每页重新编号（默认）；false=全文连续编号
+    "show_notes": true,          // [docx|pdf|html|epub|md] true=显示注释（默认）；false=全部关闭注释
+    "t2s": false,               // [所有格式] true=OpenCC t2s 简体输出（正文/注释/元数据；未指定 --font-set 时自动套 default:zh-Hans 字体；校验时官方基线同步转简体后比对）
+    "suppress_title_notes": false, // [docx] true=压制卷名/品名校勘注码（标题干净，默认 false 保留）
+    "pdf_zoom": 1.0,               // [pdf/仅chromium] HTML→PDF 整页缩放（Playwright page.pdf scale，不重排；范围 0.1-2.0，1.0=原尺寸；与 font_scale 正交可叠加）
+    "font_scale": 1.0,             // [所有格式] 字号等比缩放（重排式大字，老人版推荐 1.33/1.5；与 pdf_zoom 正交；字号不影响逐字校验）
+    "docx": {                      // [docx] DOCX 特有配置
+      "footnoteSeparator": {       //   脚注分隔线
+        "thicknessPt": 0.5,        //     线粗(pt)
+        "lengthPercent": 30,       //     线长(占栏宽%)
+        "spaceTwips": 20           //     线与正文间距(twips)
+      },
+      "gaijiFonts": {              //   缺字（>0xFFFF，如 Ext G/H）字体链：按序取本机已装首个写入 w:rFonts；
+                                   //   繁体用补充字形，简体优先 SimSunExtB、缺失再补补充字形；全缺则写首项（Word 再回退）
+        "zh-Hant": ["CBETA Supplement"],
+        "zh-Hans": ["SimSunExtB", "CBETA Supplement"]
+      }
+    },
+    "pagination": {                // [docx] 智能分页（总闸 enabled + 6 项子规则全可配置）
+      "enabled": true,            //   总闸：true=启用智能分页（出厂默认开）；false=以下 6 项全部失活，保持自然排版
+      "duplex": false,             //   true=双面打印：每个分页单元置于单数页（oddPage 分节，Word 自动补空白偶页）
+      "juan": true,                //   true=卷首分页：第 2 卷起每卷换页（由 <cb:jhead> 触发）
+      "juan_first": false,         //   true=第 1 卷也换页（书名独占一页）；false=第 1 卷紧跟书名不分页（默认）
+      "mulu_level1": true,         //   true=<cb:mulu level="1"> 且有目录文字的 序/品/其他 分页；level≥2 不参与
+      "pb": false,                 //   true=按 <cb:pb> 官方刻本页边界分页（默认 false）
+      "tei": true                  //   true=尾页【經文資訊】换页
+    },
+    "series_title": {              // [docx] 经藏名（<title level="s">，如「卍新纂大日本續藏經」）仅首页左上角打印
+      "enabled": true,             //   true=打印（默认）；false=不打印
+      "font": "隸書, LiSu",        //   字体：隶体（默认）或 黑體, SimHei 等
+      "size": 9                    //   字号(pt)
+    }
+  },
+
+  "source": {
+    // 本地源与下载落盘（CLI --xml-dir/--download-dir 可覆盖）
+    "xml_dir": "E:\\dev\\cbeta\\test",        // 本地 XML 源目录（-i 佛典編號 查找；缺省由官方下载）
+    "catalog": "E:\\dev\\cbeta\\publish\\mulu\\sutra_mapping.txt",  // 編號→冊 目录（canon,vol,no,…；可空则走 glob 或 git 兜底）
+    "download_dir": "E:\\dev\\cbeta\\test"    // 下载落盘：XML→{canon}/{canon}{vol}/，基线→{canon}/{id}/
+  },
+
+  "downloads": {
+    // CBETA 官方下载 URL 模板（{} 为占位符，可按官方更新）
+    "xml": "https://raw.githubusercontent.com/cbeta-org/xml-p5/master/{canon}/{canon}{vol}/{file}",
+    "xml_repo": "https://github.com/cbeta-org/xml-p5",
+    "html": "https://cbdata.dila.edu.tw/stable/download/html/{id}.html.zip",
+    "docx": "https://cbdata.dila.edu.tw/stable/download/docx/{canon}/{id}.zip",
+    "epub": "https://cbdata.dila.edu.tw/stable/download/epub/{canon}/{id}.epub",
+    "txt": "https://cbdata.dila.edu.tw/stable/download/text/{id}.txt.zip",
+    "txt_notes": "https://cbdata.dila.edu.tw/stable/download/text-with-notes/{id}.txt.zip",
+    "odt": "https://cbdata.dila.edu.tw/stable/download/odt/{canon}/{id}.zip"
+  },
+
+  "verify": {
+    // 校验专用配置，覆盖 output 中同名选项（output 保持全角等默认，verify 用 halfwidth 等便于比对）
+    "inline_brackets": "halfwidth",      // 校验时 inline 括号 halfwidth="()"（覆盖 output 的 fullwidth）
+    "suppress_jhead_dup": false,         // 校验时 jhead 不去重（覆盖 output）
+    "show_close_juan": true,             // 校验时显示结束卷标题
+    "compareInfos": false,               // 校验时是否比较【經文資訊】段落（默认全量不比）
+    "maxDiff": 10,                       // 默认阈值
+    "diffLines": 5,                      // 默认差异行数
+    "auto_fetch": true,                  // 基线缺失默认自动从官方下载（缺键也下载；设 false 关闭；失败静默跳过）
+    "scope_juan": true                   // true=官方基线限定到 XML 实际卷数（milestone n 对应 _NNN 文件，如 TX07n0006→TX0006_001..006.html 而非整编 49 文件）
+  },
+
+  "annotations": {
+    // 难字注音（P6）：默认关闭；开启后作用于正文 Text 节点与解析后缺字（<g> 解析出的 Unicode 字参与词表/自动注音；
+    // 未解析的 PUA/图片字、校勘记/题署不注）。
+    // 词形匹配发生在 t2s（简体）与 gaiji 解析之后，词表词形须与渲染文本逐字一致。
+    // verify 校验默认忽略注音（html <rt>、docx w:rt 在提取时剥除，md 〔〕括注由 normalize 剥除），
+    // 故开启注音不影响回归基线比对。
+    "enabled": false,                    // true=开启注音（默认 false）
+    "scheme": "pinyin",                  // "pinyin"（拼音）或 "zhuyin"（注音符号）
+    "style": "field",                   // 注音位置："ruby"=汉字上方（html/epub <ruby>、docx w:ruby；仅浏览器/Word 可见，
+                                         //   LibreOffice/WPS 整段丢弃注音含原文）；"inline"=汉字右侧行内括注（所有阅读器可见，默认 inline）；
+                                         //   "field"=汉字上方 EQ 拼音指南域（docx 专用，WPS/Word 可见;html 回退 ruby，md 回退行内）
+    "brackets": ["〔", "〕"],            // 右侧注音括号（一对单字）；默认〔〕；verify 透明，自定义符号仅读音内容被剥除；
+                                         // 避免用 []（与校勘短标记剥除规则冲突），（）可用但会降低校勘括号差异敏感度
+    "rt_size": "50%",                   // 注音字号（上方 ruby 生效；行内括注为纯文本无字号）："50%"=相对所在段落字号，
+                                         // 亦可写绝对值如 "7pt"；html 写成 ruby rt CSS，docx 写 w:rt 字号 + w:hps
+    "rt_font": "",                       // 注音字体：空=继承正文字体；如 "楷体"（html 写 font-family，docx 写 w:rFonts）
+    "ruby_up": "100%",                   // EQ 域抬升量（field 模式）：默认 100% 正文字号（整字高，不与正文相交）；WPS 原生约 60%，字框高时不够可改大，如 "120%" 或 "14pt"
+    "repeat": "page",                     // 注音频率：all=每次都注（默认）；first=全文只注首次；page=每分页单元首次
+                                         //   （docx 按智能分页分节重置，html/epub 按卷文件重置；md 无分页等同 first）
+    "rare_zones": [],                    // 生僻字自动注音分区：空=关闭；如 ["G","H"]（Ext G/H），全扩展 ["A","B","C","D","E","F","G","H","I"]；
+                                         // 需 pypinyin，未收录字跳过；词表优先（full_text 除外），多音字取最常用读音（可能不准，需人工校对）
+    "full_text": false,                   // 全文注音：true=词表优先整词注音、其余逐字注音（忽略 rare_zones/repeat；专音以词表为准）
+    "rare_font": "",                     // 补充字形 cmap 注音：空=关闭；TTF/OTF 路径（如 "cbeta/fonts/CBETASupplement.ttf"，
+                                         //   相对路径先相对本 config 所在目录），覆盖字形内全部汉字（13943 字）自动注音；与 rare_from 为"或"关系
+    "file": ""                           // 外部词表 TSV 路径；空=内置 pycbeta/data/annotations.txt；相对路径先相对本 config 所在目录
+  }
+}

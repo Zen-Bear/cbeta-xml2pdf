@@ -1,0 +1,648 @@
+"""Theme: one style definition set shared across HTML / PDF / DOCX renderers.
+
+Users may write styles either as JSON ({"tags": {...}}) or as a CSS file.
+The project ships a default theme (styles/pdf_docx.css, used by PDF/DOCX;
+HTML/EPUB use styles/cbeta_golden.css instead) that is used by default;
+user CSS/JSON overrides it per tag.
+
+CSS is used directly by HTML/PDF and parsed (via tinycss2) into the same
+tag -> property map for DOCX translation.
+"""
+
+import json
+import os
+import re
+from typing import Dict, List, Optional
+
+_DEFAULT_CSS = os.path.join(os.path.dirname(__file__), "styles", "pdf_docx.css")
+
+# CSS properties we can translate to OOXML for DOCX.
+TRANSLATABLE = {
+    "font-size", "font-weight", "color", "font-family",
+    "text-align", "text-indent", "line-height", "margin", "margin-left",
+    "margin-top", "margin-bottom",
+}
+
+TAG_SELECTOR = {
+    "body": "body",
+    "title": "h1.title",
+    "author": "p.author",
+    "translator": "p.translator",
+    "byline": "p.byline",
+    "head": "p.head",
+    "juan": "p.juan",
+    "pin": "p.pin",
+    "p": "p",
+    "pre": "pre",
+    "verse": "div.lg",
+    "form": "p.form",
+    "dharani": "p.dharani",
+    "footnote": ".endnote, .fn, .footnote",
+    "note-ref": "sup.note-ref, sup.footnote-call",
+    "note-inline": "span.note-inline",
+    "doube-line-note": "span.doube-line-note",
+    "interlinear-note": "span.interlinear-note",
+    "list": "ul, ol",
+    "item": "li",
+    "kaiti": "[rend~=kaiti]",
+    "heiti": "[rend~=heiti]",
+    "fangsong": "[rend~=fangsong]",
+    "mingti": "[rend~=mingti]",
+}
+
+# reverse: css selector -> tag
+_SELECTOR_TAGS = {}
+for _tag, _sel in TAG_SELECTOR.items():
+    for _s in _sel.split(","):
+        _SELECTOR_TAGS[_s.strip()] = _tag
+# common short forms
+_SELECTOR_TAGS.update({
+    ".title": "title", ".meta": "author", ".byline": "byline",
+    ".author": "author", "p.author": "author",
+    ".translator": "translator", "p.translator": "translator",
+    ".head": "head", ".juan": "juan", ".lg": "verse",
+    "p.pin": "pin", ".pin": "pin",
+    "pre": "pre",
+    ".form": "form", ".dharani": "dharani", ".endnote": "footnote",
+    ".fn": "footnote", ".footnote": "footnote", ".note-inline": "note-inline",
+    ".doube-line-note": "doube-line-note", "span.doube-line-note": "doube-line-note",
+    ".interlinear-note": "interlinear-note", "span.interlinear-note": "interlinear-note",
+    "sup.note-ref": "note-ref", "sup.footnote-call": "note-ref", "li": "item",
+    "ul": "list", "ol": "list",
+    "[rend~=kaiti]": "kaiti", "[rend~=heiti]": "heiti",
+    "[rend~=fangsong]": "fangsong", "[rend~=mingti]": "mingti",
+    '[rend~="kaiti"]': "kaiti", '[rend~="heiti"]': "heiti",
+    '[rend~="fangsong"]': "fangsong", '[rend~="mingti"]': "mingti",
+})
+# CBETA div/@type semantic hooks (div-orig, div-xu, ...)
+_DIV_TYPES = ["orig", "commentary", "xu", "jing", "pin", "fen", "hui", "w",
+              "note", "other", "di", "mu", "jie", "she", "shi", "toc",
+              "xiang", "zhang", "廣釋", "續補", "chu", "lg"]
+for _dt in _DIV_TYPES:
+    _SELECTOR_TAGS[f"div.div-{_dt}"] = f"div-{_dt}"
+    _SELECTOR_TAGS[f".div-{_dt}"] = f"div-{_dt}"
+    # div 标签也要进 TAG_SELECTOR，否则 css()/scale_font_sizes() 重序列化时丢弃
+    # div 规则（如 --theme xxx.json 路径下 html/pdf 的 div-xu 颜色）。安全：
+    # font_sets 预设不含 div 标签，不会误注入 font-family；无 font-size 的 div 不产生字号规则。
+    TAG_SELECTOR.setdefault(f"div-{_dt}", f"div.div-{_dt}")
+
+
+def _resolve_compound_key(key: object):
+    """font_sets compound 键（如 "div.div-xu p.head"）→ (anc_tag, tgt_tag)；
+    非法（非两段/任一段不可解析）返回 None。键用选择器写法，与 CSS 文件互抄。"""
+    if not isinstance(key, str) or " " not in key:
+        return None
+    bits = key.split()
+    if len(bits) != 2:
+        return None
+    anc = _SELECTOR_TAGS.get(bits[0])
+    tgt = _SELECTOR_TAGS.get(bits[1])
+    return (anc, tgt) if anc and tgt else None
+
+DEFAULT_THEME: Dict[str, Dict[str, str]] = {
+    "title": {"font-size": "24pt", "text-align": "center", "font-weight": "bold"},
+    "author": {"font-size": "12pt", "text-align": "center"},
+    "translator": {"font-size": "12pt", "text-align": "center"},
+    "byline": {"font-size": "12pt", "text-align": "right"},
+    "head": {"font-size": "14pt", "font-weight": "bold", "color": "#0000a0"},
+    "juan": {"font-size": "16pt", "font-weight": "bold", "color": "#0000ff"},
+    "pin": {"font-size": "14pt", "font-weight": "bold", "text-align": "center"},
+    "p": {"font-size": "12pt", "text-indent": "2em", "line-height": "1.8", "text-align": "justify"},
+    "pre": {"text-indent": "0"},
+    "verse": {"font-size": "12pt"},
+    "form": {"font-weight": "bold"},
+    "dharani": {},
+    "footnote": {"font-size": "9pt"},
+    "note-ref": {"font-size": "0.7em"},
+    "note-inline": {"font-size": "0.9em"},
+    "doube-line-note": {"font-size": "0.8em"},
+    "interlinear-note": {"font-size": "0.8em"},
+    "list": {"list-style-type": "none", "margin-left": "1em"},
+    "item": {},
+    "kaiti": {},
+    "heiti": {},
+    "fangsong": {},
+    "mingti": {},
+}
+
+# 说明：颜色不再写进 DEFAULT_THEME（byline/verse/note-ref/note-inline/
+# doube-line-note/interlinear-note 的颜色由 pdf_docx.css 定义），否则 CSS
+# 无法通过注释"删除"颜色（DEFAULT_THEME 兜底仍在）。head/juan 颜色仍在此处
+# （pdf_docx.css 未定义）。
+
+# 预设（字体方案 + 页面设置）：外部 JSON 配置，见 styles/presets.json，
+# 用户可直接改或复制后用 --presets-file 指定。
+_PRESETS_PATH = os.path.join(os.path.dirname(__file__), "config.json")
+
+
+def _strip_json_comments(text: str) -> str:
+    """去掉 JSON 里的 // 行注释 和 /* */ 块注释（跳过字符串内的 // 等）。"""
+    out = []
+    i, n = 0, len(text)
+    in_str = False
+    while i < n:
+        c = text[i]
+        if in_str:
+            out.append(c)
+            if c == "\\" and i + 1 < n:
+                out.append(text[i + 1])
+                i += 2
+                continue
+            if c == '"':
+                in_str = False
+            i += 1
+            continue
+        if c == '"':
+            in_str = True
+            out.append(c)
+            i += 1
+            continue
+        if c == "/" and i + 1 < n:
+            nxt = text[i + 1]
+            if nxt == "/":
+                while i < n and text[i] != "\n":
+                    i += 1
+                continue
+            if nxt == "*":
+                i += 2
+                while i + 1 < n and not (text[i] == "*" and text[i + 1] == "/"):
+                    i += 1
+                i += 2
+                continue
+        out.append(c)
+        i += 1
+    return "".join(out)
+
+
+def load_presets(path: str = _PRESETS_PATH) -> Dict[str, dict]:
+    """Load presets JSON (支持 // 和 /* */ 注释): {"font_sets": {...}, "pages": {...}}."""
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+    return json.loads(_strip_json_comments(text))
+
+
+try:
+    _PRESETS = load_presets()
+    FONT_SETS: Dict[str, Dict[str, str]] = _PRESETS.get("font_sets") or {}
+    PAGE_PRESETS: Dict[str, Dict] = _PRESETS.get("pages") or {}
+    OUTPUT_PRESETS: Dict = _PRESETS.get("output") or {}
+    ENGINE_PRESETS: Dict = _PRESETS.get("engines") or {}
+    VERIFY_PRESETS: Dict = _PRESETS.get("verify") or {}
+except (OSError, ValueError) as _e:
+    FONT_SETS = {}
+    PAGE_PRESETS = {}
+    OUTPUT_PRESETS = {}
+    ENGINE_PRESETS = {}
+    VERIFY_PRESETS = {}
+
+# CSS 通用字体族在序列化时保持不加引号，否则会变成普通字体名。
+_UNQUOTED_FONT_FAMILIES = frozenset({
+    "serif", "sans-serif", "monospace", "cursive", "fantasy",
+    "system-ui", "ui-serif", "ui-sans-serif", "ui-monospace", "cbetarc",
+})
+
+
+def _format_font_stack(value: object) -> str:
+    if not isinstance(value, str):
+        return ""
+    parts = []
+    for raw in value.split(","):
+        name = raw.strip().strip('"').strip("'")
+        if not name:
+            continue
+        if name.lower() in _UNQUOTED_FONT_FAMILIES:
+            parts.append(name)
+        else:
+            parts.append(f'"{name}"')
+    return ", ".join(parts)
+
+
+def _hex6(color: object):
+    """CSS 颜色 → OOXML 6 位十六进制（大小写原样保留）。
+    3 位简写展开（#000→000000）；非法值返回 None（调用方跳过，不输出 w:color）。
+    背景：ST_HexColor 只要 6/8 位，旧代码 lstrip("#") 会把 #000 写成非法的 w:val="000"。"""
+    if not isinstance(color, str):
+        return None
+    s = color.strip().lstrip("#")
+    if re.match(r"^[0-9a-fA-F]{3}$", s):
+        s = "".join(c * 2 for c in s)
+    if re.match(r"^[0-9a-fA-F]{6}$", s):
+        return s
+    return None
+
+
+def _scale_font_size(value: object, factor: float) -> Optional[str]:
+    """把单个 font-size 值（pt/em/%）等比缩放；非数值格式返回 None（保持原值）。"""
+    m = re.match(r"^\s*([\d.]+)\s*(pt|em|%)\s*$", value or "")
+    if not m:
+        return None
+    num = float(m.group(1)) * factor
+    text = f"{num:.4f}".rstrip("0").rstrip(".")
+    return f"{text}{m.group(2)}"
+
+
+def _default_font_tags(font_sets: Optional[Dict[str, Dict[str, str]]] = None,
+                       lang: str = "zh-Hant") -> Dict[str, Dict[str, str]]:
+    """默认字体方案的标签字体：config.json font_sets.default 单一来源。
+
+    组合级 "latin" 键（西文字体对）不是标签，在此跳过，由 combo_latin() 单独解析。"""
+    sets = font_sets if font_sets is not None else FONT_SETS
+    preset = sets.get("default") or {}
+    idx = 0 if lang == "zh-Hant" else 1
+    out: Dict[str, Dict[str, str]] = {}
+    for tag, v in preset.items():
+        if tag == "latin":
+            continue
+        font = v[idx] if isinstance(v, (list, tuple)) and len(v) == 2 else v
+        if isinstance(font, str) and font.strip():
+            out[tag] = {"font-family": font.strip()}
+    return out
+
+
+def combo_latin(font_sets: Optional[Dict[str, Dict[str, str]]] = None,
+                combo: str = "default", lang: str = "zh-Hant") -> str:
+    """取字体组合的西文字体：font_sets[combo]["latin"] 按语言取项，缺省 "Calibri"。
+
+    优先级（调用方保证）：页面方案显式 latin_font > 本函数返回值 > "Calibri"。"""
+    sets = font_sets if font_sets is not None else FONT_SETS
+    preset = sets.get(combo) or {}
+    v = preset.get("latin")
+    idx = 0 if lang == "zh-Hant" else 1
+    font = v[idx] if isinstance(v, (list, tuple)) and len(v) == 2 else v
+    if isinstance(font, str) and font.strip():
+        return font.strip()
+    return "Calibri"
+
+
+# 内置页面尺寸（mm），presets.json 的 pages 可覆盖/扩展
+BUILTIN_PAGES: Dict[str, Dict] = {
+    "a4": {"size": [210, 297]},
+    "a5": {"size": [148, 210]},
+    "letter": {"size": [216, 279]},
+    "phone": {"size": [100, 178]},
+    "tablet": {"size": [148, 210]},
+    "monitor": {"size": [210, 297]},
+    "book": {"size": [155, 235]},
+}
+
+
+def resolve_page(name: str, page_presets: Optional[Dict] = None) -> Dict:
+    """把 --page 名字解析成页面配置。
+
+    返回 {size: [w_mm, h_mm], margins: {top,right,bottom,left} mm,
+          doc_size: 文档兜底字号(pt), latin_font: 西文字体}。
+    presets.json 的 pages 优先；否则回退内置 BUILTIN_PAGES/a4。
+    """
+    p = (page_presets or {}).get(name)
+    if not p:
+        p = dict(BUILTIN_PAGES.get(name) or BUILTIN_PAGES["a4"])
+    margins = dict(p.get("margins") or {})
+    for k in ("top", "right", "bottom", "left"):
+        margins.setdefault(k, 25.4)
+    return {
+        "size": list(p.get("size") or BUILTIN_PAGES["a4"]["size"]),
+        "margins": margins,
+        "doc_size": p.get("doc_size", 11),
+        "latin_font": p.get("latin_font", "Calibri"),
+    }
+
+# div/@type default styles (div-orig = bold, etc.)
+for _dt in ["orig", "commentary", "xu", "jing", "pin", "fen", "hui", "w",
+            "note", "other", "di", "mu", "jie", "she", "shi", "toc",
+            "xiang", "zhang", "廣釋", "續補", "chu", "lg"]:
+    DEFAULT_THEME.setdefault(f"div-{_dt}", {})
+DEFAULT_THEME["div-orig"]["font-weight"] = "bold"
+
+_ALIGN_MAP = {"center": "center", "left": "left", "right": "right", "justify": "both"}
+
+
+class Theme:
+    def __init__(self, tags: Optional[Dict[str, Dict[str, str]]] = None,
+                 raw_css: str = ""):
+        merged: Dict[str, Dict[str, str]] = {}
+        for tag, props in DEFAULT_THEME.items():
+            merged[tag] = dict(props)
+        # official default stylesheet (semantic type hooks); parsed for DOCX
+        if not raw_css and os.path.isfile(_DEFAULT_CSS):
+            try:
+                with open(_DEFAULT_CSS, encoding="utf-8") as f:
+                    raw_css = f.read()
+            except OSError:
+                raw_css = ""
+        if raw_css:
+            parsed, compounds = self._parse_css_tags(raw_css)
+            for tag, props in parsed.items():
+                merged.setdefault(tag, {}).update(props)
+        else:
+            compounds = []
+        if tags:
+            for tag, props in tags.items():
+                merged.setdefault(tag, {}).update(props)
+        self.tags = merged
+        self.compounds = compounds
+        # 字体单一来源：默认应用 font_sets.default；已明确指定的字体不覆盖。
+        # 后代组合键（如 "div.div-xu p.head"）填 compounds（CSS 已指定字体则不覆盖）。
+        default_rules = []
+        for tag, props in _default_font_tags().items():
+            comp = _resolve_compound_key(tag)
+            if comp is not None:
+                self._set_compound_font(*comp, props["font-family"], tag,
+                                        overwrite=False)
+                continue
+            target = merged.setdefault(tag, {})
+            if not target.get("font-family"):
+                target["font-family"] = props["font-family"]
+                sel = TAG_SELECTOR.get(tag)
+                formatted = _format_font_stack(props["font-family"])
+                if sel and formatted:
+                    default_rules.append(f"{sel} {{ font-family: {formatted}; }}")
+        if default_rules:
+            extra = "\n".join(default_rules)
+            raw_css = (raw_css + "\n" + extra) if raw_css else extra
+        self.raw_css = raw_css
+
+    @staticmethod
+    def _parse_css_tags(css_text: str):
+        """解析 CSS → (tags, compounds)。
+        tags: 精确选择器 → 标签属性（供 DOCX）；compounds: 两段后代 `A B` 列表
+        [(anc_tag, tgt_tag, props, selector)]（A 须在祖先栈、B 为栈顶时覆盖，CSS 后定义优先）。
+        三段及以上、属性选择器等无法解析的精确选择器忽略（仍保留在 raw CSS 文本供 HTML/PDF）。
+
+        TRANSLATABLE 之外的声明（如 display）不进 tags（仍保留在 raw 文本）。
+        """
+        import tinycss2
+        tags: Dict[str, Dict[str, str]] = {}
+        compounds = []
+        rules = tinycss2.parse_stylesheet(css_text, skip_comments=True,
+                                          skip_whitespace=True)
+        for rule in rules:
+            if rule.type != "qualified-rule":
+                continue
+            sel = tinycss2.serialize(rule.prelude).strip()
+            decls = {}
+            for d in tinycss2.parse_declaration_list(rule.content):
+                if d.type == "declaration" and d.name in TRANSLATABLE:
+                    decls[d.name] = tinycss2.serialize(d.value).strip()
+            if not decls:
+                continue
+            for part in sel.split(","):
+                part = part.strip()
+                tag = _SELECTOR_TAGS.get(part)
+                if tag:
+                    tags.setdefault(tag, {}).update(decls)
+                    continue
+                # 两段后代：祖先与目标都须可解析
+                bits = part.split()
+                if len(bits) == 2:
+                    anc = _SELECTOR_TAGS.get(bits[0])
+                    tgt = _SELECTOR_TAGS.get(bits[1])
+                    if anc and tgt:
+                        compounds.append((anc, tgt, dict(decls), part))
+        return tags, compounds
+
+    @classmethod
+    def from_css(cls, css_text: str) -> "Theme":
+        """Parse a user CSS file into a Theme (CSS kept for HTML/PDF, tags for DOCX)."""
+        return cls(raw_css=css_text)  # __init__ 内解析 tags + compounds（与旧版合并结果一致）
+
+    def css(self) -> str:
+        out = []
+        for tag, props in self.tags.items():
+            sel = TAG_SELECTOR.get(tag)
+            if not sel or not props:
+                continue
+            rule = "; ".join(f"{k}: {v}" for k, v in props.items() if v)
+            out.append(f"{sel} {{ {rule} }}")
+        for _anc, _tgt, cprops, selector in self.compounds:
+            rule = "; ".join(f"{k}: {v}" for k, v in cprops.items() if v)
+            if rule:
+                out.append(f"{selector} {{ {rule} }}")
+        return "\n".join(out)
+
+    def apply_font_set(self, name: str = "default", lang: str = "zh-Hant",
+                       font_sets: Optional[Dict[str, Dict[str, str]]] = None) -> "Theme":
+        """Apply a per-tag font preset (书名/正文/偈颂/脚注…各自字体).
+
+        font_sets 结构：{组合名: {标签: [繁体字体, 简体字体]}}，
+        lang 取 zh-Hant(第一项) / zh-Hans(第二项)。
+        标签键还支持后代组合选择器（如 "div.div-xu p.head"，与 CSS 文件互抄）：
+        覆盖同名 compound 的 font-family（无则追加），非法键跳过。
+        组合级 "latin" 键（西文字体对）不参与标签覆盖，由 combo_latin() 单独解析。
+        - DOCX: 覆盖每个标签的 font-family（docx_run -> w:rFonts）
+        - PDF : 按 TAG_SELECTOR 注入逐标签 font-family 规则（追加在样式文件后）
+
+        font_sets 可传自定义配置（--presets-file 的 font_sets 段）；默认 styles/presets.json。
+        """
+        sets = font_sets if font_sets is not None else FONT_SETS
+        if name not in sets:
+            raise ValueError(f"unknown font-set: {name} (allowed: {', '.join(sets)})")
+        preset = sets[name]
+        idx = 0 if lang == "zh-Hant" else 1
+
+        def pick(v):
+            return v[idx] if isinstance(v, (list, tuple)) and len(v) == 2 else v
+
+        expanded = {tag: pick(v) for tag, v in preset.items() if tag != "latin"}
+
+        for tag, font in expanded.items():
+            comp = _resolve_compound_key(tag)
+            if comp is not None:
+                # 后代组合键：显式 --font-set 恒覆盖 CSS 文件值
+                self._set_compound_font(*comp, font, tag, overwrite=True)
+                continue
+            if " " in tag:
+                continue  # 解析失败的组合键：跳过，不写 junk 标签
+            self.tags.setdefault(tag, {})["font-family"] = font
+        rules = []
+        for tag, font in expanded.items():
+            if _resolve_compound_key(tag) is not None:
+                # 组合键本身就是选择器：向 raw_css 追加覆盖规则（HTML/PDF 用；
+                # CSS 层叠后定义优先，盖掉样式文件原值；DOCX 走 compounds）
+                formatted = _format_font_stack(font)
+                if formatted:
+                    rules.append(f"{tag} {{ font-family: {formatted}; }}")
+                continue
+            if " " in tag:
+                continue
+            sel = TAG_SELECTOR.get(tag)
+            formatted = _format_font_stack(font)
+            if sel and formatted:
+                rules.append(f"{sel} {{ font-family: {formatted}; }}")
+        if rules:
+            extra = "\n".join(rules)
+            self.raw_css = (self.raw_css + "\n" + extra) if self.raw_css else extra
+        return self
+
+    def scale_font_sizes(self, factor: float) -> "Theme":
+        """等比缩放全部标签字号（pt/em/%），用于大字版；版心/边距不动。
+
+        - DOCX: tags 的 font-size 直接参与 docx_run/docx_para
+        - PDF/HTML: 同步追加逐标签 font-size 覆盖规则到 raw_css
+        只调用一次（重复调用会复利叠加）。
+        """
+        try:
+            factor = float(factor)
+        except (TypeError, ValueError):
+            raise ValueError(f"invalid font-scale: {factor!r}")
+        if factor <= 0:
+            raise ValueError(f"invalid font-scale: {factor!r}")
+        if factor == 1.0:
+            return self
+        for props in self.tags.values():
+            scaled = _scale_font_size(props.get("font-size"), factor)
+            if scaled is not None:
+                props["font-size"] = scaled
+        for _anc, _tgt, cprops, _sel in self.compounds:
+            scaled = _scale_font_size(cprops.get("font-size"), factor)
+            if scaled is not None:
+                cprops["font-size"] = scaled
+        rules = []
+        for tag, props in self.tags.items():
+            sel = TAG_SELECTOR.get(tag)
+            if sel and props.get("font-size"):
+                rules.append(f"{sel} {{ font-size: {props['font-size']}; }}")
+        if rules:
+            extra = "\n".join(rules)
+            self.raw_css = (self.raw_css + "\n" + extra) if self.raw_css else extra
+        return self
+
+    def _set_compound_font(self, anc, tgt, font, selector, overwrite):
+        """compound 字体写入：overwrite=False 时已有 font-family 的不覆盖
+        （CSS 文件明确指定优先）；无匹配项则追加。"""
+        for c in self.compounds:
+            if c[0] == anc and c[1] == tgt:
+                if overwrite or not c[2].get("font-family"):
+                    c[2]["font-family"] = font
+                return
+        self.compounds.append((anc, tgt, {"font-family": font}, selector))
+
+    def _props(self, *tags: str) -> Dict[str, str]:
+        out: Dict[str, str] = {}
+        for t in tags:
+            out.update(self.tags.get(t) or {})
+        return self._apply_compounds(out, tags)
+
+    def _apply_compounds(self, props: Dict[str, str], tags) -> Dict[str, str]:
+        """后代选择器（仅两段 `A B`）：B==栈顶标签且 A 在祖先栈中时覆盖。
+        后定义的规则后应用（CSS 顺序优先）。tags 即调用方传入的完整标签栈。"""
+        if not self.compounds or not tags:
+            return props
+        target = tags[-1]
+        ancestors = set(tags[:-1])
+        for anc, tgt, cprops, _sel in self.compounds:
+            if tgt == target and anc in ancestors:
+                props.update(cprops)
+        return props
+
+    def docx_run(self, *tags: str, base_pt: Optional[float] = None) -> str:
+        """Inner run-level properties (no <w:rPr> wrapper), merging across tags.
+
+        base_pt: 所在段落字号，用于把 em 字号换算成 pt（1em == base_pt）。
+        """
+        props = self._props(*tags)
+        out = []
+        sz = props.get("font-size")
+        pt = None
+        m = re.match(r"([\d.]+)pt", sz or "")
+        if m:
+            pt = float(m.group(1))
+        else:
+            m = re.match(r"([\d.]+)em", sz or "")
+            if m:
+                pt = float(m.group(1)) * (base_pt if base_pt is not None else 12.0)
+        if pt is not None:
+            half = int(pt * 2)
+            out.append(f'<w:sz w:val="{half}"/><w:szCs w:val="{half}"/>')
+        if props.get("font-weight") == "bold":
+            out.append("<w:b/>")
+        color = _hex6(props.get("color"))
+        if color:
+            out.append(f'<w:color w:val="{color}"/>')
+        font = props.get("font-family")
+        if font:
+            names = [n.strip().strip('"').strip("'") for n in font.split(",")]
+            names = [n for n in names if n]
+            if names:
+                out.append(f'<w:rFonts w:ascii="{names[0]}" w:eastAsia="{names[0]}" '
+                           f'w:hAnsi="{names[0]}"/>')
+        return "".join(out)
+
+    def _em_to_twips(self, em: float, font_pt: float) -> int:
+        # 1em == font-size; 1pt == 20 twips
+        return int(em * font_pt * 20)
+
+    @staticmethod
+    def _parse_margin(value: str) -> Dict[str, float]:
+        """Parse CSS margin shorthand (1-4 em values) into {top,right,bottom,left}."""
+        vals = value.split()
+        out = {}
+
+        def em(s):
+            m = re.match(r"([\d.]+)em", s)
+            return float(m.group(1)) if m else 0.0
+
+        if not vals:
+            return out
+        if len(vals) == 1:
+            out.update(top=em(vals[0]), bottom=em(vals[0]), left=em(vals[0]))
+        elif len(vals) == 2:
+            out.update(top=em(vals[0]), bottom=em(vals[0]), left=em(vals[1]))
+        elif len(vals) == 3:
+            out.update(top=em(vals[0]), left=em(vals[1]), bottom=em(vals[2]))
+        else:
+            out.update(top=em(vals[0]), bottom=em(vals[2]), left=em(vals[3]))
+        return out
+
+    def docx_para(self, *tags: str, indent_em: float = 0) -> str:
+        """Paragraph properties (w:pPr inner), in OOXML schema order:
+        spacing -> ind -> jc. Returns ''.join when a key missing.
+        合并时 div 标签（靠前）的段落属性优先于 p（靠后），
+        使 div.div-xu 的 margin-top 等能覆盖到其内段落。后代选择器最后覆盖。"""
+        props: Dict[str, str] = {}
+        for t in reversed(tags):
+            props.update(self.tags.get(t) or {})
+        props = self._apply_compounds(props, tags)
+        font_pt = 12.0
+        m = re.match(r"([\d.]+)pt", props.get("font-size") or "")
+        if m:
+            font_pt = float(m.group(1))
+        parts = {}
+        spacing_attrs = []
+        lh = props.get("line-height")
+        m = re.match(r"([\d.]+)", lh or "")
+        if m:
+            # CSS line-height -> Word "N 倍行距" (240 = 单倍)
+            spacing_attrs.append(f'w:line="{int(float(m.group(1)) * 240)}" '
+                                 f'w:lineRule="auto"')
+        mgn = self._parse_margin(props.get("margin") or "")
+        for css_prop, key in (("margin-top", "top"), ("margin-bottom", "bottom")):
+            v = props.get(css_prop)
+            mm = re.match(r"([\d.]+)em", v or "")
+            if mm:
+                mgn[key] = float(mm.group(1))
+        if "top" in mgn:
+            spacing_attrs.append(f'w:before="{self._em_to_twips(mgn["top"], font_pt)}"')
+        if "bottom" in mgn:
+            spacing_attrs.append(f'w:after="{self._em_to_twips(mgn["bottom"], font_pt)}"')
+        if spacing_attrs:
+            parts["spacing"] = f"<w:spacing {' '.join(spacing_attrs)}/>"
+        ind_parts = []
+        ti = props.get("text-indent")
+        m = re.match(r"([\d.]+)em", ti or "")
+        if m:
+            ind_parts.append(f'w:firstLine="{self._em_to_twips(float(m.group(1)), font_pt)}"')
+        ind_left = indent_em
+        ml = props.get("margin-left")
+        m = re.match(r"([\d.]+)em", ml or "")
+        if m:
+            ind_left += float(m.group(1))
+        if "left" in mgn:
+            ind_left += mgn["left"]
+        if ind_left:
+            ind_parts.append(f'w:left="{self._em_to_twips(ind_left, font_pt)}"')
+        if ind_parts:
+            parts["ind"] = f"<w:ind {' '.join(ind_parts)}/>"
+        align = props.get("text-align")
+        if align and align in _ALIGN_MAP:
+            parts["jc"] = f'<w:jc w:val="{_ALIGN_MAP[align]}"/>'
+        return "".join(parts[k] for k in ("spacing", "ind", "jc") if k in parts)

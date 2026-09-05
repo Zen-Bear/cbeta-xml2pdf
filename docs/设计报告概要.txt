@@ -1,0 +1,363 @@
+对，这就不同了。**你现有脚本里的 IR 不应该简单理解成“又造了一套 Document Model”**。如果它的定位是：
+
+> **IR = Intermediate Representation = CBETA XML 文档的归一化语义/领域模型**
+
+那么它是有充分价值的，而且和我们前面讨论的 **HTML + CSS Presentation Model** 并不冲突。
+
+更准确的架构应该是：
+
+```text
+CBETA XML
+   │
+   ▼
+XML Parser
+   │
+   ▼
+IR
+Intermediate Representation
+【语义/领域模型】
+   │
+   ├──────────────┐
+   │              │
+   ▼              ▼
+HTML Generator   其他语义处理
+   │
+   ▼
+HTML + CSS
+【Presentation Model】
+   │
+   ├──→ HTML
+   ├──→ PDF
+   ├──→ EPUB
+   ├──→ DOCX
+   └──→ MD
+```
+
+### 关键区别
+
+**XML 和 IR 不是同一个层次。**
+
+XML 是：
+
+> **CBETA 的具体数据表示/序列化格式**
+
+而 IR 是：
+
+> **你的程序理解 CBETA XML 后得到的、与具体 XML 写法解耦的语义模型。**
+
+例如 CBETA XML 可能有很多复杂的：
+
+* `<lb>`
+* `<pb>`
+* `<juan>`
+* `<byline>`
+* `<note>`
+* `<app>`
+* `<rdg>`
+* `<lem>`
+* `<corr>`
+* `<choice>`
+* 各种 milestone
+* CBETA 特有属性
+
+IR 可以把这些归一化成：
+
+```text
+Book
+ ├─ Volume
+ │   ├─ Chapter
+ │   │   ├─ Paragraph
+ │   │   ├─ Quote
+ │   │   ├─ Note
+ │   │   └─ ...
+```
+
+或者更细：
+
+```text
+Text
+LineBreak
+PageBreak
+Footnote
+EditorialNote
+Variant
+Image
+Heading
+...
+```
+
+这样你的后续代码**不需要知道 CBETA XML 的具体标签细节**。
+
+---
+
+# 所以实际上是“三层”，而不是“两层”
+
+你现在的系统可以非常清楚地划分为：
+
+```text
+① SOURCE / SEMANTIC
+CBETA XML
+     ↓
+② IR / DOMAIN
+归一化语义模型
+     ↓
+③ PRESENTATION
+HTML + CSS
+     ↓
+④ OUTPUT
+PDF / EPUB / DOCX / MD / HTML
+```
+
+严格说是四层。
+
+```text
+┌──────────────────────────────┐
+│ CBETA XML                    │
+│ 原始/权威数据                 │
+└──────────────┬───────────────┘
+               ↓
+┌──────────────────────────────┐
+│ IR                           │
+│ Intermediate Representation  │
+│ 语义/领域模型                 │
+│ CBETA XML 的归一化表示        │
+└──────────────┬───────────────┘
+               ↓
+┌──────────────────────────────┐
+│ HTML + CSS                   │
+│ Presentation Model           │
+└──────────────┬───────────────┘
+               ↓
+      ┌────────┼────────┬────────┐
+      ↓        ↓        ↓        ↓
+     PDF      EPUB     DOCX      MD
+```
+
+这就非常合理了。
+
+---
+
+## 为什么 IR 仍然值得保留？
+
+因为你的目标不是简单的：
+
+> “把 XML 改写成 HTML。”
+
+而是：
+
+> **理解 CBETA XML 的语义，然后把这些语义投影到不同出版格式。**
+
+例如：
+
+```xml
+<app>
+    <lem>佛</lem>
+    <rdg>仏</rdg>
+</app>
+```
+
+HTML 怎么表现？
+
+可以是：
+
+```html
+<span class="variant">
+    佛
+</span>
+```
+
+也可以根据配置：
+
+```html
+<span class="variant" title="異文：仏">
+    佛
+</span>
+```
+
+甚至 PDF：
+
+```text
+佛¹
+```
+
+脚注：
+
+```text
+¹ CBETA 異本作「仏」。
+```
+
+而 EPUB 可能采用另一种表现。
+
+**IR 就是这里的“语义中枢”。**
+
+---
+
+# 最重要的是：IR 不应该负责排版
+
+这是你现在架构里应该明确划出的边界。
+
+例如 IR 应该知道：
+
+```text
+这是一个：
+Footnote
+
+这是一个：
+Heading
+
+这是一个：
+Variant
+
+这是一个：
+PageBreak
+
+这是一个：
+Quote
+```
+
+但是 IR **不应该知道**：
+
+```text
+字体 = 11pt
+页边距 = 20mm
+A5
+行距 = 1.8
+页眉放左边
+```
+
+这些全部属于：
+
+> **HTML + CSS Presentation Layer**
+
+---
+
+# 所以你现在的脚本实际上很可能已经走在正确方向上
+
+如果现有代码是：
+
+```text
+CBETA XML
+    ↓
+IR
+    ↓
+HTML
+    ↓
+PDF
+```
+
+那么你未来扩展：
+
+```text
+             ┌→ HTML
+             │
+CBETA XML → IR → PDF
+             │
+             ├→ EPUB
+             │
+             ├→ DOCX
+             │
+             └→ MD
+```
+
+就非常自然。
+
+而且以后甚至可以：
+
+```text
+IR
+ ├── HTML Renderer
+ ├── EPUB Renderer
+ ├── DOCX Renderer
+ └── Markdown Renderer
+```
+
+这里的 Renderer 处理的是**语义到目标格式的映射**。
+
+---
+
+## PDF 则可以再细分
+
+你前面讨论的：
+
+> HTML + Playwright + 自己的分页/脚注算法
+
+可以放在：
+
+```text
+IR
+ ↓
+HTML Generator
+ ↓
+HTML + CSS
+ ↓
+Pagination / Footnote processing
+ ↓
+Playwright
+ ↓
+PDF
+```
+
+注意：
+
+**分页算法属于 Presentation / PDF Backend，不属于 IR。**
+
+这是非常重要的边界。
+
+IR 只说：
+
+> “这里有一个脚注。”
+
+PDF 排版器才决定：
+
+> “这个脚注最终出现在第 37 页底部。”
+
+---
+
+# 因此，我会把你整个项目最终定义成：
+
+```text
+                 CBETA XML
+              Canonical Source
+                     │
+                     ▼
+              ┌────────────┐
+              │    IR      │
+              │ Semantic   │
+              │ Domain     │
+              │ Model      │
+              └─────┬──────┘
+                    │
+          Semantic → Presentation
+                    │
+                    ▼
+             HTML + CSS
+          Presentation Model
+                    │
+        ┌───────────┼────────────┐
+        ▼           ▼            ▼
+      HTML         PDF          EPUB
+                    │
+                Playwright
+                    │
+                    ▼
+                   PDF
+
+        HTML + CSS / DOM
+              │       │
+              ▼       ▼
+            DOCX      MD
+```
+
+### 一句话概括
+
+你现在的 **IR 没有多余**。
+
+真正多余的是我之前假设的那种：
+
+> XML → 再建立一个新的通用 Document Model → HTML
+
+而你的情况实际上是：
+
+> **CBETA XML → IR（语义归一化）→ HTML + CSS（表现模型）→ 各种 Renderer（输出格式）**
+
+这套架构在软件工程上是非常干净的，而且特别适合你现在这个**CBETA XML → PDF / EPUB / DOCX / Markdown 多格式出版系统**。
