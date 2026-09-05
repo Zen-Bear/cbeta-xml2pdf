@@ -8,7 +8,7 @@ from typing import Dict, Optional
 class GaijiDb:
     def __init__(self, data_dir: Optional[str] = None):
         if data_dir is None:
-            data_dir = os.path.join(os.path.dirname(__file__), "..", "ruby-cbeta", "lib", "data")
+            data_dir = os.path.join(os.path.dirname(__file__), "..", "cbeta", "data")
         self._db: Dict[str, dict] = {}
         for fn in ("cbeta_gaiji.json", "cbeta_sanskrit.json"):
             path = os.path.join(data_dir, fn)
