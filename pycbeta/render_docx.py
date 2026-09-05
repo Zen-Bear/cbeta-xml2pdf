@@ -213,7 +213,6 @@ class DocxRenderer:
         self._div_stack: List[str] = []
         self._list_stack: List[int] = []
         self._in_pre = False
-        self._fit_id = 0              # 纵中横 w:fitText 递增 id（同文档唯一）
 
     @contextmanager
     def _no_ann(self):
@@ -240,18 +239,6 @@ class DocxRenderer:
                 return float(m.group(1))
         return 12.0
 
-    def _fit_for_rpr(self, rpr_inner: str, text: str) -> str:
-        """纵中横元素（Word “纵横混排”同款 w:fitText）：仅纵排且短文本(≤6字)时返回元素，
-        否则 ""。val=挤入宽度(twips)=run 字号半磅×10（≈1em，正好一字宽）；
-        w:id 同文档递增。长注码保持旋转（挤进 1em 会糊成墨团，宁横勿糊）。"""
-        if not getattr(self, "vertical", False) or len(text) > 6:
-            return ""
-        m = re.search(r'<w:sz w:val="(\d+)"', rpr_inner)
-        if not m:
-            return ""
-        self._fit_id += 1
-        return f'<w:fitText w:val="{int(m.group(1)) * 10}" w:id="{self._fit_id}"/>'
-
     def _run_rpr(self, tags, props) -> str:
         """run 属性（含 <w:rPr> 包裹）：_run 与 _run_annotated 共用，保证注音 run 样式一致。"""
         tags = tags or (self._current_tag(),)
@@ -267,9 +254,6 @@ class DocxRenderer:
             # 显式字体优先：去掉主题带来的 rFonts 再追加（同一 rPr 内重复 w:rFonts 时 Word 取首个，不去会失效）
             rpr = re.sub(r"<w:rFonts[^>]*/>", "", rpr)
             rpr += f'<w:rFonts w:ascii="{fonts}" w:eastAsia="{fonts}" w:hint="eastAsia"/>'
-        if props.get("tate"):
-            # 纵排纵中横（如文末校注区序号）：短文本挤正，其余保持旋转
-            rpr += self._fit_for_rpr(rpr, props["tate"])
         if rpr:
             rpr = f"<w:rPr>{rpr}</w:rPr>"
         return rpr
@@ -406,10 +390,10 @@ class DocxRenderer:
                     f"{_x(seg)}</w:t></w:r></w:rubyBase></w:ruby>")
         return "".join(out)
 
-    def _marker_rpr(self, tate_text: str = "") -> str:
+    def _marker_rpr(self) -> str:
         """注码 run 属性：字号跟随主题 note-ref 的 font-size（pt/em 均可，
         缺省=所在段落字号）+ note-ref 颜色 + 上标。
-        tate_text 非空时纵排加纵中横（短注码站正，长注码保持旋转）。"""
+        注：纵排注码保持横躺（WPS/LO 忽略 w:fitText，全角化又拉长版面，见 TODO 实锤链）。"""
         base = self._tag_base_pt(self._current_tag())
         fs = (self.theme.tags.get("note-ref") or {}).get("font-size") or ""
         m = re.match(r"([\d.]+)pt", fs)
@@ -423,8 +407,7 @@ class DocxRenderer:
                 sz = int(base * 2)
         color = _hex6((self.theme.tags.get("note-ref") or {}).get("color"))
         rpr = f'<w:color w:val="{color}"/>' if color else ""
-        fit = self._fit_for_rpr(f"<w:sz w:val=\"{sz}\"/>", tate_text) if tate_text else ""
-        return (f"<w:rPr><w:sz w:val=\"{sz}\"/><w:szCs w:val=\"{sz}\"/>{rpr}{fit}"
+        return (f"<w:rPr><w:sz w:val=\"{sz}\"/><w:szCs w:val=\"{sz}\"/>{rpr}"
                 '<w:vertAlign w:val="superscript"/>'
                 '<w:rFonts w:ascii="Times New Roman"/></w:rPr>')
 
@@ -545,7 +528,6 @@ class DocxRenderer:
         self._body_para_count = 0
         self._pending_juan = None     # 待加书签的卷号（milestone 之后的下一个段落）
         self._bm_id = 0               # 书签递增 id
-        self._fit_id = 0              # 纵中横 id 随文档重置
 
     def _render_split(self, work: Work, out_dir: str, filename: str = "") -> List[str]:
         """按卷输出：每卷一个独立文档（书名页 + 本卷正文 + teiHeader 尾页）。"""
@@ -721,7 +703,7 @@ class DocxRenderer:
         seq = self._fn_seq
         if self.notes == "endnote":
             self._en_notes.append((seq, content))
-            return f'<w:r>{self._marker_rpr(f"[{seq}]")}<w:t>[{seq}]</w:t></w:r>'
+            return f'<w:r>{self._marker_rpr()}<w:t>[{seq}]</w:t></w:r>'
         self._fns.append(self._fn_entry(seq, content))
         return self._fn_ref(seq)
 
@@ -740,7 +722,7 @@ class DocxRenderer:
                 seq = self._fn_seq
                 if self.notes == "endnote":
                     self._en_notes.append((seq, content))
-                    return f'<w:r>{self._marker_rpr(f"[{seq}]")}<w:t>[{seq}]</w:t></w:r>'
+                    return f'<w:r>{self._marker_rpr()}<w:t>[{seq}]</w:t></w:r>'
                 self._fns.append(self._fn_entry(seq, content))
                 return self._fn_ref(seq)
         return ""
@@ -1173,7 +1155,7 @@ class DocxRenderer:
             items = []
             for seq, content in self._en_notes:
                 items.append(self._para(
-                    self._run(f"[{seq}] ", "footnote", tate=f"[{seq}]") + content,
+                    self._run(f"[{seq}] ", "footnote") + content,
                     "footnote"))
             en_section = self._para(self._run("注释", "head"), "head") + "".join(items)
         title_para = ""

@@ -407,7 +407,8 @@ class TestDocxVertical(unittest.TestCase):
 
 
 class TestVerticalMarkers(unittest.TestCase):
-    """纵排注码纵中横：短注码 w:fitText 站正（Word 纵横混排同款），横排/长文本零残留。"""
+    """纵排注码保持横躺（WPS/LO 忽略 w:fitText，全角化拉长版面，见 TODO 实锤链）。
+    本类锁定该决定：纵排文档无 fitText 残留，注码原文完整；防后人重加。"""
 
     def _work(self):
         from pycbeta.model import Work, Note, NoteRef
@@ -423,38 +424,17 @@ class TestVerticalMarkers(unittest.TestCase):
         with zipfile.ZipFile(fn) as z:
             return z.read("word/document.xml").decode("utf-8")
 
-    def test_fit_gated(self):
+    def test_no_fittext_helper_gone(self):
         r = DocxRenderer(vertical=True)
-        self.assertEqual(r._fit_for_rpr("", "[12]"), "")
-        self.assertEqual(r._fit_for_rpr("<w:sz w:val=\"24\"/>", "[1234567]"), "")
-        a = r._fit_for_rpr("<w:sz w:val=\"24\"/>", "[12]")
-        b = r._fit_for_rpr("<w:sz w:val=\"24\"/>", "[13]")
-        self.assertIn('<w:fitText w:val="240"', a)
-        self.assertNotEqual(a, b)  # id 递增
-        h = DocxRenderer(vertical=False)
-        self.assertEqual(h._fit_for_rpr("<w:sz w:val=\"24\"/>", "[12]"), "")
+        self.assertFalse(hasattr(r, "_fit_for_rpr"))
+        self.assertFalse(hasattr(r, "_fit_id"))
 
-    def test_marker_tate(self):
-        v = DocxRenderer(vertical=True)
-        self.assertIn("fitText", v._marker_rpr("[12]"))
-        self.assertNotIn("fitText", v._marker_rpr())
-        self.assertNotIn("fitText", v._marker_rpr("[1234567]"))
-        h = DocxRenderer(vertical=False)
-        self.assertNotIn("fitText", h._marker_rpr("[12]"))
-        out = v._run("[12] ", "footnote", tate="[12]")
-        self.assertIn("fitText", out)
-        out = h._run("[12] ", "footnote", tate="[12]")
-        self.assertNotIn("fitText", out)
-
-    def test_endnote_render_vertical(self):
+    def test_vertical_markers_plain(self):
         import re
         xml = self._doc(notes="endnote", vertical=True)
-        fits = re.findall(r"<w:fitText w:val=\"(\d+)\" w:id=\"(\d+)\"/>", xml)
-        self.assertTrue(len(fits) >= 2)  # 正文注码 + 文末校注区序号
-        self.assertEqual(len({i for _, i in fits}), len(fits))  # id 唯一
-        xml = self._doc(notes="endnote", vertical=False)
         self.assertNotIn("fitText", xml)
-
-
+        marks = re.findall(r"<w:t[^>]*>\[(\d+)\]", xml)
+        self.assertTrue(len(marks) >= 2)  # 正文注码 + 文末校注区序号都在
+        self.assertIn('<w:textDirection w:val="tbRl"/>', xml)  # 纵排本身不受影响
 if __name__ == "__main__":
     unittest.main(verbosity=2)
