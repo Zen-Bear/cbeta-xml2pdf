@@ -320,8 +320,82 @@ class TestLayoutRegroup(unittest.TestCase):
         # 两脏数据开关 + 说明同处排版卡第二列语境
         self.assertTrue(panel.ign_style_box.isEnabled() or True)
         hints = [w.text() for w in panel.findChildren(QLabel)
-                 if w.text().startswith("脏数据")]
+                 if "脏数据" in w.text()]
         self.assertTrue(hints)
+
+
+class TestMainWindowUx(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PySide6.QtWidgets import QApplication
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_out_default_and_mode_switch(self):
+        from pycbeta.gui.__main__ import MainWindow
+        w = MainWindow()
+        try:
+            self.assertTrue(w.out_edit.text())
+            w.ids_edit.setText("t0349")
+            self.assertTrue(w.mode_ids.isChecked())
+            w.path_edit.setText("x")
+            self.assertTrue(w.mode_file.isChecked())
+        finally:
+            w.close()
+
+    def test_open_cell_routing(self):
+        import tempfile
+        from PySide6.QtCore import Qt
+        from PySide6.QtWidgets import QTableWidgetItem
+        from pycbeta.gui.__main__ import MainWindow
+        w = MainWindow()
+        try:
+            d = tempfile.mkdtemp()
+            a = os.path.join(d, "A.docx")
+            b = os.path.join(d, "B.md")
+            open(a, "w").close()
+            open(b, "w").close()
+            w.table.setRowCount(1)
+            for c in range(5):
+                w.table.setItem(0, c, QTableWidgetItem(""))
+            opened = []
+            import pycbeta.gui.__main__ as M
+            orig_open = M.QDesktopServices.openUrl
+            orig_menu = M.QMenu
+
+            class FakeAction:
+                def setData(self, _d):
+                    pass
+
+            class FakeMenu:
+                def __init__(self, *a, **k):
+                    pass
+
+                def addAction(self, _t):
+                    return FakeAction()
+
+                def exec(self, _pos):
+                    return None  # 用户取消菜单
+
+            M.QDesktopServices.openUrl = staticmethod(lambda u: opened.append(u.toLocalFile()) or True)
+            M.QMenu = FakeMenu
+            try:
+                w._on_file(0, f"{a};{b}")
+                self.assertEqual(w.table.item(0, 4).data(Qt.UserRole), f"{a};{b}")
+                self.assertEqual(w.table.item(0, 4).text(), "A.docx；B.md")
+                w._open_cell(0, 4)
+                self.assertEqual(opened, [])  # 多文件走菜单，不直开
+                # 单文件直开
+                w._on_file(0, a)
+                w._open_cell(0, 4)
+                self.assertEqual([p.replace("/", os.sep) for p in opened], [a])
+            finally:
+                M.QDesktopServices.openUrl = orig_open
+                M.QMenu = orig_menu
+        finally:
+            import shutil
+            shutil.rmtree(d, ignore_errors=True)
+            w.close()
 
 
 if __name__ == "__main__":

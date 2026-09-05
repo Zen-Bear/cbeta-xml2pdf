@@ -11,7 +11,7 @@ import sys
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QFileDialog, QGridLayout, QHBoxLayout,
-    QLabel, QLineEdit, QMainWindow, QMessageBox, QProgressBar, QPushButton,
+    QLabel, QLineEdit, QMainWindow, QMenu, QMessageBox, QProgressBar, QPushButton,
     QRadioButton, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
@@ -20,7 +20,7 @@ from pycbeta.gui.panel import (
 )
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtCore import QUrl
-from PySide6.QtGui import QColor, QFont
+from PySide6.QtGui import QColor, QCursor, QDesktopServices, QFont
 
 
 def parse_produced_paths(log):
@@ -201,6 +201,7 @@ class MainWindow(QMainWindow):
         src.addWidget(self.mode_file, 0, 1)
         src.addWidget(self.mode_ids, 0, 2)
         self.path_edit = QLineEdit()
+        self.path_edit.textChanged.connect(lambda _t: self.mode_file.setChecked(True))
         browse = QPushButton("浏览…")
         browse.clicked.connect(self._browse)
         src.addWidget(QLabel("目录/文件"), 1, 0)
@@ -208,6 +209,7 @@ class MainWindow(QMainWindow):
         src.addWidget(browse, 1, 3)
         self.ids_edit = QLineEdit()
         self.ids_edit.setPlaceholderText("T0349, X1116, TX0006（逗号/空格分隔）")
+        self.ids_edit.textChanged.connect(lambda _t: self.mode_ids.setChecked(True))
         src.addWidget(QLabel("編號列表"), 2, 0)
         src.addWidget(self.ids_edit, 2, 1, 1, 2)
         self.auto_xml = QCheckBox("自动下载缺失 XML")
@@ -216,7 +218,7 @@ class MainWindow(QMainWindow):
         src.addWidget(self.auto_xml, 3, 1)
         src.addWidget(self.auto_base, 3, 2)
         src.addWidget(QLabel("输出"), 4, 0)
-        self.out_edit = QLineEdit()
+        self.out_edit = QLineEdit(os.path.join(os.getcwd(), "out"))
         out_browse = QPushButton("浏览…")
         out_browse.clicked.connect(self._browse_out)
         src.addWidget(self.out_edit, 4, 1, 1, 2)
@@ -339,9 +341,20 @@ class MainWindow(QMainWindow):
         item = self.table.item(row, col)
         if item is None:
             return
-        first = (item.data(Qt.UserRole) or item.text() or "").split(";")[0].strip()
-        if first and os.path.isfile(first):
-            QDesktopServices.openUrl(QUrl.fromLocalFile(first))
+        files = [p for p in (item.data(Qt.UserRole) or item.text() or "").split(";") if p.strip()]
+        if not files:
+            return
+        if len(files) == 1:
+            if os.path.isfile(files[0]):
+                QDesktopServices.openUrl(QUrl.fromLocalFile(files[0]))
+            return
+        menu = QMenu(self.table)
+        for p in files:
+            act = menu.addAction(f"{os.path.basename(p)}  （{p}）")
+            act.setData(p)
+        chosen = menu.exec(QCursor.pos())
+        if chosen is not None and os.path.isfile(chosen.data()):
+            QDesktopServices.openUrl(QUrl.fromLocalFile(chosen.data()))
 
     def _stop(self):
         if self.worker is not None:

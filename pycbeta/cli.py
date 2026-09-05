@@ -75,7 +75,8 @@ def _annotations_source(config_path, presets):
 
 
 def render_one(w, fmt, out_dir, out_name, args, theme):
-    note_mode = args.notes or ("footnote" if fmt == "docx" else "endnote")
+    # pdf 默认 footnote：docx2pdf 中间 docx 用真页底脚注（html2pdf 下 HtmlRenderer 无分页，footnote 与 endnote 同归文末，无影响）
+    note_mode = args.notes or ("footnote" if fmt in ("docx", "pdf") else "endnote")
     os.makedirs(out_dir, exist_ok=True)
     # 难字注音（P6）：main() 已由 config.annotations 装载为 {"table","scheme"} 或 None；
     # getattr 兼容第三方旧式 args（无该属性即无注音）
