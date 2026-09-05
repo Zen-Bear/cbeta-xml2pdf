@@ -21,7 +21,7 @@
 - [x] **已完成** 单元测试数据路径迁移（`CBETA` 常量 → `E:\dev\cbeta\test`；`TestRenderYP0012` → `TestRenderYP0019`；`_body` 归一化剥 `<style>`/border span/style 属性/标签空白）
 - [x] **已完成** `parser.py:221` charDecl `xml:id` 命名空间缺陷修复（`{NS_XML}id`）；并调整 `_resolve_gaiji` 优先级为 **gaiji_db → charDecl → raw**（官方 html 与 gaiji_db 一致，charDecl composition 非真实字符，仅作兜底）
 - [ ] **P8 低** 官方数据更新（上游：缺字庫 https://github.com/cbeta-org/cbeta_gaiji ／ 補充字型 https://github.com/cbeta-org/cbeta-fonts，步骤见 `cbeta/data/README.md`）
-- [x] **P7 中** 竖排 docx（2026-09-05 用户点档3）：`DocxRenderer(vertical=True)` 每节 `sectPr` 写 `<w:textDirection w:val="tbRl"/>`（上→下、右→左；schema 顺序 titlePg 后，节间/文末两路径共用 `sect_inner`）；CLI `--vertical -f docx` 透传（docx2pdf 中间件同传；pdf 管线仍强制 html2pdf）；T0672 实证 16/16 分节；单测 TestDocxVertical 2 项；全量 223 OK。局限：纵排专用 @字体未切（后续）、ruby/注音竖排观感待 Word 目检
+- [x] **P7 中** 竖排 docx（2026-09-05 用户点档3）：`DocxRenderer(vertical=True)` 每节 `sectPr` 写 `<w:textDirection w:val="tbRl"/>`（上→下、右→左；schema 顺序 titlePg 后，节间/文末两路径共用 `sect_inner`）；CLI `--vertical -f docx` 透传（docx2pdf 中间件同传；pdf 管线仍强制 html2pdf）；T0672 实证 16/16 分节；单测 TestDocxVertical 2 项；全量 223 OK。局限：纵排专用 @字体未切（后续）；纵排注码纵中横 `w:fitText`（Word 纵横混排同款，短注码≤6字挤入 1em，id 同文档递增；正文注码+文末校注区；T0672 实证 1994 处；单测 TestVerticalMarkers 3 项；全量 227 OK）（后续）、ruby/注音竖排观感待 Word 目检
 - [ ] **P3 低** 双轨校验 — XML 文本基线（异构 `lxml itertext`）作为渲染基线的辅轨
   - 背景：`IR` 自比对（两侧同走 `pycbeta/parser.py:40 P5Parser`）会掩盖 `lb/ed`、`charDecl`、`wit` 等解析缺陷
   - 方案：`html/txt/docx` 渲染基线保持主轨（`pycbeta/verify.py:248 verify_one` 现行）；新增 `verify --baseline xml` 辅轨：官方侧 `lxml.etree.itertext(official.xml)` 直抽，生成侧 `work_text(Work)` 线性化，两侧经 `normalize:18` 后 `diff_stats` 对比
