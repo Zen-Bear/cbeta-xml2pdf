@@ -18,6 +18,22 @@ from PySide6.QtWidgets import (
 from pycbeta.gui.panel import (
     XmlOptionsPanel, load_slot, slot_paths, write_temp_presets,
 )
+
+
+def _gui_date() -> str:
+    """GUI 最后更新日期：gui 目录下 .py 文件最新 mtime（标题栏用，免手工维护）。"""
+    import datetime
+    import glob
+    gui_dir = os.path.dirname(os.path.abspath(__file__))
+    latest = 0.0
+    for fn in glob.glob(os.path.join(gui_dir, "*.py")):
+        try:
+            latest = max(latest, os.path.getmtime(fn))
+        except OSError:
+            pass
+    if not latest:
+        return "未知日期"
+    return datetime.datetime.fromtimestamp(latest).strftime("%Y-%m-%d")
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtCore import QUrl
 from PySide6.QtGui import QColor, QCursor, QDesktopServices, QFont
@@ -186,20 +202,24 @@ class BatchWorker(QThread):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("CBETA XML 格式转换 v1.0")
+        self.setWindowTitle(f"CBETA XML 格式转换 v1.0（{_gui_date()}）")
         self.resize(980, 720)
         self.worker = None
         central = QWidget()
         self.setCentralWidget(central)
         layout = QVBoxLayout(central)
-        # 输入来源
+        # 输入来源（两 radio 同格左对齐相邻）
         src = QGridLayout()
         self.mode_file = QRadioButton("目录/文件")
         self.mode_ids = QRadioButton("佛典編號列表")
         self.mode_file.setChecked(True)
+        mode_row = QHBoxLayout()
+        mode_row.setSpacing(18)
+        mode_row.addWidget(self.mode_file)
+        mode_row.addWidget(self.mode_ids)
+        mode_row.addStretch(1)
         src.addWidget(QLabel("输入来源"), 0, 0)
-        src.addWidget(self.mode_file, 0, 1)
-        src.addWidget(self.mode_ids, 0, 2)
+        src.addLayout(mode_row, 0, 1, 1, 3)
         self.path_edit = QLineEdit()
         self.path_edit.textChanged.connect(lambda _t: self.mode_file.setChecked(True))
         browse = QPushButton("浏览…")
@@ -215,8 +235,12 @@ class MainWindow(QMainWindow):
         self.auto_xml = QCheckBox("自动下载缺失 XML")
         self.auto_xml.setChecked(True)
         self.auto_base = QCheckBox("同时下载官方电子书")
-        src.addWidget(self.auto_xml, 3, 1)
-        src.addWidget(self.auto_base, 3, 2)
+        dl_row = QHBoxLayout()
+        dl_row.setSpacing(18)
+        dl_row.addWidget(self.auto_xml)
+        dl_row.addWidget(self.auto_base)
+        dl_row.addStretch(1)
+        src.addLayout(dl_row, 3, 1, 1, 3)
         src.addWidget(QLabel("输出"), 4, 0)
         self.out_edit = QLineEdit(os.path.join(os.getcwd(), "out"))
         out_browse = QPushButton("浏览…")

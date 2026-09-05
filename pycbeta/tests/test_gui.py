@@ -343,6 +343,17 @@ class TestMainWindowUx(unittest.TestCase):
         finally:
             w.close()
 
+    def test_title_has_gui_date(self):
+        import re
+        from pycbeta.gui.__main__ import MainWindow, _gui_date
+        self.assertRegex(_gui_date(), r"^\d{4}-\d{2}-\d{2}$")
+        w = MainWindow()
+        try:
+            self.assertRegex(w.windowTitle(),
+                             r"^CBETA XML 格式转换 v1\.0（\d{4}-\d{2}-\d{2}）$")
+        finally:
+            w.close()
+
     def test_open_cell_routing(self):
         import tempfile
         from PySide6.QtCore import Qt
