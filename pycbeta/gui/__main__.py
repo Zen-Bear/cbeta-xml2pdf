@@ -186,7 +186,7 @@ class BatchWorker(QThread):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("xml2pdf 独立转换窗")
+        self.setWindowTitle("CBETA XML 格式转换 v1.0")
         self.resize(980, 720)
         self.worker = None
         central = QWidget()
@@ -214,15 +214,22 @@ class MainWindow(QMainWindow):
         src.addWidget(self.ids_edit, 2, 1, 1, 2)
         self.auto_xml = QCheckBox("自动下载缺失 XML")
         self.auto_xml.setChecked(True)
-        self.auto_base = QCheckBox("同时下载官方基线")
+        self.auto_base = QCheckBox("同时下载官方电子书")
         src.addWidget(self.auto_xml, 3, 1)
         src.addWidget(self.auto_base, 3, 2)
         src.addWidget(QLabel("输出"), 4, 0)
         self.out_edit = QLineEdit(os.path.join(os.getcwd(), "out"))
         out_browse = QPushButton("浏览…")
         out_browse.clicked.connect(self._browse_out)
-        src.addWidget(self.out_edit, 4, 1, 1, 2)
-        src.addWidget(out_browse, 4, 3)
+        out_open = QPushButton("打开目录")
+        out_open.clicked.connect(self._open_out)
+        src.addWidget(self.out_edit, 4, 1)
+        src.addWidget(out_browse, 4, 2)
+        src.addWidget(out_open, 4, 3)
+        src.addWidget(QLabel("数据源"), 5, 0)
+        src_btn = QPushButton("数据源…")
+        src_btn.clicked.connect(self._edit_source)
+        src.addWidget(src_btn, 5, 1)
         layout.addLayout(src)
         # 设置面板
         presets, actual = load_slot("user")
@@ -261,6 +268,17 @@ class MainWindow(QMainWindow):
         d = QFileDialog.getExistingDirectory(self, "选择输出目录")
         if d:
             self.out_edit.setText(d)
+
+    def _open_out(self):
+        d = self.out_edit.text().strip() or os.path.join(os.getcwd(), "out")
+        os.makedirs(d, exist_ok=True)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.abspath(d)))
+
+    def _edit_source(self):
+        from pycbeta.gui.panel import SourceDialog
+        dlg = SourceDialog(self)
+        if dlg.exec():
+            self.statusBar().showMessage("数据源已保存到用户配置")
 
     def _collect_jobs(self):
         jobs = []

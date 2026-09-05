@@ -8,8 +8,8 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from pycbeta.gui.panel import (
-    DOCX_SINGLES, HTML_SINGLES, XmlOptions, detect_engines, load_slot,
-    options_from_presets, reset_factory, save_current, slot_paths,
+    DOCX_SINGLES, HTML_SINGLES, XmlOptions, apply_source_edits, detect_engines,
+    load_slot, options_from_presets, reset_factory, save_current, slot_paths,
     write_temp_presets,
 )
 from pycbeta.theme import load_presets
@@ -396,6 +396,39 @@ class TestMainWindowUx(unittest.TestCase):
             import shutil
             shutil.rmtree(d, ignore_errors=True)
             w.close()
+
+
+class TestSourceDialog(unittest.TestCase):
+    def test_apply_merge(self):
+        base = {"source": {"xml_dir": "A", "download_dir": "B", "catalog": "C"},
+                "downloads": {"xml": "U1", "html": "U2"},
+                "output": {"t2s": False}}
+        out = apply_source_edits(base, {"source": {"xml_dir": "A2"},
+                                        "downloads": {"xml": "U9", "docx": "U3"}})
+        self.assertEqual(out["source"]["xml_dir"], "A2")
+        self.assertEqual(out["source"]["download_dir"], "B")
+        self.assertEqual(out["downloads"]["xml"], "U9")
+        self.assertEqual(out["downloads"]["html"], "U2")
+        self.assertEqual(out["downloads"]["docx"], "U3")
+        self.assertFalse(out["output"]["t2s"])
+        # base 未被污染
+        self.assertEqual(base["source"]["xml_dir"], "A")
+
+    def test_dialog_builds(self):
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PySide6.QtWidgets import QApplication
+        QApplication.instance() or QApplication([])
+        from pycbeta.gui.panel import SourceDialog
+        dlg = SourceDialog()
+        try:
+            self.assertTrue(dlg.path_edits["xml_dir"].text())
+            self.assertGreater(dlg.dl_table.rowCount(), 0)
+            self.assertEqual(dlg.dl_table.item(0, 0).text(), "xml")
+            flags = dlg.dl_table.item(0, 0).flags()
+            from PySide6.QtCore import Qt
+            self.assertFalse(bool(flags & Qt.ItemIsEditable))
+        finally:
+            dlg.close()
 
 
 if __name__ == "__main__":

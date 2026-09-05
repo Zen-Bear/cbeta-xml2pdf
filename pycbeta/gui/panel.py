@@ -14,11 +14,12 @@ import tempfile
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox,
     QFileDialog, QFormLayout, QGridLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit,
-    QPushButton, QSpinBox, QTabWidget, QVBoxLayout, QWidget,
+    QPushButton, QSpinBox, QTableWidget, QTableWidgetItem, QTabWidget, QVBoxLayout,
+    QWidget,
 )
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -866,6 +867,95 @@ class XmlOptionsPanel(QWidget):
         finally:
             self._emitting = False
         self._changed()
+
+
+SOURCE_LABELS = [
+    ("xml_dir", "本地 XML 目录（优先查找）"),
+    ("download_dir", "官方下载落盘目录（缺失时下载到这）"),
+    ("catalog", "佛典目录 catalog（sutra_mapping.txt）"),
+]
+DOWNLOAD_KEYS = ["xml", "xml_repo", "html", "docx", "epub", "txt", "txt_notes", "odt"]
+
+
+def apply_source_edits(base, values):
+    """纯函数：base presets + values{source:{...}, downloads:{...}} → 合并副本。
+    只覆盖所给键（空字符串视为清空，不写 None）。"""
+    data = copy.deepcopy(base)
+    for k, v in (values.get("source") or {}).items():
+        if v is not None:
+            data.setdefault("source", {})[k] = v
+    for k, v in (values.get("downloads") or {}).items():
+        if v is not None:
+            data.setdefault("downloads", {})[k] = v
+    return data
+
+
+class SourceDialog(QDialog):
+    """数据源窗口：查看/编辑输入来源目录与 CBETA 官方下载 URL 模板。
+    确定 = 合并进当前槽并保存（走三槽轮换）；取消 = 丢弃。"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("数据源（source / downloads）")
+        self.resize(760, 480)
+        layout = QVBoxLayout(self)
+        data, _actual = load_slot("user")
+        src = (data.get("source") or {})
+        form = QFormLayout()
+        self.path_edits = {}
+        for key, label in SOURCE_LABELS:
+            row = QHBoxLayout()
+            edit = QLineEdit(str(src.get(key, "")))
+            browse = QPushButton("浏览…")
+            if key == "catalog":
+                browse.clicked.connect(lambda _v, e=edit: self._browse_file(e))
+            else:
+                browse.clicked.connect(lambda _v, e=edit: self._browse_dir(e))
+            row.addWidget(edit, 1)
+            row.addWidget(browse)
+            form.addRow(f"{label}\nsource.{key}", row)
+            self.path_edits[key] = edit
+        layout.addLayout(form)
+        layout.addWidget(QLabel("官方下载 URL 模板（{canon}/{vol}/{file}/{id} 为占位符）："))
+        self.dl_table = QTableWidget(0, 2)
+        self.dl_table.setHorizontalHeaderLabels(["格式", "URL 模板"])
+        self.dl_table.horizontalHeader().setStretchLastSection(True)
+        dl = (data.get("downloads") or {})
+        keys = [k for k in DOWNLOAD_KEYS if k in dl] + \
+            [k for k in dl.keys() if k not in DOWNLOAD_KEYS]
+        self.dl_table.setRowCount(len(keys))
+        for i, k in enumerate(keys):
+            key_item = QTableWidgetItem(k)
+            key_item.setFlags(key_item.flags() & ~Qt.ItemIsEditable)  # 键列只读
+            self.dl_table.setItem(i, 0, key_item)
+            self.dl_table.setItem(i, 1, QTableWidgetItem(str(dl[k])))
+        layout.addWidget(self.dl_table, 1)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def _browse_dir(self, edit):
+        d = QFileDialog.getExistingDirectory(self, "选择目录", edit.text().strip() or "")
+        if d:
+            edit.setText(d)
+
+    def _browse_file(self, edit):
+        path, _ = QFileDialog.getOpenFileName(self, "选择 catalog 文件",
+                                              edit.text().strip() or "", "文本 (*.txt);;所有文件 (*)")
+        if path:
+            edit.setText(path)
+
+    def accept(self):
+        data, _actual = load_slot("user")
+        values = {"source": {k: e.text().strip() for k, e in self.path_edits.items()},
+                  "downloads": {}}
+        for i in range(self.dl_table.rowCount()):
+            k = self.dl_table.item(i, 0).text()
+            v = self.dl_table.item(i, 1).text() if self.dl_table.item(i, 1) else ""
+            values["downloads"][k] = v.strip()
+        save_current(apply_source_edits(data, values))
+        super().accept()
 
 
 class XmlOptionsDialog(QDialog):
