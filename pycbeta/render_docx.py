@@ -163,7 +163,8 @@ class DocxRenderer:
                  footnote_per_page=True, show_notes=True,
                  suppress_title_notes=False, footnote_separator=None,
                  series_title=None, pagination=None, latin_font: Optional[str] = None,
-                 annotations=None, gaiji_fonts=None, gaiji_lang: str = "zh-Hant"):
+                 annotations=None, gaiji_fonts=None, gaiji_lang: str = "zh-Hant",
+                 vertical: bool = False):
         self.gaiji_db = gaiji_db if gaiji_db is not None else GaijiDb()
         self.theme = theme if theme is not None else Theme()
         self.ignore_xml_style = ignore_xml_style  # 忽略 <p style> 的 margin-left 脏数据
@@ -182,6 +183,7 @@ class DocxRenderer:
         self.suppress_title_notes = suppress_title_notes  # 压制卷名/品名校勘注码（默认 false 保留）
         self.series_title = series_title or {}         # 经藏名（title level="s"）首页左上角配置 {enabled,font,size}
         self.pagination = pagination or {}             # 智能分页 {enabled,duplex,juan,juan_first,mulu_level1,pb,tei}
+        self.vertical = vertical                      # 纵排：每节 sectPr 写 textDirection tbRl（上→下、右→左）
         # 缺字字体链（P5）：{zh-Hant:[...], zh-Hans:[...]}，>0xFFFF 缺字取本机已装首个；
         # 懒解析（首个超大缺字才扫系统字体，平时零开销）；缺省 ["CBETA Supplement"]（旧行为）
         self.gaiji_fonts = gaiji_fonts or {}
@@ -1194,10 +1196,11 @@ class DocxRenderer:
             t = f'<w:type w:val="{typ}"/>' if typ else ""
             hr = '<w:headerReference w:type="first" r:id="rId4"/>' if header_xml else ""
             tp = '<w:titlePg/>' if header_xml else ""
-            # sectPr 子元素顺序：headerReference → footnotePr → type → pgSz → pgMar → pgBorders → titlePg
+            td = '<w:textDirection w:val="tbRl"/>' if self.vertical else ""
+            # sectPr 子元素顺序：headerReference → footnotePr → type → pgSz → pgMar → pgBorders → titlePg → textDirection
             return (f"{hr}{fnpr}{t}<w:pgSz w:w=\"{pw}\" w:h=\"{ph}\"/>"
                     f'<w:pgMar w:top="{m["top"]}" w:right="{m["right"]}" '
-                    f'w:bottom="{m["bottom"]}" w:left="{m["left"]}"/>{border}{tp}')
+                    f'w:bottom="{m["bottom"]}" w:left="{m["left"]}"/>{border}{tp}{td}')
 
         def sect(typ: str = "") -> str:
             # 文档末节：sectPr 作 w:body 最后孩子（唯一合法的裸位置）

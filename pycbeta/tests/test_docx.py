@@ -378,5 +378,33 @@ class TestGaijiFonts(unittest.TestCase):
         self.assertEqual(cfg["zh-Hans"], ["SimSunExtB", "CBETA Supplement"])
 
 
+class TestDocxVertical(unittest.TestCase):
+    """纵排：vertical=True 时每节 sectPr 写 textDirection tbRl；默认无。"""
+
+    def _work(self):
+        from pycbeta.model import Work
+        return Work(id="T", source_file="", metadata={"title": "t", "author": ""},
+                    body=[E(tag="p", attrs={}, children=[Text(text="hi")])],
+                    notes_by_n={}, apps=[], simplified=False)
+
+    def _doc(self, **kw):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(__import__("shutil").rmtree, tmp, True)
+        fn = DocxRenderer(**kw).render_work(self._work(), tmp, "v.docx")
+        with zipfile.ZipFile(fn) as z:
+            return z.read("word/document.xml").decode("utf-8")
+
+    def test_default_horizontal(self):
+        self.assertNotIn("textDirection", self._doc())
+
+    def test_vertical_all_sections(self):
+        import re
+        xml = self._doc(vertical=True)
+        sects = re.findall(r"<w:sectPr>.*?</w:sectPr>", xml, flags=re.S)
+        self.assertTrue(sects)
+        for s in sects:
+            self.assertIn('<w:textDirection w:val="tbRl"/>', s)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

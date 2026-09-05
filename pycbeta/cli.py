@@ -116,6 +116,7 @@ def render_one(w, fmt, out_dir, out_name, args, theme):
                             series_title=args.series_title,
                             gaiji_fonts=getattr(args, "gaiji_fonts", None),
                             gaiji_lang=getattr(args, "gaiji_lang", "zh-Hant"),
+                            vertical=getattr(args, "vertical", False),
                             annotations=ann) \
              .render_work(w, out_dir, filename=out_name)
         if isinstance(res, list):
@@ -169,6 +170,7 @@ def render_one(w, fmt, out_dir, out_name, args, theme):
                                     series_title=args.series_title,
                                     gaiji_fonts=getattr(args, "gaiji_fonts", None),
                                     gaiji_lang=getattr(args, "gaiji_lang", "zh-Hant"),
+                                    vertical=getattr(args, "vertical", False),
                                     annotations=ann) \
                 .render_work(w, out_dir, filename=base + ".docx")
 
@@ -372,7 +374,8 @@ def main(argv=None):
 
     pdfg = ap.add_argument_group("PDF 专属")
     pdfg.add_argument("--vertical", action="store_true",
-                      help="vertical layout (writing-mode)")
+                      help="vertical layout (writing-mode)：pdf 走 html2pdf 管线；"
+                           "docx 直接分节纵排（sectPr textDirection tbRl）")
     pdfg.add_argument("--engine", default=None,
                       help="PDF 输出：'管线[:单体]'。默认 docx2pdf（DOCX→PDF，"
                            "后端链见 config.json engines.docx2pdf.chain）；"
