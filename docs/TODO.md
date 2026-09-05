@@ -11,7 +11,7 @@
   - publish 侧（契约 `publish/docs/链路B-设计契约.md`，`publish/TODO.md:P1`）：config/app.json `default_source`+`xml2pdf.options`、collection `work_sources/xml_options`、`src/books/xml2pdf_bridge.py batch_convert`、中栏来源列/右栏三单选/[合成]按源分流
   - 验收：独立窗目录/ID 列表转换（含未下载经自动下载 XML+基线）；publish `sys.path+=["E:/dev/cbeta/xml2pdf"]` 引入 `XmlOptionsPanel`；`xml_options` 全量回存重启一致；端到端 XML→pdf/epub→合并
 
-- [x] **已完成 P2** LibreOffice（2026-09-04 复检：`soffice.com --version` 26.2.5.2 ✓；2026-09-05 用户升级至 26.8.0.3，复测 `--engine docx2pdf:libreoffice` 实转 T0672 出 2.05MB PDF ✓，见 `test/out_lo/`）
+- [x] **已完成 P2** LibreOffice（2026-09-04 复检：`soffice.com --version` 26.2.5.2 ✓；2026-09-05 用户升级至 26.8.0.3，复测 `--engine docx2pdf:libreoffice` 实转 T0672 出 2.05MB PDF ✓，见 `test/out_lo/`（用户指正后改测 `--notes footnote` 脚注版，已覆盖同目录））
   - 现状：`C:\Apps\LibreOffice` 26.2.5.2（非默认 Program Files），`pycbeta/config.json:110` 与 `engines/config.json:20` `engines.paths.libreoffice` 指向其 `soffice.com`；`pycbeta/render_pdf.py:20 _find_soffice` 优先读该路径
   - 用户手工安装后：验证 `soffice.com --version`、`_find_soffice()`、`python -m pycbeta -i <xml> -f docx --engine libreoffice` 出 PDF
   - 若改安装路径：同步更新两处 config 的 `engines.paths.libreoffice`
