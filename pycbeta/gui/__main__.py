@@ -250,10 +250,6 @@ class MainWindow(QMainWindow):
         src.addWidget(self.out_edit, 4, 1)
         src.addWidget(out_browse, 4, 2)
         src.addWidget(out_open, 4, 3)
-        src.addWidget(QLabel("数据源"), 5, 0)
-        src_btn = QPushButton("数据源…")
-        src_btn.clicked.connect(self._edit_source)
-        src.addWidget(src_btn, 5, 1)
         layout.addLayout(src)
         # 设置面板
         presets, actual = load_slot("user")
@@ -297,12 +293,6 @@ class MainWindow(QMainWindow):
         d = self.out_edit.text().strip() or os.path.join(os.getcwd(), "out")
         os.makedirs(d, exist_ok=True)
         QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.abspath(d)))
-
-    def _edit_source(self):
-        from pycbeta.gui.panel import SourceDialog
-        dlg = SourceDialog(self)
-        if dlg.exec():
-            self.statusBar().showMessage("数据源已保存到用户配置")
 
     def _collect_jobs(self):
         jobs = []

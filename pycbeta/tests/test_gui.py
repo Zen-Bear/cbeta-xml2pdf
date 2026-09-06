@@ -117,9 +117,9 @@ class TestPanelSmoke(unittest.TestCase):
         from pycbeta.gui.panel import XmlOptionsPanel
         presets = load_presets()
         panel = XmlOptionsPanel(presets)
-        self.assertEqual(panel.tabs.count(), 7)
-        self.assertEqual([panel.tabs.tabText(i) for i in range(7)],
-                         ["输出格式", "页面", "分页", "排版", "注释", "注音", "校验"])
+        self.assertEqual(panel.tabs.count(), 8)
+        self.assertEqual([panel.tabs.tabText(i) for i in range(8)],
+                         ["输出格式", "样式表", "页面", "分页", "排版", "注释", "注音", "校验"])
         # 页面纸张下拉带尺寸标签且取值仍是名字
         self.assertIn("×", panel.page_box.itemText(0))
         self.assertEqual(panel.page_box.itemData(0), "a4")
@@ -322,6 +322,37 @@ class TestLayoutRegroup(unittest.TestCase):
         hints = [w.text() for w in panel.findChildren(QLabel)
                  if "脏数据" in w.text()]
         self.assertTrue(hints)
+
+    def test_styles_tab_paths(self):
+        import os
+        from pycbeta.gui.panel import XmlOptionsPanel, STYLE_FILES, _STYLES_DIR
+        panel = XmlOptionsPanel(load_presets())
+        self.assertEqual(panel.tabs.tabText(1), "样式表")
+        self.assertEqual(set(panel.style_rows), {n for n, _d in STYLE_FILES})
+        for name, _d in STYLE_FILES:
+            edit, open_btn = panel.style_rows[name]
+            path = os.path.join(_STYLES_DIR, name)
+            self.assertTrue(os.path.isfile(path))
+            self.assertEqual(edit.text(), os.path.abspath(path))
+            self.assertTrue(open_btn.isEnabled())
+
+    def test_ann_table_hint(self):
+        import os
+        from pycbeta.gui.panel import XmlOptionsPanel
+        panel = XmlOptionsPanel(load_presets())
+        # 空=内置词表，hint 给出实际路径且可打开
+        self.assertEqual(panel.ann_file.text(), "")
+        self.assertIn("annotations.txt", panel.ann_hint.text())
+        self.assertTrue(panel.ann_open.isEnabled())
+        # 填不存在的路径→红字+禁用
+        panel.ann_file.setText(r"E:\nonexistent\x.tsv")
+        self.assertIn("不存在", panel.ann_hint.text())
+        self.assertFalse(panel.ann_open.isEnabled())
+
+    def test_source_button_on_panel(self):
+        from pycbeta.gui.panel import XmlOptionsPanel
+        panel = XmlOptionsPanel(load_presets())
+        self.assertEqual(panel.btn_source.text(), "数据源…")
 
 
 class TestMainWindowUx(unittest.TestCase):

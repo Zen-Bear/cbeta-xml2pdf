@@ -1,6 +1,6 @@
 """XML 转换选项面板（P1 GUI 链路 B 可复用组件）。
 
-七选项卡：输出格式 / 页面 / 分页 / 排版 / 注释 / 注音 / 校验。
+八选项卡：输出格式 / 样式表 / 页面 / 分页 / 排版 / 注释 / 注音 / 校验。
 控件值 ↔ XmlOptions ↔ config presets 三向同步；dict 型选项经临时 presets 进子进程桥。
 
 三槽配置（仓库根目录）：出厂 pycbeta/config.json（只读，GUI 永不写）、
@@ -14,7 +14,8 @@ import tempfile
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QUrl
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox,
     QFileDialog, QFormLayout, QGridLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit,
@@ -23,6 +24,13 @@ from PySide6.QtWidgets import (
 )
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_STYLES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                           "styles")
+# 样式表卡：默认两 CSS（路径, 说明）
+STYLE_FILES = (
+    ("pdf_docx.css", "印刷主题（pdf/docx 默认；html/epub 追加覆盖）"),
+    ("cbeta_golden.css", "网页基底（html/epub；官方在线长相）"),
+)
 FACTORY_NAME = os.path.join("pycbeta", "config.json")
 USER_NAME = "config.user.json"
 LAST_NAME = "config.last.json"
@@ -339,14 +347,18 @@ class XmlOptionsPanel(QWidget):
         self.btn_reset = QPushButton("还原出厂")
         self.btn_save.clicked.connect(self._on_save)
         self.btn_reset.clicked.connect(self._on_reset)
+        self.btn_source = QPushButton("数据源…")
+        self.btn_source.clicked.connect(self._on_source)
         bar.addWidget(self.slot_label)
         bar.addStretch(1)
+        bar.addWidget(self.btn_source)
         bar.addWidget(self.btn_save)
         bar.addWidget(self.btn_reset)
         layout.addWidget(cfg)
         self.tabs = QTabWidget()
         layout.addWidget(self.tabs)
         self.tabs.addTab(self._tab_formats(), "输出格式")
+        self.tabs.addTab(self._tab_styles(), "样式表")
         self.tabs.addTab(self._tab_page(), "页面")
         self.tabs.addTab(self._tab_pagination(), "分页")
         self.tabs.addTab(self._tab_layout(), "排版")
@@ -525,6 +537,29 @@ class XmlOptionsPanel(QWidget):
         self._on_pdf_toggled(self.format_boxes["pdf"].isChecked())
         return w
 
+    def _tab_styles(self):
+        w = QWidget()
+        form = QFormLayout(w)
+        self.style_rows = {}
+        for name, desc in STYLE_FILES:
+            path = os.path.abspath(os.path.join(_STYLES_DIR, name))
+            row = QHBoxLayout()
+            edit = QLineEdit(path)
+            edit.setReadOnly(True)
+            open_btn = QPushButton("打开")
+            if os.path.isfile(path):
+                open_btn.clicked.connect(
+                    lambda _v, p=path: self._open_local_file(p))
+            else:
+                open_btn.setEnabled(False)
+                edit.setStyleSheet("color: red")
+                edit.setText(f"{path}（文件不存在）")
+            row.addWidget(edit, 1)
+            row.addWidget(open_btn)
+            form.addRow(f"{name}\n{desc}", row)
+            self.style_rows[name] = (edit, open_btn)
+        return w
+
     def _pipe(self):
         return "html2pdf" if self.engine_html.isChecked() else "docx2pdf"
 
@@ -674,7 +709,37 @@ class XmlOptionsPanel(QWidget):
         row.addWidget(self.ann_file)
         row.addWidget(browse)
         form.addRow("词表", row)
+        orow = QHBoxLayout()
+        self.ann_hint = QLabel()
+        self.ann_hint.setWordWrap(True)
+        self.ann_hint.setStyleSheet("color: gray")
+        self.ann_open = QPushButton("打开")
+        self.ann_open.clicked.connect(self._on_open_ann_table)
+        orow.addWidget(self.ann_hint, 1)
+        orow.addWidget(self.ann_open)
+        form.addRow("", orow)
+        self.ann_file.textChanged.connect(lambda _v: self._refresh_ann_hint())
+        self._refresh_ann_hint()
         return w
+
+    def _ann_table_path(self):
+        """当前词表实际路径：空=内置表；否则按 annotate 规则解析（缺失→None）。"""
+        from pycbeta.annotate import _resolve_table_path
+        return _resolve_table_path(self.ann_file.text().strip() or None, None)
+
+    def _refresh_ann_hint(self):
+        path = self._ann_table_path()
+        if path:
+            self.ann_hint.setStyleSheet("color: gray")
+            self.ann_hint.setText(f"实际使用：{path}")
+            self.ann_open.setEnabled(True)
+        else:
+            self.ann_hint.setStyleSheet("color: red")
+            self.ann_hint.setText("词表文件不存在，将静默关闭注音")
+            self.ann_open.setEnabled(False)
+
+    def _on_open_ann_table(self):
+        self._open_local_file(self._ann_table_path())
 
     def _browse_ann_file(self):
         path, _ = QFileDialog.getOpenFileName(self, "选择注音词表", "", "TSV (*.txt *.tsv);;所有文件 (*)")
@@ -734,6 +799,18 @@ class XmlOptionsPanel(QWidget):
         self.set_options(options_from_presets(load_slot("user")[0]))
         self.slot_label.setText("当前：出厂默认（已还原）")
         self._changed()
+
+    def _on_source(self):
+        dlg = SourceDialog(self)
+        if dlg.exec():
+            self.slot_label.setText("当前：用户配置（数据源已保存）")
+            self._changed()
+
+    @staticmethod
+    def _open_local_file(path):
+        """用系统默认程序打开本地文件（样式表/词表）；供各卡的"打开"按钮。"""
+        if path and os.path.isfile(path):
+            QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.abspath(path)))
 
     def mark_slot(self, actual):
         self.slot_label.setText(f"当前：{'用户配置' if actual == 'user' else '出厂默认'}")
