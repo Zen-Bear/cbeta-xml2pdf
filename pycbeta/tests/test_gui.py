@@ -201,7 +201,11 @@ class TestEngineSingles(unittest.TestCase):
         panel._refresh_singles(keep="wps")
         self.assertEqual(panel.single_box.currentData(), "wps")
         self.assertIn("red", panel.engine_hint.styleSheet())
-        self.assertIn("WPS", panel.engine_hint.text())
+        self.assertIn("wps", panel.engine_hint.text().lower())
+        self.assertIn("未安装", panel.engine_hint.text())
+        # 长说明进 tooltip，短状态留行内
+        self.assertIn("WPS", panel.engine_hint.toolTip())
+        self.assertIn("按链顺序", panel.single_box.toolTip())
 
     def test_config_box_on_top(self):
         from PySide6.QtWidgets import QGroupBox
@@ -370,8 +374,20 @@ class TestLayoutRegroup(unittest.TestCase):
         w = MainWindow()
         try:
             self.assertEqual(w.src_btn.text(), "数据源…")
+            # 输入来源同行（row 0）最右，目录/文件浏览按钮上方
+            grid = w.centralWidget().layout().itemAt(0).layout()
+            self.assertEqual(grid.getItemPosition(grid.indexOf(w.src_btn))[:2], (0, 4))
         finally:
             w.close()
+
+    def test_slot_label_link(self):
+        from pycbeta.gui.panel import XmlOptionsPanel
+        panel = XmlOptionsPanel(load_presets())
+        panel.mark_slot("user")
+        self.assertIn("用户配置", panel.slot_label.text())
+        self.assertIn("config.user.json", panel.slot_label.text())
+        self.assertIn("config.user.json", panel.slot_label.toolTip())
+        self.assertTrue(panel.slot_label.openExternalLinks())
 
 
 class TestMainWindowUx(unittest.TestCase):

@@ -210,15 +210,7 @@ class MainWindow(QMainWindow):
         central = QWidget()
         self.setCentralWidget(central)
         layout = QVBoxLayout(central)
-        # 数据源（输入来源上方）
-        top = QHBoxLayout()
-        top.addWidget(QLabel("数据源"))
-        self.src_btn = QPushButton("数据源…")
-        self.src_btn.clicked.connect(self._edit_source)
-        top.addWidget(self.src_btn)
-        top.addStretch(1)
-        layout.addLayout(top)
-        # 输入来源（两 radio 同格左对齐相邻）
+        # 输入来源（两 radio 同格左对齐相邻；数据源按钮同行最右）
         src = QGridLayout()
         self.mode_file = QRadioButton("目录/文件")
         self.mode_ids = QRadioButton("佛典編號列表")
@@ -230,6 +222,10 @@ class MainWindow(QMainWindow):
         mode_row.addStretch(1)
         src.addWidget(QLabel("输入来源"), 0, 0)
         src.addLayout(mode_row, 0, 1, 1, 3)
+        self.src_btn = QPushButton("数据源…")
+        self.src_btn.setToolTip("查看/编辑 XML 来源目录与官方下载地址（存用户配置）")
+        self.src_btn.clicked.connect(self._edit_source)
+        src.addWidget(self.src_btn, 0, 4)
         self.path_edit = QLineEdit()
         self.path_edit.textChanged.connect(lambda _t: self.mode_file.setChecked(True))
         browse = QPushButton("浏览…")

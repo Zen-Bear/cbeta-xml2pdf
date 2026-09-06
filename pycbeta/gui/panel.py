@@ -489,34 +489,38 @@ class XmlOptionsPanel(QWidget):
             row.addWidget(box)
         row.addStretch(1)
         layout.addLayout(row)
-        # 模式组（竖排在左，简体转换在右，共框）
+        # 模式组（竖排在左，简体转换+字体下拉同行，共框）
         self.mode_group = QGroupBox("模式")
         gel = QHBoxLayout(self.mode_group)
-        self.vert_box = self._check("竖排直书（上→下，右→左）")
-        self.t2s_box = self._check("简体转换（OpenCC t2s；自动套简体字库）")
+        self.vert_box = self._check("竖排直书")
+        self.vert_box.setToolTip("上→下、右→左；竖排时注音与注释序号保持横躺"
+                                 "（WPS/LO 不渲染纵中横）")
+        self.t2s_box = self._check("简体转换")
+        self.t2s_box.setToolTip("OpenCC t2s 简繁转换；勾选后自动套简体字库")
         self.t2s_box.toggled.connect(self._on_t2s)
         gel.addWidget(self.vert_box)
         gel.addWidget(self.t2s_box)
-        gel.addStretch(1)
-        layout.addWidget(self.mode_group)
-        # 字体区（原字体卡并入）：字体下拉独立一行
-        frow = QHBoxLayout()
-        frow.addWidget(QLabel("字体"))
+        gel.addWidget(QLabel("字体"))
         self.font_box = QComboBox()
         for label, value in self._font_items():
             self.font_box.addItem(label, value)
         self.font_box.currentIndexChanged.connect(self._on_font_manual)
-        frow.addWidget(self.font_box, 1)
-        layout.addLayout(frow)
+        self.font_box.setToolTip("字体方案（config.json font_sets 键；t2s 自动切 :zh-Hans）")
+        gel.addWidget(self.font_box, 1)
+        gel.addStretch(1)
+        layout.addWidget(self.mode_group)
         self.engine_group = QGroupBox("引擎（仅 PDF 需要）")
         el = QHBoxLayout(self.engine_group)
         from PySide6.QtWidgets import QRadioButton
         self.engine_docx = QRadioButton("docx2pdf")
         self.engine_html = QRadioButton("html2pdf")
         self.engine_docx.setChecked(True)
+        self.engine_docx.setToolTip("DOCX→PDF（保真度高，默认；竖排时走 HTML 管线）")
+        self.engine_html.setToolTip("HTML→PDF（Chromium 打印；竖排必选）")
         self.engine_docx.toggled.connect(self._on_pipe_changed)
         self.engine_html.toggled.connect(self._on_pipe_changed)
         self.single_box = QComboBox()
+        self.single_box.setToolTip("自动=按链顺序首个成功者；单引擎=只用该引擎，失败即报错")
         self.single_box.currentIndexChanged.connect(self._on_single_changed)
         el.addWidget(self.engine_docx)
         el.addWidget(self.engine_html)
@@ -589,15 +593,20 @@ class XmlOptionsPanel(QWidget):
 
     def _update_engine_hint(self):
         single = self.single_box.currentData() or ""
+        auto_tip = "自动=按链顺序首个成功者；单引擎=只用该引擎，失败即报错"
         if not single:
             self.engine_hint.setStyleSheet("color: gray")
-            self.engine_hint.setText("自动=按链顺序首个成功者；单引擎=只用该引擎，失败即报错")
+            self.engine_hint.setText("自动：按链顺序尝试")
+            self.engine_hint.setToolTip(auto_tip)
         elif self._status.get(single, False):
             self.engine_hint.setStyleSheet("color: gray")
             self.engine_hint.setText(f"单引擎 {single} 已就绪")
+            self.engine_hint.setToolTip(auto_tip)
         else:
             self.engine_hint.setStyleSheet("color: red")
-            self.engine_hint.setText(f"单引擎 {single} 未安装：{INSTALL_HINTS.get(single, '')}")
+            self.engine_hint.setText(f"单引擎 {single} 未安装")
+            self.engine_hint.setToolTip(f"单引擎 {single} 未安装："
+                                        f"{INSTALL_HINTS.get(single, '')}")
 
     def _on_pipe_changed(self, _v):
         self._refresh_singles()
@@ -685,7 +694,9 @@ class XmlOptionsPanel(QWidget):
         form = QFormLayout(w)
         self.notes_on = self._check("显示注释", checked=True)
         self.per_page_box = self._check("脚注每页重新编号", checked=True)
+        self.per_page_box.setToolTip("勾选后注释序号每页从 [1] 重排；不勾选则全文连续编号")
         self.title_notes_box = self._check("压制卷名/品名校勘注码")
+        self.title_notes_box.setToolTip("勾选后卷名/品名标题后的上标注释序号隐藏，正文注码不受影响")
         form.addRow("", self.notes_on)
         form.addRow("", self.per_page_box)
         form.addRow("", self.title_notes_box)
@@ -778,7 +789,7 @@ class XmlOptionsPanel(QWidget):
     def _on_save(self):
         cur, _actual = load_slot("user")
         save_current(self._presets_merged(cur))
-        self.slot_label.setText("当前：用户配置（已保存）")
+        self.refresh_slot_label("user", "（已保存）")
         self._changed()
 
     def _presets_merged(self, cur):
@@ -805,7 +816,7 @@ class XmlOptionsPanel(QWidget):
     def _on_reset(self):
         reset_factory()
         self.set_options(options_from_presets(load_slot("user")[0]))
-        self.slot_label.setText("当前：出厂默认（已还原）")
+        self.refresh_slot_label("factory", "（已还原）")
         self._changed()
 
     @staticmethod
@@ -815,7 +826,21 @@ class XmlOptionsPanel(QWidget):
             QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.abspath(path)))
 
     def mark_slot(self, actual):
-        self.slot_label.setText(f"当前：{'用户配置' if actual == 'user' else '出厂默认'}")
+        self.refresh_slot_label(actual)
+
+    def refresh_slot_label(self, actual, suffix=""):
+        """槽标签：当前配置：<链接>（路径，太长中间省略，点击打开文件）。"""
+        factory, user, _last = slot_paths()
+        path = user if actual == "user" else factory
+        name = "用户配置" if actual == "user" else "出厂默认"
+        short = self.slot_label.fontMetrics().elidedText(
+            path, Qt.ElideMiddle, 420)
+        url = QUrl.fromLocalFile(os.path.abspath(path)).toString()
+        self.slot_label.setTextFormat(Qt.RichText)
+        self.slot_label.setOpenExternalLinks(True)
+        self.slot_label.setToolTip(path)
+        self.slot_label.setText(
+            f'当前配置：<a href="{url}">{name}</a>（{short}）{suffix}')
 
     # ---------- 读写 ----------
     def get_options(self):
