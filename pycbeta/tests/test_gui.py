@@ -142,6 +142,19 @@ class TestPanelSmoke(unittest.TestCase):
         self.assertTrue(panel.font_box.currentData().endswith(":zh-Hans"))
         panel.t2s_box.setChecked(False)
         self.assertEqual(panel.font_box.currentData(), "default")
+        # 再勾选仍自动切简体（程序切换不污染 _font_dirty）
+        panel.t2s_box.setChecked(True)
+        self.assertTrue(panel.font_box.currentData().endswith(":zh-Hans"))
+        panel.t2s_box.setChecked(False)
+        self.assertEqual(panel.font_box.currentData(), "default")
+        # 用户手动碰过下拉后不再自动：手动选 Hans，再勾选保持手动选择，
+        # 取消勾选也不回退（整轮未进入自动模式）
+        panel.font_box.setCurrentIndex(panel.font_box.findData("default:zh-Hans"))
+        self.assertTrue(panel._font_dirty)
+        panel.t2s_box.setChecked(True)
+        self.assertEqual(panel.font_box.currentData(), "default:zh-Hans")
+        panel.t2s_box.setChecked(False)
+        self.assertEqual(panel.font_box.currentData(), "default:zh-Hans")
 
     def test_vertical_mode_group(self):
         from pycbeta.gui.panel import XmlOptionsPanel

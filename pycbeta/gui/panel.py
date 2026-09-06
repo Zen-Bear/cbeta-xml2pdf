@@ -446,6 +446,8 @@ class XmlOptionsPanel(QWidget):
         return items
 
     def _on_font_manual(self, _i):
+        if self._emitting:
+            return  # 程序自动切换（t2s 联动/set_options）不算手动
         self._font_dirty = True
         self._font_auto = False
         self._changed()

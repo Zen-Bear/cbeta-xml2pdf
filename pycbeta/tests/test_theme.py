@@ -125,6 +125,19 @@ class TestScaledPagePresets(unittest.TestCase):
         out = scaled_page_presets({"x": {"size": [1, 2]}}, 2.0)
         self.assertNotIn("doc_size", out["x"])
 
+    def test_name_case_insensitive(self):
+        from pycbeta.theme import resolve_page
+        pages = {"tablet9": {"size": [121, 194],
+                             "margins": {"top": 10, "right": 10,
+                                         "bottom": 10, "left": 10}}}
+        # 大小写通吃，且用用户边距而非回退默认
+        for name in ("tablet9", "Tablet9", "TABLET9"):
+            cfg = resolve_page(name, pages)
+            self.assertEqual(cfg["size"], [121, 194])
+            self.assertEqual(cfg["margins"]["top"], 10)
+        # 内置键同样大小写不敏感
+        self.assertEqual(resolve_page("A4", {})["size"], [210, 297])
+
 
 class TestDescendantSelector(unittest.TestCase):
     CSS = ("p.head { color: #0000a0; }\n"
