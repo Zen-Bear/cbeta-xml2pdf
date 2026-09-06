@@ -378,8 +378,8 @@ def main(argv=None):
 
     pg = ap.add_argument_group("页面（pdf/docx；纯 HTML 输出不适用）")
     pg.add_argument("--page", default="a4",
-                    help="页面方案名（config.json 的 pages，或内置 "
-                         "a4/a5/letter/phone/tablet/monitor/book）")
+                    help="页面方案名（config.json 的 pages，键大小写不敏感；"
+                         "或内置 a4/a5/信纸/手机/平板8寸/平板9寸/平板11寸/32开/16开）")
 
     pdfg = ap.add_argument_group("PDF 专属")
     pdfg.add_argument("--vertical", action="store_true",

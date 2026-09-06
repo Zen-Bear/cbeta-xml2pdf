@@ -51,28 +51,38 @@
       "margins": { "top": 25.4, "right": 25.4, "bottom": 25.4, "left": 25.4 },
       "doc_size": 11
     },
-    "letter": {
+    "信纸": {  // letter 美式信纸（216×279mm）
       "size": [216, 279],
       "margins": { "top": 25.4, "right": 25.4, "bottom": 25.4, "left": 25.4 },
       "doc_size": 11
     },
-    "phone": {
+    "手机": {  // 约 8 寸 16:9（100×178mm）
       "size": [100, 178],
-      "margins": { "top": 20, "right": 15, "bottom": 20, "left": 15 },
+      "margins": { "top": 10, "right": 10, "bottom": 10, "left": 10 },
       "doc_size": 11
     },
-    "tablet": {
-      "size": [148, 210],
+    "平板8寸": {  // 8寸（172×108mm，竖版宽×高下同）
+      "size": [108, 172],
+      "margins": { "top": 10, "right": 10, "bottom": 10, "left": 10 },
+      "doc_size": 11
+    },
+    "平板9寸": {  // 9寸（194×121mm）
+      "size": [121, 194],
+      "margins": { "top": 10, "right": 10, "bottom": 10, "left": 10 },
+      "doc_size": 11
+    },
+    "平板11寸": {  // 11寸（237×148mm）
+      "size": [148, 237],
+      "margins": { "top": 10, "right": 10, "bottom": 10, "left": 10 },
+      "doc_size": 11
+    },
+    "32开": {  // 32开（130×184mm）
+      "size": [130, 184],
       "margins": { "top": 20, "right": 20, "bottom": 20, "left": 20 },
       "doc_size": 11
     },
-    "monitor": {
-      "size": [210, 297],
-      "margins": { "top": 20, "right": 20, "bottom": 20, "left": 20 },
-      "doc_size": 11
-    },
-    "book": {
-      "size": [155, 235],
+    "16开": {  // 16开（185×260mm）
+      "size": [185, 260],
       "margins": { "top": 20, "right": 20, "bottom": 20, "left": 20 },
       "doc_size": 11
     }

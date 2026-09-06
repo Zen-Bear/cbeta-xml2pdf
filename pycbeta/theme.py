@@ -282,12 +282,27 @@ def combo_latin(font_sets: Optional[Dict[str, Dict[str, str]]] = None,
 BUILTIN_PAGES: Dict[str, Dict] = {
     "a4": {"size": [210, 297]},
     "a5": {"size": [148, 210]},
-    "letter": {"size": [216, 279]},
-    "phone": {"size": [100, 178]},
-    "tablet": {"size": [148, 210]},
-    "monitor": {"size": [210, 297]},
-    "book": {"size": [155, 235]},
+    "信纸": {"size": [216, 279]},
+    "手机": {"size": [100, 178]},
+    "平板8寸": {"size": [108, 172]},
+    "平板9寸": {"size": [121, 194]},
+    "平板11寸": {"size": [148, 237]},
+    "32开": {"size": [130, 184]},
+    "16开": {"size": [185, 260]},
 }
+
+
+def _lookup_ci(mapping: Dict, name: str):
+    """大小写不敏感取键（页面方案名 A4/a4 通吃）；无则 None。"""
+    if not isinstance(mapping, dict) or not isinstance(name, str):
+        return None
+    if name in mapping:
+        return mapping[name]
+    low = name.lower()
+    for k, v in mapping.items():
+        if isinstance(k, str) and k.lower() == low:
+            return v
+    return None
 
 
 def resolve_page(name: str, page_presets: Optional[Dict] = None) -> Dict:
@@ -295,11 +310,11 @@ def resolve_page(name: str, page_presets: Optional[Dict] = None) -> Dict:
 
     返回 {size: [w_mm, h_mm], margins: {top,right,bottom,left} mm,
           doc_size: 文档兜底字号(pt), latin_font: 西文字体}。
-    presets.json 的 pages 优先；否则回退内置 BUILTIN_PAGES/a4。
+    presets.json 的 pages 优先（键大小写不敏感）；否则回退内置 BUILTIN_PAGES/a4。
     """
-    p = (page_presets or {}).get(name)
+    p = _lookup_ci(page_presets or {}, name)
     if not p:
-        p = dict(BUILTIN_PAGES.get(name) or BUILTIN_PAGES["a4"])
+        p = dict(_lookup_ci(BUILTIN_PAGES, name) or BUILTIN_PAGES["a4"])
     margins = dict(p.get("margins") or {})
     for k in ("top", "right", "bottom", "left"):
         margins.setdefault(k, 25.4)

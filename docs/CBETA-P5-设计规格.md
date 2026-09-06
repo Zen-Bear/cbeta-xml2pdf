@@ -395,7 +395,7 @@ python -m pycbeta -i <xml|目录> -f <format> [-o <输出>] [选项]
 共享参数（所有格式）: -i/--input  -o/--output  -f/--format{html,pdf,docx,md,epub,all}
                      --theme  --name-template
 注释（所有格式）   : --notes{footnote,endnote,inline}
-页面（pdf/docx）   : --page{a4,a5,letter,phone,tablet,monitor,book}
+页面（pdf/docx）   : --page{a4,a5,信纸,手机,平板8寸,平板9寸,平板11寸,32开,16开}
 PDF 专属           : --vertical  --engine{chromium,docx2pdf,prince,weasyprint}
 ```
 
@@ -489,7 +489,7 @@ pycbeta/
 
 **验证结果**：
 - 横排 A4：X1116 生成 95 页 PDF，全文 78,734 字提取完整（含正文/尾注/校注）
-- 页面尺寸：phone（100×178mm）/ tablet / monitor / a4 / a5 预设均生效
+- 页面尺寸：手机（100×178mm）/ 平板8寸 / a4 / a5 预设均生效（2026-09-06 后键名见 `--help`）
 - 竖排 POC：`writing-mode: vertical-rl` 渲染成功（122 页，文字逐字竖排提取），**判定可行**
 
 **发现并修复的 Chromium 打印 bug**：字体栈中含 `cbetarc`（经 @font-face 嵌入 CBETASupplement）时，多页打印会**丢弃全部 CJK 文字**（屏幕/单页正常，≥2 页即丢）。修复：默认字体栈不含 cbetarc；gaiji 已解析为系统字体可覆盖字形。cbetarc 嵌入作为 opt-in（带此已知问题注释）。

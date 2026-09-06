@@ -41,7 +41,7 @@ class TestPdfHorizontal(unittest.TestCase):
 
     def test_page_size_phone(self):
         import pymupdf
-        r = PdfRenderer(page="phone")
+        r = PdfRenderer(page="手机")
         html = r.render_work(self.work, self.tmp, "phone.html")
         pdf = r.html_to_pdf(html, os.path.join(self.tmp, "phone.pdf"))
         doc = pymupdf.open(pdf)

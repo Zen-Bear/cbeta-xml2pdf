@@ -16,7 +16,7 @@
 ```python
 @dataclass
 class XmlOptions:
-    page: str = "a4"                    # pages 键（a4/a5/letter/book/phone/tablet/monitor）
+    page: str = "a4"                    # pages 键（a4/a5/信纸/手机/平板8寸/9寸/11寸/32开/16开；大小写不敏感）
     font_set: str = "default"           # font_sets 键，可带 :zh-Hans
     engine: str = "docx2pdf"            # docx2pdf[:wps] | html2pdf[:chromium]
     margins: dict = None                # None → pages[page].margins
