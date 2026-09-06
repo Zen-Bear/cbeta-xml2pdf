@@ -14,7 +14,7 @@
       // body/pin 由 pdf_docx.css 迁入：body 为 PDF/DOCX 文档级默认字体，pin 为品名
       "body": ["新細明體, Songti TC, Times New Roman, sans-serif",
                "宋体, SimSun, Times New Roman, sans-serif"],
-      "title": ["標楷體, DFKaiShu", "楷体, KaiTi"],
+      "title": ["朝华标题B, ZhaohuaMinB", "朝华标题B, ZhaohuaMinB"],
       "author": ["新細明體, PMingLiU", "宋体, SimSun"],
       "translator": ["新細明體, PMingLiU", "宋体, SimSun"],
       "byline": ["新細明體, PMingLiU", "宋体, SimSun"],
@@ -113,6 +113,7 @@
 
   "output": {
     // 输出处理规则
+    "t2s": false,               // [所有格式] true=OpenCC t2s 简体输出（正文/注释/元数据；未指定 --font-set 时自动套 default:zh-Hans 字体；校验时官方基线同步转简体后比对）
     "ignore_xml_style": false,   // [docx|pdf|html|epub] true=忽略 XML 里 <p style="margin-left:…"> 脏数据，缩进统一走 CSS
     "ignore_xml_space": false,   // [docx|pdf|html|epub] true=忽略文本首尾多余空格（含全角 \u3000，如目录行首的空格）
     "verse_caesura": "　　",     // [docx] 偈颂 <caesura/> 分隔符（默认两个全角空格，可改）
@@ -127,7 +128,6 @@
     "footnote_per_page": true,   // [docx] true=脚注每页重新编号（默认）；false=全文连续编号
     "show_notes": true,          // [docx|pdf|html|epub|md] true=显示注释（默认）；false=全部关闭注释
     "notes_marker_font": "Times New Roman", // [docx] 注释注码字体（正文 [N]/文末 [N]/脚注编号上标；如 "宋体, SimSun"；字号恒为正文字号×0.75，不随标题段放大，随 font_scale 等比放大）
-    "t2s": false,               // [所有格式] true=OpenCC t2s 简体输出（正文/注释/元数据；未指定 --font-set 时自动套 default:zh-Hans 字体；校验时官方基线同步转简体后比对）
     "suppress_title_notes": false, // [docx] true=压制卷名/品名校勘注码（标题干净，默认 false 保留）
     "pdf_zoom": 1.0,               // [pdf/仅chromium] HTML→PDF 整页缩放（Playwright page.pdf scale，不重排；范围 0.1-2.0，1.0=原尺寸；与 font_scale 正交可叠加）
     "font_scale": 1.0,             // [所有格式] 字号等比缩放（重排式大字，老人版推荐 1.33/1.5；与 pdf_zoom 正交；字号不影响逐字校验）

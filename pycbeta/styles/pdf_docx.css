@@ -57,7 +57,7 @@ p.head[data-head-level="6"] { margin-left: 5em;  font-size: 12pt; font-weight: b
    想覆盖请【改这里的值】，不要删除整条——删除会回退到兜底。 */
 
 p.head {
-  font-size: 14pt;        /* 兜底值；想覆盖改这里（勿删） */
+  font-size: 20pt;        /* 兜底值；想覆盖改这里（勿删） */
   font-weight: bold;      /* 兜底值；想覆盖改这里（勿删） */
   color: #0000a0;         /* 兜底值；想覆盖改这里（勿删） */
   text-align: center;     /* 标题居中（含品名等 head） */
