@@ -32,6 +32,14 @@
   - 方案：`html/txt/docx` 渲染基线保持主轨（`pycbeta/verify.py:248 verify_one` 现行）；新增 `verify --baseline xml` 辅轨：官方侧 `lxml.etree.itertext(official.xml)` 直抽，生成侧 `work_text(Work)` 线性化，两侧经 `normalize:18` 后 `diff_stats` 对比
   - 涉及：`pycbeta/verify.py:189 find_official` 新增 `kind="xml"` 分支、`work_text` 辅助、`base_kind` 映射 `all→xml`
   - 验收：`T15n0625`/`X60n1116`/`T12n0349` 在 `baseline_root=E:\dev\cbeta\publish\cbeta_xml` 检出时 `0/0`
+- [ ] **P9 中** GUI 界面三语切换（简/繁/英，2026-09-06 用户立项；与输出经文 t2s/font_sets 无关，是界面本身语言）
+  - 背景：界面中文串全硬编码（panel 约数百处、`__main__` 状态栏/按钮），无 `QTranslator` 机制
+  - 方案：先抽字符串资源（`pycbeta/gui/i18n/*.ts`，Qt Linguist 流程：`pylupdate6` 抽取→翻译→`lrelease` 编译→`QTranslator.load/install`），面板顶部或设置加语言下拉（简/繁/英，存用户槽，重启生效；或动态 `retranslateUi` 热切）
+  - 验收：三语切换无硬编码残留（`rg` 查中文串只剩 ts 源）；offscreen 实例化通过；单测不断言具体中文文案（现有 `tabText` 名单用例需同步为 key 断言或跟随默认语言）
+- [ ] **P10 低** GUI 深色模式（2026-09-06 用户立项）
+  - 背景：现为 Qt 默认浅色；Qt6 可部分跟随系统深色，未显式适配（红字提示/灰字 hint 在深色下可能看不清）
+  - 方案：跟随系统 `Qt::ColorScheme` + 手动开关（三态：跟随/浅色/深色，存用户槽）；先只保证现有样式表（红/灰提示色）在深色下可读，不过度定制 QSS
+  - 验收：深/浅/跟随三档目检（配置栏/七卡/批量表/状态栏无看不清文字）
 
 - [x] **已完成 P4** `docx` 段合并到 `output`（死配置修复：顶层 `docx` 删段 → `output.docx.footnoteSeparator`；零代码改动，实测自定义 2.0pt 生效；单测 58 + verify 24 0 失败）
   - 落点：`config.json` 顶层 `docx` 段删除，`output.docx.footnoteSeparator` 生效（与 `cli.py:346`、`run_tests.py:79,98` 读取位置对齐）；`render_docx.py:894` 注释同步；`功能清单.md:86` 键路径同步
