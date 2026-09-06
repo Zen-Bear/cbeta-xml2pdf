@@ -47,10 +47,10 @@ p.author, p.translator {
 } */
 
 /* 标题层级缩进（数据出自 head 的 data-head-level） */
-p.head[data-head-level="1"] { margin-left: 0em; font-size: 16pt; font-weight: bold; }
-p.head[data-head-level="2"] { margin-left: 1em;  font-size: 15pt; font-weight: bold; }
-p.head[data-head-level="3"] { margin-left: 2em;  font-size: 14pt; font-weight: bold; }
-p.head[data-head-level="4"] { margin-left: 3em;  font-size: 13pt; font-weight: bold; }
+p.head[data-head-level="1"] { margin-left: 0em; font-size: 20pt; font-weight: bold; }
+p.head[data-head-level="2"] { margin-left: 1em;  font-size: 18pt; font-weight: bold; }
+p.head[data-head-level="3"] { margin-left: 2em;  font-size: 16pt; font-weight: bold; }
+p.head[data-head-level="4"] { margin-left: 3em;  font-size: 14pt; font-weight: bold; }
 p.head[data-head-level="5"] { margin-left: 4em;  font-size: 12pt; font-weight: bold; }
 p.head[data-head-level="6"] { margin-left: 5em;  font-size: 12pt; font-weight: bold; }
 /* 以下 4 处（head/juan/verse/list）的值来自 theme.py 的 DEFAULT_THEME（Python 兜底）。
@@ -141,8 +141,9 @@ div.div-commentary { font-weight: normal; } /* 解釋 */
 div.div-xu { color: #000000; margin-top: 1em; margin-bottom: 1em; } /* 序：段前段后间距。PDF 按块生效；DOCX 对序内每个段落生效（命名样式不含 div 上下文，见 render_docx._para 内联追加） */
 /* 序内标题（<head> 在 div-xu 内，如"新譯大乘入楞伽經序"）：颜色覆盖 p.head 的蓝色；
    font-family 换序标题字体（改这一行即可，如换宋体写 宋体, SimSun, serif）。
+   font-size 序标题字号（属性选择器 p.head[data-head-level] DOCX 不认，序标题走这行四格式通吃）。
    后代选择器（仅两段）：DOCX 经 theme 后代匹配生效；HTML/PDF 浏览器原生支持。 */
-div.div-xu p.head { color: #0000a0}
+div.div-xu p.head { color: #0000a0; font-size: 20pt; }
 /* div.div-jing 不加粗：经 = 正文主体，官方 golden 无此规则 */
 div.div-w { color: #777777; }                  /* 附文 */
 div.div-note { color: #666666; }               /* 注记类 div（灰色，与正文区分） */
