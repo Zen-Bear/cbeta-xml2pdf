@@ -21,6 +21,7 @@ def _body(html):
     """剥 <style>/<script>、官方 head 边框 span、style 属性、标签间空白后比较正文
     （官方 CSS/模板装饰差异不计，如校注说明注释、<span class="border">、lg 内联样式、缩进换行）。"""
     html = re.sub(r"<(style|script)[^>]*>.*?</\1>", "", html, flags=re.S | re.I)
+    html = re.sub(r"<html[^>]*>", "<html>", html)  # lang 等文档属性不计入正文比对
     html = re.sub(r'<span class="border">|</span>', "", html)
     html = re.sub(r'\sstyle="[^"]*"', "", html)
     html = re.sub(r">\s+<", "><", html)

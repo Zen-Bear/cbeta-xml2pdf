@@ -7,6 +7,10 @@ user CSS/JSON overrides it per tag.
 
 CSS is used directly by HTML/PDF and parsed (via tinycss2) into the same
 tag -> property map for DOCX translation.
+
+字体单一来源（2026-09-06 起）：CSS :root 双栏变量（繁体 + html[lang="zh-Hans"]
+简体覆盖），规则内 font-family: var(--font-标签) 引用；Theme(lang) 代入解析。
+config.json font_sets 已删除（历史包袱，不再读取）。
 """
 
 import json
@@ -96,18 +100,6 @@ for _dt in _DIV_TYPES:
     TAG_SELECTOR.setdefault(f"div-{_dt}", f"div.div-{_dt}")
 
 
-def _resolve_compound_key(key: object):
-    """font_sets compound 键（如 "div.div-xu p.head"）→ (anc_tag, tgt_tag)；
-    非法（非两段/任一段不可解析）返回 None。键用选择器写法，与 CSS 文件互抄。"""
-    if not isinstance(key, str) or " " not in key:
-        return None
-    bits = key.split()
-    if len(bits) != 2:
-        return None
-    anc = _SELECTOR_TAGS.get(bits[0])
-    tgt = _SELECTOR_TAGS.get(bits[1])
-    return (anc, tgt) if anc and tgt else None
-
 DEFAULT_THEME: Dict[str, Dict[str, str]] = {
     "title": {"font-size": "24pt", "text-align": "center", "font-weight": "bold"},
     "author": {"font-size": "12pt", "text-align": "center"},
@@ -184,7 +176,7 @@ def _strip_json_comments(text: str) -> str:
 
 
 def load_presets(path: str = _PRESETS_PATH) -> Dict[str, dict]:
-    """Load presets JSON (支持 // 和 /* */ 注释): {"font_sets": {...}, "pages": {...}}."""
+    """Load presets JSON (支持 // 和 /* */ 注释): {"pages": {...}, ...}."""
     with open(path, encoding="utf-8") as f:
         text = f.read()
     return json.loads(_strip_json_comments(text))
@@ -192,13 +184,11 @@ def load_presets(path: str = _PRESETS_PATH) -> Dict[str, dict]:
 
 try:
     _PRESETS = load_presets()
-    FONT_SETS: Dict[str, Dict[str, str]] = _PRESETS.get("font_sets") or {}
     PAGE_PRESETS: Dict[str, Dict] = _PRESETS.get("pages") or {}
     OUTPUT_PRESETS: Dict = _PRESETS.get("output") or {}
     ENGINE_PRESETS: Dict = _PRESETS.get("engines") or {}
     VERIFY_PRESETS: Dict = _PRESETS.get("verify") or {}
 except (OSError, ValueError) as _e:
-    FONT_SETS = {}
     PAGE_PRESETS = {}
     OUTPUT_PRESETS = {}
     ENGINE_PRESETS = {}
@@ -254,37 +244,137 @@ def _scale_font_size(value: object, factor: float) -> Optional[str]:
     return f"{text}{m.group(2)}"
 
 
-def _default_font_tags(font_sets: Optional[Dict[str, Dict[str, str]]] = None,
-                       lang: str = "zh-Hant") -> Dict[str, Dict[str, str]]:
-    """默认字体方案的标签字体：config.json font_sets.default 单一来源。
+# ---------------- CSS 字体变量（:root 双栏，font_sets 已删除） ----------------
+# var 名规则：单标签 "--font-<tag>"（如 --font-note-inline），后代组合
+# "--font-<anc>-<tgt>"（如 --font-div-xu-head）；latin 不是标签，单独取。
+FONT_VAR_TAGS = {
+    "body": "body", "title": "title", "series-title": "series-title",
+    "author": "author", "translator": "translator", "byline": "byline",
+    "head": "head", "juan": "juan", "pin": "pin", "p": "p",
+    "verse": "verse", "form": "form", "dharani": "dharani",
+    "footnote": "footnote", "note-inline": "note-inline",
+    "kaiti": "kaiti", "heiti": "heiti", "fangsong": "fangsong",
+    "mingti": "mingti",
+}
+FONT_VAR_COMPOUNDS = {"div-xu-head": ("div-xu", "head")}
 
-    组合级 "latin" 键（西文字体对）不是标签，在此跳过，由 combo_latin() 单独解析。"""
-    sets = font_sets if font_sets is not None else FONT_SETS
-    preset = sets.get("default") or {}
-    idx = 0 if lang == "zh-Hant" else 1
-    out: Dict[str, Dict[str, str]] = {}
-    for tag, v in preset.items():
-        if tag == "latin":
+_HANS_SELECTOR_RE = re.compile(r'^html\[lang=(["\']?)zh-Hans\1\]$')
+_VAR_RE = re.compile(r"var\(\s*(--[\w-]+)\s*(?:,\s*(.*?))?\)")
+
+
+def resolve_font_vars(css_text):
+    """收 :root + html[lang=zh-Hans] 两组 --font-* 变量 → (hant, hans)。
+    同名后定义优先；非法输入返回空对，不抛异常。"""
+    hant, hans = {}, {}
+    try:
+        import tinycss2
+        rules = tinycss2.parse_stylesheet(css_text or "", skip_comments=True,
+                                          skip_whitespace=True)
+    except Exception:
+        return hant, hans
+    for rule in rules:
+        if rule.type != "qualified-rule":
             continue
-        font = v[idx] if isinstance(v, (list, tuple)) and len(v) == 2 else v
-        if isinstance(font, str) and font.strip():
-            out[tag] = {"font-family": font.strip()}
+        sel = tinycss2.serialize(rule.prelude).strip()
+        if sel == ":root":
+            target = hant
+        elif _HANS_SELECTOR_RE.match(sel):
+            target = hans
+        else:
+            continue
+        for d in tinycss2.parse_declaration_list(rule.content):
+            if d.type == "declaration" and d.name.startswith("--"):
+                target[d.name] = tinycss2.serialize(d.value).strip()
+    return hant, hans
+
+
+def _subst_vars(value, vars):
+    """var(--x[, fallback]) 按变量表代入；未知变量用 fallback，无则原文。"""
+    def rep(m):
+        name, fb = m.group(1), m.group(2)
+        if name in vars and vars[name]:
+            return vars[name]
+        return fb.strip() if fb else m.group(0)
+    prev, out = None, value or ""
+    while prev != out:
+        prev = out
+        out = _VAR_RE.sub(rep, out)
     return out
 
 
-def combo_latin(font_sets: Optional[Dict[str, Dict[str, str]]] = None,
-                combo: str = "default", lang: str = "zh-Hant") -> str:
-    """取字体组合的西文字体：font_sets[combo]["latin"] 按语言取项，缺省 "Calibri"。
+# ---------------- 默认主题槽（config.theme，变种 CSS 选择） ----------------
+_STYLES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "styles")
+BUILTIN_PRESETS_DIR = os.path.join(_STYLES_DIR, "presets")
+USER_PRESETS_DIRNAME = "css-presets"
 
-    优先级（调用方保证）：页面方案显式 latin_font > 本函数返回值 > "Calibri"。"""
-    sets = font_sets if font_sets is not None else FONT_SETS
-    preset = sets.get(combo) or {}
-    v = preset.get("latin")
-    idx = 0 if lang == "zh-Hant" else 1
-    font = v[idx] if isinstance(v, (list, tuple)) and len(v) == 2 else v
-    if isinstance(font, str) and font.strip():
-        return font.strip()
-    return "Calibri"
+
+def user_presets_dir(root=None):
+    """用户预设目录（仓库根 css-presets/；git 忽略）。"""
+    base = root or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base, USER_PRESETS_DIRNAME)
+
+
+def list_presets(builtin_dir=None, user_dir=None):
+    """预设列表 → [(kind, stem, path)]，kind ∈ builtin/user；
+    同名用户遮蔽内置。"""
+    found = []
+    builtin_dir = os.path.abspath(builtin_dir or BUILTIN_PRESETS_DIR)
+    user_dir = os.path.abspath(user_dir or user_presets_dir())
+    for kind, d in (("builtin", builtin_dir), ("user", user_dir)):
+        if not os.path.isdir(d):
+            continue
+        for fn in sorted(os.listdir(d)):
+            if fn.lower().endswith(".css"):
+                found.append((kind, os.path.splitext(fn)[0],
+                              os.path.join(d, fn)))
+    user_names = {n for k, n, _p in found if k == "user"}
+    return [(k, n, p) for k, n, p in found
+            if k == "user" or n not in user_names]
+
+
+def resolve_theme_css(value, base_dir=None):
+    """默认 CSS 解析 → (path|None, 说明)。None=内置出厂 pdf_docx.css。
+    - 空 → 内置；"pdf_docx.css" → 内置文件
+    - 名字（无路径分隔符）：<name>[.css] 先用户库后内置库
+    - 路径：绝对直接；相对先相对 base_dir（config 所在目录）再相对仓库根
+    - 找不到 → 警告 + 内置（不崩）。"""
+    value = (value or "").strip() if isinstance(value, str) else ""
+    if not value:
+        return None, "内置出厂"
+    if value == "pdf_docx.css" or value.endswith("/pdf_docx.css") or \
+            value.endswith("\\pdf_docx.css"):
+        return None, "内置出厂"
+    if "/" not in value and "\\" not in value:
+        stem = value[:-4] if value.lower().endswith(".css") else value
+        for kind, _n, path in list_presets():
+            if _n == stem or _n.lower() == stem.lower():
+                return path, f"{'用户' if kind == 'user' else '内置'}预设"
+        # 非预设名时再试相对路径（config 目录 → 仓库根）
+        rels = []
+        if base_dir:
+            rels.append(os.path.join(base_dir, value))
+        rels.append(os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            value))
+        for c in rels:
+            if os.path.isfile(c):
+                return os.path.abspath(c), "路径指定"
+        print(f"theme: 预设 {value!r} 不存在，回内置出厂")
+        return None, "内置出厂（预设缺失）"
+    cands = []
+    if os.path.isabs(value):
+        cands.append(value)
+    else:
+        if base_dir:
+            cands.append(os.path.join(base_dir, value))
+        cands.append(os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            value))
+    for c in cands:
+        if os.path.isfile(c):
+            return os.path.abspath(c), "路径指定"
+    print(f"theme: 文件 {value!r} 不存在，回内置出厂")
+    return None, "内置出厂（文件缺失）"
 
 
 # 内置页面尺寸（mm），presets.json 的 pages 可覆盖/扩展
@@ -346,7 +436,8 @@ _ALIGN_MAP = {"center": "center", "left": "left", "right": "right", "justify": "
 
 class Theme:
     def __init__(self, tags: Optional[Dict[str, Dict[str, str]]] = None,
-                 raw_css: str = ""):
+                 raw_css: str = "", lang: str = "zh-Hant"):
+        self.lang = lang if lang in ("zh-Hant", "zh-Hans") else "zh-Hant"
         merged: Dict[str, Dict[str, str]] = {}
         for tag, props in DEFAULT_THEME.items():
             merged[tag] = dict(props)
@@ -358,7 +449,7 @@ class Theme:
             except OSError:
                 raw_css = ""
         if raw_css:
-            parsed, compounds = self._parse_css_tags(raw_css)
+            parsed, compounds = self._parse_css_tags(raw_css, self.lang)
             for tag, props in parsed.items():
                 merged.setdefault(tag, {}).update(props)
         else:
@@ -368,29 +459,45 @@ class Theme:
                 merged.setdefault(tag, {}).update(props)
         self.tags = merged
         self.compounds = compounds
-        # 字体单一来源：默认应用 font_sets.default；已明确指定的字体不覆盖。
-        # 后代组合键（如 "div.div-xu p.head"）填 compounds（CSS 已指定字体则不覆盖）。
+        # 字体变量（CSS :root 双栏，active lang 代入）：缺 font-family 的标签
+        # 按变量表填充；CSS 已指定的不覆盖（与旧缺省填充同语义）。
+        hant, hans = resolve_font_vars(raw_css)
+        self._font_vars = dict(hant)
+        if self.lang == "zh-Hans":
+            self._font_vars.update(hans)
         default_rules = []
-        for tag, props in _default_font_tags().items():
-            comp = _resolve_compound_key(tag)
-            if comp is not None:
-                self._set_compound_font(*comp, props["font-family"], tag,
-                                        overwrite=False)
+        for suffix, tag in FONT_VAR_TAGS.items():
+            v = self._font_vars.get("--font-" + suffix)
+            if not v:
                 continue
             target = merged.setdefault(tag, {})
             if not target.get("font-family"):
-                target["font-family"] = props["font-family"]
+                target["font-family"] = v
                 sel = TAG_SELECTOR.get(tag)
-                formatted = _format_font_stack(props["font-family"])
+                formatted = _format_font_stack(v)
                 if sel and formatted:
                     default_rules.append(f"{sel} {{ font-family: {formatted}; }}")
+        for suffix, (anc, tgt) in FONT_VAR_COMPOUNDS.items():
+            v = self._font_vars.get("--font-" + suffix)
+            if not v:
+                continue
+            self._set_compound_font(
+                anc, tgt, v,
+                f"{TAG_SELECTOR.get(anc, anc)} "
+                f"{TAG_SELECTOR.get(tgt, tgt).split(',')[0].strip()}",
+                overwrite=False)
         if default_rules:
             extra = "\n".join(default_rules)
             raw_css = (raw_css + "\n" + extra) if raw_css else extra
         self.raw_css = raw_css
 
+    def font_var(self, suffix: str, default: str = "") -> str:
+        """active lang 的 --font-<suffix> 值（如 latin）；缺省 default。"""
+        v = (self._font_vars or {}).get("--font-" + suffix)
+        return v if v else default
+
     @staticmethod
-    def _parse_css_tags(css_text: str):
+    def _parse_css_tags(css_text: str, lang: str = "zh-Hant"):
         """解析 CSS → (tags, compounds)。
         tags: 精确选择器 → 标签属性（供 DOCX）；compounds: 两段后代 `A B` 列表
         [(anc_tag, tgt_tag, props, selector)]（A 须在祖先栈、B 为栈顶时覆盖，CSS 后定义优先）。
@@ -399,6 +506,10 @@ class Theme:
         TRANSLATABLE 之外的声明（如 display）不进 tags（仍保留在 raw 文本）。
         """
         import tinycss2
+        hant, hans = resolve_font_vars(css_text)
+        active = dict(hant)
+        if lang == "zh-Hans":
+            active.update(hans)
         tags: Dict[str, Dict[str, str]] = {}
         compounds = []
         rules = tinycss2.parse_stylesheet(css_text, skip_comments=True,
@@ -410,7 +521,8 @@ class Theme:
             decls = {}
             for d in tinycss2.parse_declaration_list(rule.content):
                 if d.type == "declaration" and d.name in TRANSLATABLE:
-                    decls[d.name] = tinycss2.serialize(d.value).strip()
+                    decls[d.name] = _subst_vars(
+                        tinycss2.serialize(d.value).strip(), active)
             if not decls:
                 continue
             for part in sel.split(","):
@@ -429,9 +541,9 @@ class Theme:
         return tags, compounds
 
     @classmethod
-    def from_css(cls, css_text: str) -> "Theme":
+    def from_css(cls, css_text: str, lang: str = "zh-Hant") -> "Theme":
         """Parse a user CSS file into a Theme (CSS kept for HTML/PDF, tags for DOCX)."""
-        return cls(raw_css=css_text)  # __init__ 内解析 tags + compounds（与旧版合并结果一致）
+        return cls(raw_css=css_text, lang=lang)  # __init__ 内解析 tags + compounds（与旧版合并结果一致）
 
     def css(self) -> str:
         out = []
@@ -446,60 +558,6 @@ class Theme:
             if rule:
                 out.append(f"{selector} {{ {rule} }}")
         return "\n".join(out)
-
-    def apply_font_set(self, name: str = "default", lang: str = "zh-Hant",
-                       font_sets: Optional[Dict[str, Dict[str, str]]] = None) -> "Theme":
-        """Apply a per-tag font preset (书名/正文/偈颂/脚注…各自字体).
-
-        font_sets 结构：{组合名: {标签: [繁体字体, 简体字体]}}，
-        lang 取 zh-Hant(第一项) / zh-Hans(第二项)。
-        标签键还支持后代组合选择器（如 "div.div-xu p.head"，与 CSS 文件互抄）：
-        覆盖同名 compound 的 font-family（无则追加），非法键跳过。
-        组合级 "latin" 键（西文字体对）不参与标签覆盖，由 combo_latin() 单独解析。
-        - DOCX: 覆盖每个标签的 font-family（docx_run -> w:rFonts）
-        - PDF : 按 TAG_SELECTOR 注入逐标签 font-family 规则（追加在样式文件后）
-
-        font_sets 可传自定义配置（--presets-file 的 font_sets 段）；默认 styles/presets.json。
-        """
-        sets = font_sets if font_sets is not None else FONT_SETS
-        if name not in sets:
-            raise ValueError(f"unknown font-set: {name} (allowed: {', '.join(sets)})")
-        preset = sets[name]
-        idx = 0 if lang == "zh-Hant" else 1
-
-        def pick(v):
-            return v[idx] if isinstance(v, (list, tuple)) and len(v) == 2 else v
-
-        expanded = {tag: pick(v) for tag, v in preset.items() if tag != "latin"}
-
-        for tag, font in expanded.items():
-            comp = _resolve_compound_key(tag)
-            if comp is not None:
-                # 后代组合键：显式 --font-set 恒覆盖 CSS 文件值
-                self._set_compound_font(*comp, font, tag, overwrite=True)
-                continue
-            if " " in tag:
-                continue  # 解析失败的组合键：跳过，不写 junk 标签
-            self.tags.setdefault(tag, {})["font-family"] = font
-        rules = []
-        for tag, font in expanded.items():
-            if _resolve_compound_key(tag) is not None:
-                # 组合键本身就是选择器：向 raw_css 追加覆盖规则（HTML/PDF 用；
-                # CSS 层叠后定义优先，盖掉样式文件原值；DOCX 走 compounds）
-                formatted = _format_font_stack(font)
-                if formatted:
-                    rules.append(f"{tag} {{ font-family: {formatted}; }}")
-                continue
-            if " " in tag:
-                continue
-            sel = TAG_SELECTOR.get(tag)
-            formatted = _format_font_stack(font)
-            if sel and formatted:
-                rules.append(f"{sel} {{ font-family: {formatted}; }}")
-        if rules:
-            extra = "\n".join(rules)
-            self.raw_css = (self.raw_css + "\n" + extra) if self.raw_css else extra
-        return self
 
     def scale_font_sizes(self, factor: float) -> "Theme":
         """等比缩放全部标签字号（仅绝对单位 pt；em/% 相对单位随基准自动放大，不在此乘）。

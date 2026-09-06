@@ -455,6 +455,7 @@ class PdfRenderer(HtmlRenderer):
         md = work.metadata
         title = md.get("title") or work.id
         css = self._pdf_css()
+        lang = "zh-Hans" if getattr(work, "simplified", False) else "zh-Hant"
         endnotes = "".join(self._endnotes) if self._endnotes else ""
         head = f"<h1 class='title'>{_esc(title)}</h1>"
         meta = f"<p class='meta'>{_esc(md.get('author') or '')}</p>"
@@ -462,7 +463,7 @@ class PdfRenderer(HtmlRenderer):
         end = f'<div class="endnotes"><h2>校注</h2>{endnotes}</div>' if endnotes else ""
         tei_page = self._tei_info_html(work)
         return (
-            "<html><head>\n"
+            f'<html lang="{lang}"><head>\n'
             '<meta charset="utf-8"/>\n'
             f"<title>{_esc(title)}</title>\n"
             f"<style>{css}</style>\n"

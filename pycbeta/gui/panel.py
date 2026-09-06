@@ -255,7 +255,7 @@ def reset_factory(root=None):
 class XmlOptions:
     """面板数据模型（字段含义见 docs/GUI设计.md §2）。"""
     page: str = "a4"
-    font_set: str = "default"
+    font_lang: str = "zh-Hant"        # 字库语言（CSS :root 双栏；t2s 自动切简体）
     engine: str = "docx2pdf"
     margins: Optional[dict] = None          # None=跟随页面预设；否则 {top,right,bottom,left} mm
     formats: List[str] = field(default_factory=lambda: ["pdf"])
@@ -275,7 +275,7 @@ def options_from_presets(presets):
     pages = (presets.get("pages") or {})
     return XmlOptions(
         page="a4" if "a4" in pages else (next(iter(pages), "a4")),
-        font_set="default",
+        font_lang="zh-Hant",
         engine="docx2pdf",
         margins=None,
         formats=["pdf"],
@@ -327,9 +327,6 @@ class XmlOptionsPanel(QWidget):
         super().__init__(parent)
         self._presets = presets or {}
         self._emitting = False
-        self._font_dirty = False      # 字体下拉被手动碰过（t2s 自动切换豁免）
-        self._font_auto = False       # 当前字体为 t2s 自动切入
-        self._font_before_auto = "default"
         self._series_extra = {}       # series_title 旧 font/size 键透传保留
         self._emitting = True
         try:
@@ -436,46 +433,19 @@ class XmlOptionsPanel(QWidget):
             spin.setEnabled(not follow)
         self._changed()
 
-    def _font_items(self):
-        sets = self._presets.get("font_sets") or {"default": {}}
-        items = []
-        for combo in sets.keys():
-            items.append((combo, combo))
-            items.append((f"{combo}:zh-Hans", f"{combo}:zh-Hans"))
-        return items
-
-    def _on_font_manual(self, _i):
-        if self._emitting:
-            return  # 程序自动切换（t2s 联动/set_options）不算手动
-        self._font_dirty = True
-        self._font_auto = False
-        self._changed()
-
     def _on_t2s(self, checked):
-        if checked and not self._font_dirty and not self._font_auto:
-            cur = self.font_box.currentData()
-            base = (cur or "default").split(":")[0]
-            self._font_before_auto = cur or "default"
-            target = f"{base}:zh-Hans"
-            i = self.font_box.findData(target)
-            if i < 0:
-                self.font_box.addItem(target, target)
-                i = self.font_box.findData(target)
-            self._emitting = True
-            try:
-                self.font_box.setCurrentIndex(i)
-            finally:
-                self._emitting = False
-            self._font_auto = True
-        if not checked and self._font_auto:
-            i = self.font_box.findData(self._font_before_auto)
-            self._emitting = True
-            try:
+        # 简体转换强制简体字库（下拉锁定为简体）；取消后解锁回繁体
+        self._emitting = True
+        try:
+            if checked:
+                i = self.lang_box.findData("zh-Hans")
                 if i >= 0:
-                    self.font_box.setCurrentIndex(i)
-            finally:
-                self._emitting = False
-            self._font_auto = False
+                    self.lang_box.setCurrentIndex(i)
+                self.lang_box.setEnabled(False)
+            else:
+                self.lang_box.setEnabled(True)
+        finally:
+            self._emitting = False
         self._changed()
 
     def _tab_formats(self):
@@ -501,13 +471,13 @@ class XmlOptionsPanel(QWidget):
         self.t2s_box.toggled.connect(self._on_t2s)
         gel.addWidget(self.vert_box)
         gel.addWidget(self.t2s_box)
-        gel.addWidget(QLabel("字体"))
-        self.font_box = QComboBox()
-        for label, value in self._font_items():
-            self.font_box.addItem(label, value)
-        self.font_box.currentIndexChanged.connect(self._on_font_manual)
-        self.font_box.setToolTip("字体方案（config.json font_sets 键；t2s 自动切 :zh-Hans）")
-        gel.addWidget(self.font_box, 1)
+        gel.addWidget(QLabel("字库"))
+        self.lang_box = QComboBox()
+        self.lang_box.addItem("繁体", "zh-Hant")
+        self.lang_box.addItem("简体", "zh-Hans")
+        self.lang_box.currentIndexChanged.connect(lambda _i: self._changed())
+        self.lang_box.setToolTip("CSS :root 双栏变量切换；简体转换勾选后锁定为简体")
+        gel.addWidget(self.lang_box, 1)
         gel.addStretch(1)
         layout.addWidget(self.mode_group)
         self.engine_group = QGroupBox("引擎（仅 PDF 需要）")
@@ -552,6 +522,25 @@ class XmlOptionsPanel(QWidget):
     def _tab_styles(self):
         w = QWidget()
         form = QFormLayout(w)
+        from pycbeta.gui.css_editor import CssComboBox, set_user_theme
+        trow = QHBoxLayout()
+        self.theme_box = CssComboBox()
+        self.theme_box.setToolTip("默认 CSS（config.theme；出厂默认第一）")
+        trow.addWidget(self.theme_box, 1)
+        self.theme_default_btn = QPushButton("设为默认")
+        self.theme_default_btn.setToolTip("选中项写入用户槽 theme（永久生效）")
+        self.theme_default_btn.clicked.connect(self._on_theme_default)
+        trow.addWidget(self.theme_default_btn)
+        self.theme_dir_btn = QPushButton("打开用户预设目录")
+        self.theme_dir_btn.clicked.connect(lambda _v: self._open_local_file(
+            self._user_presets_path()))
+        trow.addWidget(self.theme_dir_btn)
+        form.addRow("默认样式", trow)
+        self.theme_status = QLabel()
+        self.theme_status.setWordWrap(True)
+        self.theme_status.setStyleSheet("color: gray")
+        form.addRow("", self.theme_status)
+        self._refresh_theme_box()
         self.style_rows = {}
         for name, desc in STYLE_FILES:
             path = os.path.abspath(os.path.join(_STYLES_DIR, name))
@@ -576,12 +565,47 @@ class XmlOptionsPanel(QWidget):
         form.addRow("", self.btn_editor)
         return w
 
+    def _user_presets_path(self):
+        from pycbeta.theme import user_presets_dir
+        d = user_presets_dir()
+        os.makedirs(d, exist_ok=True)
+        return d
+
+    def _refresh_theme_box(self, keep_value=None):
+        from pycbeta.theme import resolve_theme_css
+        cur = keep_value if keep_value is not None else (
+            self._presets.get("theme", "") or "")
+        self.theme_box.refresh(cur)
+        _path, label = resolve_theme_css(cur)
+        shown = _path or "内置 pdf_docx.css"
+        if len(shown) > 60:
+            shown = shown[:25] + "…" + shown[-30:]
+        self.theme_status.setText(f"当前默认：{label}（{shown}）")
+        if "缺失" in label or "不存在" in label:
+            self.theme_status.setStyleSheet("color: red")
+        else:
+            self.theme_status.setStyleSheet("color: gray")
+
+    def _on_theme_default(self):
+        from pycbeta.gui.css_editor import set_user_theme
+        value = self.theme_box.selected_value()
+        try:
+            set_user_theme(value)
+        except OSError as exc:
+            self.theme_status.setText(f"写入失败：{exc}")
+            self.theme_status.setStyleSheet("color: red")
+            return
+        self._presets["theme"] = value
+        self._refresh_theme_box(keep_value=value)
+        self._changed()
+
     def _open_style_editor(self):
         from pycbeta.gui.css_editor import CssEditorDialog
         single = self.single_box.currentData() or ""
         chain = [single] if single else None
         dlg = CssEditorDialog(sample_xml=None, engine_chain=chain, parent=self)
         dlg.exec()
+        self._refresh_theme_box()  # 编辑器内可能改了默认
 
     def _pipe(self):
         return "html2pdf" if self.engine_html.isChecked() else "docx2pdf"
@@ -858,7 +882,7 @@ class XmlOptionsPanel(QWidget):
         engine = f"{pipe}:{single}" if single else pipe
         return XmlOptions(
             page=self.page_box.currentData() or self.page_box.currentText(),
-            font_set=self.font_box.currentData() or "default",
+            font_lang=self.lang_box.currentData() or "zh-Hant",
             engine=engine,
             margins=margins,
             formats=[f for f, b in self.format_boxes.items() if b.isChecked()] or ["pdf"],
@@ -916,14 +940,10 @@ class XmlOptionsPanel(QWidget):
             self._on_margin_follow(opts.margins is None)
             self.grayscale_box.setChecked(bool(opts.output.get("grayscale", False)))
             self.border_box.setChecked(bool(opts.output.get("page_border", False)))
-            i = self.font_box.findData(opts.font_set)
-            if i < 0:
-                self.font_box.addItem(opts.font_set, opts.font_set)
-                i = self.font_box.findData(opts.font_set)
-            self.font_box.setCurrentIndex(i)
-            self._font_dirty = False
-            self._font_auto = False
+            i = self.lang_box.findData(opts.font_lang or "zh-Hant")
+            self.lang_box.setCurrentIndex(i if i >= 0 else 0)
             self.t2s_box.setChecked(bool(opts.t2s))
+            self._on_t2s(bool(opts.t2s))
             self.vert_box.setChecked(bool(opts.vertical))
             for f, b in self.format_boxes.items():
                 b.setChecked(f in (opts.formats or ["pdf"]))

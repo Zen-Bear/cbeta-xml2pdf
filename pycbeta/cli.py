@@ -16,7 +16,7 @@ from .render_pdf import PdfRenderer, docx_to_pdf, DOCX_PDF_CHAIN
 from .render_docx import DocxRenderer
 from .render_md import MdRenderer
 from .render_epub import EpubRenderer
-from .theme import Theme, PAGE_PRESETS, OUTPUT_PRESETS, ENGINE_PRESETS, load_presets, combo_latin, _PRESETS_PATH
+from .theme import Theme, PAGE_PRESETS, OUTPUT_PRESETS, ENGINE_PRESETS, load_presets, resolve_theme_css, _PRESETS_PATH
 from .filename import apply_template
 
 _ALL_FORMATS = ["html", "pdf", "docx", "md", "epub"]
@@ -24,19 +24,33 @@ _FORMAT_EXT = {"html": "", "pdf": ".pdf", "docx": ".docx", "md": ".md", "epub": 
 _FONT_LANGS = ("zh-Hant", "zh-Hans")
 
 
-def parse_font_set_arg(value: str):
-    """解析 '组合:语言'。裸值若为 zh-Hant/zh-Hans 视为语言（default 组合）。"""
-    if ":" in value:
-        name, lang = value.split(":", 1)
-        name = name or "default"
-        lang = lang or "zh-Hant"
-    elif value in _FONT_LANGS:
-        name, lang = "default", value
-    else:
-        name, lang = value, "zh-Hant"
-    if lang not in _FONT_LANGS:
-        raise SystemExit(f"--font-set 语言无效: {lang}（可选 {_FONT_LANGS}）")
-    return name, lang
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _user_slot_theme():
+    """用户槽 theme 键（无槽/无键/非法返回 ""）；CLI 无 --config 时优先于出厂。"""
+    try:
+        with open(os.path.join(_REPO_ROOT, "config.user.json"), encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return ""
+    v = (data or {}).get("theme", "")
+    return v if isinstance(v, str) else ""
+
+
+def _resolve_cli_theme(args, presets, config_path):
+    """CLI 主题四档 → (path|None, 说明)：显式 --theme > config.theme 槽 > 内置。
+    无 --config 时用户槽 theme 优先于出厂 config。"""
+    if getattr(args, "theme", None):
+        return args.theme, "显式 --theme"
+    value = (presets or {}).get("theme", "") or ""
+    base_dir = os.path.dirname(os.path.abspath(config_path)) if config_path else None
+    if not getattr(args, "config", None):
+        value = _user_slot_theme() or value
+    return resolve_theme_css(value, base_dir)
+
+
+
 
 
 def scaled_page_presets(page_presets, factor: float):
@@ -53,10 +67,10 @@ def scaled_page_presets(page_presets, factor: float):
     return out
 
 
-def load_theme(path):
+def load_theme(path, lang="zh-Hant"):
     if path.endswith(".css"):
         with open(path, encoding="utf-8") as f:
-            return Theme.from_css(f.read())
+            return Theme.from_css(f.read(), lang)
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
     return Theme(data.get("tags") or data)
@@ -341,14 +355,14 @@ def main(argv=None):
                         help="自定义主题，替换默认主题层 styles/pdf_docx.css "
                              "(作用于 pdf/docx)；html/epub 默认不带主题层，"
                              "传 --theme 会在官方基底 cbeta_golden.css 之上追加")
-    shared.add_argument("--font-set",
-                        help="字体方案：'组合:语言'，如 default:zh-Hans（default 组合简体）。"
-                             "裸值 default=default组合繁体；裸值 zh-Hans=default组合简体。"
-                             "每个组合内置逐标签[繁体,简体]字体（config.json）")
+    shared.add_argument("--font-lang", choices=["zh-Hant", "zh-Hans"],
+                        default=None,
+                        help="字库：zh-Hant 繁体（默认）/ zh-Hans 简体（CSS :root 双栏变量切换）。"
+                             "t2s 未显式指定时自动切简体")
     shared.add_argument("--t2s", dest="t2s_flag", action="store_true",
                         default=None,
                         help="简体输出：OpenCC t2s 把正文/注释/元数据转为简体"
-                             "（未指定 --font-set 时自动套用 default:zh-Hans 字体；"
+                             "（未指定 --font-lang 时自动套用简体字库；"
                              "--no-t2s 可关闭）")
     shared.add_argument("--no-t2s", dest="t2s_flag", action="store_false",
                         default=None,
@@ -358,7 +372,7 @@ def main(argv=None):
                              "默认取 config output.font_scale；与 --verify 互斥）")
     shared.add_argument("--config", "--presets-file",
                         help="自定义全局配置 JSON（复制 pycbeta/config.json 修改，"
-                             "含 font_sets/pages/engines/output）")
+                             "含 pages/engines/output/theme）")
     shared.add_argument("--xml-dir", default=None,
                         help="本地 XML 源目录（-i 佛典編號 查找；默认 config source.xml_dir）")
     shared.add_argument("--download-dir", default=None,
@@ -369,7 +383,7 @@ def main(argv=None):
     shared.add_argument("--list-fonts", nargs="?", const="", default=None,
                         metavar="关键词",
                         help="列出本机已安装字体（家族名|路径），可带关键词过滤；"
-                             "config font_sets 里填第一列家族名。仅列表，不渲染")
+                             "CSS 字体变量里填第一列家族名。仅列表，不渲染")
 
     note = ap.add_argument_group("注释（所有格式）")
     note.add_argument("--notes", choices=["footnote", "endnote", "inline"],
@@ -413,7 +427,7 @@ def main(argv=None):
             alias = " / ".join(n for n in names[1:] if n != name)
             lines.append(f"{name}" + (f"（{alias}）" if alias else "") + f" | {path}")
         if rows:
-            lines.append(f"共 {len(rows)} 款。config font_sets 里填第一列家族名（中英文皆可，要装字体的 GDI 可见名）。")
+            lines.append(f"共 {len(rows)} 款。CSS 字体变量里填第一列家族名（中英文皆可，要装字体的 GDI 可见名）。")
         else:
             lines.append("未找到匹配字体（换关键词再试，如：楷体 / kaiti / song）")
         try:
@@ -499,39 +513,27 @@ def main(argv=None):
                               or [(engines_cfg.get("html2pdf") or {}).get("engine")
                                   or "chromium"])
 
-    theme = load_theme(args.theme) if args.theme else None
-    font_sets_cfg = (presets.get("font_sets") if args.config else None)
-    font_combo, font_lang = "default", "zh-Hant"
-    if args.font_set:
-        font_combo, font_lang = parse_font_set_arg(args.font_set)
-        if theme is None:
-            theme = Theme()
-        theme.apply_font_set(font_combo, lang=font_lang, font_sets=font_sets_cfg)
-    # t2s 开关：--t2s/--no-t2s 显式 > config output.t2s；
-    # --font-set :zh-Hans 只换字库，不再联动文字
+    theme_path, _theme_label = _resolve_cli_theme(
+        args, presets if args.config else None,
+        args.config if args.config else None)
     if args.t2s_flag is not None:
         args.t2s = args.t2s_flag
-    if args.t2s and not args.font_set:
-        # 反向联动：t2s 为真且用户未指定 font-set，自动套 default:zh-Hans 字体
-        font_lang = "zh-Hans"
-        if theme is None:
-            theme = Theme()
-        theme.apply_font_set("default", lang="zh-Hans", font_sets=font_sets_cfg)
-    # --config 自带 font_sets 时，无 --font-set/t2s 也要套 default 组合——否则 --config
-    # 换字库静默失效（--config 本意即替换 font_sets，见 --help）。有显式开关时上面已处理。
-    if font_sets_cfg and "default" in font_sets_cfg \
-            and not args.font_set and not args.t2s:
-        if theme is None:
-            theme = Theme()
-        theme.apply_font_set("default", lang="zh-Hant", font_sets=font_sets_cfg)
-        font_lang = "zh-Hant"
-    # 西文字体随组合语言切换（页面方案显式 latin_font 仍优先，见 DocxRenderer）
-    args.latin_font = combo_latin(font_sets_cfg, font_combo, font_lang)
+    # 字库语言：显式 --font-lang > t2s 自动简体 > 繁体
+    font_lang = args.font_lang or ("zh-Hans" if args.t2s else "zh-Hant")
+    if theme_path:
+        theme = load_theme(theme_path, font_lang)
+    elif font_lang != "zh-Hant" or args.font_scale != 1.0:
+        theme = Theme(lang=font_lang)
+    else:
+        theme = None  # 渲染器内置 Theme()（=出厂 pdf_docx.css 繁体）
+    # 西文字体随语言切换（页面方案显式 latin_font 仍优先，见 DocxRenderer）
+    _th = theme if theme is not None else Theme(lang=font_lang)
+    args.latin_font = _th.font_var("latin", "Calibri")
     args.gaiji_lang = font_lang  # 缺字字体链按此语言选表（render_docx 懒解析）
     if args.font_scale != 1.0:
         # 大字版：主题字号等比缩放 + 页面兜底字号跟随（版心/边距不动，自动重排）
         if theme is None:
-            theme = Theme()
+            theme = Theme(lang=font_lang)
         theme.scale_font_sizes(args.font_scale)
         args.page_presets = scaled_page_presets(args.page_presets, args.font_scale)
 

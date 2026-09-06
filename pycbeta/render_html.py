@@ -194,6 +194,7 @@ class HtmlRenderer:
     def _wrap(self, body, work, juan_no) -> str:
         md = work.metadata
         title = md.get("title") or work.id
+        lang = "zh-Hans" if getattr(work, "simplified", False) else "zh-Hant"
         notes = "" if self.notes == "inline" else ("".join(self._back_old) + "\n\n".join(self._back_cb))
         back = "  <hr><h1>校注</h1>\n" + notes + "\n\n" if notes else "  \n"
         theme_css = self.theme.raw_css if self.theme and self.theme.raw_css else (
@@ -213,7 +214,7 @@ class HtmlRenderer:
         # 注音 rt 字号字体（P6）：ruby style 时输出 ruby rt 规则（行内模式无 rt 元素则为空）
         ann_rule = _rt_css(self._annotations) if self._annotations is not None else ""
         parts = [
-            "<html>\n<head>\n",
+            f'<html lang="{lang}">\n<head>\n',
             '  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />\n',
             f"  <title>{_esc(title)}</title>\n",
             "  <style>\n",

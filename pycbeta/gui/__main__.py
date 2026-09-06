@@ -54,19 +54,13 @@ def parse_produced_paths(log):
 def build_render_cmd(opts, xml, fmt, out_dir, tmpcfg):
     """子进程桥命令（纯函数，可单测）：批量渲染一行。
 
-    - ``--font-set`` 只在非默认时传：默认走 CLI 主题默认路径（CSS 已指定的字体优先），
-      否则 ``apply_font_set`` 无条件覆盖会踩掉 ``user.css`` 的字体；
-    - 仓库根 ``user.css`` 存在则追加 ``--theme``（样式编辑器产物，GUI 自动生效）。
+    - 字库语言只在简体时传 --font-lang（默认繁体省略；t2s 自动简体）；
+    - 默认主题走 --config 里的 theme 槽（CLI 解析），此处不传 --theme。
     """
-    from pycbeta.gui.css_editor import user_css_path
     cmd = [sys.executable, "-m", "pycbeta", "-i", xml, "-f", fmt,
            "--page", opts.page, "--config", tmpcfg, "-o", out_dir]
-    font_set = (opts.font_set or "default").strip()
-    if font_set not in ("", "default", "default:zh-Hant"):
-        cmd += ["--font-set", font_set]
-    css = user_css_path()
-    if os.path.isfile(css):
-        cmd += ["--theme", css]
+    if (opts.font_lang or "zh-Hant") == "zh-Hans" and not opts.t2s:
+        cmd += ["--font-lang", "zh-Hans"]
     if abs(float(opts.font_scale or 1.0) - 1.0) > 1e-9:
         cmd += ["--font-scale", str(opts.font_scale)]
     if opts.vertical:

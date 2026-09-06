@@ -4,42 +4,10 @@
   // 支持 // 行注释；生效格式标注在每条注释尾部
   // ============================================================
 
-  "font_sets": {
-    // 字体方案：每个组合为 {标签: [繁体字体, 简体字体]}，另有组合级 "latin" 西文字体对
-    // --font-set default 用第一项（繁体）；--font-set default:zh-Hans 用第二项（简体）
-    // python -m pycbeta.cli --list-fonts "kaiti" → KaiTi（楷体） | C:\WINDOWS\Fonts\simkai.ttf
-    "default": {
-      // latin：西文字体（DOCX docDefaults ascii/hAnsi），随组合语言切换
-      "latin": ["Calibri", "Calibri"],
-      // body/pin 由 pdf_docx.css 迁入：body 为 PDF/DOCX 文档级默认字体，pin 为品名
-      "body": ["新細明體, Songti TC, Times New Roman, sans-serif",
-               "宋体, SimSun, Times New Roman, sans-serif"],
-      "title": ["標楷體, DFKaiShu", "楷体, KaiTi"],
-      "author": ["新細明體, PMingLiU", "宋体, SimSun"],
-      "translator": ["新細明體, PMingLiU", "宋体, SimSun"],
-      "byline": ["新細明體, PMingLiU", "宋体, SimSun"],
-      "head": ["微軟正黑體, 新細明體", "黑体, SimHei"],
-      "juan": ["標楷體, DFKaiShu", "楷体, KaiTi"],
-      "pin": ["新細明體, PMingLiU", "宋体, SimSun"],
-      // 序标题（div.div-xu 内 head）：后代组合键，与 pdf_docx.css 互抄；
-      // --font-set 切换繁简时覆盖 CSS 文件值（默认不指定时走 CSS）
-      "div.div-xu p.head": ["標楷體, KaiTi, serif", "楷体, serif"],
-      "p": ["新細明體, PMingLiU", "宋体, SimSun"],
-      "verse": ["標楷體, DFKaiShu", "楷体, KaiTi"],
-      "form": ["新細明體, PMingLiU", "宋体, SimSun"],
-      "dharani": ["新細明體, PMingLiU", "宋体, SimSun"],
-      "footnote": ["新細明體, PMingLiU", "宋体, SimSun"],
-      "note-inline": ["新細明體, PMingLiU", "宋体, SimSun"],
-      "kaiti": ["標楷體, DFKaiShu", "楷体, KaiTi"],
-      "heiti": ["黑體, SimHei", "黑体, SimHei"],
-      "fangsong": ["仿宋, FangSong", "仿宋, FangSong"],
-      "mingti": ["新細明體, PMingLiU", "宋体, SimSun"],
-      "series": ["隸書, LiSu", "隶书, LiSu"]
-    }
-  },
+  "theme": "pdf_docx.css",  // 默认 CSS 变种（出厂）：名字走双目录（用户 css-presets/ 优先→内置 presets/）；"pdf_docx.css"=内置；绝对/相对路径直接认；空/找不到警告回内置
 
   "pages": {
-    // 页面方案：--page 选名字（只管几何：尺寸/边距/兜底字号；字体统一走 font_sets）
+    // 页面方案：--page 选名字（只管几何：尺寸/边距/兜底字号；字体走 CSS :root 双栏变量）
     // size=[宽mm,高mm]；margins=上下左右 mm；doc_size=DOCX 文档兜底字号(pt)
     "a4": {
       "size": [210, 297],
@@ -123,7 +91,7 @@
 
   "output": {
     // 输出处理规则
-    "t2s": false,               // [所有格式] true=OpenCC t2s 简体输出（正文/注释/元数据；未指定 --font-set 时自动套 default:zh-Hans 字体；校验时官方基线同步转简体后比对）
+    "t2s": false,               // [所有格式] true=OpenCC t2s 简体输出（正文/注释/元数据；未指定 --font-lang 时自动用简体字库；校验时官方基线同步转简体后比对）
     "ignore_xml_style": false,   // [docx|pdf|html|epub] true=忽略 XML 里 <p style="margin-left:…"> 脏数据，缩进统一走 CSS
     "ignore_xml_space": false,   // [docx|pdf|html|epub] true=忽略文本首尾多余空格（含全角 \u3000，如目录行首的空格）
     "verse_caesura": "　　",     // [docx] 偈颂 <caesura/> 分隔符（默认两个全角空格，可改）

@@ -3,22 +3,65 @@
    属性均可被用户主题（--theme xxx.css）替换。 */
 
 /* ============ 基础 ============ */
-/* 字体：本文件是"繁体方案"（书名標楷體/正文新細明體/偈颂標楷體/脚注新細明體…）。
-   简体方案用 --font-set zh-Hans（宋体/楷体/黑体/仿宋），会逐标签覆盖。
-   字体栈统一在 config.json font_sets 维护，本文件只保留字号/颜色/边距等版式属性；
-   例外：body 的字体栈也在 font_sets.body（见下）。 */
+/* 字体：本文件是"双栏方案"——:root 为繁体，html[lang="zh-Hans"] 为简体（只重写字体）。
+   规则内用 font-family: var(--font-标签) 引用；HTML/PDF 由浏览器按 <html lang> 原生切换；
+   DOCX 由 theme.py 按 Theme(lang) 代入。字体只此一处，别处不再重复。 */
+:root {
+  --font-latin: Calibri;
+  --font-body: 新細明體, Songti TC, Times New Roman, sans-serif;
+  --font-title: 標楷體, DFKaiShu;
+  --font-author: 新細明體, PMingLiU;
+  --font-translator: 新細明體, PMingLiU;
+  --font-byline: 新細明體, PMingLiU;
+  --font-head: 微軟正黑體, 新細明體;
+  --font-juan: 標楷體, DFKaiShu;
+  --font-pin: 新細明體, PMingLiU;
+  --font-div-xu-head: 標楷體, KaiTi, serif;
+  --font-p: 新細明體, PMingLiU;
+  --font-verse: 標楷體, DFKaiShu;
+  --font-form: 新細明體, PMingLiU;
+  --font-dharani: 新細明體, PMingLiU;
+  --font-footnote: 新細明體, PMingLiU;
+  --font-note-inline: 新細明體, PMingLiU;
+  --font-kaiti: 標楷體, DFKaiShu;
+  --font-heiti: 黑體, SimHei;
+  --font-fangsong: 仿宋, FangSong;
+  --font-mingti: 新細明體, PMingLiU;
+  --font-series-title: 隸書, LiSu;
+}
+html[lang="zh-Hans"] {
+  --font-body: 宋体, SimSun, Times New Roman, sans-serif;
+  --font-title: 楷体, KaiTi;
+  --font-author: 宋体, SimSun;
+  --font-translator: 宋体, SimSun;
+  --font-byline: 宋体, SimSun;
+  --font-head: 黑体, SimHei;
+  --font-juan: 楷体, KaiTi;
+  --font-pin: 宋体, SimSun;
+  --font-div-xu-head: 楷体, serif;
+  --font-p: 宋体, SimSun;
+  --font-verse: 楷体, KaiTi;
+  --font-form: 宋体, SimSun;
+  --font-dharani: 宋体, SimSun;
+  --font-footnote: 宋体, SimSun;
+  --font-note-inline: 宋体, SimSun;
+  --font-kaiti: 楷体, KaiTi;
+  --font-heiti: 黑体, SimHei;
+  --font-mingti: 宋体, SimSun;
+  --font-series-title: 隶书, LiSu;
+}
 body {
   line-height: 1.8;   /* 全局行距（1.8倍）；DOCX 由各标签 line-height 覆盖 */
 }
-/* body 字体栈（config.json font_sets.body，繁体五段回退）：
+/* body 字体栈（--font-body，繁体五段回退）：
    微軟正黑體（Win 繁体首选）→ 新細明體（Win 繁体兜底，生僻字覆盖多）
    → Songti TC（macOS 繁体）→ Times New Roman（拉丁字母/数字）
    → sans-serif（通用族兜底，永不加引号，保证不断字）。
    简体栈同理：黑体 → 宋体 → Times New Roman → sans-serif。
-   DOCX 只取首个中文字体作 eastAsia，西文另走 pages.latin_font。 */
+   DOCX 只取首个中文字体作 eastAsia，西文另走 --font-latin。 */
 a { text-decoration: none; }
 
-/* rend 字体由 config.json font_sets 统一提供：kaiti/heiti/fangsong/mingti（含简体）。
+/* rend 字体（--font-kaiti/heiti/fangsong/mingti，繁简双栏见文件头）。
    源 XML 的 rend 属性（如 <p rend="kaiti">）按 theme.py TAG_SELECTOR 映射到同名标签，
    与块级标签正交叠加；DOCX 经 docx_run 合并进 w:rFonts，PDF 经追加规则生效。 */
 
@@ -34,7 +77,7 @@ h1.title {
    字体/字号走主题（可视化编辑器可调）；config output.series_title 仅留 enabled 开关，
    旧配置内 font/size 仍作回退（见 render_docx series_para）。 */
 p.series-title {
-  font-family: 隸書, LiSu;
+  font-family: var(--font-series-title);
   font-size: 9pt;
   text-align: left;
 }

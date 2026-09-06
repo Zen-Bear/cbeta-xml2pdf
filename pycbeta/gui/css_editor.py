@@ -32,9 +32,6 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fi
 _STYLES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                            "..", "styles")
 FACTORY_CSS = os.path.join(_STYLES_DIR, "pdf_docx.css")
-USER_CSS_NAME = "user.css"
-BUILTIN_PRESETS_DIR = os.path.join(_STYLES_DIR, "presets")
-USER_PRESETS_DIRNAME = "css-presets"
 
 # 临时样张候选（glob，按序取首个命中者；精简样本到了替换此处即可）
 SAMPLE_CANDIDATES = (
@@ -199,53 +196,6 @@ def css_colors(css_text):
     return out
 
 
-def user_css_path(root=None):
-    """用户 CSS 路径（仓库根 user.css；git 忽略，不入库）。"""
-    return os.path.join(root or REPO_ROOT, USER_CSS_NAME)
-
-
-def save_user_css_text(text, root=None):
-    """用户 CSS 落盘（纯函数，可单测）；返回路径。"""
-    path = user_css_path(root)
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(text)
-    return path
-
-
-def clear_user_css(root=None):
-    """删除用户 CSS（不存在也算成功）；返回是否删过文件。"""
-    path = user_css_path(root)
-    if os.path.isfile(path):
-        os.remove(path)
-        return True
-    return False
-
-
-def user_presets_dir(root=None):
-    """用户预设目录（仓库根 css-presets/；git 忽略，不入库）。"""
-    return os.path.join(root or REPO_ROOT, USER_PRESETS_DIRNAME)
-
-
-def list_presets(builtin_dir=None, user_dir=None):
-    """预设列表 → [(kind, stem, path)]，kind ∈ builtin/user。
-
-    出厂默认由调用方另行加首项；同名用户预设遮蔽内置（内置的不列出）。
-    """
-    found = []
-    builtin_dir = os.path.abspath(builtin_dir or BUILTIN_PRESETS_DIR)
-    user_dir = os.path.abspath(user_dir or user_presets_dir())
-    for kind, d in (("builtin", builtin_dir), ("user", user_dir)):
-        if not os.path.isdir(d):
-            continue
-        for fn in sorted(os.listdir(d)):
-            if fn.lower().endswith(".css"):
-                found.append((kind, os.path.splitext(fn)[0],
-                              os.path.join(d, fn)))
-    user_names = {name for kind, name, _p in found if kind == "user"}
-    return [(k, n, p) for k, n, p in found
-            if k == "user" or n not in user_names]
-
-
 def _safe_preset_stem(name):
     stem = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "", (name or "").strip())
     stem = stem.strip().strip(".")
@@ -254,6 +204,7 @@ def _safe_preset_stem(name):
 
 def save_preset_file(name, full_css_text, user_dir=None):
     """另存用户预设（纯函数，可单测）；同名覆盖；返回路径。空名抛 ValueError。"""
+    from pycbeta.theme import user_presets_dir
     stem = _safe_preset_stem(name)
     if not stem:
         raise ValueError("预设名为空")
@@ -267,6 +218,7 @@ def save_preset_file(name, full_css_text, user_dir=None):
 
 def delete_preset_file(path, builtin_dir=None, user_dir=None):
     """删除用户预设；内置目录/目录外/不存在抛 ValueError（内置删不掉）。"""
+    from pycbeta.theme import BUILTIN_PRESETS_DIR, user_presets_dir
     builtin_dir = os.path.abspath(builtin_dir or BUILTIN_PRESETS_DIR)
     user_dir = os.path.abspath(user_dir or user_presets_dir())
     ap = os.path.abspath(path or "")
@@ -354,7 +306,11 @@ def build_override_block(values, passthrough=""):
     order = [sel for sel, _label in EDITABLE_ROWS]
     for sel in order + [s for s in values if s not in order]:
         props = values.get(sel) or {}
-        decls = [f"{k}: {props[k]}" for k in _FONT_PROPS if props.get(k)]
+        if sel == ":root" or sel == _HANS_BLOCK:
+            decls = [f"{k}: {props[k]}" for k in props
+                     if k.startswith("--font-") and props[k]]
+        else:
+            decls = [f"{k}: {props[k]}" for k in _FONT_PROPS if props.get(k)]
         if decls:
             out.append(f"{sel} {{ {'; '.join(decls)}; }}")
     if (passthrough or "").strip():
@@ -382,6 +338,7 @@ def split_override_block(text):
         return keep
 
     pending = []
+    _hans_re = re.compile(r'^html\[lang=(["\']?)zh-Hans\1\]$')
     for tok in tokens:
         if tok.type == "comment":
             pending.append(tinycss2.serialize([tok]))
@@ -398,6 +355,30 @@ def split_override_block(text):
         if tok.type != "qualified-rule":
             continue
         prelude = tinycss2.serialize(tok.prelude).strip()
+        var_key = ":root" if prelude == ":root" else (
+            _HANS_BLOCK if _hans_re.match(prelude) else None)
+        if var_key is not None:
+            # 字体变量块：只收 --font-*，其余声明原文透传
+            vkeep, vrest = {}, []
+            for d in tinycss2.parse_declaration_list(tok.content):
+                if d.type == "error":
+                    errs.append(str(getattr(d, "message", d)))
+                elif d.type == "declaration":
+                    val = tinycss2.serialize(d.value).strip()
+                    if d.name.startswith("--font-"):
+                        if val:
+                            vkeep[d.name] = val
+                    else:
+                        vrest.append(f"{d.name}: {val}"
+                                     + (" !important" if d.important else ""))
+            if vkeep:
+                values.setdefault(var_key, {}).update(vkeep)
+            if vrest:
+                extras.extend(flush_comments(pending))
+                extras.append(f"{prelude} {{ {'; '.join(vrest)}; }}")
+            else:
+                extras.extend(flush_comments(pending))
+            continue
         canon = _canonical_editable(prelude)
         if canon is None:
             extras.extend(flush_comments(pending))
@@ -612,11 +593,12 @@ class _RenderThread(QThread):
     done = Signal(str)
     failed = Signal(str)
 
-    def __init__(self, xml_path, css_text, out_dir, parent=None):
+    def __init__(self, xml_path, css_text, out_dir, lang="zh-Hant", parent=None):
         super().__init__(parent)
         self._xml = xml_path
         self._css = css_text
         self._out = out_dir
+        self._lang = lang
 
     def run(self):
         try:
@@ -624,7 +606,7 @@ class _RenderThread(QThread):
             from pycbeta.render_docx import DocxRenderer
             from pycbeta.theme import Theme
             work = P5Parser().parse(self._xml)
-            theme = Theme.from_css(self._css)
+            theme = Theme.from_css(self._css, self._lang)
             fn = DocxRenderer(theme=theme, notes="footnote",
                               bookmarks=False).render_work(
                 work, self._out, filename="preview.docx")
@@ -679,6 +661,197 @@ class _ColorPopup(QDialog):
         return self._selected
 
 
+_HANS_BLOCK = 'html[lang="zh-Hans"]'
+
+
+def _var_suffix(selector):
+    """行选择器 → 字体变量后缀（无变量返回 None，供字体双栏用）。"""
+    from pycbeta.theme import _SELECTOR_TAGS, FONT_VAR_TAGS, FONT_VAR_COMPOUNDS
+    tag = _SELECTOR_TAGS.get(selector)
+    if tag and tag in FONT_VAR_TAGS:
+        return tag
+    bits = (selector or "").split()
+    if len(bits) == 2:
+        anc = _SELECTOR_TAGS.get(bits[0])
+        tgt = _SELECTOR_TAGS.get(bits[1])
+        if anc and tgt:
+            for suffix, (a, t) in FONT_VAR_COMPOUNDS.items():
+                if (a, t) == (anc, tgt):
+                    return suffix
+    return None
+
+
+def _suffix_rows():
+    """变量后缀 → 行选择器（供 touched 反向映射；惰性构建）。"""
+    out = {}
+    for sel, _label in EDITABLE_ROWS:
+        suffix = _var_suffix(sel)
+        if suffix:
+            out.setdefault(suffix, sel)
+    return out
+
+
+def current_theme_value(root=None):
+    """有效默认槽值：用户槽 theme → 出厂 config theme → ''。"""
+    import json
+    from pycbeta.theme import load_presets
+    root = root or REPO_ROOT
+    try:
+        with open(os.path.join(root, "config.user.json"), encoding="utf-8") as f:
+            v = (json.load(f) or {}).get("theme", "")
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    except (OSError, ValueError):
+        pass
+    try:
+        v = load_presets(os.path.join(root, "pycbeta", "config.json")).get(
+            "theme", "")
+        if isinstance(v, str):
+            return v.strip()
+    except (OSError, ValueError):
+        pass
+    return ""
+
+
+def set_user_theme(value, root=None):
+    """用户槽 theme 键写入（只改此键；无用户槽时按出厂全量建）。返回用户槽路径。"""
+    import json
+    from pycbeta.theme import load_presets
+    root = root or REPO_ROOT
+    upath = os.path.join(root, "config.user.json")
+    if os.path.isfile(upath):
+        try:
+            with open(upath, encoding="utf-8") as f:
+                data = json.load(f) or {}
+            if not isinstance(data, dict):
+                data = {}
+        except ValueError:
+            bad = upath + ".bad"
+            try:
+                os.replace(upath, bad)
+            except OSError:
+                pass
+            data = {}
+    else:
+        data = dict(load_presets(os.path.join(root, "pycbeta", "config.json")))
+    data["theme"] = value
+    with open(upath, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+    return upath
+
+
+class CssComboBox(QComboBox):
+    """CSS 变种下拉（面板样式表卡 + 编辑器预设行共用）。
+
+    顺序：当前默认（（默认））→ 出厂组 → 用户组；itemData={"value","path"}。
+    选中只选择不写默认；设默认走独立按钮（set_user_theme）。
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setMinimumWidth(220)
+        self.refresh("")
+
+    def refresh(self, current=""):
+        from pycbeta.theme import list_presets
+        cur = (current or "").strip() or "pdf_docx.css"
+        items = list_presets()
+        builtin_css = os.path.abspath(os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "..", "styles",
+            "pdf_docx.css"))
+
+        def entry(value, path, label):
+            return (value, path, label)
+
+        def find_current():
+            if cur == "pdf_docx.css":
+                return ("pdf_docx.css", builtin_css)
+            stem = cur[:-4] if cur.lower().endswith(".css") else cur
+            for _k, n, p in items:
+                if n == stem or n.lower() == stem.lower():
+                    return (n, p)
+            if os.path.isfile(cur):
+                return (cur, os.path.abspath(cur))
+            return None
+
+        found = find_current()
+        rows = []  # (value, path, label, header?)
+
+        def label_of(value, path):
+            for k, n, p in items:
+                if p == path:
+                    return f"［{'内置' if k == 'builtin' else '用户'}］{n}"
+            return "出厂默认（pdf_docx.css）"
+
+        if found:
+            value, path = found
+            rows.append((value, path, f"（默认）{label_of(value, path)}",
+                         False))
+        else:
+            rows.append((cur, None, f"（默认）{cur}（找不到）", False))
+        rows.append((None, None, "── 出厂 ──", True))
+        rows.append(("pdf_docx.css", builtin_css, "出厂默认（pdf_docx.css）",
+                     False))
+        for k, n, p in items:
+            if k == "builtin" and (not found or p != found[1]):
+                rows.append((n, p, f"［内置］{n}", False))
+        rows.append((None, None, "── 用户 ──", True))
+        for k, n, p in items:
+            if k == "user" and (not found or p != found[1]):
+                rows.append((n, p, f"［用户］{n}", False))
+
+        with QSignalBlocker(self):
+            self.clear()
+            for value, path, label, header in rows:
+                if header:
+                    self.addItem(label, None)
+                    self.model().item(self.count() - 1).setEnabled(False)
+                else:
+                    self.addItem(label, {"value": value, "path": path})
+            self.setCurrentIndex(0)
+
+    def selected_value(self):
+        d = self.currentData() or {}
+        return d.get("value", "pdf_docx.css")
+
+    def selected_path(self):
+        d = self.currentData() or {}
+        return d.get("path")
+
+    def select_path(self, path):
+        """按文件路径选中（另存后定位用）；找不到回首项。"""
+        from PySide6.QtCore import QSignalBlocker
+        if not path:
+            return
+        target = os.path.abspath(path)
+        with QSignalBlocker(self):
+            for i in range(self.count()):
+                d = self.itemData(i) or {}
+                if d.get("path") and os.path.abspath(d["path"]) == target:
+                    self.setCurrentIndex(i)
+                    return
+            self.setCurrentIndex(0)
+
+
+def _touched_from_values(values):
+    """values → touched 集合（含字体 lang 维）。"""
+    rev = _suffix_rows()
+    touched = set()
+    for s, props in (values or {}).items():
+        if s == ":root" or s == _HANS_BLOCK:
+            lang = "zh-Hans" if s == _HANS_BLOCK else "zh-Hant"
+            for var in props:
+                if var.startswith("--font-"):
+                    row = rev.get(var[7:])
+                    if row:
+                        touched.add((row, "font-family", lang))
+        else:
+            for p in props:
+                touched.add((s, p))
+    return touched
+
+
 class CssEditorDialog(QDialog):
     """所见即所得样式编辑器：左调参 / 右预览 / 底导出。"""
 
@@ -702,12 +875,14 @@ class CssEditorDialog(QDialog):
     # ----- 构造 -----
     def _build(self, sample):
         layout = QVBoxLayout(self)
-        # 预设行
+        # 预设行（下拉仅载入；设默认走独立按钮）
         prow = QHBoxLayout()
         prow.addWidget(QLabel("预设"))
-        self.preset_box = QComboBox()
-        self.preset_box.setMinimumWidth(220)
+        self.preset_box = CssComboBox()
         self.preset_box.activated.connect(self._on_preset_chosen)
+        self.preset_apply = QPushButton("设为默认")
+        self.preset_apply.setToolTip("选中项写入用户槽 theme（永久生效）")
+        self.preset_apply.clicked.connect(self._apply_default)
         self.preset_save = QPushButton("另存为预设…")
         self.preset_save.setToolTip("当前样式另存进用户预设库（css-presets/）")
         self.preset_save.clicked.connect(self._save_preset_as)
@@ -715,6 +890,7 @@ class CssEditorDialog(QDialog):
         self.preset_del.setToolTip("只删用户预设；内置预设受保护")
         self.preset_del.clicked.connect(self._delete_preset)
         prow.addWidget(self.preset_box, 1)
+        prow.addWidget(self.preset_apply)
         prow.addWidget(self.preset_save)
         prow.addWidget(self.preset_del)
         layout.addLayout(prow)
@@ -737,7 +913,16 @@ class CssEditorDialog(QDialog):
         rl.setContentsMargins(0, 0, 0, 0)
         tip = QLabel("预览为模拟显示（字体四参数为真值），分页/页边距以 Word 为准")
         tip.setStyleSheet("color: gray")
-        rl.addWidget(tip)
+        trow = QHBoxLayout()
+        trow.addWidget(tip, 1)
+        trow.addWidget(QLabel("预览字库"))
+        self.preview_lang = QComboBox()
+        self.preview_lang.addItem("繁体", "zh-Hant")
+        self.preview_lang.addItem("简体", "zh-Hans")
+        self.preview_lang.setToolTip("切换 CSS :root 双栏变量列（样张文字不变，只看字体）")
+        self.preview_lang.currentIndexChanged.connect(lambda _i: self._schedule())
+        trow.addWidget(self.preview_lang)
+        rl.addLayout(trow)
         self.preview = QTextEdit()
         self.preview.setReadOnly(True)
         rl.addWidget(self.preview, 1)
@@ -752,15 +937,14 @@ class CssEditorDialog(QDialog):
         brow = QHBoxLayout()
         self.btn_docx = QPushButton("保存DOCX")
         self.btn_pdf = QPushButton("导出PDF")
-        self.btn_css = QPushButton("保存用户CSS")
         self.btn_reset = QPushButton("恢复出厂")
+        self.btn_reset.setToolTip("编辑器装载出厂样式（不删预设、不改默认）")
         self.btn_close = QPushButton("关闭")
         self.btn_docx.clicked.connect(self._export_docx)
         self.btn_pdf.clicked.connect(self._export_pdf)
-        self.btn_css.clicked.connect(self._save_user_css)
         self.btn_reset.clicked.connect(self._reset_factory)
         self.btn_close.clicked.connect(self.reject)
-        for b in (self.btn_docx, self.btn_pdf, self.btn_css, self.btn_reset,
+        for b in (self.btn_docx, self.btn_pdf, self.btn_reset,
                   self.btn_close):
             brow.addWidget(b)
         brow.addStretch(1)
@@ -770,31 +954,32 @@ class CssEditorDialog(QDialog):
         self._timer.setSingleShot(True)
         self._timer.setInterval(400)
         self._timer.timeout.connect(self.refresh_preview)
-        # 初始值：出厂 CSS；控件预填出厂值（不算 touched，源码块保持空）
-        self._factory_css = factory_css_text()
+        # 初始值：有效默认 CSS；控件预填（不算 touched，源码块保持空）
+        self._base_css, self._base_label = self._effective_base_css()
         self._passthrough = ""
         self._touched = set()
+        self._loaded_block = ""
         self._source_edit.setPlaceholderText("在此追加/覆盖规则；解析失败红字且预览保持上次")
-        factory_values, _, _ = split_override_block(self._factory_css)
-        self._sync_controls_from_block(factory_values)
-        self._refresh_preset_box()
+        base_values, _, _ = split_override_block(self._base_css)
+        self._sync_controls_from_block(base_values)
+        self.preset_box.refresh(current_theme_value())
+        self.status.setText(f"基于：{self._base_label}")
         self.refresh_preview()
 
-    # ----- 预设库 -----
-    def _refresh_preset_box(self, keep=None):
-        """预设下拉：出厂默认 + 内置/用户（同名用户遮蔽内置）。"""
-        box = self.preset_box
-        with QSignalBlocker(box):
-            box.clear()
-            box.addItem("出厂默认", None)
-            for kind, name, path in list_presets():
-                box.addItem(f"［{'内置' if kind == 'builtin' else '用户'}］{name}",
-                            path)
-            if keep:
-                i = box.findData(keep)
-                box.setCurrentIndex(i if i >= 0 else 0)
+    def _effective_base_css(self):
+        """有效默认 CSS → (全文, 说明)：用户槽/出厂 theme 槽解析，失败回出厂。"""
+        from pycbeta.theme import resolve_theme_css
+        path, label = resolve_theme_css(current_theme_value())
+        if path:
+            try:
+                with open(path, encoding="utf-8") as f:
+                    return f.read(), f"{label}：{os.path.basename(path)}"
+            except OSError:
+                pass
+        return factory_css_text(), "内置出厂"
 
-    def _load_block_text(self, block_text, keep_path=None):
+    # ----- 预设库 -----
+    def _load_block_text(self, block_text):
         """覆盖块文本装载进编辑器（源码页+控件+touched 联动）；返回 True/False。"""
         values, passthrough, err = split_override_block(block_text or "")
         if err:
@@ -805,12 +990,9 @@ class CssEditorDialog(QDialog):
             self._source_edit.setPlainText(
                 build_override_block(values, passthrough))
         self._passthrough = passthrough
-        self._touched = {(s, p) for s, props in values.items() for p in props}
+        self._touched = _touched_from_values(values)
+        self._loaded_block = self._source_edit.toPlainText()
         self._sync_controls_from_block(values)
-        if keep_path is not None:
-            with QSignalBlocker(self.preset_box):
-                i = self.preset_box.findData(keep_path)
-                self.preset_box.setCurrentIndex(i if i >= 0 else 0)
         self._schedule()
         return True
 
@@ -821,24 +1003,46 @@ class CssEditorDialog(QDialog):
         except OSError as exc:
             QMessageBox.warning(self, "载入失败", str(exc))
             return
-        self._load_block_text(strip_factory_prefix(text), keep_path=path)
+        self._load_block_text(strip_factory_prefix(text))
 
-    def _on_preset_chosen(self, index):
-        path = self.preset_box.itemData(index)
-        if not path:
+    def _on_preset_chosen(self, _index):
+        value = self.preset_box.selected_value()
+        path = self.preset_box.selected_path()
+        if value == "pdf_docx.css" or not path:
             self._reset_editor_state()
             return
         self._load_preset_path(path)
 
+    def _is_dirty(self):
+        return self._source_edit.toPlainText() != (self._loaded_block or "")
+
+    def _apply_default(self):
+        """选中项设为默认（写用户槽 theme；未保存修改不在内）。"""
+        value = self.preset_box.selected_value()
+        try:
+            set_user_theme(value)
+        except OSError as exc:
+            QMessageBox.warning(self, "设为默认失败", str(exc))
+            return
+        self.preset_box.refresh(value)
+        msg = f"已设默认：{value}"
+        if self._is_dirty():
+            msg += "（当前未保存修改不在内，请先另存）"
+        self.status.setText(msg)
+
     def _reset_editor_state(self):
-        """回到出厂默认（只清编辑器，不删 user.css；删文件走恢复出厂）。"""
+        """回到出厂缓冲（只装载出厂文本；不删预设、不改默认）。"""
+        self._base_css = factory_css_text()
         self._passthrough = ""
         self._touched = set()
         with QSignalBlocker(self._source_edit):
             self._source_edit.setPlainText("")
+        self._loaded_block = ""
         self._source_err.setText("")
-        factory_values, _, _ = split_override_block(self._factory_css)
+        factory_values, _, _ = split_override_block(self._base_css)
         self._sync_controls_from_block(factory_values)
+        self.preset_box.refresh("pdf_docx.css")
+        self.status.setText("基于：内置出厂")
         self.refresh_preview()
 
     def _save_preset_as(self):
@@ -854,11 +1058,12 @@ class CssEditorDialog(QDialog):
         except OSError as exc:
             QMessageBox.warning(self, "另存失败", str(exc))
             return
-        self._refresh_preset_box(keep=path)
+        self.preset_box.refresh(current_theme_value())
+        self.preset_box.select_path(path)
         self.status.setText(f"预设已存：{path}")
 
     def _delete_preset(self):
-        path = self.preset_box.currentData()
+        path = self.preset_box.selected_path()
         if not path:
             QMessageBox.information(self, "删除预设", "出厂默认删不掉。")
             return
@@ -870,7 +1075,7 @@ class CssEditorDialog(QDialog):
         except OSError as exc:
             QMessageBox.warning(self, "删除失败", str(exc))
             return
-        self._refresh_preset_box()
+        self.preset_box.refresh(current_theme_value())
         self.status.setText("用户预设已删除")
 
     def _left_panel(self):
@@ -897,11 +1102,21 @@ class CssEditorDialog(QDialog):
         cv.addLayout(form)
         for sel, label in EDITABLE_ROWS:
             row = QHBoxLayout()
-            font_box = QComboBox()
-            font_box.setEditable(True)
-            font_box.setPlaceholderText("字体，如 朝华标题B, ZhaohuaMinB")
-            font_box.setMinimumWidth(190)
-            font_box.setInsertPolicy(QComboBox.NoInsert)
+            suffix = _var_suffix(sel)
+            font_hant = QComboBox()
+            font_hant.setEditable(True)
+            font_hant.setPlaceholderText("繁字体")
+            font_hant.setMinimumWidth(150)
+            font_hant.setInsertPolicy(QComboBox.NoInsert)
+            font_hans = QComboBox()
+            font_hans.setEditable(True)
+            font_hans.setPlaceholderText("简字体")
+            font_hans.setMinimumWidth(150)
+            font_hans.setInsertPolicy(QComboBox.NoInsert)
+            if suffix is None:
+                for _box in (font_hant, font_hans):
+                    _box.setEnabled(False)
+                    _box.setToolTip("该行无字体变量（只调字号/颜色）")
             size_edit = QLineEdit()
             size_edit.setPlaceholderText("如 20pt / 0.75em")
             size_edit.setFixedWidth(110)
@@ -917,7 +1132,8 @@ class CssEditorDialog(QDialog):
             color_btn.setContextMenuPolicy(Qt.CustomContextMenu)
             color_btn.customContextMenuRequested.connect(
                 lambda _p, s=sel: self._clear_color(s))
-            row.addWidget(font_box, 1)
+            row.addWidget(font_hant, 1)
+            row.addWidget(font_hans, 1)
             row.addWidget(size_edit)
             row.addWidget(weight)
             row.addWidget(color_btn)
@@ -925,11 +1141,16 @@ class CssEditorDialog(QDialog):
             if sel in ROW_TIPS:
                 lab.setToolTip(ROW_TIPS[sel])
             form.addRow(lab, row)
-            self._rows[sel] = {"font": font_box, "size": size_edit,
+            self._rows[sel] = {"font_hant": font_hant, "font_hans": font_hans,
+                               "suffix": suffix, "size": size_edit,
                                "weight": weight, "color": color_btn,
                                "color_value": ""}
-            font_box.currentTextChanged.connect(
-                lambda _v, s=sel: self._on_control_changed(s, "font-family"))
+            font_hant.currentTextChanged.connect(
+                lambda _v, s=sel: self._on_control_changed(s, "font-family",
+                                                          "zh-Hant"))
+            font_hans.currentTextChanged.connect(
+                lambda _v, s=sel: self._on_control_changed(s, "font-family",
+                                                          "zh-Hans"))
             size_edit.textChanged.connect(
                 lambda _v, s=sel: self._on_control_changed(s, "font-size"))
             weight.currentIndexChanged.connect(
@@ -956,13 +1177,14 @@ class CssEditorDialog(QDialog):
 
     # ----- 工作 CSS -----
     def work_css(self):
-        """工作 CSS = 出厂原文 + 覆盖块（源码页文本）。"""
-        return self._factory_css + "\n" + self._source_edit.toPlainText()
+        """工作 CSS = 有效默认原文 + 覆盖块（源码页文本）。"""
+        return self._base_css + "\n" + self._source_edit.toPlainText()
 
-    def _control_value(self, sel, prop):
+    def _control_value(self, sel, prop, lang=""):
         ctrls = self._rows[sel]
         if prop == "font-family":
-            return ctrls["font"].currentText().strip()
+            box = ctrls["font_hant"] if lang != "zh-Hans" else ctrls["font_hans"]
+            return box.currentText().strip()
         if prop == "font-size":
             return ctrls["size"].text().strip()
         if prop == "font-weight":
@@ -971,17 +1193,30 @@ class CssEditorDialog(QDialog):
             return ctrls["color_value"]
         return ""
 
-    def _on_control_changed(self, sel=None, prop=None):
+    def _on_control_changed(self, sel=None, prop=None, lang=""):
         if sel and prop:
-            if self._control_value(sel, prop):
-                self._touched.add((sel, prop))
+            key = (sel, prop, lang) if prop == "font-family" else (sel, prop)
+            if self._control_value(sel, prop, lang):
+                self._touched.add(key)
             else:
-                self._touched.discard((sel, prop))
+                self._touched.discard(key)
         values = {}
-        for s, p in self._touched:
-            v = self._control_value(s, p)
-            if v:
-                values.setdefault(s, {})[p] = v
+        for entry in self._touched:
+            if len(entry) == 3:
+                s, _p, lg = entry
+                v = self._control_value(s, "font-family", lg)
+                if not v:
+                    continue
+                suffix = (self._rows[s] or {}).get("suffix")
+                if not suffix:
+                    continue
+                block = ":root" if lg != "zh-Hans" else _HANS_BLOCK
+                values.setdefault(block, {})["--font-" + suffix] = v
+            else:
+                s, p = entry
+                v = self._control_value(s, p)
+                if v:
+                    values.setdefault(s, {})[p] = v
         block = build_override_block(values, self._passthrough)
         with QSignalBlocker(self._source_edit):
             self._source_edit.setPlainText(block)
@@ -996,17 +1231,25 @@ class CssEditorDialog(QDialog):
             return
         self._source_err.setText("")
         self._passthrough = passthrough
-        self._touched = {(s, p) for s, props in values.items() for p in props}
+        self._touched = _touched_from_values(values)
         self._sync_controls_from_block(values)
         self._schedule()
 
     def _sync_controls_from_block(self, values=None):
         if values is None:
             values, _err = parse_override_block(self._source_edit.toPlainText())
+        values = values or {}
+        hant_vars = values.get(":root", {})
+        hans_vars = values.get(_HANS_BLOCK, {})
         for sel, ctrls in self._rows.items():
-            props = (values or {}).get(sel, {})
-            with QSignalBlocker(ctrls["font"]):
-                ctrls["font"].setCurrentText(props.get("font-family", ""))
+            props = values.get(sel, {})
+            suffix = ctrls.get("suffix")
+            with QSignalBlocker(ctrls["font_hant"]):
+                ctrls["font_hant"].setCurrentText(
+                    hant_vars.get("--font-" + suffix, "") if suffix else "")
+            with QSignalBlocker(ctrls["font_hans"]):
+                ctrls["font_hans"].setCurrentText(
+                    hans_vars.get("--font-" + suffix, "") if suffix else "")
             with QSignalBlocker(ctrls["size"]):
                 ctrls["size"].setText(props.get("font-size", ""))
             with QSignalBlocker(ctrls["weight"]):
@@ -1040,34 +1283,34 @@ class CssEditorDialog(QDialog):
         order = [g for g, _ks in _CJK_BUCKETS if groups.get(g)] + \
                 (["未分类"] if groups.get("未分类") else [])
         for _sel, ctrls in self._rows.items():
-            box = ctrls["font"]
-            cur = box.currentText()
-            model = QStandardItemModel(box)
+            for box in (ctrls["font_hant"], ctrls["font_hans"]):
+                cur = box.currentText()
+                model = QStandardItemModel(box)
 
-            def header(text):
-                it = QStandardItem(f"── {text} ──")
-                it.setEnabled(False)
-                model.appendRow(it)
+                def header(text, _m=model):
+                    it = QStandardItem(f"── {text} ──")
+                    it.setEnabled(False)
+                    _m.appendRow(it)
 
-            def item(name):
-                it = QStandardItem(name)
-                it.setData(name, Qt.UserRole)
-                model.appendRow(it)
+                def item(name, _m=model):
+                    it = QStandardItem(name)
+                    it.setData(name, Qt.UserRole)
+                    _m.appendRow(it)
 
-            header("中文")
-            for gname in order:
-                header(f"中文·{gname}")
-                for n in sorted(set(groups[gname])):
+                header("中文")
+                for gname in order:
+                    header(f"中文·{gname}")
+                    for n in sorted(set(groups[gname])):
+                        item(n)
+                header("西文")
+                for n in _WESTERN_FONTS:
                     item(n)
-            header("西文")
-            for n in _WESTERN_FONTS:
-                item(n)
-            header("字库目录（cbeta/fonts）")
-            for _fn, fam in bundled:
-                item(fam)
-            with QSignalBlocker(box):
-                box.setModel(model)
-                box.setCurrentText(cur)
+                header("字库目录（cbeta/fonts）")
+                for _fn, fam in bundled:
+                    item(fam)
+                with QSignalBlocker(box):
+                    box.setModel(model)
+                    box.setCurrentText(cur)
 
     def _open_fonts_dir(self):
         fonts_dir = os.path.join(REPO_ROOT, "cbeta", "fonts")
@@ -1125,19 +1368,22 @@ class CssEditorDialog(QDialog):
             return
         self._need_refresh = False
         self._thread = _RenderThread(self.sample_edit.text().strip(), css, self._tmp,
-                                     self)
+                                     self._preview_lang(), self)
         self._thread.done.connect(self._on_rendered)
         self._thread.failed.connect(self._on_render_failed)
         self._thread.start()
 
-    def _render_inline(self, css):
+    def _preview_lang(self):
+        return self.preview_lang.currentData() or "zh-Hant"
+
+    def _render_inline(self, css, lang=None):
         """同步重渲（单测/导出前保底用；界面走线程）。返回 docx 路径。"""
         import tempfile as _tf
         from pycbeta.parser import P5Parser
         from pycbeta.render_docx import DocxRenderer
         from pycbeta.theme import Theme
         work = P5Parser().parse(self.sample_edit.text().strip())
-        theme = Theme.from_css(css)
+        theme = Theme.from_css(css, lang or self._preview_lang())
         out = _tf.mkdtemp(prefix="css-editor-")
         fn = DocxRenderer(theme=theme, notes="footnote",
                           bookmarks=False).render_work(work, out, "preview.docx")
@@ -1265,36 +1511,19 @@ class CssEditorDialog(QDialog):
             QApplication.restoreOverrideCursor()
         self.status.setText(f"PDF 已导出：{path}")
 
-    def _save_user_css(self):
-        try:
-            path = save_user_css_text(self._last_good_css or self.work_css())
-        except OSError as exc:
-            QMessageBox.warning(self, "保存失败", str(exc))
-            return
-        QMessageBox.information(self, "已保存",
-                                f"用户 CSS 已存 {path}\n主窗口批量渲染自动生效（--theme）。")
-
     def _reset_factory(self):
-        path = user_css_path()
-        if os.path.isfile(path):
-            if QMessageBox.question(
-                    self, "恢复出厂",
-                    f"删除用户 CSS（{path}）并回到出厂样式？",
-                    QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
-                return
-            try:
-                clear_user_css()
-            except OSError as exc:
-                QMessageBox.warning(self, "恢复失败", str(exc))
-                return
+        """恢复出厂缓冲：装载出厂文本（不删预设、不改默认）。"""
+        self._base_css = factory_css_text()
         self._passthrough = ""
         self._touched = set()
+        self._loaded_block = ""
         with QSignalBlocker(self._source_edit):
             self._source_edit.setPlainText("")
         self._source_err.setText("")
-        factory_values, _, _ = split_override_block(self._factory_css)
+        factory_values, _, _ = split_override_block(self._base_css)
         self._sync_controls_from_block(factory_values)
-        self._refresh_preset_box()
+        self.preset_box.refresh("pdf_docx.css")
+        self.status.setText("基于：内置出厂")
         self.refresh_preview()
 
     def closeEvent(self, event):

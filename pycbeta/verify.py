@@ -365,6 +365,19 @@ def generate_formal(xml_fn: str, work, fmt: str, outdir: str, config_path: Optio
     except Exception:
         _ann = None
     theme = None
+    # 主题槽跟随（与主程序一致；字体系与提取文本无关，lang 恒繁体）
+    _tv = (presets or {}).get("theme", "") or ""
+    if _tv:
+        try:
+            from .theme import resolve_theme_css
+            _tp, _ = resolve_theme_css(
+                _tv, os.path.dirname(os.path.abspath(config_path))
+                if config_path else None)
+            if _tp:
+                with open(_tp, encoding="utf-8") as _f:
+                    theme = Theme.from_css(_f.read())
+        except OSError:
+            theme = None
     p = lambda k, d=None: out_defaults.get(k, d)
     if fmt == "html":
         files = HtmlRenderer(theme=theme, notes="endnote", ignore_xml_style=bool(p("ignore_xml_style")), ignore_xml_space=bool(p("ignore_xml_space")), show_notes=p("show_notes", True), inline_brackets=p("inline_brackets", "fullwidth"), annotations=_ann).render_work(work, out_dir=outdir)

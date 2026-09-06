@@ -48,11 +48,12 @@ class EpubRenderer:
         md = work.metadata
         title = md.get("title") or work.id
         author = md.get("author") or ""
+        lang = "zh-Hans" if getattr(work, "simplified", False) else "zh-Hant"
         chapters = self._build_chapters(tmp, html_files, title)
-        opf = self._build_opf(work, title, author, chapters)
-        nav = self._build_nav(title, chapters)
+        opf = self._build_opf(work, title, author, chapters, lang)
+        nav = self._build_nav(title, chapters, lang)
         ncx = self._build_ncx(title, chapters)
-        data = self._zip(work.id, chapters, opf, nav, ncx)
+        data = self._zip(work.id, chapters, opf, nav, ncx, lang)
         os.makedirs(out_dir, exist_ok=True)
         if not filename:
             filename = f"{work.id}.epub"
@@ -78,10 +79,11 @@ class EpubRenderer:
         body = re.search(r"<body>(.*)</body>", html, re.S)
         return body.group(1) if body else ""
 
-    def _build_chapter_xhtml(self, ch: dict, title: str, css: str) -> str:
+    def _build_chapter_xhtml(self, ch: dict, title: str, css: str,
+                               lang: str = "zh-Hant") -> str:
         return (
             '<?xml version="1.0" encoding="utf-8"?>\n'
-            '<html xmlns="http://www.w3.org/1999/xhtml">\n<head>\n'
+            f'<html xmlns="http://www.w3.org/1999/xhtml" lang="{lang}">\n<head>\n'
             f'<title>{_x(ch["title"])}</title>\n'
             f'<style>{css}</style>\n'
             "</head>\n<body>\n"
@@ -89,7 +91,7 @@ class EpubRenderer:
             "</body>\n</html>"
         )
 
-    def _build_opf(self, work, title, author, chapters) -> str:
+    def _build_opf(self, work, title, author, chapters, lang="zh-Hant") -> str:
         manifest = "".join(
             f'<item id="{c["id"]}" href="{c["file"]}" media-type="application/xhtml+xml"/>'
             for c in chapters)
@@ -103,7 +105,7 @@ class EpubRenderer:
             '<metadata xmlns:dc="http://purl.org/dc/elements/1.1/">\n'
             f'<dc:identifier id="uid">{_x(work.id)}</dc:identifier>\n'
             f'<dc:title>{_x(title)}</dc:title>\n'
-            f'<dc:language>zh-Hant</dc:language>\n'
+            f'<dc:language>{lang}</dc:language>\n'
             f'<dc:creator>{_x(author)}</dc:creator>\n'
             '<meta property="dcterms:modified">2026-01-01T00:00:00Z</meta>\n'
             "</metadata>\n"
@@ -112,12 +114,12 @@ class EpubRenderer:
             "</package>"
         )
 
-    def _build_nav(self, title, chapters) -> str:
+    def _build_nav(self, title, chapters, lang="zh-Hant") -> str:
         items = "".join(f'<li><a href="{c["file"]}">{_x(c["title"])}</a></li>' for c in chapters)
         return (
             '<?xml version="1.0" encoding="utf-8"?>\n'
             '<html xmlns="http://www.w3.org/1999/xhtml" '
-            'xmlns:epub="http://www.idpf.org/2007/ops">\n<head>\n'
+            f'xmlns:epub="http://www.idpf.org/2007/ops" lang="{lang}">\n<head>\n'
             f"<title>{_x(title)}</title>\n</head>\n<body>\n<nav epub:type=\"toc\">\n"
             f"<h1>{_x(title)}</h1>\n<ol>\n{items}\n</ol>\n</nav>\n</body>\n</html>"
         )
@@ -135,7 +137,7 @@ class EpubRenderer:
             f'<navMap>{items}</navMap>\n</ncx>'
         )
 
-    def _zip(self, work_id, chapters, opf, nav, ncx) -> bytes:
+    def _zip(self, work_id, chapters, opf, nav, ncx, lang="zh-Hant") -> bytes:
         css = self.theme.raw_css or self.theme.css()
         zio = io.BytesIO()
         with zipfile.ZipFile(zio, "w") as z:
@@ -152,6 +154,7 @@ class EpubRenderer:
             z.writestr("OEBPS/style.css", css)
             for c in chapters:
                 xhtml = self._build_chapter_xhtml(c, c["title"],
-                                                  '@import url("style.css");')
+                                                  '@import url("style.css");',
+                                                  lang)
                 z.writestr(f"OEBPS/{c['file']}", xhtml)
         return zio.getvalue()

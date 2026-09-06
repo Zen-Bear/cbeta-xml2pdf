@@ -17,7 +17,7 @@
 @dataclass
 class XmlOptions:
     page: str = "a4"                    # pages 键（a4/a5/信纸/手机/平板8寸/9寸/11寸/32开/16开；大小写不敏感）
-    font_set: str = "default"           # font_sets 键，可带 :zh-Hans
+    font_lang: str = "zh-Hant"         # 字库语言（CSS :root 双栏；t2s 自动切简）
     engine: str = "docx2pdf"            # docx2pdf[:wps] | html2pdf[:chromium]
     margins: dict = None                # None → pages[page].margins
     formats: list = None                # None → [pdf]；如 ["pdf", "epub"]
@@ -25,7 +25,7 @@ class XmlOptions:
     font_scale: float = 1.0             # 字号等比缩放（大字版 1.33/1.5；字号不影响逐字校验）
     pagination: dict = None             # 智能分页 {enabled,duplex,juan,juan_first,mulu_level1,pb,tei}
     series_title: dict = None           # 经藏名 {enabled,font,size}
-    t2s: bool = False                 # OpenCC t2s 简体输出（正文/注释/元数据；未指定 font_set 时自动套简体字库；校验时官方基线同步转简体）
+    t2s: bool = False                 # OpenCC t2s 简体输出（正文/注释/元数据；未指定 --font-lang 时自动用简体字库；校验时官方基线同步转简体）
     verify: dict = None                 # 可选：转换后校验 {enabled:bool, formats:list}
 ```
 
@@ -38,11 +38,11 @@ class XmlOptions:
 | | `output.grayscale` | 复选「黑白输出」 | `output.grayscale` |
 | | `output.page_border` | 复选「页面边框」 | `output.page_border` |
 | | `output.pdf_zoom` | 数字输入「PDF 缩放」 | `output.pdf_zoom` |
-| 字体 | `font_sets` | 下拉（组合:语言） | `xml_options.font_set` |
+| 字体 | CSS :root 双栏变量 | 字库两态（繁/简） | `xml_options.font_lang` |
 | 引擎 | `engines.docx2pdf.chain` / `html2pdf` | 单选+单体下拉 | `xml_options.engine` |
 | 输出格式 | — | 多选 `pdf/epub/docx/html/md` | `xml_options.formats` |
 | | `output.font_scale` | 数字输入「字号缩放」（大字版 1.33/1.5） | `output.font_scale` |
-| | `output.t2s` | 复选「简体转换」（OpenCC t2s；未指定 font_set 时自动套简体字库；校验时官方基线同步转简体） | `output.t2s` |
+| | `output.t2s` | 复选「简体转换」（OpenCC t2s；未指定 --font-lang 时自动用简体字库；校验时官方基线同步转简体） | `output.t2s` |
 | 注释 | `output.show_notes` | 复选「显示注释」 | `output.show_notes` |
 | | `output.footnote_per_page` | 复选「脚注每页重新编号」 | `output.footnote_per_page` |
 | | `output.inline_brackets` | 下拉 halfwidth/fullwidth | `output.inline_brackets` |
@@ -74,7 +74,7 @@ class XmlOptions:
 │   纸张 [a4 ▼]    边距 [使用页面预设 □]  上[ ] 下[ ] 左[ ] 右[ ] │
 │   ☐ 黑白输出(grayscale)    ☐ 页面边框(page_border)            │
 ├───────────────────────────────────────────────────────────────┤
-│ 字体:  [default ▼]（font_sets 键，含 :zh-Hans 变体）           │
+│ 字体:  [default ▼]（CSS :root 双栏变量，繁/简两态）           │
 ├───────────────────────────────────────────────────────────────┤
 │ 输出格式: ☐ pdf ☑ epub ☐ docx ☐ html ☐ md                     │
 │ 引擎: (•) docx2pdf  ( ) html2pdf     单体 [自动 ▼]            │
@@ -101,8 +101,9 @@ class XmlOptions:
 - 每个选项卡控件值变更即写回内存中的 `XmlOptions`，`get_options()` 汇总
 
 > 注（2026-09-06）：上图为初版草图，当前实际为八卡——输出格式 / **样式表** / 页面 / 分页 /
-> 排版 / 注释 / 注音 / 校验。样式表卡列两默认 CSS 路径（可打开）；输出格式卡有"模式"组
-> （竖排直书 + 简体转换 + 字体下拉同行，竖排在左；GUI 经 `--vertical` 进子进程；
+> 排版 / 注释 / 注音 / 校验。样式表卡 = CSS 下拉（当前默认第一+（默认）标记）+ 设为默认
+> + 打开用户目录 + 两默认 CSS 路径（可打开）；输出格式卡有"模式"组
+> （竖排直书 + 简体转换 + 字库繁简两态同行，竖排在左；GUI 经 `--vertical`/`--font-lang` 进子进程；
 > 复选框长说明收进 tooltip）；注音卡词表行下有实际路径
 > hint + 打开按钮；注释卡注码相关项、引擎组（单引擎+自动）说明同样收进 tooltip；
 > 面板顶部槽标签显示配置文件路径（过长省略，点击打开）；数据源按钮在主窗口输入来源
@@ -110,9 +111,9 @@ class XmlOptions:
 >
 > CSS 编辑器（2026-09-06，`pycbeta/gui/css_editor.py`）：`CssEditorDialog`（样式表卡“打开 CSS 编辑器”按钮弹窗；
 > publish 侧同样 import 即用）+ `python -m pycbeta.gui.css_editor --sample X.xml` 独立运行。
-> 左调参（标签分组字体四件套 + 源码页，控件预填出厂值、只输出碰过的项，左栏可滚动）/ 右 QTextDocument 模拟预览（读 `DocxRenderer`
+> 左调参（标签分组字体双栏繁简 + 字号粗细颜色 + 源码页，控件预填有效默认值、只输出碰过的项，左栏可滚动，预览繁简可切）/ 右 QTextDocument 模拟预览（读 `DocxRenderer`
 > 刚写出的 run 真值；注文尾注归并；分页以 Word 为准）/ 底导出样张 DOCX+PDF（PDF 跟主窗口
-> 引擎链）+ `user.css` 落盘自动生效 + 恢复出厂。`--font-set` 默认不进子进程桥（保 CSS 字体）。
+> 引擎链）+ 恢复出厂（装载出厂缓冲）。
 >
 > 编辑器行按书本排版顺序（经藏名→书名→序→作者译者→卷品→标题→正文→偈颂→夹注→注码注文→
 > 注锚→行内字体）；`pdf_docx.css` 文件本身不动。控件不认识的规则（标题 level 属性选择器、
@@ -121,7 +122,7 @@ class XmlOptions:
 >
 > 预设库（双目录）：内置 `pycbeta/styles/presets/`（入库，随包分发，删不掉）+ 用户
 > `css-presets/`（仓库根，不入库）。编辑器顶部预设行切换只装载（切换/另存/删除用户预设）；
-> `保存用户CSS`即"应用为当前"（写 `user.css`）；`恢复出厂`不动预设库。
+> "设为默认"写用户槽 theme（面板样式表卡同动作）；`恢复出厂`只装载出厂缓冲（不删预设、不改默认）。
 
 ### 3.2 `XmlOptionsDialog(QDialog)`
 面板的对话框包装：`exec() -> Optional[XmlOptions]`（Accept→选项；Cancel→None），`[确定][取消]`。
@@ -171,7 +172,7 @@ class XmlOptions:
 {
   "default_source": "official",          // official | xml
   "xml2pdf": { "path": "E:/dev/cbeta/xml2pdf",
-               "options": { "page": "a4", "font_set": "default", "engine": "docx2pdf",
+               "options": { "page": "a4", "font_lang": "zh-Hant", "engine": "docx2pdf",
                             "output": {"grayscale": false, "show_notes": true},
                             "pagination": {"enabled": false, "duplex": false},
                             "series_title": {"enabled": true} } }

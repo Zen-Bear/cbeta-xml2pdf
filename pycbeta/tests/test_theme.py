@@ -5,7 +5,8 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from pycbeta.cli import scaled_page_presets
-from pycbeta.theme import FONT_SETS, Theme, _scale_font_size, combo_latin, resolve_page
+from pycbeta.theme import Theme, _scale_font_size, resolve_font_vars, resolve_page, \
+    resolve_theme_css
 
 
 class TestScaleHelper(unittest.TestCase):
@@ -57,43 +58,62 @@ class TestScaleFontSizes(unittest.TestCase):
                 Theme().scale_font_sizes(bad)
 
     def test_hans_then_scale(self):
-        t = Theme()
-        t.apply_font_set("default", lang="zh-Hans")
+        t = Theme(lang="zh-Hans")
         t.scale_font_sizes(1.5)
         self.assertEqual(t.tags["p"]["font-size"], "18pt")
         self.assertIn("SimSun", t.tags["p"]["font-family"])
 
     def test_single_source_body_pin(self):
-        # P1 回归：body/pin 来自 font_sets，rend 简体可用
+        # 字体来自 CSS :root 变量（繁简双栏），非 font_sets
         t = Theme()
-        self.assertIn("font-family", t.tags["body"])
-        self.assertIn("font-family", t.tags["pin"])
-        h = Theme()
-        h.apply_font_set("default", lang="zh-Hans")
+        self.assertIn("新細明體", t.tags["body"]["font-family"])
+        self.assertIn("新細明體", t.tags["pin"]["font-family"])
+        h = Theme(lang="zh-Hans")
+        self.assertIn("宋体", h.tags["p"]["font-family"])
         self.assertIn("KaiTi", h.tags["kaiti"]["font-family"])
 
 
-class TestLatinFont(unittest.TestCase):
-    def test_combo_latin_pair(self):
-        self.assertIn("latin", FONT_SETS["default"])
-        self.assertEqual(combo_latin(None, "default", "zh-Hant"), "Calibri")
-        self.assertEqual(combo_latin(None, "default", "zh-Hans"), "Calibri")
+class TestFontVars(unittest.TestCase):
+    CSS = (":root { --font-p: HantP; --font-title: HantT; }\n"
+           'html[lang="zh-Hans"] { --font-p: HansP; }\n'
+           "p { font-size: 12pt; }\n"
+           "h1.title { font-family: var(--font-title); font-size: 30pt; }\n")
 
-    def test_combo_latin_custom_and_fallback(self):
-        sets = {"default": {"latin": ["Times", "SimSun"]}}
-        self.assertEqual(combo_latin(sets, "default", "zh-Hant"), "Times")
-        self.assertEqual(combo_latin(sets, "default", "zh-Hans"), "SimSun")
-        self.assertEqual(combo_latin({}, "default", "zh-Hant"), "Calibri")
-        self.assertEqual(combo_latin({"other": {}}, "nope", "zh-Hans"), "Calibri")
-        self.assertEqual(combo_latin({"default": {"latin": "Solo"}}, "default", "zh-Hant"), "Solo")
+    def test_collect_both_columns(self):
+        hant, hans = resolve_font_vars(self.CSS)
+        self.assertEqual(hant["--font-p"], "HantP")
+        self.assertEqual(hans["--font-p"], "HansP")
+        self.assertNotIn("--font-title", hans)  # 未覆盖栏继承 :root
+
+    def test_hans_falls_back_to_hant(self):
+        t = Theme.from_css(self.CSS, lang="zh-Hans")
+        self.assertEqual(t.tags["p"]["font-family"], "HansP")
+        self.assertEqual(t.tags["title"]["font-family"], "HantT")
+
+    def test_var_substitution_in_rules(self):
+        t = Theme.from_css(self.CSS)
+        self.assertEqual(t.tags["title"]["font-family"], "HantT")
+        # 字面量仍优先于变量填充
+        t2 = Theme.from_css("p { font-family: Literal; }\n" + self.CSS)
+        self.assertEqual(t2.tags["p"]["font-family"], "Literal")
+
+    def test_var_fallback_value(self):
+        t = Theme.from_css(":root { }\np { font-family: var(--nope, FB); }\n")
+        self.assertEqual(t.tags["p"]["font-family"], "FB")
+
+
+class TestLatinFont(unittest.TestCase):
+    def test_latin_var_pair(self):
+        t = Theme()
+        self.assertEqual(t.font_var("latin", "?"), "Calibri")
+        h = Theme(lang="zh-Hans")
+        self.assertEqual(h.font_var("latin", "?"), "Calibri")
+        self.assertEqual(Theme().font_var("nope", "D"), "D")
 
     def test_latin_not_a_tag(self):
-        # 组合级 latin 不进入标签体系（无 CSS 规则、无 tags 条目）
+        # --font-latin 不进入标签体系（无 CSS 规则、无 tags 条目）
         t = Theme()
         self.assertNotIn("latin", t.tags)
-        h = Theme()
-        h.apply_font_set("default", lang="zh-Hans")
-        self.assertNotIn("latin", h.tags)
 
     def test_resolve_page_default(self):
         # pages 不再自带 latin_font 时回退 Calibri（旧配置自带值仍优先）
@@ -151,9 +171,8 @@ class TestDescendantSelector(unittest.TestCase):
         self.assertEqual(len(t.compounds), 1)
         anc, tgt, props, sel = t.compounds[0]
         self.assertEqual((anc, tgt), ("div-xu", "head"))
-        # CSS 未指定字体 → font_sets.default 组合键补上（Hant 第一项）
-        self.assertEqual(props, {"color": "#000",
-                                 "font-family": "標楷體, KaiTi, serif"})
+        # 片段无 :root 变量 → 不填充字体（变量填充只认同文件 :root 双栏）
+        self.assertEqual(props, {"color": "#000"})
         # 三段及以上、属性选择器不进 tags 也不进 compounds（HTML 靠原文 CSS）
         self.assertNotIn("span.note-inline", [c[1] for c in t.compounds])
 
@@ -206,54 +225,87 @@ class TestHex6(unittest.TestCase):
         self.assertIsNone(_hex6("#gggggg"))
 
 
-class TestFontSetCompound(unittest.TestCase):
-    SETS = {"default": {"div.div-xu p.head": ["HantFont, serif", "HansFont, serif"]}}
-
-    def test_override_and_no_junk(self):
+class TestFontVarCompound(unittest.TestCase):
+    def test_compound_filled_from_vars(self):
         from pycbeta.theme import Theme
-        t = Theme.from_css("div.div-xu p.head { color: #000; }\n")
-        t.apply_font_set("default", lang="zh-Hant", font_sets=self.SETS)
+        t = Theme.from_css(":root { --font-div-xu-head: VFont, serif; }\n"
+                           "div.div-xu p.head { color: #000; }\n")
         got = [(a, tg, p.get("font-family")) for a, tg, p, _s in t.compounds]
-        self.assertIn(("div-xu", "head", "HantFont, serif"), got)
-        self.assertNotIn("div.div-xu p.head", t.tags)  # 不写 junk 标签
-        self.assertIn("div.div-xu p.head", t.raw_css)  # HTML/PDF 跟随覆盖
+        self.assertIn(("div-xu", "head", "VFont, serif"), got)
 
-    def test_append_when_missing(self):
+    def test_compound_hans_column(self):
         from pycbeta.theme import Theme
-        t = Theme.from_css("p.head { color: #0000a0; }\n")
-        t.apply_font_set("default", lang="zh-Hans", font_sets=self.SETS)
+        t = Theme.from_css(":root { --font-div-xu-head: HantF; }\n"
+                           'html[lang="zh-Hans"] { --font-div-xu-head: HansF; }\n',
+                           lang="zh-Hans")
         got = [(a, tg, p.get("font-family")) for a, tg, p, _s in t.compounds]
-        self.assertIn(("div-xu", "head", "HansFont, serif"), got)
-
-    def test_invalid_key_skipped(self):
-        from pycbeta.theme import Theme
-        t = Theme.from_css("p.head { color: #0000a0; }\n")
-        n_comp = len(t.compounds)
-        t.apply_font_set("default", lang="zh-Hant",
-                         font_sets={"default": {"foo bar": "X, serif",
-                                                "a b c": "Y, serif"}})
-        self.assertEqual(len(t.compounds), n_comp)
-        self.assertNotIn("foo bar", t.tags)
-        self.assertNotIn("a b c", t.tags)
-
-    def test_docx_run_uses_switched_font(self):
-        from pycbeta.theme import Theme
-        from pycbeta.render_docx import DocxRenderer
-        t = Theme.from_css("div.div-xu p.head { color: #000; }\n")
-        t.apply_font_set("default", lang="zh-Hant", font_sets=self.SETS)
-        r = DocxRenderer(theme=t)
-        r._div_stack = ["div-xu"]
-        r._tag_stack = ["head"]
-        out = r._run("序", *r._current_tag())
-        self.assertIn('w:eastAsia="HantFont"', out)
-
+        self.assertIn(("div-xu", "head", "HansF"), got)
 
     def test_css_specified_wins_over_default(self):
-        # CSS 文件明确指定字体 → font_sets.default 不覆盖
+        # CSS 文件明确指定字体 → 变量填充不覆盖
         from pycbeta.theme import Theme
         t = Theme.from_css("div.div-xu p.head { color: #000; font-family: CustomFont, serif; }\n")
         got = [(a, tg, pr.get("font-family")) for a, tg, pr, _s in t.compounds]
         self.assertIn(("div-xu", "head", "CustomFont, serif"), got)
+
+    def test_docx_run_uses_var_font(self):
+        from pycbeta.theme import Theme
+        from pycbeta.render_docx import DocxRenderer
+        t = Theme.from_css(":root { --font-div-xu-head: VFont, serif; }\n"
+                           "div.div-xu p.head { color: #000; }\n")
+        r = DocxRenderer(theme=t)
+        r._div_stack = ["div-xu"]
+        r._tag_stack = ["head"]
+        out = r._run("序", *r._current_tag())
+        self.assertIn('w:eastAsia="VFont"', out)
+
+
+class TestResolveThemeCss(unittest.TestCase):
+    def test_empty_and_factory(self):
+        from pycbeta.theme import resolve_theme_css
+        self.assertEqual(resolve_theme_css("")[0], None)
+        self.assertEqual(resolve_theme_css("pdf_docx.css")[0], None)
+        self.assertEqual(resolve_theme_css(None)[0], None)
+
+    def test_builtin_preset_by_name(self):
+        import os
+        from pycbeta.theme import resolve_theme_css
+        path, label = resolve_theme_css("large-print")
+        self.assertTrue(path and os.path.isfile(path))
+        self.assertIn("内置", label)
+        path2, _l2 = resolve_theme_css("large-print.css")
+        self.assertEqual(path, path2)
+
+    def test_missing_falls_back_with_warning(self):
+        import io
+        from contextlib import redirect_stdout
+        from pycbeta.theme import resolve_theme_css
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            path, label = resolve_theme_css("no-such-preset-xyz")
+        self.assertIsNone(path)
+        self.assertIn("内置", label)
+        self.assertIn("no-such-preset-xyz", buf.getvalue())
+
+    def test_absolute_and_relative_path(self):
+        import os
+        import tempfile
+        from pycbeta.theme import resolve_theme_css
+        tmp = tempfile.mkdtemp()
+        try:
+            fn = os.path.join(tmp, "mine.css")
+            with open(fn, "w", encoding="utf-8") as f:
+                f.write("p { font-size: 1pt; }\n")
+            path, label = resolve_theme_css(fn)
+            self.assertEqual(path, fn)
+            self.assertEqual(label, "路径指定")
+            sub = os.path.join(tmp, "sub")
+            os.makedirs(sub)
+            path2, _l2 = resolve_theme_css("mine.css", base_dir=tmp)
+            self.assertEqual(path2, fn)
+        finally:
+            import shutil
+            shutil.rmtree(tmp, ignore_errors=True)
 
 if __name__ == "__main__":
     unittest.main()

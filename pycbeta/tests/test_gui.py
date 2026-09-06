@@ -127,7 +127,7 @@ class TestPanelSmoke(unittest.TestCase):
         panel.set_options(o1)
         o2 = panel.get_options()
         self.assertEqual(o1.page, o2.page)
-        self.assertEqual(o1.font_set, o2.font_set)
+        self.assertEqual(o1.font_lang, o2.font_lang)
         self.assertEqual(o1.engine, o2.engine)
         self.assertEqual(o1.formats, o2.formats)
         self.assertEqual(o1.t2s, o2.t2s)
@@ -139,22 +139,14 @@ class TestPanelSmoke(unittest.TestCase):
         from pycbeta.gui.panel import XmlOptionsPanel
         panel = XmlOptionsPanel(load_presets())
         panel.t2s_box.setChecked(True)
-        self.assertTrue(panel.font_box.currentData().endswith(":zh-Hans"))
+        self.assertEqual(panel.lang_box.currentData(), "zh-Hans")
+        self.assertFalse(panel.lang_box.isEnabled())  # t2s 锁定简体
         panel.t2s_box.setChecked(False)
-        self.assertEqual(panel.font_box.currentData(), "default")
-        # 再勾选仍自动切简体（程序切换不污染 _font_dirty）
-        panel.t2s_box.setChecked(True)
-        self.assertTrue(panel.font_box.currentData().endswith(":zh-Hans"))
-        panel.t2s_box.setChecked(False)
-        self.assertEqual(panel.font_box.currentData(), "default")
-        # 用户手动碰过下拉后不再自动：手动选 Hans，再勾选保持手动选择，
-        # 取消勾选也不回退（整轮未进入自动模式）
-        panel.font_box.setCurrentIndex(panel.font_box.findData("default:zh-Hans"))
-        self.assertTrue(panel._font_dirty)
-        panel.t2s_box.setChecked(True)
-        self.assertEqual(panel.font_box.currentData(), "default:zh-Hans")
-        panel.t2s_box.setChecked(False)
-        self.assertEqual(panel.font_box.currentData(), "default:zh-Hans")
+        self.assertTrue(panel.lang_box.isEnabled())
+        # 字库两态 roundtrip
+        panel.lang_box.setCurrentIndex(
+            panel.lang_box.findData("zh-Hans"))
+        self.assertEqual(panel.get_options().font_lang, "zh-Hans")
 
     def test_vertical_mode_group(self):
         from pycbeta.gui.panel import XmlOptionsPanel
@@ -609,9 +601,116 @@ class TestCssEditor(unittest.TestCase):
         r2 = DocxRenderer(theme=t, series_title={"size": 12})
         self.assertEqual(r2._series_size_pt({}), 24)
 
+    def test_font_dual_column_roundtrip(self):
+        import pycbeta.gui.css_editor as ce
+        dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+        try:
+            dlg._rows["h1.title"]["font_hant"].setCurrentText("HantF")
+            dlg._rows["h1.title"]["font_hans"].setCurrentText("HansF")
+            block = dlg._source_edit.toPlainText()
+            self.assertIn(":root { --font-title: HantF; }", block)
+            self.assertIn('html[lang="zh-Hans"] { --font-title: HansF; }',
+                          block)
+            self.assertIn(("h1.title", "font-family", "zh-Hant"),
+                          dlg._touched)
+            self.assertIn(("h1.title", "font-family", "zh-Hans"),
+                          dlg._touched)
+            # 回读联动
+            dlg._load_block_text(block)
+            self.assertEqual(
+                dlg._rows["h1.title"]["font_hant"].currentText(), "HantF")
+            self.assertEqual(
+                dlg._rows["h1.title"]["font_hans"].currentText(), "HansF")
+        finally:
+            dlg.close()
+
+    def test_rows_without_var_disable_fonts(self):
+        import pycbeta.gui.css_editor as ce
+        dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+        try:
+            # 注锚行只有颜色，无字体变量
+            self.assertFalse(dlg._rows["a.noteAnchor"].get("suffix"))
+            self.assertFalse(
+                dlg._rows["a.noteAnchor"]["font_hant"].isEnabled())
+            self.assertTrue(dlg._rows["h1.title"]["font_hant"].isEnabled())
+        finally:
+            dlg.close()
+
+    def test_preview_lang_toggle(self):
+        import pycbeta.gui.css_editor as ce
+        dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+        try:
+            self.assertEqual(dlg._preview_lang(), "zh-Hant")
+            dlg.preview_lang.setCurrentIndex(
+                dlg.preview_lang.findData("zh-Hans"))
+            self.assertEqual(dlg._preview_lang(), "zh-Hans")
+        finally:
+            dlg.close()
+
+    def test_css_combo_ordering(self):
+        import shutil
+        import unittest.mock as mock
+        import pycbeta.gui.css_editor as ce
+        import pycbeta.theme as _theme
+        root = tempfile.mkdtemp()
+        try:
+            bdir = os.path.join(root, "b")
+            udir = os.path.join(root, "u")
+            os.makedirs(bdir)
+            os.makedirs(udir)
+            for d, fn in ((bdir, "a.css"), (udir, "mine.css")):
+                with open(os.path.join(d, fn), "w",
+                          encoding="utf-8") as f:
+                    f.write("/* x */\n")
+            with mock.patch.object(_theme, "BUILTIN_PRESETS_DIR", bdir), \
+                    mock.patch.object(_theme, "user_presets_dir",
+                                      lambda root=None: udir):
+                box = ce.CssComboBox()
+                box.refresh("mine")
+                texts = [box.itemText(i) for i in range(box.count())]
+                self.assertTrue(texts[0].startswith("（默认）"))
+                self.assertIn("［用户］mine", texts[0])
+                self.assertIn("［内置］a", texts)
+                self.assertEqual(box.selected_value(), "mine")
+                box.refresh("pdf_docx.css")
+                self.assertTrue(box.itemText(0).startswith("（默认）出厂默认"))
+                self.assertEqual(box.selected_value(), "pdf_docx.css")
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+    def test_cli_theme_priority(self):
+        import argparse
+        import unittest.mock as mock
+        from pycbeta.cli import _resolve_cli_theme
+        args = argparse.Namespace(theme=None, config=None)
+        # 用户槽优先于出厂
+        with mock.patch("pycbeta.cli._user_slot_theme",
+                        return_value="large-print"):
+            path, _label = _resolve_cli_theme(args, {"theme": "pdf_docx.css"},
+                                              None)
+            self.assertTrue(path and path.endswith("large-print.css"))
+        # 显式 --theme 最大
+        args2 = argparse.Namespace(theme="x.css", config=None)
+        path2, _l2 = _resolve_cli_theme(args2, {}, None)
+        self.assertEqual(path2, "x.css")
+        # 空槽回内置
+        with mock.patch("pycbeta.cli._user_slot_theme", return_value=""):
+            path3, _l3 = _resolve_cli_theme(args, {}, None)
+            self.assertIsNone(path3)
+
+    def test_font_set_arg_gone(self):
+        import subprocess
+        import sys
+        r = subprocess.run(
+            [sys.executable, "-m", "pycbeta.cli", "--font-set", "default",
+             "-i", "x", "-f", "docx"],
+            capture_output=True, text=True, cwd=r"E:\dev\cbeta\xml2pdf")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("--font-set", r.stderr.lower().replace("_", "-"))
+
     def test_preset_list_merge(self):
         import shutil
-        import pycbeta.gui.css_editor as ce
+        from pycbeta.theme import list_presets
         root = tempfile.mkdtemp()
         try:
             bdir = os.path.join(root, "builtin")
@@ -623,7 +722,7 @@ class TestCssEditor(unittest.TestCase):
                           (udir, "note.txt")):
                 with open(os.path.join(d, fn), "w", encoding="utf-8") as f:
                     f.write("x")
-            got = ce.list_presets(builtin_dir=bdir, user_dir=udir)
+            got = list_presets(builtin_dir=bdir, user_dir=udir)
             self.assertEqual([(k, name) for k, name, _p in got],
                              [("builtin", "a"), ("user", "b"), ("user", "c")])
         finally:
@@ -687,22 +786,31 @@ class TestCssEditor(unittest.TestCase):
         import shutil
         import unittest.mock as mock
         import pycbeta.gui.css_editor as ce
+        import pycbeta.theme as _theme
         root = tempfile.mkdtemp()
         try:
+            bdir = os.path.join(root, "builtin")
             udir = os.path.join(root, "css-presets")
+            os.makedirs(bdir)
             os.makedirs(udir)
+            with open(os.path.join(bdir, "b.css"), "w",
+                      encoding="utf-8") as f:
+                f.write("/* b */\n")
             full = "/* base */\n" + ce.build_override_block(
                 {"h1.title": {"font-size": "40pt"}})
             with open(os.path.join(udir, "mine.css"), "w",
                       encoding="utf-8") as f:
                 f.write(full)
-            with mock.patch.object(ce, "REPO_ROOT", root):
+            with mock.patch.object(_theme, "BUILTIN_PRESETS_DIR", bdir), \
+                    mock.patch.object(_theme, "user_presets_dir",
+                                      lambda root=None: udir), \
+                    mock.patch.object(ce, "REPO_ROOT", root):
                 dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
                 try:
                     texts = [dlg.preset_box.itemText(i)
                              for i in range(dlg.preset_box.count())]
-                    self.assertEqual(texts[0], "出厂默认")
-                    self.assertIn("［内置］large-print", texts)
+                    self.assertTrue(texts[0].startswith("（默认）"))
+                    self.assertIn("［内置］b", texts)
                     self.assertIn("［用户］mine", texts)
                     # 装载用户预设 → 控件+touched 联动
                     dlg._load_preset_path(os.path.join(udir, "mine.css"))
@@ -718,17 +826,26 @@ class TestCssEditor(unittest.TestCase):
                     dlg.close()
         finally:
             shutil.rmtree(root, ignore_errors=True)
+    def test_user_theme_slot(self):
+        import json
         import shutil
-        from pycbeta.gui.css_editor import (clear_user_css, save_user_css_text,
-                                        user_css_path)
+        from pycbeta.gui.css_editor import current_theme_value, set_user_theme
         root = tempfile.mkdtemp()
         try:
-            self.assertEqual(user_css_path(root), os.path.join(root, "user.css"))
-            self.assertFalse(clear_user_css(root))
-            p = save_user_css_text("p { font-size: 12pt; }", root)
-            self.assertTrue(os.path.isfile(p))
-            self.assertTrue(clear_user_css(root))
-            self.assertFalse(os.path.isfile(p))
+            # 无槽 → 出厂（无 theme 键 → ""）
+            os.makedirs(os.path.join(root, "pycbeta"))
+            with open(os.path.join(root, "pycbeta", "config.json"), "w",
+                      encoding="utf-8") as f:
+                json.dump({"theme": "pdf_docx.css"}, f)
+            self.assertEqual(current_theme_value(root), "pdf_docx.css")
+            # 写槽 → 用户槽优先
+            p = set_user_theme("large-print", root)
+            self.assertTrue(p.endswith("config.user.json"))
+            self.assertEqual(current_theme_value(root), "large-print")
+            # 全量快照不变量：出厂键都在
+            d = json.load(open(os.path.join(root, "config.user.json"),
+                               encoding="utf-8"))
+            self.assertIn("theme", d)
         finally:
             shutil.rmtree(root, ignore_errors=True)
 
@@ -858,27 +975,27 @@ class TestCssEditor(unittest.TestCase):
         self.assertNotIn("Times New Roman", flat)  # 西文走固定三
 
     def test_build_render_cmd(self):
-        import unittest.mock as mock
         from pycbeta.gui.__main__ import build_render_cmd
-        opts = XmlOptions(page="a4", font_set="default", engine="docx2pdf",
+        opts = XmlOptions(page="a4", font_lang="zh-Hant", engine="docx2pdf",
                           formats=["docx"], t2s=False, vertical=False)
-        with mock.patch("pycbeta.gui.css_editor.user_css_path",
-                        return_value=r"E:\nonexistent\user.css"):
-            cmd = build_render_cmd(opts, "x.xml", "docx", "out", "tmp.json")
-        self.assertNotIn("--font-set", cmd)  # 默认不传，CSS 字体优先
-        self.assertNotIn("--theme", cmd)
+        cmd = build_render_cmd(opts, "x.xml", "docx", "out", "tmp.json")
+        self.assertNotIn("--font-lang", cmd)  # 繁体默认省略
+        self.assertNotIn("--theme", cmd)  # 默认主题走 --config 槽
         self.assertIn("--no-t2s", cmd)
-        # 非默认字体 + 竖排 + user.css 存在
-        opts2 = XmlOptions(page="a4", font_set="default:zh-Hans",
+        # 简体字库 + 竖排
+        opts2 = XmlOptions(page="a4", font_lang="zh-Hans",
                            engine="docx2pdf", formats=["docx"],
                            t2s=True, vertical=True)
-        with mock.patch("pycbeta.gui.css_editor.user_css_path",
-                        return_value=__file__):
-            cmd2 = build_render_cmd(opts2, "x.xml", "docx", "out", "tmp.json")
-        self.assertIn("--font-set", cmd2)
-        self.assertIn("--theme", cmd2)
+        cmd2 = build_render_cmd(opts2, "x.xml", "docx", "out", "tmp.json")
+        self.assertNotIn("--font-lang", cmd2)  # t2s 自动简体，不用显式传
         self.assertIn("--vertical", cmd2)
         self.assertIn("--t2s", cmd2)
+        # 显式简体（无 t2s）才传
+        opts3 = XmlOptions(page="a4", font_lang="zh-Hans",
+                           engine="docx2pdf", formats=["docx"],
+                           t2s=False, vertical=False)
+        cmd3 = build_render_cmd(opts3, "x.xml", "docx", "out", "tmp.json")
+        self.assertIn("--font-lang", cmd3)
 
     def test_styles_tab_opens_editor(self):
         from pycbeta.gui.panel import XmlOptionsPanel

@@ -44,6 +44,10 @@
   - 预设库双目录（2026-09-06）：内置 `pycbeta/styles/presets/`（入库+示例 large-print+
     README，删不掉）+ 用户 `css-presets/`（不入库）；编辑器顶部预设行切换/另存/删除；
     切换只装载，保存用户CSS即应用为当前；`list/save/delete/strip_prefix` 纯函数可测
+  - 统一大迁移（2026-09-06）：font_sets 迁 CSS `:root` 双栏变量 + `config.theme` 默认槽 +
+    编辑器双栏/下拉复用 + `user.css` 概念删除（详见本条）：T0672 繁字节一致、简仅经藏名
+    隸書→隶书一处；用户槽朝华标题B搬入 `css-presets/我的样式.css` 并设默认；`--font-set`
+    用到即报错；publish 桥需同日跟进（跨仓）
 - [ ] **P9 中** GUI 界面三语切换（简/繁/英，2026-09-06 用户立项；与输出经文 t2s/font_sets 无关，是界面本身语言）
   - 背景：界面中文串全硬编码（panel 约数百处、`__main__` 状态栏/按钮），无 `QTranslator` 机制
   - 方案：先抽字符串资源（`pycbeta/gui/i18n/*.ts`，Qt Linguist 流程：`pylupdate6` 抽取→翻译→`lrelease` 编译→`QTranslator.load/install`），面板顶部或设置加语言下拉（简/繁/英，存用户槽，重启生效；或动态 `retranslateUi` 热切）
