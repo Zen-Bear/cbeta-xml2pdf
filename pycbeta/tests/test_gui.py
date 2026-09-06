@@ -374,9 +374,10 @@ class TestLayoutRegroup(unittest.TestCase):
         w = MainWindow()
         try:
             self.assertEqual(w.src_btn.text(), "数据源…")
-            # 输入来源同行（row 0），与目录/文件浏览按钮同列对齐
+            # 编号列表同行（row 2），与浏览按钮同列对齐
             grid = w.centralWidget().layout().itemAt(0).layout()
-            self.assertEqual(grid.getItemPosition(grid.indexOf(w.src_btn))[:2], (0, 3))
+            self.assertEqual(grid.getItemPosition(grid.indexOf(w.src_btn))[:2], (2, 3))
+            self.assertTrue(w.mode_ids.text().startswith("佛典编号"))
         finally:
             w.close()
 
