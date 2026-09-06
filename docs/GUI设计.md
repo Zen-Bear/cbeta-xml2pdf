@@ -101,8 +101,9 @@ class XmlOptions:
 - 每个选项卡控件值变更即写回内存中的 `XmlOptions`，`get_options()` 汇总
 
 > 注（2026-09-06）：上图为初版草图，当前实际为八卡——输出格式 / **样式表** / 页面 / 分页 /
-> 排版 / 注释 / 注音 / 校验。样式表卡列两默认 CSS 路径（可打开）；注音卡词表行下有实际路径
-> hint + 打开按钮；数据源按钮在面板顶部配置栏（原独立窗按钮已移除，`SourceDialog` 共用）。
+> 排版 / 注释 / 注音 / 校验。样式表卡列两默认 CSS 路径（可打开）；输出格式卡有"模式"组
+> （竖排直书 + 简体转换并排，竖排在左；GUI 经 `--vertical` 进子进程）；注音卡词表行下有实际路径
+> hint + 打开按钮；数据源按钮在主窗口输入来源上方（`SourceDialog` 共用）。
 
 ### 3.2 `XmlOptionsDialog(QDialog)`
 面板的对话框包装：`exec() -> Optional[XmlOptions]`（Accept→选项；Cancel→None），`[确定][取消]`。

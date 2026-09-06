@@ -168,6 +168,8 @@ class BatchWorker(QThread):
                "--config", tmpcfg, "-o", out_dir]
         if abs(float(self.opts.font_scale or 1.0) - 1.0) > 1e-9:
             cmd += ["--font-scale", str(self.opts.font_scale)]
+        if self.opts.vertical:
+            cmd += ["--vertical"]
         cmd += ["--t2s"] if self.opts.t2s else ["--no-t2s"]
         if self.opts.engine:
             cmd += ["--engine", self.opts.engine]

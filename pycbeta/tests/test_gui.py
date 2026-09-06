@@ -131,6 +131,7 @@ class TestPanelSmoke(unittest.TestCase):
         self.assertEqual(o1.engine, o2.engine)
         self.assertEqual(o1.formats, o2.formats)
         self.assertEqual(o1.t2s, o2.t2s)
+        self.assertEqual(o1.vertical, o2.vertical)
         self.assertEqual(o1.annotations["style"], o2.annotations["style"])
         self.assertEqual(o1.pagination.get("enabled"), o2.pagination.get("enabled"))
 
@@ -141,6 +142,21 @@ class TestPanelSmoke(unittest.TestCase):
         self.assertTrue(panel.font_box.currentData().endswith(":zh-Hans"))
         panel.t2s_box.setChecked(False)
         self.assertEqual(panel.font_box.currentData(), "default")
+
+    def test_vertical_mode_group(self):
+        from pycbeta.gui.panel import XmlOptionsPanel
+        panel = XmlOptionsPanel(load_presets())
+        # 竖排在简体转换左边，同属模式组
+        items = [panel.mode_group.layout().itemAt(i).widget()
+                 for i in range(panel.mode_group.layout().count())]
+        self.assertEqual(items[0], panel.vert_box)
+        self.assertEqual(items[1], panel.t2s_box)
+        self.assertFalse(panel.get_options().vertical)
+        panel.vert_box.setChecked(True)
+        o = panel.get_options()
+        self.assertTrue(o.vertical)
+        panel.set_options(o)
+        self.assertTrue(panel.vert_box.isChecked())
 
 
 class TestEngineSingles(unittest.TestCase):

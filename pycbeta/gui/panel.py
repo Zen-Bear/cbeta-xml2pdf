@@ -266,6 +266,7 @@ class XmlOptions:
     pagination: dict = field(default_factory=dict)
     series_title: dict = field(default_factory=dict)
     t2s: bool = False
+    vertical: bool = False            # 竖排直书（CLI --vertical；pdf 切 html2pdf 管线）
     annotations: dict = field(default_factory=dict)
     verify: dict = field(default_factory=dict)
 
@@ -286,6 +287,7 @@ def options_from_presets(presets):
         pagination=copy.deepcopy(out.get("pagination") or {}),
         series_title=copy.deepcopy(out.get("series_title") or {}),
         t2s=bool(out.get("t2s", False)),
+        vertical=bool(out.get("vertical", False)),
         annotations=copy.deepcopy(presets.get("annotations") or {}),
         verify=copy.deepcopy(presets.get("verify") or {}),
     )
@@ -308,7 +310,8 @@ def write_temp_presets(base, opts, path=None):
     if opts.margins:
         data.setdefault("pages", {}).setdefault(opts.page, {})["margins"] = \
             copy.deepcopy(opts.margins)
-    data["output"]["t2s"] = bool(opts.t2s)
+        data["output"]["t2s"] = bool(opts.t2s)
+    data["output"]["vertical"] = bool(opts.vertical)
     data["output"]["font_scale"] = float(opts.font_scale or 1.0)
     if path is None:
         fd, path = tempfile.mkstemp(prefix="xml2pdf-gui-", suffix=".json")
@@ -486,11 +489,18 @@ class XmlOptionsPanel(QWidget):
             row.addWidget(box)
         row.addStretch(1)
         layout.addLayout(row)
-        # 字体区（原字体卡并入）：简体转换在上，字体下拉在下
-        frow = QHBoxLayout()
+        # 模式组（竖排在左，简体转换在右，共框）
+        self.mode_group = QGroupBox("模式")
+        gel = QHBoxLayout(self.mode_group)
+        self.vert_box = self._check("竖排直书（上→下，右→左）")
         self.t2s_box = self._check("简体转换（OpenCC t2s；自动套简体字库）")
         self.t2s_box.toggled.connect(self._on_t2s)
-        frow.addWidget(self.t2s_box)
+        gel.addWidget(self.vert_box)
+        gel.addWidget(self.t2s_box)
+        gel.addStretch(1)
+        layout.addWidget(self.mode_group)
+        # 字体区（原字体卡并入）：字体下拉独立一行
+        frow = QHBoxLayout()
         frow.addWidget(QLabel("字体"))
         self.font_box = QComboBox()
         for label, value in self._font_items():
@@ -788,6 +798,7 @@ class XmlOptionsPanel(QWidget):
             data.setdefault("pages", {}).setdefault(opts.page, {})["margins"] = \
                 copy.deepcopy(opts.margins)
         data["output"]["t2s"] = bool(opts.t2s)
+        data["output"]["vertical"] = bool(opts.vertical)
         data["output"]["font_scale"] = float(opts.font_scale or 1.0)
         return data
 
@@ -842,6 +853,7 @@ class XmlOptionsPanel(QWidget):
                           "font": self.series_font.currentText(),
                           "size": int(self.series_size.value())},
             t2s=self.t2s_box.isChecked(),
+            vertical=self.vert_box.isChecked(),
             annotations={
                 "enabled": self.ann_on.isChecked(),
                 "scheme": self.ann_scheme.currentData(),
@@ -883,6 +895,7 @@ class XmlOptionsPanel(QWidget):
             self._font_dirty = False
             self._font_auto = False
             self.t2s_box.setChecked(bool(opts.t2s))
+            self.vert_box.setChecked(bool(opts.vertical))
             for f, b in self.format_boxes.items():
                 b.setChecked(f in (opts.formats or ["pdf"]))
             pipe, _, single = (opts.engine or "docx2pdf").partition(":")
