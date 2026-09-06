@@ -359,8 +359,8 @@ Note 与 App 的**归属版本**（witness 解析后的【大】【宋】…）�
 | 资产 | 位置 |
 |---|---|
 | 缺字库 | `cbeta/data/cbeta_gaiji.json`（4MB）、`cbeta_sanskrit.json` |
-| 藏经元数据 | `canons.csv`、`categories.json` |
-| Unicode 版本表 | `unicode-1.1.json`（供手机/桌面字形判断） |
+| 藏经元数据 | 上游 cbeta_gaiji 仓（`canons.csv`、`categories.json`；未随包，需用自取） |
+| Unicode 版本表 | 上游同仓（未随包；2026-09-06 删仓内 `unicode-1.1.json`，无代码引用） |
 | 官方参照输出 | `cbeta/` 各目录（HTML/PDF/EPUB/DOCX/ODT/TXT + `*.yaml`） |
 | 缺字字体 | `cbeta/fonts/CBETASupplement.ttf`（+ 网络 woff2） |
 | 官方规范 | `cbeta/cbeta-documentation/`（60 元素 + 结构 + 跨册 + global attributes） |
