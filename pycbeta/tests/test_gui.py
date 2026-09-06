@@ -609,7 +609,115 @@ class TestCssEditor(unittest.TestCase):
         r2 = DocxRenderer(theme=t, series_title={"size": 12})
         self.assertEqual(r2._series_size_pt({}), 24)
 
-    def test_user_css_helpers(self):
+    def test_preset_list_merge(self):
+        import shutil
+        import pycbeta.gui.css_editor as ce
+        root = tempfile.mkdtemp()
+        try:
+            bdir = os.path.join(root, "builtin")
+            udir = os.path.join(root, "user")
+            os.makedirs(bdir)
+            os.makedirs(udir)
+            for d, fn in ((bdir, "a.css"), (bdir, "b.css"),
+                          (udir, "b.css"), (udir, "c.css"),
+                          (udir, "note.txt")):
+                with open(os.path.join(d, fn), "w", encoding="utf-8") as f:
+                    f.write("x")
+            got = ce.list_presets(builtin_dir=bdir, user_dir=udir)
+            self.assertEqual([(k, name) for k, name, _p in got],
+                             [("builtin", "a"), ("user", "b"), ("user", "c")])
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+    def test_preset_save_load_roundtrip(self):
+        import shutil
+        import pycbeta.gui.css_editor as ce
+        root = tempfile.mkdtemp()
+        try:
+            udir = os.path.join(root, "u")
+            full = ("/* base */\n" + ce.build_override_block(
+                {"p": {"font-size": "14pt"}}))
+            path = ce.save_preset_file("我的预设:/v1", full, user_dir=udir)
+            self.assertTrue(path.endswith("我的预设v1.css"))
+            with open(path, encoding="utf-8") as f:
+                block = ce.strip_factory_prefix(f.read())
+            values, _pt, err = ce.split_override_block(block)
+            self.assertIsNone(err)
+            self.assertEqual(values, {"p": {"font-size": "14pt"}})
+            self.assertRaises(ValueError, ce.save_preset_file, "  ", full,
+                              udir)
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+    def test_preset_delete_protects_builtin(self):
+        import shutil
+        import pycbeta.gui.css_editor as ce
+        root = tempfile.mkdtemp()
+        try:
+            bdir = os.path.join(root, "b")
+            udir = os.path.join(root, "u")
+            os.makedirs(bdir)
+            os.makedirs(udir)
+            bp = os.path.join(bdir, "a.css")
+            up = os.path.join(udir, "mine.css")
+            for p in (bp, up):
+                with open(p, "w", encoding="utf-8") as f:
+                    f.write("x")
+            self.assertRaises(ValueError, ce.delete_preset_file, bp, bdir, udir)
+            self.assertRaises(ValueError, ce.delete_preset_file,
+                              os.path.join(root, "elsewhere.css"), bdir, udir)
+            self.assertTrue(ce.delete_preset_file(up, bdir, udir))
+            self.assertFalse(os.path.isfile(up))
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+    def test_example_preset_parses(self):
+        import pycbeta.gui.css_editor as ce
+        from pycbeta.theme import Theme
+        path = os.path.join(os.path.dirname(
+            os.path.dirname(os.path.abspath(ce.__file__))),
+            "styles", "presets", "large-print.css")
+        self.assertTrue(os.path.isfile(path))
+        with open(path, encoding="utf-8") as f:
+            t = Theme.from_css(f.read())
+        self.assertEqual((t.tags.get("p") or {}).get("font-size"), "14pt")
+        self.assertEqual((t.tags.get("title") or {}).get("font-size"), "36pt")
+
+    def test_dialog_preset_load(self):
+        import shutil
+        import unittest.mock as mock
+        import pycbeta.gui.css_editor as ce
+        root = tempfile.mkdtemp()
+        try:
+            udir = os.path.join(root, "css-presets")
+            os.makedirs(udir)
+            full = "/* base */\n" + ce.build_override_block(
+                {"h1.title": {"font-size": "40pt"}})
+            with open(os.path.join(udir, "mine.css"), "w",
+                      encoding="utf-8") as f:
+                f.write(full)
+            with mock.patch.object(ce, "REPO_ROOT", root):
+                dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+                try:
+                    texts = [dlg.preset_box.itemText(i)
+                             for i in range(dlg.preset_box.count())]
+                    self.assertEqual(texts[0], "出厂默认")
+                    self.assertIn("［内置］large-print", texts)
+                    self.assertIn("［用户］mine", texts)
+                    # 装载用户预设 → 控件+touched 联动
+                    dlg._load_preset_path(os.path.join(udir, "mine.css"))
+                    self.assertEqual(
+                        dlg._rows["h1.title"]["size"].text(), "40pt")
+                    self.assertIn(("h1.title", "font-size"), dlg._touched)
+                    # 回到出厂 → 控件回预填、块清空
+                    dlg._reset_editor_state()
+                    self.assertEqual(
+                        dlg._rows["h1.title"]["size"].text(), "30pt")
+                    self.assertEqual(dlg._touched, set())
+                finally:
+                    dlg.close()
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
         import shutil
         from pycbeta.gui.css_editor import (clear_user_css, save_user_css_text,
                                         user_css_path)

@@ -14,6 +14,8 @@ config.user.json
 config.last.json
 # 可视化样式编辑器产物 user.css（本机样式，不入库；删掉即恢复出厂）
 user.css
+# CSS 编辑器用户预设库（本机，不入库；内置预设在 pycbeta/styles/presets/ 入库）
+css-presets/
 
 # 系统
 .DS_Store

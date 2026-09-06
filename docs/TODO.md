@@ -41,6 +41,9 @@
   - 改名 css_editor（2026-09-06）：`editor.py`→`css_editor.py`、`StyleEditorDialog`→
     `CssEditorDialog`（引用全改，无外部依赖）；控件预填出厂值+touched 输出；左栏滚动；
     字体中文优先显示+纯英文非精选过滤（`pmingliu` 别名补入 `fonts._ZH_ALIASES`）
+  - 预设库双目录（2026-09-06）：内置 `pycbeta/styles/presets/`（入库+示例 large-print+
+    README，删不掉）+ 用户 `css-presets/`（不入库）；编辑器顶部预设行切换/另存/删除；
+    切换只装载，保存用户CSS即应用为当前；`list/save/delete/strip_prefix` 纯函数可测
 - [ ] **P9 中** GUI 界面三语切换（简/繁/英，2026-09-06 用户立项；与输出经文 t2s/font_sets 无关，是界面本身语言）
   - 背景：界面中文串全硬编码（panel 约数百处、`__main__` 状态栏/按钮），无 `QTranslator` 机制
   - 方案：先抽字符串资源（`pycbeta/gui/i18n/*.ts`，Qt Linguist 流程：`pylupdate6` 抽取→翻译→`lrelease` 编译→`QTranslator.load/install`），面板顶部或设置加语言下拉（简/繁/英，存用户槽，重启生效；或动态 `retranslateUi` 热切）

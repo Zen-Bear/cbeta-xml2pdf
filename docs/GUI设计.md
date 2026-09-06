@@ -118,6 +118,10 @@ class XmlOptions:
 > 注锚→行内字体）；`pdf_docx.css` 文件本身不动。控件不认识的规则（标题 level 属性选择器、
 > 注记偈行等）原文透传，改控件不丢失。字体下拉分三组（中文 buckets/西文三/字库目录
 > `cbeta/fonts`+打开/刷新，显示优先中文名、纯英文非精选过滤）；颜色取"工作 CSS 现有色（标来源元素）/自定义"两组。
+>
+> 预设库（双目录）：内置 `pycbeta/styles/presets/`（入库，随包分发，删不掉）+ 用户
+> `css-presets/`（仓库根，不入库）。编辑器顶部预设行切换只装载（切换/另存/删除用户预设）；
+> `保存用户CSS`即"应用为当前"（写 `user.css`）；`恢复出厂`不动预设库。
 
 ### 3.2 `XmlOptionsDialog(QDialog)`
 面板的对话框包装：`exec() -> Optional[XmlOptions]`（Accept→选项；Cancel→None），`[确定][取消]`。

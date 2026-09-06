@@ -29,9 +29,12 @@ from PySide6.QtWidgets import (
 )
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-FACTORY_CSS = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                           "..", "styles", "pdf_docx.css")
+_STYLES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                           "..", "styles")
+FACTORY_CSS = os.path.join(_STYLES_DIR, "pdf_docx.css")
 USER_CSS_NAME = "user.css"
+BUILTIN_PRESETS_DIR = os.path.join(_STYLES_DIR, "presets")
+USER_PRESETS_DIRNAME = "css-presets"
 
 # 临时样张候选（glob，按序取首个命中者；精简样本到了替换此处即可）
 SAMPLE_CANDIDATES = (
@@ -216,6 +219,73 @@ def clear_user_css(root=None):
         os.remove(path)
         return True
     return False
+
+
+def user_presets_dir(root=None):
+    """用户预设目录（仓库根 css-presets/；git 忽略，不入库）。"""
+    return os.path.join(root or REPO_ROOT, USER_PRESETS_DIRNAME)
+
+
+def list_presets(builtin_dir=None, user_dir=None):
+    """预设列表 → [(kind, stem, path)]，kind ∈ builtin/user。
+
+    出厂默认由调用方另行加首项；同名用户预设遮蔽内置（内置的不列出）。
+    """
+    found = []
+    builtin_dir = os.path.abspath(builtin_dir or BUILTIN_PRESETS_DIR)
+    user_dir = os.path.abspath(user_dir or user_presets_dir())
+    for kind, d in (("builtin", builtin_dir), ("user", user_dir)):
+        if not os.path.isdir(d):
+            continue
+        for fn in sorted(os.listdir(d)):
+            if fn.lower().endswith(".css"):
+                found.append((kind, os.path.splitext(fn)[0],
+                              os.path.join(d, fn)))
+    user_names = {name for kind, name, _p in found if kind == "user"}
+    return [(k, n, p) for k, n, p in found
+            if k == "user" or n not in user_names]
+
+
+def _safe_preset_stem(name):
+    stem = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "", (name or "").strip())
+    stem = stem.strip().strip(".")
+    return stem
+
+
+def save_preset_file(name, full_css_text, user_dir=None):
+    """另存用户预设（纯函数，可单测）；同名覆盖；返回路径。空名抛 ValueError。"""
+    stem = _safe_preset_stem(name)
+    if not stem:
+        raise ValueError("预设名为空")
+    user_dir = os.path.abspath(user_dir or user_presets_dir())
+    os.makedirs(user_dir, exist_ok=True)
+    path = os.path.join(user_dir, stem + ".css")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(full_css_text)
+    return path
+
+
+def delete_preset_file(path, builtin_dir=None, user_dir=None):
+    """删除用户预设；内置目录/目录外/不存在抛 ValueError（内置删不掉）。"""
+    builtin_dir = os.path.abspath(builtin_dir or BUILTIN_PRESETS_DIR)
+    user_dir = os.path.abspath(user_dir or user_presets_dir())
+    ap = os.path.abspath(path or "")
+    if not ap.lower().endswith(".css") or not os.path.isfile(ap):
+        raise ValueError(f"预设不存在：{path}")
+    if ap == builtin_dir or ap.startswith(builtin_dir + os.sep):
+        raise ValueError("内置预设受保护，删不掉")
+    if not (ap == user_dir or ap.startswith(user_dir + os.sep)):
+        raise ValueError(f"不在预设目录内：{path}")
+    os.remove(ap)
+    return True
+
+
+def strip_factory_prefix(text, factory=None):
+    """预设全文 → 覆盖块部分（去掉出厂原文前缀；无前缀则原文）。"""
+    factory = factory if factory is not None else factory_css_text()
+    if (text or "").startswith(factory):
+        return text[len(factory):].lstrip("\n")
+    return text or ""
 
 
 def factory_css_text():
@@ -632,6 +702,22 @@ class CssEditorDialog(QDialog):
     # ----- 构造 -----
     def _build(self, sample):
         layout = QVBoxLayout(self)
+        # 预设行
+        prow = QHBoxLayout()
+        prow.addWidget(QLabel("预设"))
+        self.preset_box = QComboBox()
+        self.preset_box.setMinimumWidth(220)
+        self.preset_box.activated.connect(self._on_preset_chosen)
+        self.preset_save = QPushButton("另存为预设…")
+        self.preset_save.setToolTip("当前样式另存进用户预设库（css-presets/）")
+        self.preset_save.clicked.connect(self._save_preset_as)
+        self.preset_del = QPushButton("删除预设")
+        self.preset_del.setToolTip("只删用户预设；内置预设受保护")
+        self.preset_del.clicked.connect(self._delete_preset)
+        prow.addWidget(self.preset_box, 1)
+        prow.addWidget(self.preset_save)
+        prow.addWidget(self.preset_del)
+        layout.addLayout(prow)
         # 样张行
         srow = QHBoxLayout()
         srow.addWidget(QLabel("样张"))
@@ -691,7 +777,101 @@ class CssEditorDialog(QDialog):
         self._source_edit.setPlaceholderText("在此追加/覆盖规则；解析失败红字且预览保持上次")
         factory_values, _, _ = split_override_block(self._factory_css)
         self._sync_controls_from_block(factory_values)
+        self._refresh_preset_box()
         self.refresh_preview()
+
+    # ----- 预设库 -----
+    def _refresh_preset_box(self, keep=None):
+        """预设下拉：出厂默认 + 内置/用户（同名用户遮蔽内置）。"""
+        box = self.preset_box
+        with QSignalBlocker(box):
+            box.clear()
+            box.addItem("出厂默认", None)
+            for kind, name, path in list_presets():
+                box.addItem(f"［{'内置' if kind == 'builtin' else '用户'}］{name}",
+                            path)
+            if keep:
+                i = box.findData(keep)
+                box.setCurrentIndex(i if i >= 0 else 0)
+
+    def _load_block_text(self, block_text, keep_path=None):
+        """覆盖块文本装载进编辑器（源码页+控件+touched 联动）；返回 True/False。"""
+        values, passthrough, err = split_override_block(block_text or "")
+        if err:
+            self._source_err.setText(f"CSS 解析失败（预览保持上次）：{err}")
+            return False
+        self._source_err.setText("")
+        with QSignalBlocker(self._source_edit):
+            self._source_edit.setPlainText(
+                build_override_block(values, passthrough))
+        self._passthrough = passthrough
+        self._touched = {(s, p) for s, props in values.items() for p in props}
+        self._sync_controls_from_block(values)
+        if keep_path is not None:
+            with QSignalBlocker(self.preset_box):
+                i = self.preset_box.findData(keep_path)
+                self.preset_box.setCurrentIndex(i if i >= 0 else 0)
+        self._schedule()
+        return True
+
+    def _load_preset_path(self, path):
+        try:
+            with open(path, encoding="utf-8") as f:
+                text = f.read()
+        except OSError as exc:
+            QMessageBox.warning(self, "载入失败", str(exc))
+            return
+        self._load_block_text(strip_factory_prefix(text), keep_path=path)
+
+    def _on_preset_chosen(self, index):
+        path = self.preset_box.itemData(index)
+        if not path:
+            self._reset_editor_state()
+            return
+        self._load_preset_path(path)
+
+    def _reset_editor_state(self):
+        """回到出厂默认（只清编辑器，不删 user.css；删文件走恢复出厂）。"""
+        self._passthrough = ""
+        self._touched = set()
+        with QSignalBlocker(self._source_edit):
+            self._source_edit.setPlainText("")
+        self._source_err.setText("")
+        factory_values, _, _ = split_override_block(self._factory_css)
+        self._sync_controls_from_block(factory_values)
+        self.refresh_preview()
+
+    def _save_preset_as(self):
+        from PySide6.QtWidgets import QInputDialog
+        name, ok = QInputDialog.getText(self, "另存为预设", "预设名（存进用户库 css-presets/）：")
+        if not ok:
+            return
+        try:
+            path = save_preset_file(name, self._last_good_css or self.work_css())
+        except ValueError as exc:
+            QMessageBox.warning(self, "另存失败", str(exc))
+            return
+        except OSError as exc:
+            QMessageBox.warning(self, "另存失败", str(exc))
+            return
+        self._refresh_preset_box(keep=path)
+        self.status.setText(f"预设已存：{path}")
+
+    def _delete_preset(self):
+        path = self.preset_box.currentData()
+        if not path:
+            QMessageBox.information(self, "删除预设", "出厂默认删不掉。")
+            return
+        try:
+            delete_preset_file(path)
+        except ValueError as exc:
+            QMessageBox.warning(self, "删除失败", str(exc))
+            return
+        except OSError as exc:
+            QMessageBox.warning(self, "删除失败", str(exc))
+            return
+        self._refresh_preset_box()
+        self.status.setText("用户预设已删除")
 
     def _left_panel(self):
         w = QWidget()
@@ -1108,8 +1288,13 @@ class CssEditorDialog(QDialog):
                 QMessageBox.warning(self, "恢复失败", str(exc))
                 return
         self._passthrough = ""
-        self._source_edit.setPlainText("")
-        self._sync_controls_from_block({})
+        self._touched = set()
+        with QSignalBlocker(self._source_edit):
+            self._source_edit.setPlainText("")
+        self._source_err.setText("")
+        factory_values, _, _ = split_override_block(self._factory_css)
+        self._sync_controls_from_block(factory_values)
+        self._refresh_preset_box()
         self.refresh_preview()
 
     def closeEvent(self, event):
