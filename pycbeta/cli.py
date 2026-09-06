@@ -517,6 +517,14 @@ def main(argv=None):
         if theme is None:
             theme = Theme()
         theme.apply_font_set("default", lang="zh-Hans", font_sets=font_sets_cfg)
+    # --config 自带 font_sets 时，无 --font-set/t2s 也要套 default 组合——否则 --config
+    # 换字库静默失效（--config 本意即替换 font_sets，见 --help）。有显式开关时上面已处理。
+    if font_sets_cfg and "default" in font_sets_cfg \
+            and not args.font_set and not args.t2s:
+        if theme is None:
+            theme = Theme()
+        theme.apply_font_set("default", lang="zh-Hant", font_sets=font_sets_cfg)
+        font_lang = "zh-Hant"
     # 西文字体随组合语言切换（页面方案显式 latin_font 仍优先，见 DocxRenderer）
     args.latin_font = combo_latin(font_sets_cfg, font_combo, font_lang)
     args.gaiji_lang = font_lang  # 缺字字体链按此语言选表（render_docx 懒解析）

@@ -14,7 +14,7 @@
       // body/pin 由 pdf_docx.css 迁入：body 为 PDF/DOCX 文档级默认字体，pin 为品名
       "body": ["新細明體, Songti TC, Times New Roman, sans-serif",
                "宋体, SimSun, Times New Roman, sans-serif"],
-      "title": ["朝华标题B, ZhaohuaMinB", "朝华标题B, ZhaohuaMinB"],
+      "title": ["標楷體, DFKaiShu", "楷体, KaiTi"],
       "author": ["新細明體, PMingLiU", "宋体, SimSun"],
       "translator": ["新細明體, PMingLiU", "宋体, SimSun"],
       "byline": ["新細明體, PMingLiU", "宋体, SimSun"],

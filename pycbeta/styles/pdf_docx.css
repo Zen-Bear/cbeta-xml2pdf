@@ -77,7 +77,7 @@ p.juan {
 /* 品名（<cb:jhead type="pin">，如“方便品第二”）：深蓝加粗居中，上下各空 2em；
    DOCX 同时挂 outlineLvl=1（导航窗格二级目录，挂在卷之下）。 */
 p.pin {
-  font-size: 14pt;
+  font-size: 16pt;
   font-weight: bold;
   text-align: center;
   color: #0000a0;        /* #0000a0 兜底值；想覆盖改这里（勿删） */
