@@ -12,6 +12,8 @@ test/out*/
 # GUI 用户槽（本机状态，不入库；出厂 pycbeta/config.json 入库）
 config.user.json
 config.last.json
+# 可视化样式编辑器产物 user.css（本机样式，不入库；删掉即恢复出厂）
+user.css
 
 # 系统
 .DS_Store

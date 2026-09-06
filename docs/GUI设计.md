@@ -107,6 +107,12 @@ class XmlOptions:
 > hint + 打开按钮；注释卡注码相关项、引擎组（单引擎+自动）说明同样收进 tooltip；
 > 面板顶部槽标签显示配置文件路径（过长省略，点击打开）；数据源按钮在主窗口输入来源
 > 同行最右（`SourceDialog` 共用）。
+>
+> 样式编辑器（2026-09-06，`pycbeta/gui/editor.py`）：`StyleEditorDialog`（样式表卡按钮弹窗；
+> publish 侧同样 import 即用）+ `python -m pycbeta.gui.editor --sample X.xml` 独立运行。
+> 左调参（标签分组字体四件套 + 源码页）/ 右 QTextDocument 模拟预览（读 `DocxRenderer`
+> 刚写出的 run 真值；注文尾注归并；分页以 Word 为准）/ 底导出样张 DOCX+PDF（PDF 跟主窗口
+> 引擎链）+ `user.css` 落盘自动生效 + 恢复出厂。`--font-set` 默认不进子进程桥（保 CSS 字体）。
 
 ### 3.2 `XmlOptionsDialog(QDialog)`
 面板的对话框包装：`exec() -> Optional[XmlOptions]`（Accept→选项；Cancel→None），`[确定][取消]`。

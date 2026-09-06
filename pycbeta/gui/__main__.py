@@ -51,6 +51,32 @@ def parse_produced_paths(log):
     return out
 
 
+def build_render_cmd(opts, xml, fmt, out_dir, tmpcfg):
+    """子进程桥命令（纯函数，可单测）：批量渲染一行。
+
+    - ``--font-set`` 只在非默认时传：默认走 CLI 主题默认路径（CSS 已指定的字体优先），
+      否则 ``apply_font_set`` 无条件覆盖会踩掉 ``user.css`` 的字体；
+    - 仓库根 ``user.css`` 存在则追加 ``--theme``（样式编辑器产物，GUI 自动生效）。
+    """
+    from pycbeta.gui.editor import user_css_path
+    cmd = [sys.executable, "-m", "pycbeta", "-i", xml, "-f", fmt,
+           "--page", opts.page, "--config", tmpcfg, "-o", out_dir]
+    font_set = (opts.font_set or "default").strip()
+    if font_set not in ("", "default", "default:zh-Hant"):
+        cmd += ["--font-set", font_set]
+    css = user_css_path()
+    if os.path.isfile(css):
+        cmd += ["--theme", css]
+    if abs(float(opts.font_scale or 1.0) - 1.0) > 1e-9:
+        cmd += ["--font-scale", str(opts.font_scale)]
+    if opts.vertical:
+        cmd += ["--vertical"]
+    cmd += ["--t2s"] if opts.t2s else ["--no-t2s"]
+    if opts.engine:
+        cmd += ["--engine", opts.engine]
+    return cmd
+
+
 class BatchWorker(QThread):
     row_status = Signal(int, str)
     row_source = Signal(int, str)
@@ -163,16 +189,7 @@ class BatchWorker(QThread):
             return os.path.basename(xml)
 
     def _render_one(self, xml, fmt, out_dir, tmpcfg):
-        cmd = [sys.executable, "-m", "pycbeta", "-i", xml, "-f", fmt,
-               "--page", self.opts.page, "--font-set", self.opts.font_set,
-               "--config", tmpcfg, "-o", out_dir]
-        if abs(float(self.opts.font_scale or 1.0) - 1.0) > 1e-9:
-            cmd += ["--font-scale", str(self.opts.font_scale)]
-        if self.opts.vertical:
-            cmd += ["--vertical"]
-        cmd += ["--t2s"] if self.opts.t2s else ["--no-t2s"]
-        if self.opts.engine:
-            cmd += ["--engine", self.opts.engine]
+        cmd = build_render_cmd(self.opts, xml, fmt, out_dir, tmpcfg)
         self.log.emit("$ " + " ".join(cmd))
         try:
             self._proc = subprocess.Popen(

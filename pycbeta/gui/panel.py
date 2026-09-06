@@ -571,7 +571,18 @@ class XmlOptionsPanel(QWidget):
             row.addWidget(open_btn)
             form.addRow(f"{name}\n{desc}", row)
             self.style_rows[name] = (edit, open_btn)
+        self.btn_editor = QPushButton("打开可视化编辑器…")
+        self.btn_editor.setToolTip("DOCX 所见即所得调样式（左改参/右预览），CSS 存 user.css 自动生效")
+        self.btn_editor.clicked.connect(self._open_style_editor)
+        form.addRow("", self.btn_editor)
         return w
+
+    def _open_style_editor(self):
+        from pycbeta.gui.editor import StyleEditorDialog
+        single = self.single_box.currentData() or ""
+        chain = [single] if single else None
+        dlg = StyleEditorDialog(sample_xml=None, engine_chain=chain, parent=self)
+        dlg.exec()
 
     def _pipe(self):
         return "html2pdf" if self.engine_html.isChecked() else "docx2pdf"

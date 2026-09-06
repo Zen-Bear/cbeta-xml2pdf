@@ -523,5 +523,158 @@ class TestSourceDialog(unittest.TestCase):
             dlg.close()
 
 
+class TestStyleEditor(unittest.TestCase):
+    """样式编辑器：覆盖块 roundtrip / spec 解析 / user.css 落盘 / 接线（全 offscreen）。"""
+
+    @classmethod
+    def setUpClass(cls):
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PySide6.QtWidgets import QApplication
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_override_roundtrip(self):
+        from pycbeta.gui.editor import build_override_block, parse_override_block
+        values = {"h1.title": {"font-family": "朝华标题B, ZhaohuaMinB",
+                               "font-size": "30pt"},
+                  "div.div-xu p.head": {"font-size": "20pt", "color": "#0000a0"},
+                  "sup.note-ref": {"font-size": "0.75em"}}
+        block = build_override_block(values)
+        back, err = parse_override_block(block)
+        self.assertIsNone(err)
+        self.assertEqual(back["h1.title"]["font-family"], "朝华标题B, ZhaohuaMinB")
+        self.assertEqual(back["h1.title"]["font-size"], "30pt")
+        self.assertEqual(back["div.div-xu p.head"]["color"], "#0000a0")
+        self.assertEqual(back["sup.note-ref"]["font-size"], "0.75em")
+
+    def test_override_bad_css_reports(self):
+        from pycbeta.gui.editor import parse_override_block
+        # 非法输入只红字不抛异常
+        _values, err = parse_override_block("\x00\x01\x02{{{{p.head")
+        self.assertIsInstance(err, (str, type(None)))
+
+    def test_user_css_helpers(self):
+        import shutil
+        from pycbeta.gui.editor import (clear_user_css, save_user_css_text,
+                                        user_css_path)
+        root = tempfile.mkdtemp()
+        try:
+            self.assertEqual(user_css_path(root), os.path.join(root, "user.css"))
+            self.assertFalse(clear_user_css(root))
+            p = save_user_css_text("p { font-size: 12pt; }", root)
+            self.assertTrue(os.path.isfile(p))
+            self.assertTrue(clear_user_css(root))
+            self.assertFalse(os.path.isfile(p))
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+    def _make_docx(self, tmp):
+        """最小合成 docx：样式 run + ruby + EQ 域 + 脚注引用 + footnotes.xml。"""
+        import zipfile
+        doc = (
+            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+            "<w:body>"
+            '<w:p><w:pPr><w:pStyle w:val="head"/></w:pPr>'
+            '<w:r><w:rPr><w:sz w:val="40"/><w:szCs w:val="40"/><w:b/>'
+            '<w:rFonts w:ascii="X" w:eastAsia="朝华标题B"/>'
+            '<w:color w:val="0000A0"/></w:rPr><w:t>序标题</w:t></w:r>'
+            '<w:r><w:rPr><w:sz w:val="18"/><w:vertAlign w:val="superscript"/>'
+            "</w:rPr><w:footnoteReference w:id=\"2\"/></w:r>"
+            "</w:p>"
+            "<w:p><w:r><w:rPr><w:sz w:val=\"24\"/></w:rPr>"
+            "<w:t>楞伽</w:t></w:r>"
+            "<w:ruby><w:rt><w:r><w:t>qié</w:t></w:r></w:rt>"
+            "<w:rubyBase><w:r><w:t>伽</w:t></w:r></w:rubyBase></w:ruby>"
+            "<w:r><w:rPr><w:rFonts w:hint=\"eastAsia\"/></w:rPr>"
+            "<w:instrText xml:space=\"preserve\"> EQ \\* jc0 \\* &quot;Font:宋体&quot; "
+            "\\* hps12 \\o \\ad(\\s \\up 11(pú),菩)</w:instrText></w:r>"
+            "</w:p>"
+            "</w:body></w:document>")
+        fns = (
+            '<w:footnotes xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+            "<w:footnote w:id=\"0\"/><w:footnote w:id=\"1\"/>"
+            "<w:footnote w:id=\"2\"><w:p><w:r><w:rPr><w:sz w:val=\"18\"/></w:rPr>"
+            "<w:t>注文内容</w:t></w:r></w:p></w:footnote>"
+            "</w:footnotes>")
+        fn = os.path.join(tmp, "s.docx")
+        with zipfile.ZipFile(fn, "w") as z:
+            z.writestr("word/document.xml", doc)
+            z.writestr("word/footnotes.xml", fns)
+        return fn
+
+    def test_docx_spec(self):
+        import shutil
+        from pycbeta.gui.editor import docx_spec
+        tmp = tempfile.mkdtemp()
+        try:
+            spec = docx_spec(self._make_docx(tmp))
+            head = spec["paras"][0]
+            self.assertEqual(head["style"], "head")
+            r0 = head["runs"][0]
+            self.assertEqual(r0["text"], "序标题")
+            self.assertEqual(r0["size"], 20.0)
+            self.assertEqual(r0["font"], "朝华标题B")
+            self.assertTrue(r0["bold"])
+            self.assertEqual(r0["color"], "#0000A0")
+            self.assertEqual(head["runs"][1]["text"], "[1]")  # 脚注引用取序号
+            # ruby 展开 + EQ 域还原
+            texts = [r["text"] for r in spec["paras"][1]["runs"]]
+            self.assertIn("伽", texts)
+            self.assertIn("〔qié〕", texts)
+            self.assertIn("菩", texts)
+            self.assertIn("〔pú〕", texts)
+            # 注文尾注归并
+            self.assertEqual(len(spec["footnotes"]), 1)
+            self.assertEqual(spec["footnotes"][0]["runs"][0]["text"], "注文内容")
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_dialog_builds_offscreen(self):
+        from pycbeta.gui.editor import EDITABLE_ROWS, StyleEditorDialog
+        dlg = StyleEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+        try:
+            self.assertEqual(len(dlg._rows), len(EDITABLE_ROWS))
+            self.assertTrue(dlg.preview.isReadOnly())
+        finally:
+            dlg.close()
+
+    def test_control_to_block(self):
+        from pycbeta.gui.editor import StyleEditorDialog
+        dlg = StyleEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+        try:
+            dlg._rows["h1.title"]["size"].setText("34pt")
+            self.assertIn("h1.title { font-size: 34pt; }",
+                          dlg._source_edit.toPlainText())
+        finally:
+            dlg.close()
+
+    def test_build_render_cmd(self):
+        import unittest.mock as mock
+        from pycbeta.gui.__main__ import build_render_cmd
+        opts = XmlOptions(page="a4", font_set="default", engine="docx2pdf",
+                          formats=["docx"], t2s=False, vertical=False)
+        with mock.patch("pycbeta.gui.editor.user_css_path",
+                        return_value=r"E:\nonexistent\user.css"):
+            cmd = build_render_cmd(opts, "x.xml", "docx", "out", "tmp.json")
+        self.assertNotIn("--font-set", cmd)  # 默认不传，CSS 字体优先
+        self.assertNotIn("--theme", cmd)
+        self.assertIn("--no-t2s", cmd)
+        # 非默认字体 + 竖排 + user.css 存在
+        opts2 = XmlOptions(page="a4", font_set="default:zh-Hans",
+                           engine="docx2pdf", formats=["docx"],
+                           t2s=True, vertical=True)
+        with mock.patch("pycbeta.gui.editor.user_css_path",
+                        return_value=__file__):
+            cmd2 = build_render_cmd(opts2, "x.xml", "docx", "out", "tmp.json")
+        self.assertIn("--font-set", cmd2)
+        self.assertIn("--theme", cmd2)
+        self.assertIn("--vertical", cmd2)
+        self.assertIn("--t2s", cmd2)
+
+    def test_styles_tab_opens_editor(self):
+        from pycbeta.gui.panel import XmlOptionsPanel
+        panel = XmlOptionsPanel(load_presets())
+        self.assertEqual(panel.btn_editor.text(), "打开可视化编辑器…")
+
+
 if __name__ == "__main__":
     unittest.main()
