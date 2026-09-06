@@ -1,9 +1,9 @@
-"""DOCX 所见即所得样式编辑器（P1 GUI）。
+"""DOCX 所见即所得 CSS 编辑器（P1 GUI）。
 
 三层出口（与 panel/__main__ 同构）：
-- ``StyleEditorDialog`` —— 纯对话框，``(sample_xml=None, engine_chain=None, parent=None)``，
+- ``CssEditorDialog`` —— 纯对话框，``(sample_xml=None, engine_chain=None, parent=None)``，
   当前 GUI 样式表卡弹窗 + publish 侧同样 import 即用；
-- ``main()`` —— ``python -m pycbeta.gui.editor [--sample 样张.xml]`` 独立运行；
+- ``main()`` —— ``python -m pycbeta.gui.css_editor [--sample 样张.xml]`` 独立运行；
 - 导出：样张 DOCX/PDF（PDF 经主窗口引擎链），CSS 落仓库根 ``user.css``（GUI 自动生效）。
 
 预览原理（模拟显示，非 Word 真排版）：左改参 → 覆盖 CSS 块 → 工作 CSS
@@ -23,7 +23,8 @@ from PySide6.QtGui import QColor, QDesktopServices, QFont, QTextCharFormat, QTex
 from PySide6.QtWidgets import (
     QApplication, QColorDialog, QComboBox, QDialog,
     QFileDialog, QFormLayout, QGridLayout, QHBoxLayout, QLabel,
-    QLineEdit, QMessageBox, QPlainTextEdit, QPushButton, QSplitter, QTabWidget,
+    QLineEdit, QMessageBox, QPlainTextEdit, QPushButton, QScrollArea,
+    QSplitter, QTabWidget,
     QTextEdit, QVBoxLayout, QWidget,
 )
 
@@ -101,22 +102,54 @@ def group_font_names(names):
     groups = {g: [] for g, _ks in _CJK_BUCKETS}
     groups["未分类"] = []
     for name in dict.fromkeys(n for n in (names or []) if n):
-        key = name.lower()
-        for gname, kws in _CJK_BUCKETS:
-            if any(k in key for k in kws):
-                groups[gname].append(name)
-                break
-        else:
-            groups["未分类"].append(name)
+        groups[classify_font(name)].append(name)
     return groups
 
 
+def classify_font(name):
+    """单个字体名 → bucket 组名（纯函数）。"""
+    key = (name or "").lower()
+    for gname, kws in _CJK_BUCKETS:
+        if any(k in key for k in kws):
+            return gname
+    return "未分类"
+
+
+_CJK_NAME_RE = re.compile(r"[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]")
+
+
+def pick_display_name(names, primary=""):
+    """显示名优先中文：文件名表含 CJK 取首个中文名；否则 _ZH_ALIASES 补；再否则主名。"""
+    from pycbeta import fonts as _fonts
+    cands = list(dict.fromkeys([n for n in (names or []) if n]))
+    if primary:
+        alias = _fonts._ZH_ALIASES.get(_fonts._normalize(primary))
+        if alias and alias not in cands:
+            cands.append(alias)
+    for n in cands:
+        if _CJK_NAME_RE.search(n):
+            return n
+    return primary or (cands[0] if cands else "")
+
+
 def font_group_model(fresh=False):
-    """→ ({组名: [字体]}, [(文件名, 家族名)], 字库目录)。fresh=True 重扫系统（刷新按钮用）。"""
+    """→ ({组名: [显示名]}, [(文件名, 显示名)], 字库目录)。
+
+    显示名优先中文；纯英文且未分类、非西文精选的不陈列（下拉过滤）。
+    fresh=True 重扫系统（刷新按钮用）。
+    """
     from pycbeta import fonts as _fonts
     loc = _fonts.FontLocator() if fresh else _fonts.locator()
-    installed = [name for name, _names, _path in _fonts.iter_installed(loc)]
-    groups = group_font_names(installed)
+    groups = {g: [] for g, _ks in _CJK_BUCKETS}
+    groups["未分类"] = []
+    for primary, names, _path in _fonts.iter_installed(loc):
+        bucket = classify_font(primary)
+        display = pick_display_name(names, primary)
+        if bucket == "未分类" and (display in _WESTERN_FONTS
+                                   or not _CJK_NAME_RE.search(display or "")):
+            continue  # 西文精选走固定组；纯英文非精选过滤
+        if display and display not in groups[bucket]:
+            groups[bucket].append(display)
     fonts_dir = os.path.join(REPO_ROOT, "cbeta", "fonts")
     bundled = []
     if os.path.isdir(fonts_dir):
@@ -127,7 +160,8 @@ def font_group_model(fresh=False):
                 names = _fonts.read_family_names(os.path.join(fonts_dir, fn))
             except OSError:
                 names = []
-            bundled.append((fn, names[0] if names else os.path.splitext(fn)[0]))
+            disp = pick_display_name(names, os.path.splitext(fn)[0])
+            bundled.append((fn, disp or fn))
     return groups, bundled, fonts_dir
 
 
@@ -575,21 +609,22 @@ class _ColorPopup(QDialog):
         return self._selected
 
 
-class StyleEditorDialog(QDialog):
+class CssEditorDialog(QDialog):
     """所见即所得样式编辑器：左调参 / 右预览 / 底导出。"""
 
     def __init__(self, sample_xml=None, engine_chain=None, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("样式编辑器（DOCX 所见即所得）")
+        self.setWindowTitle("CSS 编辑器（DOCX 所见即所得）")
         self.resize(1180, 760)
         self._engine_chain = engine_chain
-        self._tmp = tempfile.mkdtemp(prefix="style-editor-")
+        self._tmp = tempfile.mkdtemp(prefix="css-editor-")
         self._work = None            # 当前解析后 Work（样张缓存）
         self._work_src = ("", 0)     # (path, mtime)
         self._last_docx = ""         # 最近一次重渲产物（导出用）
         self._last_good_css = ""     # 最近一次可预览的工作 CSS
         self._need_refresh = False   # 渲染中又有改动时补一轮
         self._passthrough = ""       # 覆盖块中控件不认识的规则原文
+        self._touched = set()        # 用户碰过的 (selector, prop)；只输出这些
         self._thread = None
         self._rows = {}              # selector -> 控件组
         self._build(sample_xml or default_sample())
@@ -649,11 +684,13 @@ class StyleEditorDialog(QDialog):
         self._timer.setSingleShot(True)
         self._timer.setInterval(400)
         self._timer.timeout.connect(self.refresh_preview)
-        # 初始值：出厂 CSS + 空覆盖块
+        # 初始值：出厂 CSS；控件预填出厂值（不算 touched，源码块保持空）
         self._factory_css = factory_css_text()
         self._passthrough = ""
+        self._touched = set()
         self._source_edit.setPlaceholderText("在此追加/覆盖规则；解析失败红字且预览保持上次")
-        self._sync_controls_from_block({})
+        factory_values, _, _ = split_override_block(self._factory_css)
+        self._sync_controls_from_block(factory_values)
         self.refresh_preview()
 
     def _left_panel(self):
@@ -661,7 +698,7 @@ class StyleEditorDialog(QDialog):
         layout = QVBoxLayout(w)
         layout.setContentsMargins(0, 0, 0, 0)
         tabs = QTabWidget()
-        # 控件页
+        # 控件页（29 行，包滚动区）
         cw = QWidget()
         cv = QVBoxLayout(cw)
         cv.setContentsMargins(4, 4, 4, 4)
@@ -711,11 +748,17 @@ class StyleEditorDialog(QDialog):
             self._rows[sel] = {"font": font_box, "size": size_edit,
                                "weight": weight, "color": color_btn,
                                "color_value": ""}
-            font_box.currentTextChanged.connect(lambda _v: self._on_control_changed())
-            size_edit.textChanged.connect(lambda _v: self._on_control_changed())
-            weight.currentIndexChanged.connect(lambda _i: self._on_control_changed())
+            font_box.currentTextChanged.connect(
+                lambda _v, s=sel: self._on_control_changed(s, "font-family"))
+            size_edit.textChanged.connect(
+                lambda _v, s=sel: self._on_control_changed(s, "font-size"))
+            weight.currentIndexChanged.connect(
+                lambda _i, s=sel: self._on_control_changed(s, "font-weight"))
         self._fill_font_combos(False)
-        tabs.addTab(cw, "控件")
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(cw)
+        tabs.addTab(scroll, "控件")
         # 源码页
         sw = QWidget()
         sl = QVBoxLayout(sw)
@@ -736,20 +779,29 @@ class StyleEditorDialog(QDialog):
         """工作 CSS = 出厂原文 + 覆盖块（源码页文本）。"""
         return self._factory_css + "\n" + self._source_edit.toPlainText()
 
-    def _on_control_changed(self):
+    def _control_value(self, sel, prop):
+        ctrls = self._rows[sel]
+        if prop == "font-family":
+            return ctrls["font"].currentText().strip()
+        if prop == "font-size":
+            return ctrls["size"].text().strip()
+        if prop == "font-weight":
+            return ctrls["weight"].currentData() or ""
+        if prop == "color":
+            return ctrls["color_value"]
+        return ""
+
+    def _on_control_changed(self, sel=None, prop=None):
+        if sel and prop:
+            if self._control_value(sel, prop):
+                self._touched.add((sel, prop))
+            else:
+                self._touched.discard((sel, prop))
         values = {}
-        for sel, ctrls in self._rows.items():
-            props = {}
-            if ctrls["font"].currentText().strip():
-                props["font-family"] = ctrls["font"].currentText().strip()
-            if ctrls["size"].text().strip():
-                props["font-size"] = ctrls["size"].text().strip()
-            if ctrls["weight"].currentData():
-                props["font-weight"] = ctrls["weight"].currentData()
-            if ctrls["color_value"]:
-                props["color"] = ctrls["color_value"]
-            if props:
-                values[sel] = props
+        for s, p in self._touched:
+            v = self._control_value(s, p)
+            if v:
+                values.setdefault(s, {})[p] = v
         block = build_override_block(values, self._passthrough)
         with QSignalBlocker(self._source_edit):
             self._source_edit.setPlainText(block)
@@ -764,6 +816,7 @@ class StyleEditorDialog(QDialog):
             return
         self._source_err.setText("")
         self._passthrough = passthrough
+        self._touched = {(s, p) for s, props in values.items() for p in props}
         self._sync_controls_from_block(values)
         self._schedule()
 
@@ -792,12 +845,12 @@ class StyleEditorDialog(QDialog):
         if dlg.exec() == QDialog.Accepted and dlg.selected():
             self._rows[sel]["color_value"] = dlg.selected()
             self._paint_color_button(sel)
-            self._on_control_changed()
+            self._on_control_changed(sel, "color")
 
     def _clear_color(self, sel):
         self._rows[sel]["color_value"] = ""
         self._paint_color_button(sel)
-        self._on_control_changed()
+        self._on_control_changed(sel, "color")
 
     # ----- 字体分组 -----
     def _fill_font_combos(self, fresh=False):
@@ -905,7 +958,7 @@ class StyleEditorDialog(QDialog):
         from pycbeta.theme import Theme
         work = P5Parser().parse(self.sample_edit.text().strip())
         theme = Theme.from_css(css)
-        out = _tf.mkdtemp(prefix="style-editor-")
+        out = _tf.mkdtemp(prefix="css-editor-")
         fn = DocxRenderer(theme=theme, notes="footnote",
                           bookmarks=False).render_work(work, out, "preview.docx")
         return fn if isinstance(fn, str) else fn[0]
@@ -1068,13 +1121,13 @@ class StyleEditorDialog(QDialog):
 
 
 def main(argv=None):
-    """独立运行：python -m pycbeta.gui.editor [--sample 样张.xml]。"""
+    """独立运行：python -m pycbeta.gui.css_editor [--sample 样张.xml]。"""
     import argparse
-    ap = argparse.ArgumentParser(description="DOCX 所见即所得样式编辑器")
+    ap = argparse.ArgumentParser(description="DOCX 所见即所得 CSS 编辑器")
     ap.add_argument("--sample", default="", help="预览样张 XML 路径")
     args = ap.parse_args(argv)
     app = QApplication.instance() or QApplication(sys.argv if argv is None else argv or [])
-    dlg = StyleEditorDialog(sample_xml=args.sample or None)
+    dlg = CssEditorDialog(sample_xml=args.sample or None)
     dlg.exec()
     return 0
 

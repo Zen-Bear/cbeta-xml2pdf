@@ -58,7 +58,7 @@ def build_render_cmd(opts, xml, fmt, out_dir, tmpcfg):
       否则 ``apply_font_set`` 无条件覆盖会踩掉 ``user.css`` 的字体；
     - 仓库根 ``user.css`` 存在则追加 ``--theme``（样式编辑器产物，GUI 自动生效）。
     """
-    from pycbeta.gui.editor import user_css_path
+    from pycbeta.gui.css_editor import user_css_path
     cmd = [sys.executable, "-m", "pycbeta", "-i", xml, "-f", fmt,
            "--page", opts.page, "--config", tmpcfg, "-o", out_dir]
     font_set = (opts.font_set or "default").strip()

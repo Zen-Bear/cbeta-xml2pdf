@@ -15,6 +15,8 @@ FONT_EXTS = (".ttf", ".otf", ".ttc")
 # 常见 CJK 字体的中英文名对应（键为规范化英文名）
 _ZH_ALIASES = {
     "kaiti": "楷體",
+    "pmingliu": "新細明體",
+    "mingliu": "細明體",
     "simsun": "宋體",
     "nsimsun": "新宋体",
     "simhei": "黑体",

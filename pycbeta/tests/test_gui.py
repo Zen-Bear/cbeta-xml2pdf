@@ -523,7 +523,7 @@ class TestSourceDialog(unittest.TestCase):
             dlg.close()
 
 
-class TestStyleEditor(unittest.TestCase):
+class TestCssEditor(unittest.TestCase):
     """样式编辑器：覆盖块 roundtrip / spec 解析 / user.css 落盘 / 接线（全 offscreen）。"""
 
     @classmethod
@@ -533,7 +533,7 @@ class TestStyleEditor(unittest.TestCase):
         cls.app = QApplication.instance() or QApplication([])
 
     def test_override_roundtrip(self):
-        from pycbeta.gui.editor import build_override_block, parse_override_block
+        from pycbeta.gui.css_editor import build_override_block, parse_override_block
         values = {"h1.title": {"font-family": "朝华标题B, ZhaohuaMinB",
                                "font-size": "30pt"},
                   "div.div-xu p.head": {"font-size": "20pt", "color": "#0000a0"},
@@ -547,13 +547,13 @@ class TestStyleEditor(unittest.TestCase):
         self.assertEqual(back["sup.note-ref"]["font-size"], "0.75em")
 
     def test_override_bad_css_reports(self):
-        from pycbeta.gui.editor import parse_override_block
+        from pycbeta.gui.css_editor import parse_override_block
         # 非法输入只红字不抛异常
         _values, err = parse_override_block("\x00\x01\x02{{{{p.head")
         self.assertIsInstance(err, (str, type(None)))
 
     def test_passthrough_survives_control_edit(self):
-        from pycbeta.gui.editor import (build_override_block,
+        from pycbeta.gui.css_editor import (build_override_block,
                                         split_override_block)
         src = ("p.head[data-head-level=\"1\"] { margin-left: 0em; font-size: 20pt; }\n"
                "div.lg.note1, div.lg.note2 { color: #408080; }\n"
@@ -571,7 +571,7 @@ class TestStyleEditor(unittest.TestCase):
         self.assertIn("font-size: 34pt", rebuilt)
 
     def test_font_buckets(self):
-        from pycbeta.gui.editor import group_font_names
+        from pycbeta.gui.css_editor import group_font_names
         g = group_font_names(["SimSun", "宋体", "PMingLiU", "新細明體",
                               "KaiTi", "楷体", "FangSong", "LiSu", "隸書",
                               "ZhaohuaMinB", "朝華標題B", "Times New Roman",
@@ -586,7 +586,7 @@ class TestStyleEditor(unittest.TestCase):
         self.assertIn("Times New Roman", g["未分类"])
 
     def test_css_colors(self):
-        from pycbeta.gui.editor import css_colors
+        from pycbeta.gui.css_editor import css_colors
         css = ("p.head { color: #0000a0; font-size: 20pt; }\n"
                "/* sup.note-ref { color: #fff; } */\n"
                "sup.note-ref { color: #0066CC; }\n")
@@ -611,7 +611,7 @@ class TestStyleEditor(unittest.TestCase):
 
     def test_user_css_helpers(self):
         import shutil
-        from pycbeta.gui.editor import (clear_user_css, save_user_css_text,
+        from pycbeta.gui.css_editor import (clear_user_css, save_user_css_text,
                                         user_css_path)
         root = tempfile.mkdtemp()
         try:
@@ -660,7 +660,7 @@ class TestStyleEditor(unittest.TestCase):
 
     def test_docx_spec(self):
         import shutil
-        from pycbeta.gui.editor import docx_spec
+        from pycbeta.gui.css_editor import docx_spec
         tmp = tempfile.mkdtemp()
         try:
             spec = docx_spec(self._make_docx(tmp))
@@ -686,8 +686,8 @@ class TestStyleEditor(unittest.TestCase):
             shutil.rmtree(tmp, ignore_errors=True)
 
     def test_dialog_builds_offscreen(self):
-        from pycbeta.gui.editor import EDITABLE_ROWS, StyleEditorDialog
-        dlg = StyleEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+        from pycbeta.gui.css_editor import EDITABLE_ROWS, CssEditorDialog
+        dlg = CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
         try:
             self.assertEqual(len(dlg._rows), len(EDITABLE_ROWS))
             self.assertTrue(dlg.preview.isReadOnly())
@@ -695,8 +695,8 @@ class TestStyleEditor(unittest.TestCase):
             dlg.close()
 
     def test_control_to_block(self):
-        from pycbeta.gui.editor import StyleEditorDialog
-        dlg = StyleEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+        from pycbeta.gui.css_editor import CssEditorDialog
+        dlg = CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
         try:
             dlg._rows["h1.title"]["size"].setText("34pt")
             self.assertIn("h1.title { font-size: 34pt; }",
@@ -704,12 +704,57 @@ class TestStyleEditor(unittest.TestCase):
         finally:
             dlg.close()
 
+    def test_controls_default_from_factory(self):
+        from pycbeta.gui.css_editor import CssEditorDialog
+        dlg = CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+        try:
+            # 控件预填出厂值，但源码块保持空（不算 touched）
+            self.assertEqual(dlg._rows["h1.title"]["size"].text(), "30pt")
+            self.assertEqual(dlg._rows["p"]["size"].text(), "12pt")
+            self.assertEqual(dlg._touched, set())
+            self.assertNotIn("h1.title {", dlg._source_edit.toPlainText())
+        finally:
+            dlg.close()
+
+    def test_left_panel_scrolls(self):
+        from PySide6.QtWidgets import QScrollArea
+        from pycbeta.gui.css_editor import CssEditorDialog
+        dlg = CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+        try:
+            self.assertTrue(any(isinstance(w, QScrollArea)
+                                for w in dlg.findChildren(QScrollArea)))
+        finally:
+            dlg.close()
+
+    def test_pick_display_name(self):
+        from pycbeta.gui.css_editor import pick_display_name
+        self.assertEqual(pick_display_name(["SimSun", "宋体"], "SimSun"), "宋体")
+        self.assertEqual(pick_display_name(["PMingLiU"], "PMingLiU"), "新細明體")
+        self.assertEqual(pick_display_name(["Calibri"], "Calibri"), "Calibri")
+        self.assertEqual(pick_display_name([], ""), "")
+
+    def test_font_model_filters_english(self):
+        import unittest.mock as mock
+        from pycbeta.gui.css_editor import font_group_model
+        rows = [("SimSun", ["SimSun", "宋体"], "x"),
+                ("PMingLiU", ["PMingLiU"], "z"),
+                ("Calibri", ["Calibri"], "y"),
+                ("Times New Roman", ["Times New Roman"], "w")]
+        with mock.patch("pycbeta.fonts.FontLocator"), \
+                mock.patch("pycbeta.fonts.iter_installed", return_value=rows):
+            groups, _bundled, _d = font_group_model(fresh=True)
+        flat = [n for names in groups.values() for n in names]
+        self.assertIn("宋体", flat)
+        self.assertIn("新細明體", flat)
+        self.assertNotIn("Calibri", flat)  # 纯英文非精选过滤
+        self.assertNotIn("Times New Roman", flat)  # 西文走固定三
+
     def test_build_render_cmd(self):
         import unittest.mock as mock
         from pycbeta.gui.__main__ import build_render_cmd
         opts = XmlOptions(page="a4", font_set="default", engine="docx2pdf",
                           formats=["docx"], t2s=False, vertical=False)
-        with mock.patch("pycbeta.gui.editor.user_css_path",
+        with mock.patch("pycbeta.gui.css_editor.user_css_path",
                         return_value=r"E:\nonexistent\user.css"):
             cmd = build_render_cmd(opts, "x.xml", "docx", "out", "tmp.json")
         self.assertNotIn("--font-set", cmd)  # 默认不传，CSS 字体优先
@@ -719,7 +764,7 @@ class TestStyleEditor(unittest.TestCase):
         opts2 = XmlOptions(page="a4", font_set="default:zh-Hans",
                            engine="docx2pdf", formats=["docx"],
                            t2s=True, vertical=True)
-        with mock.patch("pycbeta.gui.editor.user_css_path",
+        with mock.patch("pycbeta.gui.css_editor.user_css_path",
                         return_value=__file__):
             cmd2 = build_render_cmd(opts2, "x.xml", "docx", "out", "tmp.json")
         self.assertIn("--font-set", cmd2)
@@ -730,7 +775,7 @@ class TestStyleEditor(unittest.TestCase):
     def test_styles_tab_opens_editor(self):
         from pycbeta.gui.panel import XmlOptionsPanel
         panel = XmlOptionsPanel(load_presets())
-        self.assertEqual(panel.btn_editor.text(), "打开可视化编辑器…")
+        self.assertEqual(panel.btn_editor.text(), "打开 CSS 编辑器…")
 
 
 if __name__ == "__main__":
