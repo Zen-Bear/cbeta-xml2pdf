@@ -26,6 +26,7 @@ TRANSLATABLE = {
 TAG_SELECTOR = {
     "body": "body",
     "title": "h1.title",
+    "series-title": "p.series-title",
     "author": "p.author",
     "translator": "p.translator",
     "byline": "p.byline",
@@ -64,6 +65,14 @@ _SELECTOR_TAGS.update({
     "p.pin": "pin", ".pin": "pin",
     "pre": "pre",
     ".form": "form", ".dharani": "dharani", ".endnote": "footnote",
+    "p.form": "form", "p.dharani": "dharani",
+    "p.series-title": "series-title",
+    # 以下仅解析方向（DOCX 渲染器不查这些标签，HTML/PDF 走原文 CSS）：
+    # 注锚颜色（a.noteAnchor 及按校勘类型着色）、注记类偈行颜色
+    "a.noteAnchor": "note-anchor", "a.noteAnchor.add": "note-anchor-add",
+    "a.noteAnchor.mod": "note-anchor-mod", "a.noteAnchor.orig": "note-anchor-orig",
+    "a.noteAnchor.star": "note-anchor-star",
+    "div.lg.note1": "lg-note1", "div.lg.note2": "lg-note2",
     ".fn": "footnote", ".footnote": "footnote", ".note-inline": "note-inline",
     ".doube-line-note": "doube-line-note", "span.doube-line-note": "doube-line-note",
     ".interlinear-note": "interlinear-note", "span.interlinear-note": "interlinear-note",

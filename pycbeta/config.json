@@ -162,10 +162,9 @@
       "pb": false,                 //   true=按 <cb:pb> 官方刻本页边界分页（默认 false）
       "tei": true                  //   true=尾页【經文資訊】换页
     },
-    "series_title": {              // [docx] 经藏名（<title level="s">，如「卍新纂大日本續藏經」）仅首页左上角打印
-      "enabled": true,             //   true=打印（默认）；false=不打印
-      "font": "隸書, LiSu",        //   字体：隶体（默认）或 黑體, SimHei 等
-      "size": 9                    //   字号(pt)
+    "series_title": {              // [docx] 经藏名（<title level="s">）仅首页左上角打印
+      "enabled": true              //   true=打印（默认）；false=不打印；字体/字号走 CSS p.series-title，
+                                   //   旧 font/size 键保留作回退（老用户槽不断行为），新配置勿加
     }
   },
 

@@ -18,11 +18,11 @@ import sys
 import tempfile
 import zipfile
 
-from PySide6.QtCore import Qt, QThread, Signal, QTimer, QSignalBlocker
-from PySide6.QtGui import QColor, QFont, QTextCharFormat, QTextCursor
+from PySide6.QtCore import Qt, QThread, Signal, QTimer, QSignalBlocker, QUrl
+from PySide6.QtGui import QColor, QDesktopServices, QFont, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import (
     QApplication, QColorDialog, QComboBox, QDialog,
-    QFileDialog, QFormLayout, QHBoxLayout, QLabel,
+    QFileDialog, QFormLayout, QGridLayout, QHBoxLayout, QLabel,
     QLineEdit, QMessageBox, QPlainTextEdit, QPushButton, QSplitter, QTabWidget,
     QTextEdit, QVBoxLayout, QWidget,
 )
@@ -38,28 +38,128 @@ SAMPLE_CANDIDATES = (
     r"E:\dev\cbeta\test\T1144*\T20n1144.xml",
 )
 
-# 左侧可调行：(覆盖块选择器, 显示名)
+# 左侧可调行（书本排版顺序）：(覆盖块选择器, 显示名)
 EDITABLE_ROWS = (
+    ("p.series-title", "经藏名"),
     ("h1.title", "书名"),
-    ("p.head", "标题"),
-    ("p.juan", "卷名"),
-    ("p.pin", "品名"),
-    ("p", "正文"),
-    ("div.lg", "偈颂"),
-    ("span.note-inline", "行内夹注"),
-    (".footnote", "脚注文字"),
-    ("sup.note-ref", "注释序号"),
-    ("p.byline", "题署"),
+    ("div.div-xu p.head", "序标题"),
     ("p.author", "作者"),
     ("p.translator", "译者"),
-    ("[rend~=kaiti]", "楷体"),
-    ("[rend~=heiti]", "黑体"),
-    ("[rend~=fangsong]", "仿宋"),
-    ("[rend~=mingti]", "明体"),
-    ("div.div-xu p.head", "序标题"),
+    ("p.byline", "题署"),
+    ("p.juan", "卷名"),
+    ("p.pin", "品名"),
+    ("p.head", "标题"),
+    ("p", "正文"),
+    ("p.dharani", "咒语"),
+    ("p.form", "格式段"),
+    ("pre", "预排"),
+    ("div.lg", "偈颂"),
+    ("span.doube-line-note", "双行夹注"),
+    ("span.interlinear-note", "单行夹注"),
+    ("span.note-inline", "括号夹注"),
+    ("sup.note-ref", "注释序号"),
+    (".footnote", "脚注文字"),
+    ("a.noteAnchor", "注锚"),
+    ("a.noteAnchor.add", "注锚·新增"),
+    ("a.noteAnchor.mod", "注锚·改字"),
+    ("a.noteAnchor.orig", "注锚·原文"),
+    ("a.noteAnchor.star", "注锚·星号"),
+    ("[rend~=kaiti]", "行内·楷体"),
+    ("[rend~=heiti]", "行内·黑体"),
+    ("[rend~=fangsong]", "行内·仿宋"),
+    ("[rend~=mingti]", "行内·明体"),
 )
 
+# 行提示（复杂规则去源码页；DOCX 忽略的属性选择器特别说明）
+ROW_TIPS = {
+    "p.series-title": "首页左上角一行；config 仅留开关",
+    "p.head": "标题1–6级在源码页调（仅HTML/PDF，DOCX忽略）",
+    "div.lg": "注记类偈行颜色在源码页（div.lg.note1/2）",
+}
+
 WEIGHT_ITEMS = [("（跟随）", ""), ("加粗", "bold"), ("正常", "normal")]
+
+# 字体下拉分组：中文按关键字 buckets（首中即停；宋体在明体前吞掉 PMingLiU 类）
+_CJK_BUCKETS = (
+    ("黑体", ("黑", "雅黑", "苹方", "pingfang", "gothic", "hei")),
+    ("宋体", ("宋", "sun", "明流", "mingliu", "pmingliu", "細明", "细明",
+              "songti", "simsun", "nsimsun", "song")),
+    ("楷体", ("楷", "kai")),
+    ("仿宋", ("仿宋", "fangsong")),
+    ("明体", ("明朝", "mincho", "ming")),
+    ("隶书", ("隶", "lisu")),
+    ("圆体", ("圆", "yuan")),
+    ("魏碑", ("魏", "wei")),
+    ("行草", ("行", "草", "xing", "cao")),
+    ("标题", ("标题", "见出", "zhaohua")),
+)
+_WESTERN_FONTS = ("Times New Roman", "Courier New", "Aptos")
+
+
+def group_font_names(names):
+    """[字体名] → {组名: [字体]}（纯函数，可单测）。西文三固定另行，不进 buckets。"""
+    groups = {g: [] for g, _ks in _CJK_BUCKETS}
+    groups["未分类"] = []
+    for name in dict.fromkeys(n for n in (names or []) if n):
+        key = name.lower()
+        for gname, kws in _CJK_BUCKETS:
+            if any(k in key for k in kws):
+                groups[gname].append(name)
+                break
+        else:
+            groups["未分类"].append(name)
+    return groups
+
+
+def font_group_model(fresh=False):
+    """→ ({组名: [字体]}, [(文件名, 家族名)], 字库目录)。fresh=True 重扫系统（刷新按钮用）。"""
+    from pycbeta import fonts as _fonts
+    loc = _fonts.FontLocator() if fresh else _fonts.locator()
+    installed = [name for name, _names, _path in _fonts.iter_installed(loc)]
+    groups = group_font_names(installed)
+    fonts_dir = os.path.join(REPO_ROOT, "cbeta", "fonts")
+    bundled = []
+    if os.path.isdir(fonts_dir):
+        for fn in sorted(os.listdir(fonts_dir)):
+            if not fn.lower().endswith(_fonts.FONT_EXTS):
+                continue
+            try:
+                names = _fonts.read_family_names(os.path.join(fonts_dir, fn))
+            except OSError:
+                names = []
+            bundled.append((fn, names[0] if names else os.path.splitext(fn)[0]))
+    return groups, bundled, fonts_dir
+
+
+def _norm_hex(val):
+    """#rgb/#rrggbb → 小写 #rrggbb；其余返回 ""。"""
+    m = re.match(r"#([0-9a-fA-F]{3})$", (val or "").strip())
+    if m:
+        return "#" + "".join(c * 2 for c in m.group(1)).lower()
+    m = re.match(r"#([0-9a-fA-F]{6})$", (val or "").strip())
+    return ("#" + m.group(1).lower()) if m else ""
+
+
+def css_colors(css_text):
+    """工作 CSS 全部 color → [(规范色值, 来源选择器)]（首次序；注释掉的不算）。"""
+    import tinycss2
+    out, seen = [], set()
+    try:
+        tokens = tinycss2.parse_stylesheet(css_text or "", skip_comments=True,
+                                           skip_whitespace=True)
+    except Exception:  # noqa: BLE001
+        return []
+    for tok in tokens:
+        if tok.type != "qualified-rule":
+            continue
+        prelude = tinycss2.serialize(tok.prelude).strip()
+        for d in tinycss2.parse_declaration_list(tok.content):
+            if d.type == "declaration" and d.name == "color":
+                norm = _norm_hex(tinycss2.serialize(d.value).strip())
+                if norm and norm not in seen:
+                    seen.add(norm)
+                    out.append((norm, prelude))
+    return out
 
 
 def user_css_path(root=None):
@@ -98,62 +198,137 @@ def default_sample():
     return ""
 
 
-def build_override_block(values):
-    """{selector: {font-family, font-size, font-weight, color}} → 覆盖块文本。
+_FONT_PROPS = ("font-family", "font-size", "font-weight", "color")
+_GEN_MARK = "可视化编辑器生成"
+_GEN_HEADER = "/* 可视化编辑器生成：只覆盖字体四属性，后定义优先 */"
+_EDITABLE_SET = frozenset(sel for sel, _label in EDITABLE_ROWS)
 
-    只含字体四属性；空值跳过，无值行不输出（EDITABLE_ROWS 顺序）。
+
+def _norm_sel(tag):
+    """标签 → 规范可调选择器（EDITABLE_ROWS 成员）；落空返回 ""。"""
+    from pycbeta.theme import TAG_SELECTOR, _SELECTOR_TAGS
+    sel = (TAG_SELECTOR.get(tag) or "").split(",")[0].strip()
+    if sel in _EDITABLE_SET:
+        return sel
+    for key, val in _SELECTOR_TAGS.items():
+        if val == tag and key in _EDITABLE_SET:
+            return key
+    return ""
+
+
+def _canonical_editable(prelude):
+    """规则前奏 → 规范可调选择器|None。
+
+    逗号分组每段都须落到 EDITABLE_ROWS（直接成员或经 _SELECTOR_TAGS 映射后
+    规范形）；属性选择器（如 level）、三段以上落空 → None（原文透传）。
     """
-    out = ["/* 可视化编辑器生成：只覆盖字体四属性，后定义优先 */"]
+    from pycbeta.theme import _SELECTOR_TAGS
+    canon = []
+    for part in (prelude or "").split(","):
+        p = " ".join(part.split())
+        if not p:
+            continue
+        if p in _EDITABLE_SET:
+            canon.append(p)
+            continue
+        tag = _SELECTOR_TAGS.get(p)
+        norm = _norm_sel(tag) if tag else ""
+        if norm:
+            canon.append(norm)
+            continue
+        return None
+    return canon[0] if canon else None
+
+
+def build_override_block(values, passthrough=""):
+    """({selector: props}, 透传原文) → 覆盖块文本。
+
+    只含字体四属性；空值跳过，无值行不输出（EDITABLE_ROWS 顺序）；
+    控件不认识的规则原文缀尾（改控件不丢失）。
+    """
+    out = [_GEN_HEADER]
     order = [sel for sel, _label in EDITABLE_ROWS]
     for sel in order + [s for s in values if s not in order]:
         props = values.get(sel) or {}
-        decls = []
-        if props.get("font-family"):
-            decls.append(f"font-family: {props['font-family']}")
-        if props.get("font-size"):
-            decls.append(f"font-size: {props['font-size']}")
-        if props.get("font-weight"):
-            decls.append(f"font-weight: {props['font-weight']}")
-        if props.get("color"):
-            decls.append(f"color: {props['color']}")
+        decls = [f"{k}: {props[k]}" for k in _FONT_PROPS if props.get(k)]
         if decls:
             out.append(f"{sel} {{ {'; '.join(decls)}; }}")
+    if (passthrough or "").strip():
+        out.append(passthrough.rstrip())
     return "\n".join(out) + "\n"
 
 
-def parse_override_block(text):
-    """覆盖块文本 → ({selector: props}, 错误信息|None)。
+def split_override_block(text):
+    """覆盖块文本 → (values, passthrough, 错误|None)。
 
-    用 Theme._parse_css_tags 复用选择器映射（含后代组合）；tinycss2 错误 token
-    报红，不抛异常。只取字体四属性。
+    可调选择器的字体四属性进 values；其余规则（含注释、@规则、非字体声明）
+    原文进 passthrough；tinycss2 错误 token 报红，不抛异常。
     """
-    from pycbeta.theme import Theme, TAG_SELECTOR
     import tinycss2
+    values, extras, errs = {}, [], []
     try:
-        errors = [t for t in tinycss2.parse_stylesheet(
-            text or "", skip_comments=True, skip_whitespace=True)
-            if t.type == "error"]
+        tokens = tinycss2.parse_stylesheet(text or "", skip_comments=False,
+                                           skip_whitespace=False)
     except Exception as exc:  # noqa: BLE001 —— 非法输入只红字
-        return {}, str(exc)
-    err = None
-    if errors:
-        err = "; ".join(str(getattr(e, "message", e)) for e in errors[:3])
-    values = {}
-    try:
-        tags, compounds = Theme._parse_css_tags(text or "")
-    except Exception as exc:  # 防御：解析器内部异常也只红字
-        return {}, str(exc)
-    keep = ("font-family", "font-size", "font-weight", "color")
-    for tag, props in tags.items():
-        sel = (TAG_SELECTOR.get(tag) or "").split(",")[0].strip()
-        if sel:
-            got = {k: v for k, v in props.items() if k in keep}
-            if got:
-                values.setdefault(sel, {}).update(got)
-    for _anc, _tgt, cprops, selector in compounds:
-        got = {k: v for k, v in cprops.items() if k in keep}
-        if got:
-            values.setdefault(selector, {}).update(got)
+        return {}, text or "", str(exc)
+
+    def flush_comments(buf):
+        keep = [c for c in buf if _GEN_MARK not in c]
+        del buf[:]
+        return keep
+
+    pending = []
+    for tok in tokens:
+        if tok.type == "comment":
+            pending.append(tinycss2.serialize([tok]))
+            continue
+        if tok.type == "whitespace":
+            continue
+        if tok.type == "error":
+            errs.append(str(getattr(tok, "message", tok)))
+            continue
+        if tok.type == "at-rule":
+            extras.extend(flush_comments(pending))
+            extras.append(tinycss2.serialize([tok]).strip())
+            continue
+        if tok.type != "qualified-rule":
+            continue
+        prelude = tinycss2.serialize(tok.prelude).strip()
+        canon = _canonical_editable(prelude)
+        if canon is None:
+            extras.extend(flush_comments(pending))
+            extras.append(tinycss2.serialize([tok]).strip())
+            continue
+        keep, rest = {}, []
+        for d in tinycss2.parse_declaration_list(tok.content):
+            if d.type == "error":
+                errs.append(str(getattr(d, "message", d)))
+            elif d.type == "declaration":
+                val = tinycss2.serialize(d.value).strip()
+                if d.name in _FONT_PROPS:
+                    if val:
+                        keep[d.name] = val
+                else:
+                    rest.append(f"{d.name}: {val}"
+                                + (" !important" if d.important else ""))
+        if keep:
+            values.setdefault(canon, {}).update(keep)
+        if rest:
+            extras.extend(flush_comments(pending))
+            extras.append(f"{prelude} {{ {'; '.join(rest)}; }}")
+        else:
+            extras.extend(flush_comments(pending))
+    extras.extend(flush_comments(pending))
+    err = "; ".join(errs[:3]) if errs else None
+    passthrough = "\n".join(e for e in extras if e and e.strip())
+    if passthrough:
+        passthrough += "\n"
+    return values, passthrough, err
+
+
+def parse_override_block(text):
+    """覆盖块文本 → ({selector: props}, 错误信息|None)。透传部分丢弃（预览/旧调用用）。"""
+    values, _passthrough, err = split_override_block(text)
     return values, err
 
 
@@ -356,6 +531,50 @@ class _RenderThread(QThread):
 
 # ---------------- 对话框 ----------------
 
+class _ColorPopup(QDialog):
+    """颜色两组：上半=工作 CSS 现有色（标注来源元素），下半=自定义取色。"""
+
+    def __init__(self, css_text, current="", parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("选择颜色")
+        self._selected = ""
+        layout = QVBoxLayout(self)
+        grid = QGridLayout()
+        colors = css_colors(css_text)
+        labels = {sel: label for sel, label in EDITABLE_ROWS}
+        row, col = 0, 0
+        for hexval, src in colors:
+            btn = QPushButton()
+            btn.setFixedSize(30, 30)
+            btn.setStyleSheet(f"background-color: {hexval}")
+            canon = _canonical_editable(src)
+            tip = labels.get(canon, src) if canon else src
+            btn.setToolTip(f"{hexval} ← {tip}")
+            btn.clicked.connect(lambda _v, h=hexval: self._choose(h))
+            grid.addWidget(btn, row, col)
+            col += 1
+            if col >= 8:
+                col, row = 0, row + 1
+        if not colors:
+            grid.addWidget(QLabel("（工作 CSS 暂无 color，见源码页）"), 0, 0)
+        layout.addLayout(grid)
+        custom = QPushButton("自定义…")
+        custom.clicked.connect(lambda _v: self._custom(current))
+        layout.addWidget(custom)
+
+    def _choose(self, hexval):
+        self._selected = hexval
+        self.accept()
+
+    def _custom(self, current):
+        c = QColorDialog.getColor(QColor(current or "#000000"), self, "自定义颜色")
+        if c.isValid():
+            self._choose(c.name())
+
+    def selected(self):
+        return self._selected
+
+
 class StyleEditorDialog(QDialog):
     """所见即所得样式编辑器：左调参 / 右预览 / 底导出。"""
 
@@ -370,6 +589,7 @@ class StyleEditorDialog(QDialog):
         self._last_docx = ""         # 最近一次重渲产物（导出用）
         self._last_good_css = ""     # 最近一次可预览的工作 CSS
         self._need_refresh = False   # 渲染中又有改动时补一轮
+        self._passthrough = ""       # 覆盖块中控件不认识的规则原文
         self._thread = None
         self._rows = {}              # selector -> 控件组
         self._build(sample_xml or default_sample())
@@ -431,8 +651,9 @@ class StyleEditorDialog(QDialog):
         self._timer.timeout.connect(self.refresh_preview)
         # 初始值：出厂 CSS + 空覆盖块
         self._factory_css = factory_css_text()
-        self._source_edit.setPlainText("/* 在此追加/覆盖规则；解析失败时本框红字且预览保持上次 */\n")
-        self._sync_controls_from_block()
+        self._passthrough = ""
+        self._source_edit.setPlaceholderText("在此追加/覆盖规则；解析失败红字且预览保持上次")
+        self._sync_controls_from_block({})
         self.refresh_preview()
 
     def _left_panel(self):
@@ -442,38 +663,58 @@ class StyleEditorDialog(QDialog):
         tabs = QTabWidget()
         # 控件页
         cw = QWidget()
-        form = QFormLayout(cw)
+        cv = QVBoxLayout(cw)
+        cv.setContentsMargins(4, 4, 4, 4)
+        frow = QHBoxLayout()
+        self.fonts_dir_btn = QPushButton("打开字库目录")
+        self.fonts_dir_btn.setToolTip("cbeta/fonts/：拷入 TTF/OTF 后点刷新即用")
+        self.fonts_dir_btn.clicked.connect(self._open_fonts_dir)
+        self.fonts_refresh_btn = QPushButton("刷新字体列表")
+        self.fonts_refresh_btn.setToolTip("重扫系统+字库目录（较慢，按需）")
+        self.fonts_refresh_btn.clicked.connect(lambda _v: self._fill_font_combos(True))
+        frow.addStretch(1)
+        frow.addWidget(self.fonts_dir_btn)
+        frow.addWidget(self.fonts_refresh_btn)
+        cv.addLayout(frow)
+        form = QFormLayout()
+        cv.addLayout(form)
         for sel, label in EDITABLE_ROWS:
             row = QHBoxLayout()
-            font_edit = QLineEdit()
-            font_edit.setPlaceholderText("字体，如 朝华标题B, ZhaohuaMinB")
-            font_edit.setMinimumWidth(170)
+            font_box = QComboBox()
+            font_box.setEditable(True)
+            font_box.setPlaceholderText("字体，如 朝华标题B, ZhaohuaMinB")
+            font_box.setMinimumWidth(190)
+            font_box.setInsertPolicy(QComboBox.NoInsert)
             size_edit = QLineEdit()
             size_edit.setPlaceholderText("如 20pt / 0.75em")
             size_edit.setFixedWidth(110)
             weight = QComboBox()
-            for label, data in WEIGHT_ITEMS:
-                weight.addItem(label, data)
+            for wlabel, data in WEIGHT_ITEMS:
+                weight.addItem(wlabel, data)
             weight.setFixedWidth(80)
             color_btn = QPushButton("颜色")
             color_btn.setFixedWidth(64)
             color_btn.clicked.connect(
                 lambda _v, s=sel: self._pick_color(s))
-            color_btn.setToolTip("点击取色；右键清除")
+            color_btn.setToolTip("CSS 现有颜色 / 自定义取色；右键清除")
             color_btn.setContextMenuPolicy(Qt.CustomContextMenu)
             color_btn.customContextMenuRequested.connect(
                 lambda _p, s=sel: self._clear_color(s))
-            row.addWidget(font_edit, 1)
+            row.addWidget(font_box, 1)
             row.addWidget(size_edit)
             row.addWidget(weight)
             row.addWidget(color_btn)
-            form.addRow(label, row)
-            self._rows[sel] = {"font": font_edit, "size": size_edit,
+            lab = QLabel(label)
+            if sel in ROW_TIPS:
+                lab.setToolTip(ROW_TIPS[sel])
+            form.addRow(lab, row)
+            self._rows[sel] = {"font": font_box, "size": size_edit,
                                "weight": weight, "color": color_btn,
                                "color_value": ""}
-            font_edit.textChanged.connect(lambda _v: self._on_control_changed())
+            font_box.currentTextChanged.connect(lambda _v: self._on_control_changed())
             size_edit.textChanged.connect(lambda _v: self._on_control_changed())
             weight.currentIndexChanged.connect(lambda _i: self._on_control_changed())
+        self._fill_font_combos(False)
         tabs.addTab(cw, "控件")
         # 源码页
         sw = QWidget()
@@ -499,8 +740,8 @@ class StyleEditorDialog(QDialog):
         values = {}
         for sel, ctrls in self._rows.items():
             props = {}
-            if ctrls["font"].text().strip():
-                props["font-family"] = ctrls["font"].text().strip()
+            if ctrls["font"].currentText().strip():
+                props["font-family"] = ctrls["font"].currentText().strip()
             if ctrls["size"].text().strip():
                 props["font-size"] = ctrls["size"].text().strip()
             if ctrls["weight"].currentData():
@@ -509,18 +750,20 @@ class StyleEditorDialog(QDialog):
                 props["color"] = ctrls["color_value"]
             if props:
                 values[sel] = props
-        block = build_override_block(values)
+        block = build_override_block(values, self._passthrough)
         with QSignalBlocker(self._source_edit):
             self._source_edit.setPlainText(block)
         self._source_err.setText("")
         self._schedule()
 
     def _on_source_changed(self):
-        values, err = parse_override_block(self._source_edit.toPlainText())
+        values, passthrough, err = split_override_block(
+            self._source_edit.toPlainText())
         if err:
             self._source_err.setText(f"CSS 解析失败（预览保持上次）：{err}")
             return
         self._source_err.setText("")
+        self._passthrough = passthrough
         self._sync_controls_from_block(values)
         self._schedule()
 
@@ -530,7 +773,7 @@ class StyleEditorDialog(QDialog):
         for sel, ctrls in self._rows.items():
             props = (values or {}).get(sel, {})
             with QSignalBlocker(ctrls["font"]):
-                ctrls["font"].setText(props.get("font-family", ""))
+                ctrls["font"].setCurrentText(props.get("font-family", ""))
             with QSignalBlocker(ctrls["size"]):
                 ctrls["size"].setText(props.get("font-size", ""))
             with QSignalBlocker(ctrls["weight"]):
@@ -545,10 +788,9 @@ class StyleEditorDialog(QDialog):
         btn.setStyleSheet(f"background-color: {val}" if val else "")
 
     def _pick_color(self, sel):
-        c = QColorDialog.getColor(QColor(self._rows[sel]["color_value"] or "#000000"),
-                                 self, f"{sel} 颜色")
-        if c.isValid():
-            self._rows[sel]["color_value"] = c.name()
+        dlg = _ColorPopup(self.work_css(), self._rows[sel]["color_value"], self)
+        if dlg.exec() == QDialog.Accepted and dlg.selected():
+            self._rows[sel]["color_value"] = dlg.selected()
             self._paint_color_button(sel)
             self._on_control_changed()
 
@@ -556,6 +798,48 @@ class StyleEditorDialog(QDialog):
         self._rows[sel]["color_value"] = ""
         self._paint_color_button(sel)
         self._on_control_changed()
+
+    # ----- 字体分组 -----
+    def _fill_font_combos(self, fresh=False):
+        """全部字体下拉按 中文buckets/西文三/字库目录 建模；保留当前文本。"""
+        from PySide6.QtGui import QStandardItem, QStandardItemModel
+        groups, bundled, _fonts_dir = font_group_model(fresh=fresh)
+        order = [g for g, _ks in _CJK_BUCKETS if groups.get(g)] + \
+                (["未分类"] if groups.get("未分类") else [])
+        for _sel, ctrls in self._rows.items():
+            box = ctrls["font"]
+            cur = box.currentText()
+            model = QStandardItemModel(box)
+
+            def header(text):
+                it = QStandardItem(f"── {text} ──")
+                it.setEnabled(False)
+                model.appendRow(it)
+
+            def item(name):
+                it = QStandardItem(name)
+                it.setData(name, Qt.UserRole)
+                model.appendRow(it)
+
+            header("中文")
+            for gname in order:
+                header(f"中文·{gname}")
+                for n in sorted(set(groups[gname])):
+                    item(n)
+            header("西文")
+            for n in _WESTERN_FONTS:
+                item(n)
+            header("字库目录（cbeta/fonts）")
+            for _fn, fam in bundled:
+                item(fam)
+            with QSignalBlocker(box):
+                box.setModel(model)
+                box.setCurrentText(cur)
+
+    def _open_fonts_dir(self):
+        fonts_dir = os.path.join(REPO_ROOT, "cbeta", "fonts")
+        os.makedirs(fonts_dir, exist_ok=True)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.abspath(fonts_dir)))
 
     # ----- 样张 -----
     def _browse_sample(self):
@@ -770,8 +1054,8 @@ class StyleEditorDialog(QDialog):
             except OSError as exc:
                 QMessageBox.warning(self, "恢复失败", str(exc))
                 return
-        self._source_edit.setPlainText(
-            "/* 在此追加/覆盖规则；解析失败时本框红字且预览保持上次 */\n")
+        self._passthrough = ""
+        self._source_edit.setPlainText("")
         self._sync_controls_from_block({})
         self.refresh_preview()
 

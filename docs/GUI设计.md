@@ -113,6 +113,11 @@ class XmlOptions:
 > 左调参（标签分组字体四件套 + 源码页）/ 右 QTextDocument 模拟预览（读 `DocxRenderer`
 > 刚写出的 run 真值；注文尾注归并；分页以 Word 为准）/ 底导出样张 DOCX+PDF（PDF 跟主窗口
 > 引擎链）+ `user.css` 落盘自动生效 + 恢复出厂。`--font-set` 默认不进子进程桥（保 CSS 字体）。
+>
+> 编辑器行按书本排版顺序（经藏名→书名→序→作者译者→卷品→标题→正文→偈颂→夹注→注码注文→
+> 注锚→行内字体）；`pdf_docx.css` 文件本身不动。控件不认识的规则（标题 level 属性选择器、
+> 注记偈行等）原文透传，改控件不丢失。字体下拉分三组（中文 buckets/西文三/字库目录
+> `cbeta/fonts`+打开/刷新）；颜色取"工作 CSS 现有色（标来源元素）/自定义"两组。
 
 ### 3.2 `XmlOptionsDialog(QDialog)`
 面板的对话框包装：`exec() -> Optional[XmlOptions]`（Accept→选项；Cancel→None），`[确定][取消]`。

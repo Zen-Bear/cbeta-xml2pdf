@@ -552,6 +552,63 @@ class TestStyleEditor(unittest.TestCase):
         _values, err = parse_override_block("\x00\x01\x02{{{{p.head")
         self.assertIsInstance(err, (str, type(None)))
 
+    def test_passthrough_survives_control_edit(self):
+        from pycbeta.gui.editor import (build_override_block,
+                                        split_override_block)
+        src = ("p.head[data-head-level=\"1\"] { margin-left: 0em; font-size: 20pt; }\n"
+               "div.lg.note1, div.lg.note2 { color: #408080; }\n"
+               "h1.title { font-size: 30pt; }\n")
+        values, passthrough, err = split_override_block(src)
+        self.assertIsNone(err)
+        self.assertEqual(values, {"h1.title": {"font-size": "30pt"}})
+        self.assertIn("data-head-level", passthrough)
+        self.assertIn("note1", passthrough)
+        # 控件改值重建后未知规则仍在
+        values["h1.title"]["font-size"] = "34pt"
+        rebuilt = build_override_block(values, passthrough)
+        self.assertIn("data-head-level", rebuilt)
+        self.assertIn("color: #408080", rebuilt)
+        self.assertIn("font-size: 34pt", rebuilt)
+
+    def test_font_buckets(self):
+        from pycbeta.gui.editor import group_font_names
+        g = group_font_names(["SimSun", "宋体", "PMingLiU", "新細明體",
+                              "KaiTi", "楷体", "FangSong", "LiSu", "隸書",
+                              "ZhaohuaMinB", "朝華標題B", "Times New Roman",
+                              "Calibri", "Aptos", "Courier New"])
+        self.assertIn("PMingLiU", g["宋体"])  # 明流陷阱：PMingLiU 属宋体不属明体
+        self.assertIn("新細明體", g["宋体"])
+        self.assertIn("KaiTi", g["楷体"])
+        self.assertIn("LiSu", g["隶书"])
+        self.assertIn("ZhaohuaMinB", g["标题"])
+        # 西文走下拉固定三，分组里归未分类（UI 另行陈列）
+        self.assertIn("Calibri", g["未分类"])
+        self.assertIn("Times New Roman", g["未分类"])
+
+    def test_css_colors(self):
+        from pycbeta.gui.editor import css_colors
+        css = ("p.head { color: #0000a0; font-size: 20pt; }\n"
+               "/* sup.note-ref { color: #fff; } */\n"
+               "sup.note-ref { color: #0066CC; }\n")
+        got = css_colors(css)
+        self.assertEqual([h for h, _s in got], ["#0000a0", "#0066cc"])
+        self.assertIn("p.head", got[0][1])
+        self.assertNotIn("fff", [h for h, _s in got])  # 注释掉的不算
+
+    def test_series_title_theme(self):
+        from pycbeta.render_docx import DocxRenderer
+        from pycbeta.theme import Theme
+        t = Theme()
+        st = t.tags.get("series-title") or {}
+        self.assertEqual(st.get("font-size"), "9pt")
+        self.assertIn("LiSu", st.get("font-family", ""))
+        r = DocxRenderer(theme=t, series_title={})
+        self.assertEqual(r._series_size_pt(st), 18)  # 9pt→18 半磅
+        # 无规则时回退 config 旧键
+        self.assertEqual(r._series_size_pt({}), 18)
+        r2 = DocxRenderer(theme=t, series_title={"size": 12})
+        self.assertEqual(r2._series_size_pt({}), 24)
+
     def test_user_css_helpers(self):
         import shutil
         from pycbeta.gui.editor import (clear_user_css, save_user_css_text,

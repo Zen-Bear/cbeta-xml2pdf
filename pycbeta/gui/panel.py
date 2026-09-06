@@ -189,8 +189,6 @@ STYLE_ITEMS = [("汉字上方 ruby", "ruby"), ("汉字右侧行内", "inline"), 
 REPEAT_ITEMS = [("每次都注", "all"), ("全文只注首次", "first"), ("每单元只注首次", "page")]
 SCHEME_ITEMS = [("拼音", "pinyin"), ("注音符号", "zhuyin")]
 BRACKET_NAMES = list(BRACKET_PRESETS.keys())
-SERIES_FONTS = ["隸書, LiSu", "楷體, KaiTi", "宋体, SimSun", "黑體, SimHei",
-                "新細明體, PMingLiU", "微軟正黑體"]
 
 
 def slot_paths(root=None):
@@ -332,6 +330,7 @@ class XmlOptionsPanel(QWidget):
         self._font_dirty = False      # 字体下拉被手动碰过（t2s 自动切换豁免）
         self._font_auto = False       # 当前字体为 t2s 自动切入
         self._font_before_auto = "default"
+        self._series_extra = {}       # series_title 旧 font/size 键透传保留
         self._emitting = True
         try:
             self._build()
@@ -656,17 +655,10 @@ class XmlOptionsPanel(QWidget):
         form = QFormLayout(group)
         self.series_on = self._check("首页打印", checked=True)
         form.addRow("", self.series_on)
-        self.series_font = QComboBox()
-        self.series_font.setEditable(True)
-        self.series_font.addItems(SERIES_FONTS)
-        self.series_font.currentIndexChanged.connect(lambda _i: self._changed())
-        self.series_font.editTextChanged.connect(lambda _v: self._changed())
-        form.addRow("字体", self.series_font)
-        self.series_size = QSpinBox()
-        self.series_size.setRange(6, 72)
-        self.series_size.setValue(9)
-        self.series_size.valueChanged.connect(lambda _v: self._changed())
-        form.addRow("字号", self.series_size)
+        self.series_css_btn = QPushButton("去 CSS 编辑器调样式…")
+        self.series_css_btn.setToolTip("经藏名字体/字号走 CSS p.series-title（此处仅留开关）")
+        self.series_css_btn.clicked.connect(self._open_style_editor)
+        form.addRow("样式", self.series_css_btn)
         right.addWidget(group)
         right.addWidget(self._hint("印在首页左上角"))
         right.addStretch(1)
@@ -888,8 +880,7 @@ class XmlOptionsPanel(QWidget):
             font_scale=float(self.scale_spin.value()),
             pagination={k: b.isChecked() for k, b in self.pg_boxes.items()},
             series_title={"enabled": self.series_on.isChecked(),
-                          "font": self.series_font.currentText(),
-                          "size": int(self.series_size.value())},
+                          **self._series_extra},
             t2s=self.t2s_box.isChecked(),
             vertical=self.vert_box.isChecked(),
             annotations={
@@ -954,9 +945,9 @@ class XmlOptionsPanel(QWidget):
             self.strip_quotes_box.setChecked(bool(o.get("verse_strip_quotes", False)))
             st = opts.series_title or {}
             self.series_on.setChecked(bool(st.get("enabled", True)))
-            if st.get("font"):
-                self.series_font.setCurrentText(str(st["font"]))
-            self.series_size.setValue(int(st.get("size", 9) or 9))
+            # 旧 font/size 键只透传保留（样式走 CSS），不展示
+            self._series_extra = {k: copy.deepcopy(v) for k, v in st.items()
+                                  if k != "enabled"}
             self.notes_on.setChecked(bool(o.get("show_notes", True)))
             self.per_page_box.setChecked(bool(o.get("footnote_per_page", True)))
             self.title_notes_box.setChecked(bool(o.get("suppress_title_notes", False)))

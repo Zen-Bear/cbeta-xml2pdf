@@ -427,6 +427,21 @@ class DocxRenderer:
             f'<w:footnote w:id="{fid}"><w:p><w:pPr>{ppr}</w:pPr>{ref}{content}</w:p></w:footnote>'
         )
 
+    def _series_size_pt(self, st) -> int:
+        """经藏名字号（半磅）：主题 p.series-title font-size 优先（pt 绝对值；
+        em 按正文字号折算）；无规则时回退 config 旧 size 键，再回退 9pt。"""
+        fs = (st.get("font-size") or "").strip()
+        m = re.match(r"([\d.]+)pt", fs)
+        if m:
+            return int(float(m.group(1)) * 2)
+        m = re.match(r"([\d.]+)em", fs)
+        if m:
+            return int(float(m.group(1)) * self._tag_base_pt(("p",)) * 2)
+        try:
+            return int(float(self.series_title.get("size", 9)) * 2)
+        except (TypeError, ValueError):
+            return 18
+
     def _para(self, runs: str, *tags: str, indent: float = 0, hang=None,
               page_break: bool = False, count: bool = True) -> str:
         tags = tuple(t for t in tags if t)
@@ -1183,16 +1198,20 @@ class DocxRenderer:
             border = b
 
         # 经藏名（title level="s"）仅首页顶部一行：正文首段左上角（隶体/黑体，可配置）
+        # 字体/字号走主题 p.series-title；config 内旧 font/size 键仅作回退兼容
         series_para = ""
         if self.series_title.get("enabled", True):
             series = ((self._work.metadata.get("series") or "") if self._work else "").strip()
             if series:
-                ff = self.series_title.get("font") or "隸書, LiSu"
-                ff_first = [n.strip().strip('"').strip("'") for n in ff.split(",")][0]
-                size = int(float(self.series_title.get("size", 9)) * 2)
+                st = self.theme.tags.get("series-title") or {}
+                ff = (st.get("font-family") or "").split(",")[0].strip().strip('"').strip("'")
+                if not ff:
+                    ff = self.series_title.get("font") or "隸書, LiSu"
+                    ff = [n.strip().strip('"').strip("'") for n in ff.split(",")][0]
+                size = self._series_size_pt(st)
                 series_para = (
                     f'<w:p><w:pPr><w:jc w:val="left"/></w:pPr>'
-                    f'<w:r><w:rPr><w:rFonts w:ascii="{self.latin_font}" w:eastAsia="{ff_first}" w:hAnsi="{self.latin_font}"/>'
+                    f'<w:r><w:rPr><w:rFonts w:ascii="{self.latin_font}" w:eastAsia="{ff}" w:hAnsi="{self.latin_font}"/>'
                     f'<w:sz w:val="{size}"/><w:szCs w:val="{size}"/></w:rPr>'
                     f'<w:t xml:space="preserve">{_x(series)}</w:t></w:r></w:p>'
                 )
