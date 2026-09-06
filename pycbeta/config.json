@@ -161,8 +161,8 @@
 
   "source": {
     // 本地源与下载落盘（CLI --xml-dir/--download-dir 可覆盖）
-    "xml_dir": "E:\\dev\\cbeta\\test",        // 本地 XML 源目录（-i 佛典編號 查找；缺省由官方下载）
     "catalog": "E:\\dev\\cbeta\\xml2pdf\\cbeta\\data\\sutra_mapping.txt",  // 編號→冊目录（canon,vol,no,…；仓内版，随包更新；publish 原件仅作上游备份）
+    "xml_dir": "E:\\dev\\cbeta\\test",        // 本地 XML 源目录（-i 佛典編號 查找；缺省由官方下载）
     "download_dir": "E:\\dev\\cbeta\\test"    // 下载落盘：XML→{canon}/{canon}{vol}/，基线→{canon}/{id}/
   },
 

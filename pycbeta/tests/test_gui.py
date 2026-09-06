@@ -349,10 +349,13 @@ class TestLayoutRegroup(unittest.TestCase):
         self.assertIn("不存在", panel.ann_hint.text())
         self.assertFalse(panel.ann_open.isEnabled())
 
-    def test_source_button_on_panel(self):
-        from pycbeta.gui.panel import XmlOptionsPanel
-        panel = XmlOptionsPanel(load_presets())
-        self.assertEqual(panel.btn_source.text(), "数据源…")
+    def test_source_button_above_input(self):
+        from pycbeta.gui.__main__ import MainWindow
+        w = MainWindow()
+        try:
+            self.assertEqual(w.src_btn.text(), "数据源…")
+        finally:
+            w.close()
 
 
 class TestMainWindowUx(unittest.TestCase):

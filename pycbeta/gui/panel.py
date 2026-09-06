@@ -29,7 +29,7 @@ _STYLES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__fil
 # 样式表卡：默认两 CSS（路径, 说明）
 STYLE_FILES = (
     ("pdf_docx.css", "印刷主题（pdf/docx 默认；html/epub 追加覆盖）"),
-    ("cbeta_golden.css", "网页基底（html/epub；官方在线长相）"),
+    ("cbeta_golden.css", "电子书基底（html/epub；官方电子书样式）"),
 )
 FACTORY_NAME = os.path.join("pycbeta", "config.json")
 USER_NAME = "config.user.json"
@@ -347,11 +347,8 @@ class XmlOptionsPanel(QWidget):
         self.btn_reset = QPushButton("还原出厂")
         self.btn_save.clicked.connect(self._on_save)
         self.btn_reset.clicked.connect(self._on_reset)
-        self.btn_source = QPushButton("数据源…")
-        self.btn_source.clicked.connect(self._on_source)
         bar.addWidget(self.slot_label)
         bar.addStretch(1)
-        bar.addWidget(self.btn_source)
         bar.addWidget(self.btn_save)
         bar.addWidget(self.btn_reset)
         layout.addWidget(cfg)
@@ -799,12 +796,6 @@ class XmlOptionsPanel(QWidget):
         self.set_options(options_from_presets(load_slot("user")[0]))
         self.slot_label.setText("当前：出厂默认（已还原）")
         self._changed()
-
-    def _on_source(self):
-        dlg = SourceDialog(self)
-        if dlg.exec():
-            self.slot_label.setText("当前：用户配置（数据源已保存）")
-            self._changed()
 
     @staticmethod
     def _open_local_file(path):

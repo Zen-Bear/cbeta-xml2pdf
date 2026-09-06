@@ -208,6 +208,14 @@ class MainWindow(QMainWindow):
         central = QWidget()
         self.setCentralWidget(central)
         layout = QVBoxLayout(central)
+        # 数据源（输入来源上方）
+        top = QHBoxLayout()
+        top.addWidget(QLabel("数据源"))
+        self.src_btn = QPushButton("数据源…")
+        self.src_btn.clicked.connect(self._edit_source)
+        top.addWidget(self.src_btn)
+        top.addStretch(1)
+        layout.addLayout(top)
         # 输入来源（两 radio 同格左对齐相邻）
         src = QGridLayout()
         self.mode_file = QRadioButton("目录/文件")
@@ -293,6 +301,12 @@ class MainWindow(QMainWindow):
         d = self.out_edit.text().strip() or os.path.join(os.getcwd(), "out")
         os.makedirs(d, exist_ok=True)
         QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.abspath(d)))
+
+    def _edit_source(self):
+        from pycbeta.gui.panel import SourceDialog
+        dlg = SourceDialog(self)
+        if dlg.exec():
+            self.statusBar().showMessage("数据源已保存到用户配置")
 
     def _collect_jobs(self):
         jobs = []
