@@ -669,15 +669,32 @@ class TestCssEditor(unittest.TestCase):
                    '/wordprocessingml/2006/main"><w:body>'
                    '<w:p><w:pPr><w:spacing w:line="432" w:lineRule="auto"/>'
                    '</w:pPr><w:r><w:t>文</w:t></w:r></w:p>'
+                   '<w:p><w:pPr><w:pStyle w:val="head"/></w:pPr>'
+                   '<w:r><w:t>题</w:t></w:r></w:p>'
                    '<w:p><w:r><w:t>素</w:t></w:r></w:p>'
                    "</w:body></w:document>")
+            styles = ('<w:styles xmlns:w="http://schemas.openxmlformats.org'
+                      '/wordprocessingml/2006/main">'
+                      '<w:style w:styleId="head"><w:pPr>'
+                      '<w:spacing w:line="480" w:lineRule="auto"/>'
+                      '</w:pPr></w:style>'
+                      '<w:style w:styleId="Normal"><w:pPr>'
+                      '<w:spacing w:line="360" w:lineRule="auto"/>'
+                      '</w:pPr></w:style></w:styles>')
             fn = os.path.join(tmp, "s.docx")
             with zipfile.ZipFile(fn, "w") as z:
                 z.writestr("word/document.xml", doc)
+                z.writestr("word/styles.xml", styles)
             spec = ce.docx_spec(fn)
+            # 行内优先
             self.assertEqual(spec["paras"][0]["line"],
                              {"line": 432, "rule": "auto"})
-            self.assertIsNone(spec["paras"][1].get("line"))
+            # 无行内 → 本样式
+            self.assertEqual(spec["paras"][1]["line"],
+                             {"line": 480, "rule": "auto"})
+            # 无行内无样式 → Normal（与 Word 一致）
+            self.assertEqual(spec["paras"][2]["line"],
+                             {"line": 360, "rule": "auto"})
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 

@@ -307,5 +307,30 @@ class TestResolveThemeCss(unittest.TestCase):
             import shutil
             shutil.rmtree(tmp, ignore_errors=True)
 
+class TestLineHeightInherit(unittest.TestCase):
+    """行距 CSS 层叠：无本标签行距时继承 body（与浏览器/PDF 一致，DOCX 不再全员单倍）。"""
+
+    def test_inherit_body(self):
+        from pycbeta.theme import Theme
+        t = Theme.from_css("body { line-height: 1.8; }\n"
+                           "p.head { color: #000; }\n"
+                           "p { line-height: 1; }\n")
+        self.assertIn('w:line="432"', t.docx_para("head"))
+        self.assertIn('w:line="240"', t.docx_para("p"))
+        self.assertIn('w:line="432"', t.docx_para("juan"))
+
+    def test_explicit_wins(self):
+        from pycbeta.theme import Theme
+        t = Theme.from_css("body { line-height: 1.8; }\n"
+                           "p.pin { line-height: 2; }\n")
+        self.assertIn('w:line="480"', t.docx_para("pin"))
+
+    def test_normal_spacing_follows_body(self):
+        from pycbeta.render_docx import DocxRenderer
+        from pycbeta.theme import Theme
+        r = DocxRenderer(theme=Theme.from_css("body { line-height: 1.8; }\n"))
+        self.assertIn('w:line="432"', r._normal_spacing())
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -447,6 +447,19 @@ def _para_line(p):
     return {"line": line, "rule": _a(sp, "lineRule") or "auto"}
 
 
+def _style_lines(styles_root):
+    """styles.xml → {styleId: line}（无行距的不收；Normal 照收，供无样式段落回退）。"""
+    out = {}
+    if styles_root is None:
+        return out
+    for st in styles_root.findall(_w("style")):
+        sid = _a(st, "styleId")
+        line = _para_line(st)  # style 下同样是 w:pPr/w:spacing 结构
+        if sid and line:
+            out[sid] = line
+    return out
+
+
 def _run_text(run):
     return "".join(t.text or "" for t in run.iter(_w("t")))
 
@@ -518,6 +531,15 @@ def _eq_reading(instr):
     return m.group(1).strip() if m else ""
 
 
+def _para_style(p):
+    """段落命名样式Id（无则 ""）。"""
+    ppr = p.find(_w("pPr"))
+    if ppr is None:
+        return ""
+    ps = ppr.find(_w("pStyle"))
+    return _a(ps, "val") or "" if ps is not None else ""
+
+
 def _para_runs(p, fn_id_to_num):
     """段落 → [run规格]；ruby/EQ 展开为 原文+灰小字〔读音〕；脚注引用取编号。"""
     runs = []
@@ -583,6 +605,9 @@ def docx_spec(docx_path):
         doc = etree.fromstring(z.read("word/document.xml"))
         fn_root = (etree.fromstring(z.read("word/footnotes.xml"))
                    if "word/footnotes.xml" in names else None)
+        st_root = (etree.fromstring(z.read("word/styles.xml"))
+                   if "word/styles.xml" in names else None)
+    style_lines = _style_lines(st_root)
     fn_id_to_num, fn_bodies = {}, {}
     if fn_root is not None:
         num = 0
@@ -596,26 +621,27 @@ def docx_spec(docx_path):
             fn_line = None
             for p in fn.findall(_w("p")):
                 if fn_line is None:
-                    fn_line = _para_line(p)
+                    st = _para_style(p)
+                    fn_line = _para_line(p) or style_lines.get(st) \
+                        or style_lines.get("Normal")
                 runs.extend(_para_runs(p, {}))
             fn_bodies[num] = (runs, fn_line)
     for p in doc.iter(_w("p")):
-        style = ""
-        ppr = p.find(_w("pPr"))
-        if ppr is not None:
-            ps = ppr.find(_w("pStyle"))
-            if ps is not None:
-                style = _a(ps, "val") or ""
+        style = _para_style(p)
         align = _PSTYLE_ALIGN.get(style, "")
-        if not align and ppr is not None:
-            jc = ppr.find(_w("jc"))
-            if jc is not None:
-                align = {"center": "center", "right": "right",
-                         "both": "justify"}.get(_a(jc, "val") or "", "")
+        if not align:
+            ppr = p.find(_w("pPr"))
+            if ppr is not None:
+                jc = ppr.find(_w("jc"))
+                if jc is not None:
+                    align = {"center": "center", "right": "right",
+                             "both": "justify"}.get(_a(jc, "val") or "", "")
         runs = _para_runs(p, fn_id_to_num)
         if runs:
+            line = _para_line(p) or style_lines.get(style) \
+                or style_lines.get("Normal")
             spec["paras"].append({"style": style, "align": align,
-                                  "line": _para_line(p), "runs": runs})
+                                  "line": line, "runs": runs})
     for num in sorted(fn_bodies):
         if fn_bodies[num][0]:
             spec["footnotes"].append({"num": num, "runs": fn_bodies[num][0],
@@ -993,6 +1019,8 @@ class CssEditorDialog(QDialog):
     def __init__(self, sample_xml=None, engine_chain=None, parent=None):
         super().__init__(parent)
         self.setWindowTitle("CSS 编辑器（DOCX 所见即所得）")
+        self.setWindowFlags(self.windowFlags()
+                            | Qt.WindowMaximizeButtonHint)
         self.resize(1180, 760)
         self._engine_chain = engine_chain
         self._tmp = tempfile.mkdtemp(prefix="css-editor-")
@@ -1074,13 +1102,10 @@ class CssEditorDialog(QDialog):
         self.btn_pdf = QPushButton("导出PDF")
         self.btn_reset = QPushButton("恢复出厂")
         self.btn_reset.setToolTip("编辑器装载出厂样式（不删预设、不改默认）")
-        self.btn_close = QPushButton("关闭")
         self.btn_docx.clicked.connect(self._export_docx)
         self.btn_pdf.clicked.connect(self._export_pdf)
         self.btn_reset.clicked.connect(self._reset_factory)
-        self.btn_close.clicked.connect(self.reject)
-        for b in (self.btn_docx, self.btn_pdf, self.btn_reset,
-                  self.btn_close):
+        for b in (self.btn_docx, self.btn_pdf, self.btn_reset):
             brow.addWidget(b)
         brow.addStretch(1)
         layout.addLayout(brow)
@@ -1229,9 +1254,9 @@ class CssEditorDialog(QDialog):
         self.fonts_refresh_btn = QPushButton("刷新字体列表")
         self.fonts_refresh_btn.setToolTip("重扫系统+字库目录（较慢，按需）")
         self.fonts_refresh_btn.clicked.connect(lambda _v: self._fill_font_combos(True))
-        frow.addStretch(1)
         frow.addWidget(self.fonts_dir_btn)
         frow.addWidget(self.fonts_refresh_btn)
+        frow.addStretch(1)
         cv.addLayout(frow)
         form = QFormLayout()
         cv.addLayout(form)

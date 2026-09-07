@@ -1356,8 +1356,11 @@ class DocxRenderer:
         return "微軟正黑體"
 
     def _normal_spacing(self) -> str:
-        """Normal 样式的兜底行距：跟随主题 p 的 line-height，未设则 1.5 倍。"""
-        lh = (self.theme.tags.get("p") or {}).get("line-height")
+        """Normal 样式的兜底行距：跟随主题 body 的 line-height（CSS 层叠语义），
+        未设回退 p，再未设则 1.5 倍。2026-09-06 前跟 p（正文恒单倍），与 PDF 打架。"""
+        lh = (self.theme.tags.get("body") or {}).get("line-height")
+        if lh is None:
+            lh = (self.theme.tags.get("p") or {}).get("line-height")
         m = re.match(r"([\d.]+)", lh or "")
         if m:
             return f'<w:spacing w:line="{int(float(m.group(1)) * 240)}" w:lineRule="auto"/>'

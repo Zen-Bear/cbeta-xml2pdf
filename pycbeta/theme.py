@@ -696,6 +696,10 @@ class Theme:
         parts = {}
         spacing_attrs = []
         lh = props.get("line-height")
+        if lh is None and "body" not in tags:
+            # CSS 层叠：无本标签行距时继承 body（与浏览器/PDF 一致；
+            # 2026-09-06 实锤 DOCX 曾全员单倍、PDF 按 1.8，两边打架）
+            lh = (self.tags.get("body") or {}).get("line-height")
         m = re.match(r"([\d.]+)", lh or "")
         if m:
             # CSS line-height -> Word "N 倍行距" (240 = 单倍)
