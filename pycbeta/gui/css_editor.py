@@ -33,8 +33,9 @@ _STYLES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                            "..", "styles")
 FACTORY_CSS = os.path.join(_STYLES_DIR, "pdf_docx.css")
 
-# 临时样张候选（glob，按序取首个命中者；精简样本到了替换此处即可）
+# 样张候选（首选用户精简样本 css-presets/sample.xml；glob，按序取首个命中者）
 SAMPLE_CANDIDATES = (
+    os.path.join(REPO_ROOT, "css-presets", "sample.xml"),
     r"E:\dev\cbeta\test\T0349*\T12n0349.xml",
     r"E:\dev\cbeta\test\T1144*\T20n1144.xml",
 )
@@ -1200,6 +1201,12 @@ class CssEditorDialog(QDialog):
                 self._touched.add(key)
             else:
                 self._touched.discard(key)
+            if prop == "font-family" and lang:
+                # 改哪栏字体，预览就切哪栏（否则改了简栏、看着繁栏，以为没生效）
+                i = self.preview_lang.findData(lang)
+                if i >= 0:
+                    with QSignalBlocker(self.preview_lang):
+                        self.preview_lang.setCurrentIndex(i)
         values = {}
         for entry in self._touched:
             if len(entry) == 3:

@@ -647,6 +647,26 @@ class TestCssEditor(unittest.TestCase):
         finally:
             dlg.close()
 
+    def test_default_sample_is_user_sample(self):
+        import os
+        import pycbeta.gui.css_editor as ce
+        self.assertTrue(ce.SAMPLE_CANDIDATES[0].endswith(
+            os.path.join("css-presets", "sample.xml")))
+        self.assertEqual(ce.default_sample(), ce.SAMPLE_CANDIDATES[0])
+        self.assertTrue(os.path.isfile(ce.default_sample()))
+
+    def test_font_edit_switches_preview_lang(self):
+        import pycbeta.gui.css_editor as ce
+        dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+        try:
+            # 改简栏字体 → 预览自动切简（否则看着繁栏以为没生效）
+            dlg._rows["h1.title"]["font_hans"].setCurrentText("SimSun")
+            self.assertEqual(dlg._preview_lang(), "zh-Hans")
+            dlg._rows["h1.title"]["font_hant"].setCurrentText("PMingLiU")
+            self.assertEqual(dlg._preview_lang(), "zh-Hant")
+        finally:
+            dlg.close()
+
     def test_css_combo_ordering(self):
         import shutil
         import unittest.mock as mock

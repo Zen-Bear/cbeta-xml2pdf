@@ -33,7 +33,7 @@
   - 涉及：`pycbeta/verify.py:189 find_official` 新增 `kind="xml"` 分支、`work_text` 辅助、`base_kind` 映射 `all→xml`
   - 验收：`T15n0625`/`X60n1116`/`T12n0349` 在 `baseline_root=E:\dev\cbeta\publish\cbeta_xml` 检出时 `0/0`
 - [x] **已完成 P1 GUI 样式编辑器**（2026-09-06 用户点档：DOCX 所见即所得调 `pdf_docx.css` 字体参数）
-  - `pycbeta/gui/css_editor.py`：`CssEditorDialog`（样式表卡按钮弹窗，publish 可复用）+ `python -m pycbeta.gui.css_editor --sample` 独立运行；左标签分组四件套+源码页（tinycss2 红字不覆盖）/右 QTextDocument 模拟预览（回读 `DocxRenderer` run 真值：字号/字体/颜色/加粗/上标，ruby/EQ 展小字灰，注文尾注归并；分页以 Word 为准）/底导出样张 DOCX+PDF（跟主窗口引擎链）+ `user.css` 落盘自动生效+恢复出厂；样张暂 T0349（`SAMPLE_CANDIDATES`，精简样本到即换）
+  - `pycbeta/gui/css_editor.py`：`CssEditorDialog`（样式表卡按钮弹窗，publish 可复用）+ `python -m pycbeta.gui.css_editor --sample` 独立运行；左标签分组四件套+源码页（tinycss2 红字不覆盖）/右 QTextDocument 模拟预览（回读 `DocxRenderer` run 真值：字号/字体/颜色/加粗/上标，ruby/EQ 展小字灰，注文尾注归并；分页以 Word 为准）/底导出样张 DOCX+PDF（跟主窗口引擎链）+ `user.css` 落盘自动生效+恢复出厂；样张默认 `css-presets/sample.xml`（用户已定稿）
   - 附带修批量桥：`--font-set` 默认省略（保 `user.css` 字体不被 `apply_font_set` 踩；显式组合/t2s 照旧覆盖）；`build_render_cmd` 纯函数可测；单测 TestStyleEditor 8 项；全量待跑
   - 追加强化（2026-09-06）：编辑器行按书顺序（文件不动）+ 未知规则原文透传；经藏名抽离到 CSS
     （`p.series-title`，config 仅留开关、旧键回退，GUI 分页卡改跳转）；字体三组下拉（中文
