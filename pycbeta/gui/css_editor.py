@@ -432,8 +432,38 @@ def _a(el, name):
     return el.get(f"{{{_W_NS}}}{name}") if el is not None else None
 
 
+def _para_line(p):
+    """段落行距 → {"line": int, "rule": str} | None（Word w:spacing，240=单倍）。"""
+    ppr = p.find(_w("pPr"))
+    if ppr is None:
+        return None
+    sp = ppr.find(_w("spacing"))
+    if sp is None:
+        return None
+    try:
+        line = int(_a(sp, "line") or "")
+    except (TypeError, ValueError):
+        return None
+    return {"line": line, "rule": _a(sp, "lineRule") or "auto"}
+
+
 def _run_text(run):
     return "".join(t.text or "" for t in run.iter(_w("t")))
+
+
+def _block_line_height(fmt, line):
+    """QTextBlockFormat 行距：auto→百分比（240=单倍），exact→固定磅，atLeast→最小磅。"""
+    from PySide6.QtGui import QTextBlockFormat as _BF
+    if not line:
+        return
+    rule, val = line.get("rule", "auto"), line.get("line", 0)
+    if rule == "auto" and val > 0:
+        fmt.setLineHeight(val / 2.4,
+                          _BF.LineHeightTypes.ProportionalHeight.value)
+    elif rule == "exact" and val > 0:
+        fmt.setLineHeight(val / 20.0, _BF.LineHeightTypes.FixedHeight.value)
+    elif rule == "atLeast" and val > 0:
+        fmt.setLineHeight(val / 20.0, _BF.LineHeightTypes.MinimumHeight.value)
 
 
 def _rpr(run):
@@ -563,9 +593,12 @@ def docx_spec(docx_path):
             num += 1
             fn_id_to_num[fid] = num
             runs = []
+            fn_line = None
             for p in fn.findall(_w("p")):
+                if fn_line is None:
+                    fn_line = _para_line(p)
                 runs.extend(_para_runs(p, {}))
-            fn_bodies[num] = runs
+            fn_bodies[num] = (runs, fn_line)
     for p in doc.iter(_w("p")):
         style = ""
         ppr = p.find(_w("pPr"))
@@ -581,10 +614,12 @@ def docx_spec(docx_path):
                          "both": "justify"}.get(_a(jc, "val") or "", "")
         runs = _para_runs(p, fn_id_to_num)
         if runs:
-            spec["paras"].append({"style": style, "align": align, "runs": runs})
+            spec["paras"].append({"style": style, "align": align,
+                                  "line": _para_line(p), "runs": runs})
     for num in sorted(fn_bodies):
-        if fn_bodies[num]:
-            spec["footnotes"].append({"num": num, "runs": fn_bodies[num]})
+        if fn_bodies[num][0]:
+            spec["footnotes"].append({"num": num, "runs": fn_bodies[num][0],
+                                      "line": fn_bodies[num][1]})
     return spec
 
 
@@ -1265,6 +1300,7 @@ class CssEditorDialog(QDialog):
         sl = QVBoxLayout(sw)
         sl.setContentsMargins(4, 4, 4, 4)
         self._source_edit = QPlainTextEdit()
+        self._source_edit.setFont(QFont("Consolas"))
         self._source_edit.textChanged.connect(self._on_source_changed)
         sl.addWidget(self._source_edit, 1)
         self._source_err = QLabel()
@@ -1538,6 +1574,7 @@ class CssEditorDialog(QDialog):
                 fmt.setAlignment(Qt.AlignRight)
             elif para["align"] == "justify":
                 fmt.setAlignment(Qt.AlignJustify)
+            _block_line_height(fmt, para.get("line"))
             cur.setBlockFormat(fmt)
             for r in para["runs"]:
                 cf = QTextCharFormat()
@@ -1545,7 +1582,8 @@ class CssEditorDialog(QDialog):
                     cf.setFontPointSize(r["size"])
                 if r["font"]:
                     resolved = resolve_qt_family(r["font"], aliases)
-                    cf.setFontFamilies(preview_families(resolved or r["font"]))
+                    cf.setFontFamilies(
+                        preview_families(resolved or r["font"]))
                 if r["bold"]:
                     cf.setFontWeight(QFont.Bold)
                 if r["color"]:
@@ -1566,6 +1604,9 @@ class CssEditorDialog(QDialog):
             cur.insertText("校注（预览统一作尾注显示，页底脚注以 Word 为准）", cf)
             cur.insertBlock()
             for fn in spec["footnotes"]:
+                ffmt = QTextBlockFormat()
+                _block_line_height(ffmt, fn.get("line"))
+                cur.setBlockFormat(ffmt)
                 for r in fn["runs"]:
                     cf = QTextCharFormat()
                     if r["size"]:
@@ -1652,9 +1693,23 @@ class CssEditorDialog(QDialog):
             super().closeEvent(event)
 
 
+def suppress_font_warnings():
+    """压住 Qt DirectWrite Fixedsys 噪音。QApplication 创建之前调用。
+
+    背景：Qt 在 Windows 上解析默认等宽字体时 probing 到光栅字体 Fixedsys，
+    DirectWrite 建 face 失败打警告（qt.qpa.fonts），与渲染无关的噪音。
+    """
+    key = "QT_LOGGING_RULES"
+    rule = "qt.qpa.fonts.warning=false"
+    cur = os.environ.get(key, "")
+    if rule not in cur:
+        os.environ[key] = (cur + ";" + rule) if cur else rule
+
+
 def main(argv=None):
     """独立运行：python -m pycbeta.gui.css_editor [--sample 样张.xml]。"""
     import argparse
+    suppress_font_warnings()
     ap = argparse.ArgumentParser(description="DOCX 所见即所得 CSS 编辑器")
     ap.add_argument("--sample", default="", help="预览样张 XML 路径")
     args = ap.parse_args(argv)

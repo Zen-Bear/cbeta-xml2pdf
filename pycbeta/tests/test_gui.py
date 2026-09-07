@@ -637,6 +637,71 @@ class TestCssEditor(unittest.TestCase):
                          ["b"])
         self.assertEqual(ce.missing_families([], []), [])
 
+    def test_suppress_font_warnings(self):
+        import unittest.mock as mock
+        import pycbeta.gui.css_editor as ce
+        with mock.patch.dict("os.environ", {}, clear=False):
+            import os
+            os.environ.pop("QT_LOGGING_RULES", None)
+            ce.suppress_font_warnings()
+            self.assertIn("qt.qpa.fonts.warning=false",
+                          os.environ["QT_LOGGING_RULES"])
+            ce.suppress_font_warnings()  # 幂等，不重复追加
+            self.assertEqual(
+                os.environ["QT_LOGGING_RULES"].count("qt.qpa.fonts"),
+                1)
+
+    def test_source_edit_fixed_font(self):
+        import pycbeta.gui.css_editor as ce
+        dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+        try:
+            self.assertEqual(dlg._source_edit.font().family(), "Consolas")
+        finally:
+            dlg.close()
+
+    def test_spec_captures_line_spacing(self):
+        import shutil
+        import zipfile
+        import pycbeta.gui.css_editor as ce
+        tmp = tempfile.mkdtemp()
+        try:
+            doc = ('<w:document xmlns:w="http://schemas.openxmlformats.org'
+                   '/wordprocessingml/2006/main"><w:body>'
+                   '<w:p><w:pPr><w:spacing w:line="432" w:lineRule="auto"/>'
+                   '</w:pPr><w:r><w:t>文</w:t></w:r></w:p>'
+                   '<w:p><w:r><w:t>素</w:t></w:r></w:p>'
+                   "</w:body></w:document>")
+            fn = os.path.join(tmp, "s.docx")
+            with zipfile.ZipFile(fn, "w") as z:
+                z.writestr("word/document.xml", doc)
+            spec = ce.docx_spec(fn)
+            self.assertEqual(spec["paras"][0]["line"],
+                             {"line": 432, "rule": "auto"})
+            self.assertIsNone(spec["paras"][1].get("line"))
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_preview_applies_line_spacing(self):
+        from PySide6.QtGui import QTextBlockFormat
+        import pycbeta.gui.css_editor as ce
+        dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+        try:
+            spec = {"paras": [{"style": "p", "align": "",
+                               "line": {"line": 432, "rule": "auto"},
+                               "runs": [{"text": "文", "size": 12.0,
+                                         "font": "", "bold": False,
+                                         "color": "", "super": False,
+                                         "dim": False}]}],
+                    "footnotes": []}
+            dlg._show_spec(spec, {})
+            fmt = dlg.preview.document().firstBlock().blockFormat()
+            self.assertEqual(
+                int(fmt.lineHeightType()),
+                QTextBlockFormat.LineHeightTypes.ProportionalHeight.value)
+            self.assertAlmostEqual(fmt.lineHeight(), 180.0)
+        finally:
+            dlg.close()
+
     def test_qt_alias_bridges_localized_names(self):
         import pycbeta.gui.css_editor as ce
         rows = [["ZhaohuaMinB", "朝華見出明朝B", "朝华标题B",

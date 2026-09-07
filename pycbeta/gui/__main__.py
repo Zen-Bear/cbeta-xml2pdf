@@ -422,6 +422,8 @@ class MainWindow(QMainWindow):
 
 
 def main(argv=None):
+    from pycbeta.gui.css_editor import suppress_font_warnings
+    suppress_font_warnings()
     app = QApplication.instance() or QApplication(sys.argv if argv is None else argv)
     win = MainWindow()
     win.show()
