@@ -588,6 +588,41 @@ def docx_spec(docx_path):
     return spec
 
 
+# 预览回退链：Qt 认不出请求字体（如本机未安装/未注册）时逐个顺延，
+# 保证中文可读（SimSun/宋体系统必带）而非掉到默认西文字体。
+PREVIEW_FALLBACKS = ("SimSun", "宋体", "Microsoft YaHei", "sans-serif")
+
+
+def preview_families(requested):
+    """预览字体栈：请求字体 + 回退链（去重保序；Qt 按序取首个可用）。"""
+    out = []
+    for name in ([requested] if requested else []) + list(PREVIEW_FALLBACKS):
+        if name and name not in out:
+            out.append(name)
+    return out
+
+
+def missing_families(used, available):
+    """used 中 Qt 字体库没有的 → 保序去重列表（状态行警告用）。大小写不敏感。"""
+    have = {a.lower() for a in (available or [])}
+    out = []
+    for name in used or []:
+        if name and name.lower() not in have and name not in out:
+            out.append(name)
+    return out
+
+
+def _spec_fonts(spec):
+    """预览规格用到的全部字体名（正文+注文，保序去重）。"""
+    out = []
+    for para in (spec.get("paras") or []) + [
+            {"runs": fn.get("runs", [])} for fn in spec.get("footnotes", [])]:
+        for r in para.get("runs", []):
+            if r.get("font") and r["font"] not in out:
+                out.append(r["font"])
+    return out
+
+
 # ---------------- 后台重渲线程 ----------------
 
 class _RenderThread(QThread):
@@ -1406,7 +1441,16 @@ class CssEditorDialog(QDialog):
         self._last_docx = docx_path
         self._show_spec(spec)
         now = datetime.datetime.now().strftime("%H:%M:%S")
-        self.status.setText(f"预览已更新 {now}")
+        try:
+            from PySide6.QtGui import QFontDatabase
+            missing = missing_families(_spec_fonts(spec),
+                                       QFontDatabase.families())
+        except Exception:  # noqa: BLE001 —— 查不到就当全有，不挡预览
+            missing = []
+        msg = f"预览已更新 {now}"
+        if missing:
+            msg += f"（{ '、'.join(missing[:6]) }本机 Qt 不可用，替代显示；请安装字体后重开）"
+        self.status.setText(msg)
         if self._need_refresh:
             self._need_refresh = False
             QTimer.singleShot(0, self.refresh_preview)
@@ -1436,7 +1480,7 @@ class CssEditorDialog(QDialog):
                 if r["size"]:
                     cf.setFontPointSize(r["size"])
                 if r["font"]:
-                    cf.setFontFamilies([r["font"]])
+                    cf.setFontFamilies(preview_families(r["font"]))
                 if r["bold"]:
                     cf.setFontWeight(QFont.Bold)
                 if r["color"]:
@@ -1462,7 +1506,7 @@ class CssEditorDialog(QDialog):
                     if r["size"]:
                         cf.setFontPointSize(r["size"])
                     if r["font"]:
-                        cf.setFontFamilies([r["font"]])
+                        cf.setFontFamilies(preview_families(r["font"]))
                     if r["bold"]:
                         cf.setFontWeight(QFont.Bold)
                     if r["color"]:

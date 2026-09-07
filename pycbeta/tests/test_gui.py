@@ -624,6 +624,19 @@ class TestCssEditor(unittest.TestCase):
         finally:
             dlg.close()
 
+    def test_preview_font_fallback(self):
+        import pycbeta.gui.css_editor as ce
+        self.assertEqual(ce.preview_families("新細明體"),
+                         ["新細明體", "SimSun", "宋体", "Microsoft YaHei",
+                          "sans-serif"])
+        self.assertEqual(ce.preview_families(""),
+                         ["SimSun", "宋体", "Microsoft YaHei", "sans-serif"])
+        self.assertEqual(ce.preview_families("SimSun"),
+                         ["SimSun", "宋体", "Microsoft YaHei", "sans-serif"])
+        self.assertEqual(ce.missing_families(["A", "b", "A"], ["a", "C"]),
+                         ["b"])
+        self.assertEqual(ce.missing_families([], []), [])
+
     def test_rows_without_var_disable_fonts(self):
         import pycbeta.gui.css_editor as ce
         dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
