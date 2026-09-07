@@ -1468,6 +1468,20 @@ class TestCssEditor(unittest.TestCase):
         finally:
             dlg.close()
 
+    def test_div_note_row(self):
+        from pycbeta.gui.css_editor import CssEditorDialog
+        dlg = CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+        try:
+            row = dlg._rows["div.div-note"]
+            # 无字体变量：字体栏置灰；颜色取 base（#666666）
+            self.assertIsNone(row.get("suffix"))
+            self.assertFalse(row["font_hant"].isEnabled())
+            self.assertFalse(row["font_hans"].isEnabled())
+            self.assertEqual(row["color_value"], "#666666")
+            dlg._loaded_block = dlg._source_edit.toPlainText()
+        finally:
+            dlg.close()
+
     def test_left_panel_scrolls(self):
         from PySide6.QtWidgets import QScrollArea
         from pycbeta.gui.css_editor import CssEditorDialog

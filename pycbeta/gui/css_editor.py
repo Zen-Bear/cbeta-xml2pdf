@@ -56,6 +56,7 @@ EDITABLE_ROWS = (
     ("p.form", "格式段"),
     ("pre", "预排"),
     ("div.lg", "偈颂"),
+    ("div.div-note", "字义"),
     ("span.doube-line-note", "双行夹注"),
     ("span.interlinear-note", "单行夹注"),
     ("span.note-inline", "括号夹注"),
