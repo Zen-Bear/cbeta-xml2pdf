@@ -867,6 +867,23 @@ class TestCssEditor(unittest.TestCase):
         finally:
             dlg.close()
 
+    def test_status_warn_link(self):
+        import unittest.mock as mock
+        import pycbeta.gui.css_editor as ce
+        dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+        try:
+            self.assertFalse(hasattr(dlg, "btn_check"))  # 检查按钮已删
+            dlg._set_status("预览已更新 00:00:00")
+            self.assertEqual(dlg.status.text(), "预览已更新 00:00:00")
+            dlg._set_status("预览已更新 00:00:00", 2, "缺A；缺B")
+            self.assertIn("⚠2", dlg.status.text())
+            self.assertEqual(dlg.status.toolTip(), "缺A；缺B")
+            with mock.patch.object(dlg, "_open_report") as m:
+                dlg.status.linkActivated.emit("#")
+                m.assert_called_once_with()
+        finally:
+            dlg.close()
+
     def test_names_merge_consecutive(self):
         import pycbeta.gui.css_editor as ce
         dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")

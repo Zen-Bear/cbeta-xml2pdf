@@ -1294,16 +1294,13 @@ class CssEditorDialog(QDialog):
         self.btn_pdf = QPushButton("导出PDF")
         self.btn_save = QPushButton("保存")
         self.btn_save.setToolTip("保存当前修改到选中的预设文件（出厂默认则走另存）")
-        self.btn_check = QPushButton("检查")
-        self.btn_check.setToolTip("打开预览检查窗（更新信息 + 缺字体醒目提示）")
         self.btn_reset = QPushButton("恢复出厂")
         self.btn_reset.setToolTip("编辑器装载出厂样式（不删预设、不改默认）")
         self.btn_docx.clicked.connect(self._export_docx)
         self.btn_pdf.clicked.connect(self._export_pdf)
         self.btn_save.clicked.connect(lambda _v: self._save_current())
-        self.btn_check.clicked.connect(self._open_report)
         self.btn_reset.clicked.connect(self._reset_editor_state)
-        for b in (self.btn_save, self.btn_docx, self.btn_pdf, self.btn_check,
+        for b in (self.btn_save, self.btn_docx, self.btn_pdf,
                   self.btn_reset):
             brow.addWidget(b)
         brow.addStretch(1)
@@ -1888,6 +1885,35 @@ class CssEditorDialog(QDialog):
         self._report_dlg.raise_()
         self._report_dlg.activateWindow()
 
+    def _set_status(self, text, issues=0, tip=""):
+        """状态行：平时只显示正文；有问题追加可点击 ⚠（点开检查窗）。
+
+        issues: 问题数；tip: 悬停摘要。
+        """
+        if issues:
+            try:
+                self.status.linkActivated.disconnect()
+            except Exception:  # noqa: BLE001 —— 首次尚无连接
+                pass
+            self.status.setTextFormat(Qt.RichText)
+            self.status.setText(
+                f'{text} <a href="#" style="color:red">⚠{issues}</a>')
+            self.status.setToolTip(tip or "点击打开预览检查")
+            self.status.setOpenExternalLinks(False)
+            self.status.setTextInteractionFlags(Qt.TextBrowserInteraction)
+            self.status.setCursor(Qt.PointingHandCursor)
+            self.status.linkActivated.connect(lambda _u: self._open_report())
+        else:
+            try:
+                self.status.linkActivated.disconnect()
+            except Exception:  # noqa: BLE001
+                pass
+            self.status.setTextFormat(Qt.PlainText)
+            self.status.setText(text)
+            self.status.setToolTip("")
+            self.status.setTextInteractionFlags(Qt.NoTextInteraction)
+            self.status.unsetCursor()
+
     def _on_rendered(self, docx_path):
         import datetime
         try:
@@ -1905,20 +1931,21 @@ class CssEditorDialog(QDialog):
                    if f and not resolve_qt_family(f, aliases)]
         gaps = glyph_gaps(spec)
         self._last_gaps = gaps
-        msg = f"预览已更新 {now}"
+        tips = []
         if missing:
-            msg += (f"（{'、'.join(missing[:6])}无可用字形，替代显示；"
-                    "导出 DOCX 不受影响）")
+            tips.append(f"{'、'.join(missing[:6])}无可用字形，替代显示；"
+                        "导出 DOCX 不受影响")
         if gaps:
-            msg += f"【缺字形：{_gaps_text(gaps)}】"
-        self.status.setText(msg)
+            tips.append(f"缺字形：{_gaps_text(gaps)}")
+        self._set_status(f"预览已更新 {now}",
+                         len(missing) + len(gaps), "；".join(tips))
         self._push_report()
         if self._need_refresh:
             self._need_refresh = False
             QTimer.singleShot(0, self.refresh_preview)
 
     def _on_render_failed(self, msg):
-        self.status.setText(f"重渲失败：{msg}")
+        self._set_status("重渲失败", 1, msg)
         self._push_report(msg)
         if self._need_refresh:
             self._need_refresh = False
