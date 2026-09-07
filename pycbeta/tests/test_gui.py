@@ -1136,6 +1136,29 @@ class TestCssEditor(unittest.TestCase):
         dirty = ce._name_label_format(True).background().color().name()
         self.assertNotEqual(clean, dirty)
 
+    def test_save_only_when_preset_loaded(self):
+        import shutil
+        import pycbeta.gui.css_editor as ce
+        root = tempfile.mkdtemp()
+        try:
+            fn = os.path.join(root, "mine.css")
+            with open(fn, "w", encoding="utf-8") as f:
+                f.write("/* base */\np.head { font-size: 40pt; }\n")
+            dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+            try:
+                # 出厂缓冲：保存置灰，输名字的事归另存
+                self.assertFalse(dlg.btn_save.isEnabled())
+                self.assertIn("另存", dlg.btn_save.toolTip())
+                dlg._load_preset_path(fn)
+                self.assertTrue(dlg.btn_save.isEnabled())
+                dlg._reset_editor_state()  # 无修改，不弹确认框
+                self.assertFalse(dlg.btn_save.isEnabled())
+                dlg._loaded_block = dlg._source_edit.toPlainText()
+            finally:
+                dlg.close()
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
     def test_row_label_paints_dirty(self):
         import pycbeta.gui.css_editor as ce
         dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")

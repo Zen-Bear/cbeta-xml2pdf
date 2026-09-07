@@ -1504,7 +1504,6 @@ class CssEditorDialog(QDialog):
         self.btn_docx = QPushButton("保存DOCX")
         self.btn_pdf = QPushButton("导出PDF")
         self.btn_save = QPushButton("保存")
-        self.btn_save.setToolTip("保存当前修改到选中的预设文件（出厂默认则走另存）")
         self.btn_restore = QPushButton("恢复")
         self.btn_restore.setToolTip("回到载入时的状态（未修改前）；不碰预设选择与默认设置")
         self.btn_docx.clicked.connect(self._export_docx)
@@ -1531,6 +1530,7 @@ class CssEditorDialog(QDialog):
         self._sync_controls_from_block(base_values)
         self.preset_box.refresh(current_theme_value())
         self.status.setText(f"基于：{self._base_label}")
+        self._refresh_save_enabled()
         self.refresh_preview()
 
     def _effective_base_css(self):
@@ -1585,6 +1585,7 @@ class CssEditorDialog(QDialog):
             return
         if self._load_block_text(strip_factory_prefix(text)):
             self._preset_path = path
+            self._refresh_save_enabled()
 
     def _on_preset_chosen(self, _index):
         if not self._confirm_discard():
@@ -1653,6 +1654,7 @@ class CssEditorDialog(QDialog):
         self.preset_box.refresh("pdf_docx.css")
         self.status.setText("基于：内置出厂")
         self._paint_row_labels()
+        self._refresh_save_enabled()
         self.refresh_preview()
 
     def _save_preset_as(self):
@@ -1680,6 +1682,7 @@ class CssEditorDialog(QDialog):
         self._loaded_block = self._source_edit.toPlainText()
         self.status.setText(f"预设已存：{path}")
         self._paint_row_labels()
+        self._refresh_save_enabled()
 
     def _paint_row_labels(self):
         """左栏行名：脏（未保存改动）橙字加粗，干净恢复默认。
@@ -1701,8 +1704,25 @@ class CssEditorDialog(QDialog):
             else:
                 lab.setStyleSheet("")
 
+    def _refresh_save_enabled(self):
+        """保存按钮只在载入了预设文件时可用（直接写回，无对话框）。
+
+        出厂/无预设时置灰——输名字的事归「另存为预设…」，保存不再弹窗。
+        """
+        has_path = bool(getattr(self, "_preset_path", None))
+        self.btn_save.setEnabled(has_path)
+        if has_path:
+            self.btn_save.setToolTip("直接写回当前预设文件")
+        else:
+            self.btn_save.setToolTip(
+                "出厂缓冲不可直接保存，请用「另存为预设…」")
+
     def _save_current(self):
-        """保存当前修改：有预设文件则直接写回；出厂默认/新建则走另存。返回是否已保存。"""
+        """保存当前修改：有预设文件则直接写回。返回是否已保存。
+
+        无预设文件（按钮置灰，点不到）时走另存——仅关闭三选一选「保存」
+        会走到这里（用户明确要存，给个起名机会）。
+        """
         if self._source_err.text().strip():
             QMessageBox.warning(self, "保存失败", "源码页有解析错误，先修好再存。")
             return False
