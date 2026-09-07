@@ -123,6 +123,12 @@ class XmlOptions:
 > 预设库（双目录）：内置 `pycbeta/styles/presets/`（入库，随包分发，删不掉）+ 用户
 > `css-presets/`（仓库根，不入库）。编辑器顶部预设行切换只装载（切换/另存/删除用户预设）；
 > "设为默认"写用户槽 theme（面板样式表卡同动作）；`恢复出厂`只装载出厂缓冲（不删预设、不改默认）。
+>
+> 备忘（2026-09-06）：预览技术选型 QTextEdit vs QWebEngineView，以后再议——
+> QTextEdit 胜在毫秒刷新/逐 run 可编程（注文归并/缺字点名）/单测友好/零依赖，
+> 劣在无真分页竖排；WebEngine 胜在像素级真效果（@page/vertical-rl/printToPdf 即成品），
+> 劣在秒级刷新/内存大/DOCX 链路作废（只认 HTML，ruby/EQ 注音特性看不见）/单测打包成本高。
+> 结论：调字体字号颜色保持 QTextEdit；HTML 竖排精品预览若立项再上 WebEngine（P11 预留）。
 
 ### 3.2 `XmlOptionsDialog(QDialog)`
 面板的对话框包装：`exec() -> Optional[XmlOptions]`（Accept→选项；Cancel→None），`[确定][取消]`。
