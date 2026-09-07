@@ -51,7 +51,7 @@ html[lang="zh-Hans"] {
   --font-series-title: 隶书, LiSu;
 }
 body {
-  line-height: 1.8;   /* 全局行距（1.8倍）；DOCX 由各标签 line-height 覆盖 */
+  line-height: 1.5;   /* 全局行距（1.5倍）；DOCX 由各标签 line-height 覆盖 */
 }
 /* body 字体栈（--font-body，繁体五段回退）：
    微軟正黑體（Win 繁体首选）→ 新細明體（Win 繁体兜底，生僻字覆盖多）
@@ -138,12 +138,11 @@ p.pin {
 }
 
 /* ============ 段落 ============ */
-/* 正文（<p>）：12pt 两端对齐，首行缩进 2 字符，段前 0.5em、段后 0.3em。
-   行距不写 = 继承 body 全局 1.8（2026-09-06 前此处写 line-height:1 单倍，
-   与序/标题的 1.8 打架，正文忽宽忽挤；现全书正文统一 1.8）。 */
+/* 正文（<p>）：12pt 两端对齐，首行缩进 2 字符，段前 0.5em、段后 0.3em，行距 1.5（与 body 全局一致）。 */
 p {
   font-size: 12pt;
   text-indent: 2em;          /* 段前缩进（首行 2 字符） */
+  line-height: 1.5;          /* 行距（1.5倍，与 body 全局一致；Word 映射为 w:lineRule="auto"） */
   margin-top: 0.5em;         /* 正文段前 0.5 */
   margin-bottom: 0.3em;      /* 段后 */
   text-align: justify;

@@ -69,8 +69,8 @@ def scaled_page_presets(page_presets, factor: float):
 
 def load_theme(path, lang="zh-Hant"):
     if path.endswith(".css"):
-        with open(path, encoding="utf-8") as f:
-            return Theme.from_css(f.read(), lang)
+        from .theme import theme_file_text
+        return Theme.from_css(theme_file_text(path), lang)
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
     return Theme(data.get("tags") or data)

@@ -1142,16 +1142,20 @@ class CssEditorDialog(QDialog):
         self.refresh_preview()
 
     def _effective_base_css(self):
-        """有效默认 CSS → (全文, 说明)：用户槽/出厂 theme 槽解析，失败回出厂。"""
-        from pycbeta.theme import resolve_theme_css
+        """有效默认 CSS → (全文, 说明)：出厂 + theme 文件（层叠，后者胜）。
+
+        预设只存覆盖块，不存出厂快照——出厂进化（行距/边距修复）自动跟随，
+        不会像旧全快照那样腐烂（2026-09-06 字義边距实锤）。"""
+        from pycbeta.theme import resolve_theme_css, theme_file_text
+        factory = factory_css_text()
         path, label = resolve_theme_css(current_theme_value())
         if path:
             try:
-                with open(path, encoding="utf-8") as f:
-                    return f.read(), f"{label}：{os.path.basename(path)}"
+                return (theme_file_text(path, factory),
+                        f"{label}：{os.path.basename(path)}")
             except OSError:
                 pass
-        return factory_css_text(), "内置出厂"
+        return factory, "内置出厂"
 
     # ----- 预设库 -----
     def _load_block_text(self, block_text):
@@ -1221,12 +1225,18 @@ class CssEditorDialog(QDialog):
         self.refresh_preview()
 
     def _save_preset_as(self):
+        """另存为预设：只存编辑块（源码页文本），不存出厂快照。
+
+        预设 = 覆盖块；加载时出厂 + 覆盖合并，出厂进化自动跟随。"""
         from PySide6.QtWidgets import QInputDialog
+        if self._source_err.text().strip():
+            QMessageBox.warning(self, "另存失败", "源码页有解析错误，先修好再存。")
+            return
         name, ok = QInputDialog.getText(self, "另存为预设", "预设名（存进用户库 css-presets/）：")
         if not ok:
             return
         try:
-            path = save_preset_file(name, self._last_good_css or self.work_css())
+            path = save_preset_file(name, self._source_edit.toPlainText())
         except ValueError as exc:
             QMessageBox.warning(self, "另存失败", str(exc))
             return

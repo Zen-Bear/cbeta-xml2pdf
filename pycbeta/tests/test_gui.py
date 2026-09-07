@@ -959,15 +959,34 @@ class TestCssEditor(unittest.TestCase):
 
     def test_example_preset_parses(self):
         import pycbeta.gui.css_editor as ce
-        from pycbeta.theme import Theme
+        from pycbeta.theme import Theme, theme_file_text
         path = os.path.join(os.path.dirname(
             os.path.dirname(os.path.abspath(ce.__file__))),
             "styles", "presets", "large-print.css")
         self.assertTrue(os.path.isfile(path))
+        # 预设只存覆盖块：加载时出厂+覆盖合并
         with open(path, encoding="utf-8") as f:
-            t = Theme.from_css(f.read())
+            raw = f.read()
+        self.assertNotIn("text-align: justify", raw)
+        t = Theme.from_css(theme_file_text(path))
         self.assertEqual((t.tags.get("p") or {}).get("font-size"), "14pt")
         self.assertEqual((t.tags.get("title") or {}).get("font-size"), "36pt")
+
+    def test_load_theme_merges_factory(self):
+        import shutil
+        from pycbeta.cli import load_theme
+        tmp = tempfile.mkdtemp()
+        try:
+            fn = os.path.join(tmp, "part.css")
+            with open(fn, "w", encoding="utf-8") as f:
+                f.write("p.head { font-size: 99pt; }\n")
+            t = load_theme(fn)
+            # 部分文件：出厂打底（正文 12pt）+ 覆盖生效
+            self.assertEqual((t.tags.get("p") or {}).get("font-size"), "12pt")
+            self.assertEqual((t.tags.get("head") or {}).get("font-size"),
+                             "99pt")
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
 
     def test_dialog_preset_load(self):
         import shutil

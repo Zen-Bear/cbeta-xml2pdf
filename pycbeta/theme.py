@@ -332,6 +332,20 @@ def list_presets(builtin_dir=None, user_dir=None):
             if k == "user" or n not in user_names]
 
 
+def theme_file_text(path, factory_text=None):
+    """主题文件全文 = 出厂原文 + 文件原文（CSS 层叠，后者胜）。
+
+    预设只存覆盖块（不存出厂快照，出厂进化自动跟随）；旧全快照同样安全
+    （重复规则值一致，文件缺失/非法抛 OSError/UnicodeError 由调用方处理）。
+    """
+    if factory_text is None:
+        with open(_DEFAULT_CSS, encoding="utf-8") as f:
+            factory_text = f.read()
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+    return factory_text + "\n" + text
+
+
 def resolve_theme_css(value, base_dir=None):
     """默认 CSS 解析 → (path|None, 说明)。None=内置出厂 pdf_docx.css。
     - 空 → 内置；"pdf_docx.css" → 内置文件

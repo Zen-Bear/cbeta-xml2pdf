@@ -320,10 +320,10 @@ class TestLineHeightInherit(unittest.TestCase):
         self.assertIn('w:line="432"', t.docx_para("juan"))
 
     def test_body_rhythm_uniform(self):
-        # 2026-09-06：正文 p 去单倍（继承 body 1.8），head 上下边距，div-xu 随正文节奏
+        # 2026-09-06：正文 p 显式 1.5，head 上下边距，div-xu 随正文节奏
         from pycbeta.theme import Theme
         t = Theme()
-        self.assertIn('w:line="432"', t.docx_para("p"))
+        self.assertIn('w:line="360"', t.docx_para("p"))
         self.assertIn('w:before="400"', t.docx_para("head"))  # 1em@20pt
         self.assertIn('w:after="200"', t.docx_para("head"))  # 0.5em@20pt
         self.assertIn('w:before="120"', t.docx_para("div-xu"))  # 0.5em@12pt
