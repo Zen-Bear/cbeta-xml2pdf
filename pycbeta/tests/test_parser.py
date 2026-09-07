@@ -25,6 +25,30 @@ def all_of(work, cls):
     return [n for n in iter_nodes(work.body) if isinstance(n, cls)]
 
 
+class TestCharDeclRjchar(unittest.TestCase):
+    """charDecl 收录 rjchar（悉昙显示用字；范本用 sample.xml 内联 XML 避免路径依赖）。"""
+
+    def test_rjchar_captured(self):
+        xml = ("<TEI xmlns='http://www.tei-c.org/ns/1.0'>"
+               "<teiHeader><encodingDesc><charDecl>"
+               "<char xml:id='RJ-T'><charProp><localName>rjchar</localName>"
+               "<value>屇</value></charProp>"
+               "<mapping type='PUA'>U+10CCBA</mapping></char>"
+               "</charDecl></encodingDesc></teiHeader>"
+               "<text><body><p>文</p></body></text></TEI>")
+        import tempfile
+        with tempfile.NamedTemporaryFile("w", suffix=".xml", delete=False,
+                                         encoding="utf-8") as f:
+            f.write(xml)
+            fn = f.name
+        try:
+            w = P5Parser().parse(fn)
+        finally:
+            os.remove(fn)
+        self.assertEqual((w.metadata.get("charDecl") or {}).get("RJ-T"),
+                         {"rjchar": "屇", "pua": "U+10CCBA"})
+
+
 class TestT0349(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

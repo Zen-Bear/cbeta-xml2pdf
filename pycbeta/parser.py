@@ -229,6 +229,9 @@ class P5Parser:
                 val = cp.findtext("value")
                 if ln == "composition":
                     rec["composition"] = val or ""
+                elif ln == "rjchar":
+                    # 悉昙字显示用字（常规汉字，如 RJ-CCBA→屇；官方 docx 用它+Ranjana 字体，不用 PUA）
+                    rec["rjchar"] = val or ""
                 elif ln == "normalized form":
                     rec["normal"] = val or ""
             for m in ch.iter("mapping"):

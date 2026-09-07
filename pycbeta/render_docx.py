@@ -656,7 +656,14 @@ class DocxRenderer:
         return "".join(out)
 
     def _resolve_gaiji_raw(self, code: str, raw: str) -> str:
-        # 优先级：gaiji_db（CBETA 全局缺字表，与官方 html 一致）→ charDecl（本经 charDecl，兜底）→ raw
+        # 优先级：RJ 悉昙用 charDecl rjchar（常规汉字；官方行为，配 Ranjana 系字体显示，
+        # 不用 PUA 私用字——无字体覆盖，必 tofu）→ gaiji_db（CBETA 全局缺字表，与官方 html 一致）
+        # → charDecl（本经 charDecl，兜底）→ raw
+        if code.startswith("RJ"):
+            chard0 = (self._work.metadata.get("charDecl") or {}) if self._work else {}
+            rj = (chard0.get(code) or {}).get("rjchar")
+            if rj:
+                return rj
         data = self.gaiji_db.get(code) if self.gaiji_db else None
         if data:
             for k in ("unicode", "norm_unicode"):
@@ -695,6 +702,20 @@ class DocxRenderer:
             return simplify_text(char)
         return char
 
+    def _ranjana_font_for(self, ch):
+        """RJ 悉昙字形：首个已装且覆盖该字者（Ranjana→Siddam）；无则 None。
+
+        有则 run 指定该字体（官方 docx 同款 eastAsia="Ranjana"）；无则回退主题字体——
+        rjchar 本身是常规汉字，依然可读，只是非悉昙体（用户实证：没装显示歾，装了显示种子字）。
+        """
+        if not ch:
+            return None
+        for fam in ("Ranjana", "Siddam"):
+            cmap = self._fallback_cmap(fam)
+            if cmap is not None and ord(ch[0]) in cmap:
+                return fam
+        return None
+
     def _gaiji_font(self) -> str:
         """超大缺字（>0xFFFF）字体：按 gaiji_lang 取链，首个本机已装者；
         全缺/无配置回退首项（缺省 CBETA Supplement，旧行为）。结果缓存，零缺字时零开销。"""
@@ -730,14 +751,16 @@ class DocxRenderer:
             return ""
         if isinstance(n, Gaiji):
             char = self._resolve_gaiji(n.code, n.char or n.code)
+            fonts = None
+            if n.code.startswith("RJ"):
+                # 悉昙文：已装且覆盖则指定 Ranjana 系字体（官方同款），否则主题字体直显 rjchar
+                fonts = self._ranjana_font_for(char)
+            if fonts is None and char and ord(char[0]) > 0xFFFF:
+                fonts = self._gaiji_font()
+            kw = {"fonts": fonts} if fonts else {}
             if self._annotations is not None:
-                # 解析后缺字走统一注音管线（词表单字+生僻字兜底；>0xFFFF 字体经 props 保留）
-                if char and ord(char[0]) > 0xFFFF:
-                    return self._run_annotated(char, *self._current_tag(), fonts=self._gaiji_font())
-                return self._run_annotated(char, *self._current_tag())
-            if char and ord(char[0]) > 0xFFFF:
-                return self._run(char, *self._current_tag(), fonts=self._gaiji_font())
-            return self._run(char, *self._current_tag())
+                return self._run_annotated(char, *self._current_tag(), **kw)
+            return self._run(char, *self._current_tag(), **kw)
         if isinstance(n, NoteRef):
             return self._render_noteref(n)
         if isinstance(n, App):

@@ -378,6 +378,62 @@ class TestGaijiFonts(unittest.TestCase):
         self.assertEqual(cfg["zh-Hans"], ["SimSunExtB", "CBETA Supplement"])
 
 
+class TestRanjana(unittest.TestCase):
+    """RJ 悉昙：charDecl rjchar 显示 + Ranjana 系字体（官方 docx 同款）。
+
+    无 Ranjana 字体时主题字体直显 rjchar（可读非悉昙体）；PUA 私用字不再落盘。
+    """
+
+    def _renderer(self, files, chardecl=None):
+        import types
+        import unittest.mock as mock
+        m1 = mock.patch("pycbeta.fonts.locator")
+        m2 = mock.patch("pycbeta.fonts.font_cmap")
+        ml = m1.start()
+        mc = m2.start()
+        self.addCleanup(m1.stop)
+        self.addCleanup(m2.stop)
+        ml.return_value.path.side_effect = files.get
+        mc.side_effect = lambda p: {
+            "/rj.ttf": frozenset({ord("屇")}),
+            "/song.ttf": frozenset({ord("A"), ord("屇")}),
+        }.get(p, frozenset())
+        r = DocxRenderer()
+        r._work = types.SimpleNamespace(
+            metadata={"charDecl": chardecl or {}}, simplified=False)
+        return r
+
+    def test_resolve_prefers_rjchar(self):
+        r = self._renderer({})
+        cd = {"RJ-X": {"rjchar": "屇", "pua": "U+10CCBA"}}
+        r._work.metadata["charDecl"] = cd
+        self.assertEqual(r._resolve_gaiji("RJ-X", "X"), "屇")
+        # 非 RJ 码不受影响（走旧链路回 raw）
+        self.assertEqual(r._resolve_gaiji("CB-X", "Y"), "Y")
+
+    def test_font_installed_and_covering(self):
+        r = self._renderer({"Ranjana": "/rj.ttf", "SimSun": "/song.ttf"})
+        self.assertEqual(r._ranjana_font_for("屇"), "Ranjana")
+
+    def test_font_missing_falls_back(self):
+        r = self._renderer({"SimSun": "/song.ttf"})
+        self.assertIsNone(r._ranjana_font_for("屇"))
+
+    def test_render_rj_run(self):
+        from pycbeta.model import Gaiji
+        r = self._renderer({"Ranjana": "/rj.ttf", "SimSun": "/song.ttf"})
+        r._work.metadata["charDecl"] = {"RJ-X": {"rjchar": "屇"}}
+        out = r._render_node(Gaiji(code="RJ-X", char="X"))
+        self.assertIn('w:eastAsia="Ranjana"', out)
+        self.assertIn("屇", out)
+        # 没装 Ranjana：主题字体 + rjchar 可读文本（非 tofu）
+        r2 = self._renderer({"SimSun": "/song.ttf"})
+        r2._work.metadata["charDecl"] = {"RJ-X": {"rjchar": "屇"}}
+        out2 = r2._render_node(Gaiji(code="RJ-X", char="X"))
+        self.assertNotIn("Ranjana", out2)
+        self.assertIn("屇", out2)
+
+
 class TestRenderFallback(unittest.TestCase):
     """render-time 按字回退：主字体缺字形的字拆出用回退字体，保证无 tofu。
 
