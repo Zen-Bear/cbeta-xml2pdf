@@ -21,7 +21,7 @@ import zipfile
 from PySide6.QtCore import Qt, QThread, Signal, QTimer, QSignalBlocker, QUrl
 from PySide6.QtGui import QColor, QDesktopServices, QFont, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import (
-    QApplication, QColorDialog, QComboBox, QDialog,
+    QApplication, QCheckBox, QColorDialog, QComboBox, QDialog,
     QFileDialog, QFormLayout, QGridLayout, QHBoxLayout, QLabel,
     QLineEdit, QMessageBox, QPlainTextEdit, QPushButton, QScrollArea,
     QSplitter, QTabWidget,
@@ -541,7 +541,8 @@ def _para_style(p):
 
 
 def _para_runs(p, fn_id_to_num):
-    """段落 → [run规格]；ruby/EQ 展开为 原文+灰小字〔读音〕；脚注引用取编号。"""
+    """段落 → [run规格]；ruby/EQ 展开为 原文+灰小字〔读音〕；脚注引用取编号；
+    w:br 记 {"br": True}（显示时换块，偈颂/预排分行用）。"""
     runs = []
     for run in p.findall(_w("r")):
         rpr = _rpr(run)
@@ -552,6 +553,9 @@ def _para_runs(p, fn_id_to_num):
             fid = _a(run.find(_w("footnoteReference")), "id")
             num = fn_id_to_num.get(fid, "?")
             runs.append(dict(base, text=f"[{num}]", super=True))
+            continue
+        if run.find(_w("br")) is not None and not _run_text(run).strip():
+            runs.append({"br": True})
             continue
         instr = run.find(_w("instrText"))
         if instr is not None:
@@ -584,7 +588,7 @@ def _para_runs(p, fn_id_to_num):
         if reading:
             runs.append({"text": f"〔{reading}〕", "size": None, "font": "",
                          "bold": False, "color": "", "super": True, "dim": True})
-    return [r for r in runs if r["text"]]
+    return [r for r in runs if r.get("br") or r.get("text")]
 
 
 _PSTYLE_ALIGN = {"title": "center", "head": "center", "juan": "center",
@@ -754,12 +758,14 @@ class _RenderThread(QThread):
     done = Signal(str)
     failed = Signal(str)
 
-    def __init__(self, xml_path, css_text, out_dir, lang="zh-Hant", parent=None):
+    def __init__(self, xml_path, css_text, out_dir, lang="zh-Hant",
+                 t2s=False, parent=None):
         super().__init__(parent)
         self._xml = xml_path
         self._css = css_text
         self._out = out_dir
         self._lang = lang
+        self._t2s = t2s
 
     def run(self):
         try:
@@ -767,7 +773,12 @@ class _RenderThread(QThread):
             from pycbeta.render_docx import DocxRenderer
             from pycbeta.theme import Theme
             work = P5Parser().parse(self._xml)
-            theme = Theme.from_css(self._css, self._lang)
+            lang = self._lang
+            if self._t2s:
+                from pycbeta.simplify import simplify_work
+                simplify_work(work)
+                lang = "zh-Hans"
+            theme = Theme.from_css(self._css, lang)
             fn = DocxRenderer(theme=theme, notes="footnote",
                               bookmarks=False).render_work(
                 work, self._out, filename="preview.docx")
@@ -1067,6 +1078,10 @@ class CssEditorDialog(QDialog):
         browse.clicked.connect(self._browse_sample)
         srow.addWidget(self.sample_edit, 1)
         srow.addWidget(browse)
+        self.t2s_box = QCheckBox("简体")
+        self.t2s_box.setToolTip("OpenCC t2s 简体预览/导出（自动用简体字库）")
+        self.t2s_box.toggled.connect(lambda _v: self._on_t2s_toggled())
+        srow.addWidget(self.t2s_box)
         layout.addLayout(srow)
         # 左右分栏
         split = QSplitter(Qt.Horizontal)
@@ -1498,6 +1513,10 @@ class CssEditorDialog(QDialog):
         self._work = None
         self.refresh_preview()
 
+    def _on_t2s_toggled(self):
+        self._work = None  # 简繁文字不同，重解样张
+        self.refresh_preview()
+
     def _load_work(self):
         from pycbeta.parser import P5Parser
         path = self.sample_edit.text().strip()
@@ -1536,8 +1555,10 @@ class CssEditorDialog(QDialog):
             self._need_refresh = True  # 本轮结束后补一轮
             return
         self._need_refresh = False
+        t2s = self.t2s_box.isChecked()
+        lang = "zh-Hans" if t2s else self._preview_lang()
         self._thread = _RenderThread(self.sample_edit.text().strip(), css, self._tmp,
-                                     self._preview_lang(), self)
+                                     lang, t2s, self)
         self._thread.done.connect(self._on_rendered)
         self._thread.failed.connect(self._on_render_failed)
         self._thread.start()
@@ -1552,6 +1573,11 @@ class CssEditorDialog(QDialog):
         from pycbeta.render_docx import DocxRenderer
         from pycbeta.theme import Theme
         work = P5Parser().parse(self.sample_edit.text().strip())
+        t2s = self.t2s_box.isChecked()
+        if t2s:
+            from pycbeta.simplify import simplify_work
+            simplify_work(work)
+            lang = "zh-Hans"
         theme = Theme.from_css(css, lang or self._preview_lang())
         out = _tf.mkdtemp(prefix="css-editor-")
         fn = DocxRenderer(theme=theme, notes="footnote",
@@ -1602,6 +1628,11 @@ class CssEditorDialog(QDialog):
             _block_line_height(fmt, para.get("line"))
             cur.setBlockFormat(fmt)
             for r in para["runs"]:
+                if r.get("br"):
+                    # 段内换行（偈颂/预排）：新块并重挂本段格式
+                    cur.insertBlock()
+                    cur.setBlockFormat(fmt)
+                    continue
                 cf = QTextCharFormat()
                 if r["size"]:
                     cf.setFontPointSize(r["size"])
@@ -1633,6 +1664,10 @@ class CssEditorDialog(QDialog):
                 _block_line_height(ffmt, fn.get("line"))
                 cur.setBlockFormat(ffmt)
                 for r in fn["runs"]:
+                    if r.get("br"):
+                        cur.insertBlock()
+                        cur.setBlockFormat(ffmt)
+                        continue
                     cf = QTextCharFormat()
                     if r["size"]:
                         cf.setFontPointSize(r["size"])

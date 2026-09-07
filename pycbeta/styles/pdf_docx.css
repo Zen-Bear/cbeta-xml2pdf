@@ -112,6 +112,8 @@ p.head {
   font-weight: bold;      /* 兜底值；想覆盖改这里（勿删） */
   color: #0000a0;         /* 兜底值；想覆盖改这里（勿删） */
   text-align: center;     /* 标题居中（含品名等 head） */
+  margin-top: 1em;        /* 标题段前（2026-09-06 补：此前紧贴上文，如字義） */
+  margin-bottom: 0.5em;   /* 标题段后 */
 }
 
 /* ============ 卷 / 品 ============ */
@@ -137,11 +139,11 @@ p.pin {
 
 /* ============ 段落 ============ */
 /* 正文（<p>）：12pt 两端对齐，首行缩进 2 字符，段前 0.5em、段后 0.3em。
-   注意 line-height: 1 在此表示 1 倍行距（Word 映射为 w:lineRule="auto"）。 */
+   行距不写 = 继承 body 全局 1.8（2026-09-06 前此处写 line-height:1 单倍，
+   与序/标题的 1.8 打架，正文忽宽忽挤；现全书正文统一 1.8）。 */
 p {
   font-size: 12pt;
   text-indent: 2em;          /* 段前缩进（首行 2 字符） */
-  line-height: 1;            /* 行距（1倍） */
   margin-top: 0.5em;         /* 正文段前 0.5 */
   margin-bottom: 0.3em;      /* 段后 */
   text-align: justify;
@@ -189,7 +191,7 @@ div.lg.note2 {
    （见 theme.py docx_para：div 标签靠前合并优先）。 */
 div.div-orig { font-weight: bold; }         /* 原文（官方 golden 同样加粗） */
 div.div-commentary { font-weight: normal; } /* 解釋 */
-div.div-xu { color: #000000; margin-top: 1em; margin-bottom: 1em; } /* 序：段前段后间距。PDF 按块生效；DOCX 对序内每个段落生效（命名样式不含 div 上下文，见 render_docx._para 内联追加） */
+div.div-xu { color: #000000; margin-top: 0.5em; margin-bottom: 0.3em; } /* 序：与正文同节奏（2026-09-06 前 1em/1em，序内每段大间距、正文忽宽忽挤；块分隔靠标题边距与分页）。PDF 按块生效；DOCX 对序内每个段落生效（命名样式不含 div 上下文，见 render_docx._para 内联追加） */
 /* 序内标题（<head> 在 div-xu 内，如"新譯大乘入楞伽經序"）：颜色覆盖 p.head 的蓝色；
    font-family 换序标题字体（改这一行即可，如换宋体写 宋体, SimSun, serif）。
    font-size 序标题字号（属性选择器 p.head[data-head-level] DOCX 不认，序标题走这行四格式通吃）。

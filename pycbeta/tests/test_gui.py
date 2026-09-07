@@ -719,6 +719,59 @@ class TestCssEditor(unittest.TestCase):
         finally:
             dlg.close()
 
+    def test_preview_breaks_on_br(self):
+        import shutil
+        import zipfile
+        import pycbeta.gui.css_editor as ce
+        tmp = tempfile.mkdtemp()
+        try:
+            doc = ('<w:document xmlns:w="http://schemas.openxmlformats.org'
+                   '/wordprocessingml/2006/main"><w:body>'
+                   '<w:p><w:r><w:t>上句。</w:t></w:r>'
+                   '<w:r><w:br/></w:r>'
+                   '<w:r><w:t>下句。</w:t></w:r></w:p>'
+                   "</w:body></w:document>")
+            fn = os.path.join(tmp, "s.docx")
+            with zipfile.ZipFile(fn, "w") as z:
+                z.writestr("word/document.xml", doc)
+            spec = ce.docx_spec(fn)
+            runs = spec["paras"][0]["runs"]
+            self.assertEqual([r.get("text", "<br>") for r in runs],
+                             ["上句。", "<br>", "下句。"])
+            dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+            try:
+                dlg._show_spec(spec, {})
+                blocks = []
+                b = dlg.preview.document().firstBlock()
+                while b.isValid():
+                    blocks.append(b.text())
+                    b = b.next()
+                self.assertIn("上句。", blocks)
+                self.assertIn("下句。", blocks)
+            finally:
+                dlg.close()
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_editor_t2s_renders_simplified(self):
+        import glob
+        import pycbeta.gui.css_editor as ce
+        sample = glob.glob(r"E:\dev\cbeta\xml2pdf\css-presets\sample.xml")
+        self.assertTrue(sample, "sample.xml 缺失")
+        dlg = ce.CssEditorDialog(sample_xml=sample[0])
+        try:
+            self.assertFalse(dlg.t2s_box.isChecked())
+            dlg.t2s_box.setChecked(True)
+            fn = dlg._render_inline(dlg.work_css())
+            import zipfile
+            x = zipfile.ZipFile(fn).read("word/document.xml").decode("utf-8")
+            import re
+            texts = "".join(re.findall(r"<w:t[^>]*>([^<]*)</w:t>", x))
+            self.assertIn("准提", texts)  # 準→准（简体）
+            self.assertNotIn("準提", texts)
+        finally:
+            dlg.close()
+
     def test_qt_alias_bridges_localized_names(self):
         import pycbeta.gui.css_editor as ce
         rows = [["ZhaohuaMinB", "朝華見出明朝B", "朝华标题B",
