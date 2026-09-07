@@ -464,6 +464,59 @@ def _run_text(run):
     return "".join(t.text or "" for t in run.iter(_w("t")))
 
 
+def _para_margin(p):
+    """段落上下边距 → {"before": twips, "after": twips}（缺项为 None）| None。"""
+    ppr = p.find(_w("pPr"))
+    if ppr is None:
+        return None
+    sp = ppr.find(_w("spacing"))
+    if sp is None:
+        return None
+    out = {}
+    for key in ("before", "after"):
+        try:
+            out[key] = int(_a(sp, key) or "")
+        except (TypeError, ValueError):
+            out[key] = None
+    if out["before"] is None and out["after"] is None:
+        return None
+    return out
+
+
+def _style_margins(styles_root):
+    """styles.xml → {styleId: {"before","after"}}（供无行内边距段落回退，与 Word 一致）。"""
+    out = {}
+    if styles_root is None:
+        return out
+    for st in styles_root.findall(_w("style")):
+        sid = _a(st, "styleId")
+        if not sid:
+            continue
+        ppr = st.find(_w("pPr"))
+        sp = ppr.find(_w("spacing")) if ppr is not None else None
+        if sp is None:
+            continue
+        m = {}
+        for key in ("before", "after"):
+            try:
+                m[key] = int(_a(sp, key) or "")
+            except (TypeError, ValueError):
+                m[key] = None
+        if m["before"] is not None or m["after"] is not None:
+            out[sid] = m
+    return out
+
+
+def _block_margins(fmt, margin):
+    """QTextBlockFormat 上下边距：twips→px（96dpi 下 /15），与 Word 同值真实显示。"""
+    if not margin:
+        return
+    if margin.get("before") is not None:
+        fmt.setTopMargin(margin["before"] / 15.0)
+    if margin.get("after") is not None:
+        fmt.setBottomMargin(margin["after"] / 15.0)
+
+
 def _block_line_height(fmt, line):
     """QTextBlockFormat 行距：auto→百分比（240=单倍），exact→固定磅，atLeast→最小磅。"""
     from PySide6.QtGui import QTextBlockFormat as _BF
@@ -619,6 +672,7 @@ def docx_spec(docx_path):
         st_root = (etree.fromstring(z.read("word/styles.xml"))
                    if "word/styles.xml" in names else None)
     style_lines = _style_lines(st_root)
+    style_margins = _style_margins(st_root)
     fn_id_to_num, fn_bodies = {}, {}
     if fn_root is not None:
         num = 0
@@ -630,13 +684,16 @@ def docx_spec(docx_path):
             fn_id_to_num[fid] = num
             runs = []
             fn_line = None
+            fn_margin = None
             for p in fn.findall(_w("p")):
                 if fn_line is None:
                     st = _para_style(p)
                     fn_line = _para_line(p) or style_lines.get(st) \
                         or style_lines.get("Normal")
+                    fn_margin = _para_margin(p) or style_margins.get(st) \
+                        or style_margins.get("Normal")
                 runs.extend(_para_runs(p, {}))
-            fn_bodies[num] = (runs, fn_line)
+            fn_bodies[num] = (runs, fn_line, fn_margin)
     for p in doc.iter(_w("p")):
         style = _para_style(p)
         align = _PSTYLE_ALIGN.get(style, "")
@@ -651,12 +708,16 @@ def docx_spec(docx_path):
         if runs:
             line = _para_line(p) or style_lines.get(style) \
                 or style_lines.get("Normal")
+            margin = _para_margin(p) or style_margins.get(style) \
+                or style_margins.get("Normal")
             spec["paras"].append({"style": style, "align": align,
-                                  "line": line, "runs": runs})
+                                  "line": line, "margin": margin,
+                                  "runs": runs})
     for num in sorted(fn_bodies):
         if fn_bodies[num][0]:
             spec["footnotes"].append({"num": num, "runs": fn_bodies[num][0],
-                                      "line": fn_bodies[num][1]})
+                                      "line": fn_bodies[num][1],
+                                      "margin": fn_bodies[num][2]})
     return spec
 
 
@@ -756,6 +817,55 @@ def _spec_fonts(spec):
         for r in para.get("runs", []):
             if r.get("font") and r["font"] not in out:
                 out.append(r["font"])
+    return out
+
+
+def glyph_gaps(spec, path_of=None):
+    """{字体: [缺字形码位...]}：各 run 实际字符查字体文件 cmap。
+
+    Word 与预览同一结论（都没字形就是真 tofu）。path_of(font) 可注入
+    （单测）；默认走 fonts.locator()；找不到文件跳过（Qt 缺字体警告另报）。
+    """
+    if path_of is None:
+        from pycbeta.fonts import font_cmap, locator
+        _loc = locator()
+        path_of = _loc.path
+    else:
+        from pycbeta.fonts import font_cmap
+    chars = {}
+    for para in (spec.get("paras") or []) + [
+            {"runs": fn.get("runs", [])} for fn in spec.get("footnotes", [])]:
+        for r in para.get("runs", []):
+            if r.get("font") and r.get("text"):
+                chars.setdefault(r["font"], set()).update(r["text"])
+    gaps = {}
+    for font, chs in chars.items():
+        try:
+            path = path_of(font)
+        except Exception:  # noqa: BLE001
+            continue
+        if not path:
+            continue
+        try:
+            cmap = font_cmap(path)
+        except Exception:  # noqa: BLE001 —— 读坏不断预览
+            continue
+        missing = sorted({c for c in chs if ord(c) not in cmap})
+        if missing:
+            gaps[font] = missing
+    return gaps
+
+
+def _gaps_text(gaps, limit=6):
+    """缺字形摘要行（状态行/检查窗共用）：字体缺N字形（如U+10CCEB…）。"""
+    bits = []
+    for font, chs in gaps.items():
+        shown = "、".join(f"U+{ord(c):04X}" for c in chs[:3])
+        more = f"等{len(chs)}个" if len(chs) > 3 else ""
+        bits.append(f"{font}缺字形{shown}{more}")
+    out = "；".join(bits[:limit])
+    if len(bits) > limit:
+        out += f"；等{len(bits)}种字体"
     return out
 
 
@@ -869,13 +979,25 @@ class PreviewReportDialog(QDialog):
                                 " ✗ 无可用字形（预览替代显示，导出 DOCX 不受影响）"
                                 "</font></b></li>")
             parts.append("<p>字体：</p><ul>" + "".join(rows) + "</ul>")
+        gaps = info.get("gaps") or {}
+        if gaps:
+            grows = []
+            for font, chs in gaps.items():
+                shown = "、".join(f"U+{ord(c):04X}" for c in chs[:8])
+                more = f"等{len(chs)}个" if len(chs) > 8 else ""
+                grows.append(f"<li><b><font color='red'>{_html.escape(font)}"
+                             f"缺字形：{shown}{more}（预览与 Word 均为 tofu）"
+                             "</font></b></li>")
+            parts.append("<p>缺字形（字库里没有这些字）：</p><ul>" +
+                         "".join(grows) + "</ul>")
         if info.get("css_error"):
             parts.append(f"<p><b><font color='red'>CSS 错误："
                          f"{_html.escape(info['css_error'])}</font></b></p>")
         if info.get("error"):
             parts.append(f"<p><b><font color='red'>渲染失败："
                          f"{_html.escape(info['error'])}</font></b></p>")
-        if not fonts and not info.get("css_error") and not info.get("error"):
+        if not fonts and not info.get("gaps") and not info.get("css_error") \
+                and not info.get("error"):
             parts.append("<p>暂无检查项（等一次预览完成）。</p>")
         self.view.setHtml("".join(parts))
 
@@ -1091,6 +1213,7 @@ class CssEditorDialog(QDialog):
         self._touched = set()        # 用户碰过的 (selector, prop)；只输出这些
         self._preset_path = None       # 当前缓冲对应的预设文件（保存目标）；出厂/新建为 None
         self._report = None            # 预览检查信息（_push_report 更新）
+        self._last_gaps = {}             # 字形覆盖缺口 {字体: [码位]}（纠错用）
         self._report_dlg = None          # 检查窗（打开检查时懒建）
         self._thread = None
         self._rows = {}              # selector -> 控件组
@@ -1747,6 +1870,7 @@ class CssEditorDialog(QDialog):
                 "sample": self.sample_edit.text().strip(),
                 "t2s": self.t2s_box.isChecked(),
                 "fonts": fonts,
+                "gaps": getattr(self, "_last_gaps", None) or {},
                 "css_error": self._source_err.text().strip() or "",
                 "error": error or ""}
 
@@ -1779,10 +1903,14 @@ class CssEditorDialog(QDialog):
         now = datetime.datetime.now().strftime("%H:%M:%S")
         missing = [f for f in _spec_fonts(spec)
                    if f and not resolve_qt_family(f, aliases)]
+        gaps = glyph_gaps(spec)
+        self._last_gaps = gaps
         msg = f"预览已更新 {now}"
         if missing:
             msg += (f"（{'、'.join(missing[:6])}无可用字形，替代显示；"
                     "导出 DOCX 不受影响）")
+        if gaps:
+            msg += f"【缺字形：{_gaps_text(gaps)}】"
         self.status.setText(msg)
         self._push_report()
         if self._need_refresh:
@@ -1802,6 +1930,7 @@ class CssEditorDialog(QDialog):
         doc = self.preview.document()
         doc.clear()
         cur = QTextCursor(doc)
+        prev_style = None
         for para in spec["paras"]:
             fmt = QTextBlockFormat()
             if para["align"] == "center":
@@ -1811,12 +1940,14 @@ class CssEditorDialog(QDialog):
             elif para["align"] == "justify":
                 fmt.setAlignment(Qt.AlignJustify)
             _block_line_height(fmt, para.get("line"))
+            _block_margins(fmt, para.get("margin"))
             cur.setBlockFormat(fmt)
-            if show_names:
+            if show_names and para.get("style", "") != prev_style:
                 ncf = QTextCharFormat()
                 ncf.setFontPointSize(8)
                 ncf.setForeground(QColor("#888888"))
                 cur.insertText(f"【{STYLE_ROW_LABEL.get(para.get('style', ''), para.get('style', ''))}】", ncf)
+            prev_style = para.get("style", "")
             for r in para["runs"]:
                 if r.get("br"):
                     # 段内换行（偈颂/预排）：新块并重挂本段格式
@@ -1852,6 +1983,7 @@ class CssEditorDialog(QDialog):
             for fn in spec["footnotes"]:
                 ffmt = QTextBlockFormat()
                 _block_line_height(ffmt, fn.get("line"))
+                _block_margins(ffmt, fn.get("margin"))
                 cur.setBlockFormat(ffmt)
                 if show_names:
                     ncf = QTextCharFormat()

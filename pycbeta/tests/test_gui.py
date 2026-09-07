@@ -867,6 +867,89 @@ class TestCssEditor(unittest.TestCase):
         finally:
             dlg.close()
 
+    def test_names_merge_consecutive(self):
+        import pycbeta.gui.css_editor as ce
+        dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+        try:
+            run = {"text": "x", "size": 12.0, "font": "", "bold": False,
+                   "color": "", "super": False, "dim": False}
+            spec = {"paras": [
+                {"style": "p", "align": "", "line": None, "runs": [run]},
+                {"style": "p", "align": "", "line": None, "runs": [run]},
+                {"style": "head", "align": "center", "line": None,
+                 "runs": [run]},
+                {"style": "p", "align": "", "line": None, "runs": [run]}],
+                "footnotes": []}
+            dlg.names_box.setChecked(True)
+            dlg._show_spec(spec, {})
+            text = dlg.preview.toPlainText()
+            # 相邻同样式只标首段：正文2段→1标，标题1标，后正文再标
+            self.assertEqual(text.count("【正文】"), 2)
+            self.assertEqual(text.count("【标题】"), 1)
+            dlg.names_box.setChecked(False)
+            dlg._show_spec(spec, {})
+            self.assertNotIn("【", dlg.preview.toPlainText())
+            dlg._loaded_block = dlg._source_edit.toPlainText()
+        finally:
+            dlg.close()
+
+    def test_margins_real_display(self):
+        import pycbeta.gui.css_editor as ce
+        self.assertEqual(
+            ce._para_margin.__doc__ is not None, True)
+        import shutil
+        import zipfile
+        tmp = tempfile.mkdtemp()
+        try:
+            doc = ('<w:document xmlns:w="http://schemas.openxmlformats.org'
+                   '/wordprocessingml/2006/main"><w:body>'
+                   '<w:p><w:pPr><w:pStyle w:val="head"/>'
+                   '<w:spacing w:before="400" w:after="200"/>'
+                   '</w:pPr><w:r><w:t>题</w:t></w:r></w:p>'
+                   "</w:body></w:document>")
+            styles = ('<w:styles xmlns:w="http://schemas.openxmlformats.org'
+                      '/wordprocessingml/2006/main">'
+                      '<w:style w:styleId="Normal"><w:pPr>'
+                      '<w:spacing w:before="10" w:after="20"/>'
+                      '</w:pPr></w:style></w:styles>')
+            fn = os.path.join(tmp, "s.docx")
+            with zipfile.ZipFile(fn, "w") as z:
+                z.writestr("word/document.xml", doc)
+                z.writestr("word/styles.xml", styles)
+            spec = ce.docx_spec(fn)
+            self.assertEqual(spec["paras"][0]["margin"],
+                             {"before": 400, "after": 200})
+            dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+            try:
+                dlg._show_spec(spec, {})
+                fmt = dlg.preview.document().firstBlock().blockFormat()
+                self.assertAlmostEqual(fmt.topMargin(), 400 / 15.0)
+                self.assertAlmostEqual(fmt.bottomMargin(), 200 / 15.0)
+                dlg._loaded_block = dlg._source_edit.toPlainText()
+            finally:
+                dlg.close()
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_glyph_gaps(self):
+        import pycbeta.gui.css_editor as ce
+        spec = {"paras": [{"style": "p", "align": "", "line": None,
+                           "runs": [{"text": "AB字", "size": 12.0,
+                                     "font": "F", "bold": False, "color": "",
+                                     "super": False, "dim": False}]}],
+                "footnotes": []}
+        import unittest.mock as mock
+        with mock.patch("pycbeta.fonts.font_cmap",
+                        return_value=frozenset({ord("A")})), \
+                mock.patch("pycbeta.fonts.locator") as ml:
+            ml.return_value.path.return_value = "/x.ttf"
+            gaps = ce.glyph_gaps(spec)
+        self.assertEqual(set(gaps["F"]), {"B", "字"})
+        # 找不到文件跳过，不断预览
+        with mock.patch("pycbeta.fonts.locator") as ml2:
+            ml2.return_value.path.return_value = None
+            self.assertEqual(ce.glyph_gaps(spec), {})
+
     def test_names_toggle_labels_paras(self):
         import pycbeta.gui.css_editor as ce
         dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
