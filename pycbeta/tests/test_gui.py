@@ -807,6 +807,12 @@ class TestCssEditor(unittest.TestCase):
                         dlg, "_ask_save_discard_cancel",
                         return_value="discard"):
                     self.assertTrue(dlg._confirm_discard())
+                # 脏 + 选取消 → 不放行（留编辑，与不保存区分）
+                dlg._rows["h1.title"]["size"].setText("42pt")
+                with mock.patch.object(
+                        dlg, "_ask_save_discard_cancel",
+                        return_value="cancel"):
+                    self.assertFalse(dlg._confirm_discard())
                 # 保存后变干净，关闭不再弹窗
                 self.assertTrue(dlg._save_current())
                 self.assertFalse(dlg._is_dirty())
@@ -858,6 +864,32 @@ class TestCssEditor(unittest.TestCase):
         dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
         try:
             self.assertEqual(dlg.t2s_box.text(), "繁转简")
+        finally:
+            dlg.close()
+
+    def test_names_toggle_labels_paras(self):
+        import pycbeta.gui.css_editor as ce
+        dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+        try:
+            spec = {"paras": [
+                {"style": "head", "align": "center", "line": None,
+                 "runs": [{"text": "字義", "size": 20.0, "font": "",
+                           "bold": True, "color": "", "super": False,
+                           "dim": False}]},
+                {"style": "p", "align": "", "line": None,
+                 "runs": [{"text": "正文", "size": 12.0, "font": "",
+                           "bold": False, "color": "", "super": False,
+                           "dim": False}]}],
+                "footnotes": []}
+            self.assertFalse(dlg.names_box.isChecked())
+            dlg._show_spec(spec, {})
+            self.assertNotIn("【标题】", dlg.preview.toPlainText())
+            dlg.names_box.setChecked(True)
+            dlg._show_spec(spec, {})
+            text = dlg.preview.toPlainText()
+            self.assertIn("【标题】", text)
+            self.assertIn("【正文】", text)
+            dlg._loaded_block = dlg._source_edit.toPlainText()
         finally:
             dlg.close()
 

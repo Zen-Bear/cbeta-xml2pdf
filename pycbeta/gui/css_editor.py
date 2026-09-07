@@ -540,6 +540,13 @@ def _para_style(p):
     return _a(ps, "val") or "" if ps is not None else ""
 
 
+# 预览元素名标注：段落样式 → 左栏控件名（style 为空按正文）。
+STYLE_ROW_LABEL = {"title": "书名", "head": "标题", "juan": "卷名",
+                   "pin": "品名", "p": "正文", "verse": "偈颂",
+                   "footnote": "脚注", "byline": "题署", "author": "作者",
+                   "translator": "译者", "": "正文"}
+
+
 def _para_runs(p, fn_id_to_num):
     """段落 → [run规格]；ruby/EQ 展开为 原文+灰小字〔读音〕；脚注引用取编号；
     w:br 记 {"br": True}（显示时换块，偈颂/预排分行用）。"""
@@ -1143,6 +1150,10 @@ class CssEditorDialog(QDialog):
         self.preview_lang.setToolTip("切换 CSS :root 双栏变量列（样张文字不变，只看字体）")
         self.preview_lang.currentIndexChanged.connect(lambda _i: self._schedule())
         trow.addWidget(self.preview_lang)
+        self.names_box = QCheckBox("元素名")
+        self.names_box.setToolTip("每段前标注对应左栏控件名（如【标题】），方便找修改位置")
+        self.names_box.toggled.connect(lambda _v: self._on_names_toggled())
+        trow.addWidget(self.names_box)
         rl.addLayout(trow)
         self.preview = QTextEdit()
         self.preview.setReadOnly(True)
@@ -1327,17 +1338,24 @@ class CssEditorDialog(QDialog):
         return True
 
     def _ask_save_discard_cancel(self):
-        """未保存修改的三选一（纯交互，可单测 mock）；返回 save/discard/cancel。"""
+        """未保存修改的三选一（纯交互，可单测 mock）；返回 save/discard/cancel。
+
+        注意：全自定义按钮时 result() 不可靠，必须直接比对 clickedButton；
+        点 X（无点击按钮）按取消处理。
+        """
         box = QMessageBox(self)
         box.setWindowTitle("未保存的修改")
         box.setText("当前样式有未保存的修改，怎么办？")
         save_btn = box.addButton("保存", QMessageBox.AcceptRole)
-        box.addButton("不保存", QMessageBox.DestructiveRole)
-        box.addButton("取消", QMessageBox.RejectRole)
+        discard_btn = box.addButton("不保存", QMessageBox.DestructiveRole)
+        cancel_btn = box.addButton("取消", QMessageBox.RejectRole)
         box.exec()
-        if box.clickedButton() == save_btn:
+        clicked = box.clickedButton()
+        if clicked == save_btn:
             return "save"
-        return "cancel" if box.result() == QMessageBox.Rejected else "discard"
+        if clicked == discard_btn:
+            return "discard"
+        return "cancel"
 
     def _confirm_discard(self):
         """无修改返回 True；有修改弹三选一。保存失败/取消返回 False。"""
@@ -1694,6 +1712,12 @@ class CssEditorDialog(QDialog):
     def _preview_lang(self):
         return self.preview_lang.currentData() or "zh-Hant"
 
+    def _on_names_toggled(self):
+        # 元素名开关：用缓存 spec 重画，不重渲
+        spec = getattr(self, "_last_spec", None)
+        if spec:
+            self._show_spec(spec, qt_aliases())
+
     def _render_inline(self, css, lang=None):
         """同步重渲（单测/导出前保底用；界面走线程）。返回 docx 路径。"""
         import tempfile as _tf
@@ -1774,6 +1798,7 @@ class CssEditorDialog(QDialog):
 
     def _show_spec(self, spec, aliases=None):
         from PySide6.QtGui import QTextBlockFormat
+        show_names = self.names_box.isChecked()
         doc = self.preview.document()
         doc.clear()
         cur = QTextCursor(doc)
@@ -1787,6 +1812,11 @@ class CssEditorDialog(QDialog):
                 fmt.setAlignment(Qt.AlignJustify)
             _block_line_height(fmt, para.get("line"))
             cur.setBlockFormat(fmt)
+            if show_names:
+                ncf = QTextCharFormat()
+                ncf.setFontPointSize(8)
+                ncf.setForeground(QColor("#888888"))
+                cur.insertText(f"【{STYLE_ROW_LABEL.get(para.get('style', ''), para.get('style', ''))}】", ncf)
             for r in para["runs"]:
                 if r.get("br"):
                     # 段内换行（偈颂/预排）：新块并重挂本段格式
@@ -1823,6 +1853,11 @@ class CssEditorDialog(QDialog):
                 ffmt = QTextBlockFormat()
                 _block_line_height(ffmt, fn.get("line"))
                 cur.setBlockFormat(ffmt)
+                if show_names:
+                    ncf = QTextCharFormat()
+                    ncf.setFontPointSize(8)
+                    ncf.setForeground(QColor("#888888"))
+                    cur.insertText("【脚注】", ncf)
                 for r in fn["runs"]:
                     if r.get("br"):
                         cur.insertBlock()
