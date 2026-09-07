@@ -867,6 +867,48 @@ class TestCssEditor(unittest.TestCase):
         finally:
             dlg.close()
 
+    def test_sim_tip_below_status(self):
+        import pycbeta.gui.css_editor as ce
+        dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+        try:
+            self.assertIn("模拟显示", dlg.sim_tip.text())
+            self.assertIn("分页", dlg.sim_tip.text())
+        finally:
+            dlg.close()
+
+    def test_restore_loaded(self):
+        import shutil
+        import pycbeta.gui.css_editor as ce
+        root = tempfile.mkdtemp()
+        try:
+            fn = os.path.join(root, "mine.css")
+            with open(fn, "w", encoding="utf-8") as f:
+                f.write("/* base */\np.head { font-size: 40pt; }\n")
+            dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+            try:
+                dlg._load_preset_path(fn)
+                self.assertFalse(dlg._is_dirty())
+                self.assertTrue(hasattr(dlg, "btn_restore"))
+                orig = dlg._rows["h1.title"]["size"].text()
+                dlg._rows["h1.title"]["size"].setText("41pt")
+                self.assertTrue(dlg._is_dirty())
+                self.assertTrue(dlg._restore_loaded())
+                self.assertFalse(dlg._is_dirty())
+                self.assertEqual(
+                    dlg._rows["h1.title"]["size"].text(), orig)
+                self.assertIn("p.head { font-size: 40pt; }",
+                              dlg._source_edit.toPlainText())
+                # 恢复不碰预设选择
+                before = dlg.preset_box.currentIndex()
+                dlg._rows["h1.title"]["size"].setText("42pt")
+                self.assertTrue(dlg._restore_loaded())
+                self.assertFalse(dlg._is_dirty())
+                self.assertEqual(dlg.preset_box.currentIndex(), before)
+            finally:
+                dlg.close()
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
     def test_status_warn_link(self):
         import unittest.mock as mock
         import pycbeta.gui.css_editor as ce

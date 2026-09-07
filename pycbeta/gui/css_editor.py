@@ -1259,10 +1259,7 @@ class CssEditorDialog(QDialog):
         right = QWidget()
         rl = QVBoxLayout(right)
         rl.setContentsMargins(0, 0, 0, 0)
-        tip = QLabel("预览为模拟显示（字体四参数为真值），分页/页边距以 Word 为准")
-        tip.setStyleSheet("color: gray")
         trow = QHBoxLayout()
-        trow.addWidget(tip, 1)
         self.t2s_box = QCheckBox("繁转简")
         self.t2s_box.setToolTip("OpenCC t2s 简体预览/导出（自动用简体字库）")
         self.t2s_box.toggled.connect(lambda _v: self._on_t2s_toggled())
@@ -1285,6 +1282,10 @@ class CssEditorDialog(QDialog):
         self.status = QLabel("就绪")
         self.status.setStyleSheet("color: gray")
         rl.addWidget(self.status)
+        self.sim_tip = QLabel("预览为模拟显示（字体四参数为真值），分页/页边距以 Word 为准")
+        self.sim_tip.setStyleSheet("color: gray")
+        self.sim_tip.setWordWrap(True)
+        rl.addWidget(self.sim_tip)
         split.addWidget(right)
         split.setStretchFactor(0, 0)
         split.setStretchFactor(1, 1)
@@ -1295,14 +1296,13 @@ class CssEditorDialog(QDialog):
         self.btn_pdf = QPushButton("导出PDF")
         self.btn_save = QPushButton("保存")
         self.btn_save.setToolTip("保存当前修改到选中的预设文件（出厂默认则走另存）")
-        self.btn_reset = QPushButton("恢复出厂")
-        self.btn_reset.setToolTip("编辑器装载出厂样式（不删预设、不改默认）")
+        self.btn_restore = QPushButton("恢复")
+        self.btn_restore.setToolTip("回到载入时的状态（未修改前）；不碰预设选择与默认设置")
         self.btn_docx.clicked.connect(self._export_docx)
         self.btn_pdf.clicked.connect(self._export_pdf)
         self.btn_save.clicked.connect(lambda _v: self._save_current())
-        self.btn_reset.clicked.connect(self._reset_editor_state)
-        for b in (self.btn_save, self.btn_docx, self.btn_pdf,
-                  self.btn_reset):
+        self.btn_restore.clicked.connect(lambda _v: self._restore_loaded())
+        for b in (self.btn_save, self.btn_restore, self.btn_docx, self.btn_pdf):
             brow.addWidget(b)
         brow.addStretch(1)
         layout.addLayout(brow)
@@ -1396,6 +1396,25 @@ class CssEditorDialog(QDialog):
         if self._is_dirty():
             msg += "（当前未保存修改不在内，请先另存）"
         self.status.setText(msg)
+
+    def _restore_loaded(self):
+        """恢复到载入时的状态（未修改前）：源码页回到 _loaded_block，控件联动；
+        base/预设选择/默认设置都不动。返回是否已恢复（无修改也返回 True）。"""
+        if not self._is_dirty():
+            return True
+        with QSignalBlocker(self._source_edit):
+            self._source_edit.setPlainText(self._loaded_block or "")
+        self._source_err.setText("")
+        values, passthrough, err = split_override_block(
+            self._loaded_block or "")
+        if err:
+            self._source_err.setText(f"CSS 解析失败（预览保持上次）：{err}")
+            return False
+        self._passthrough = passthrough
+        self._touched = _touched_from_values(values)
+        self._sync_controls_from_block(values)
+        self._schedule()
+        return True
 
     def _reset_editor_state(self):
         """回到出厂缓冲（只装载出厂文本；不删预设、不改默认）。"""
