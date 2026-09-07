@@ -1991,7 +1991,9 @@ class CssEditorDialog(QDialog):
             if show_names and para.get("style", "") != prev_style:
                 ncf = QTextCharFormat()
                 ncf.setFontPointSize(8)
-                ncf.setForeground(QColor("#888888"))
+                ncf.setFontWeight(QFont.Bold)
+                ncf.setForeground(QColor("#ffffff"))
+                ncf.setBackground(QColor("#cc6600"))
                 cur.insertText(f"【{STYLE_ROW_LABEL.get(para.get('style', ''), para.get('style', ''))}】", ncf)
             prev_style = para.get("style", "")
             for r in para["runs"]:
