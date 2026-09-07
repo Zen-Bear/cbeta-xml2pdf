@@ -1041,6 +1041,41 @@ class TestCssEditor(unittest.TestCase):
         finally:
             dlg.close()
 
+    def test_div_note_color(self):
+        import pycbeta.gui.css_editor as ce
+        self.assertEqual(
+            ce.div_note_color("div.div-note { color: #666666; }"),
+            "#666666")
+        # 后定义优先（用户覆盖胜出厂）
+        self.assertEqual(
+            ce.div_note_color("div.div-note { color: #666666; }\n"
+                              "div.div-note { color: #999999; }"),
+            "#999999")
+        self.assertEqual(ce.div_note_color("p { color: #000; }"), "")
+
+    def test_note_paras_labeled_ziyi(self):
+        import pycbeta.gui.css_editor as ce
+        dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+        try:
+            gray = {"text": "x", "size": 12.0, "font": "", "bold": False,
+                    "color": "#666666", "super": False, "dim": False}
+            black = dict(gray, color="")
+            spec = {"paras": [
+                {"style": "p", "align": "", "line": None, "runs": [black]},
+                {"style": "p", "align": "", "line": None, "runs": [gray]},
+                {"style": "p", "align": "", "line": None, "runs": [gray]},
+                {"style": "p", "align": "", "line": None, "runs": [black]}],
+                "footnotes": []}
+            dlg.names_box.setChecked(True)
+            dlg._show_spec(spec, {})
+            text = dlg.preview.toPlainText()
+            # 出厂 div.div-note 灰色 → 灰段标【字义】（相邻去重），黑段仍【正文】
+            self.assertEqual(text.count("【字义】"), 1)
+            self.assertEqual(text.count("【正文】"), 2)
+            dlg._loaded_block = dlg._source_edit.toPlainText()
+        finally:
+            dlg.close()
+
     def test_load_shows_inherited_values(self):
         import shutil
         import pycbeta.gui.css_editor as ce

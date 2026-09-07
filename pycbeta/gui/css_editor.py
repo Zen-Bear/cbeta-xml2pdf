@@ -616,7 +616,20 @@ def _para_style(p):
 STYLE_ROW_LABEL = {"title": "书名", "head": "标题", "juan": "卷名",
                    "pin": "品名", "p": "正文", "verse": "偈颂",
                    "footnote": "脚注", "byline": "题署", "author": "作者",
-                   "translator": "译者", "": "正文"}
+                   "translator": "译者", "div-note": "字义", "": "正文"}
+
+
+def div_note_color(css_text):
+    """工作 CSS 里 div.div-note 的颜色（小写 #hex；无则 ""）。
+
+    div 是祖先上下文，DOCX 不保留结构——预览用 run 颜色反推字义段
+    （纯函数，可单测；后定义优先，取最后一个匹配）。
+    """
+    found = re.findall(
+        r"div\.div-note\s*\{[^}]*?color\s*:\s*"
+        r"(#[0-9a-fA-F]{3,8}|[a-zA-Z]+)", css_text or "")
+    last = (found or [""])[-1].strip().lower()
+    return last if last.startswith("#") else ""
 
 
 def _name_label_format():
@@ -2190,7 +2203,9 @@ class CssEditorDialog(QDialog):
         doc = self.preview.document()
         doc.clear()
         cur = QTextCursor(doc)
-        prev_style = None
+        prev_key = None
+        # 字义（div-note）无段落样式，DOCX 只留 run 灰色：颜色全中即推断
+        note_gray = div_note_color(self.work_css()) if show_names else ""
         for para in spec["paras"]:
             fmt = QTextBlockFormat()
             if para["align"] == "center":
@@ -2202,10 +2217,18 @@ class CssEditorDialog(QDialog):
             _block_line_height(fmt, para.get("line"))
             _block_margins(fmt, para.get("margin"))
             cur.setBlockFormat(fmt)
-            if show_names and para.get("style", "") != prev_style:
-                cur.insertText(f"【{STYLE_ROW_LABEL.get(para.get('style', ''), para.get('style', ''))}】",
+            style = para.get("style", "")
+            label_key = style
+            if style in ("p", "") and note_gray:
+                texts = [r for r in para["runs"]
+                         if r.get("text") and not r.get("br")]
+                if texts and all((r.get("color") or "").lower() == note_gray
+                                 for r in texts):
+                    label_key = "div-note"
+            if show_names and label_key != prev_key:
+                cur.insertText(f"【{STYLE_ROW_LABEL.get(label_key, label_key)}】",
                                _name_label_format())
-            prev_style = para.get("style", "")
+            prev_key = label_key
             for r in para["runs"]:
                 if r.get("br"):
                     # 段内换行（偈颂/预排）：新块并重挂本段格式
