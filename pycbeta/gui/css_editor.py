@@ -838,6 +838,39 @@ def missing_families(used, available):
     return out
 
 
+def factory_font_stacks():
+    """出厂 :root 双栏 --font-* 栈去重（保序；纯函数，可单测）→ [栈]。
+
+    左栏下拉"常用栈"选项来源；显示短名、值存完整栈，选不回问题不再有。
+    --font-body（无左栏行）与 --font-latin（纯西文）不进 CJK 下拉。
+    """
+    stacks = []
+    for m in re.finditer(
+            r'(html\[lang=["\']zh-Hans["\']\]|:root)\s*\{([^}]*)\}',
+            factory_css_text(), re.S):
+        for vm in re.finditer(r'(--font-[\w-]+)\s*:\s*([^;{}]+);',
+                               m.group(2)):
+            if vm.group(1) in ("--font-body", "--font-latin"):
+                continue
+            stack = vm.group(2).strip()
+            if stack and stack not in stacks:
+                stacks.append(stack)
+    return stacks
+
+
+def stack_display_names(stacks):
+    """[栈] → [(显示名, 栈)]：显示名取首段名；首段冲突用全栈（防选错）。"""
+    firsts = {}
+    for s in stacks or []:
+        first = s.split(",")[0].strip().strip('"').strip("'")
+        firsts.setdefault(first, []).append(s)
+    out = []
+    for s in stacks or []:
+        first = s.split(",")[0].strip().strip('"').strip("'")
+        out.append((first if len(firsts[first]) == 1 else s, s))
+    return out
+
+
 def _spec_fonts(spec):
     """预览规格用到的全部字体名（正文+注文，保序去重）。"""
     out = []
@@ -1693,17 +1726,18 @@ class CssEditorDialog(QDialog):
             row = QHBoxLayout()
             suffix = _var_suffix(sel)
             font_hant = QComboBox()
-            font_hant.setEditable(True)
+            font_hant.setEditable(False)  # 只从下拉选（防手打 typo）；特殊栈去源码页
             font_hant.setMinimumWidth(150)
-            font_hant.setInsertPolicy(QComboBox.NoInsert)
             font_hans = QComboBox()
-            font_hans.setEditable(True)
+            font_hans.setEditable(False)
             font_hans.setMinimumWidth(150)
-            font_hans.setInsertPolicy(QComboBox.NoInsert)
             if suffix is None:
                 for _box in (font_hant, font_hans):
                     _box.setEnabled(False)
                     _box.setToolTip("该行无字体变量（只调字号/颜色）")
+            else:
+                for _box in (font_hant, font_hans):
+                    _box.setToolTip("下拉选择字体栈；特殊栈去源码页手写")
             size_edit = QLineEdit()
             size_edit.setFixedWidth(80)
             weight = QComboBox()
@@ -1734,13 +1768,9 @@ class CssEditorDialog(QDialog):
             font_hant.currentTextChanged.connect(
                 lambda _v, s=sel: self._on_control_changed(s, "font-family",
                                                           "zh-Hant"))
-            font_hant.activated.connect(
-                lambda _i, b=font_hant: b.lineEdit().setCursorPosition(0))
             font_hans.currentTextChanged.connect(
                 lambda _v, s=sel: self._on_control_changed(s, "font-family",
                                                           "zh-Hans"))
-            font_hans.activated.connect(
-                lambda _i, b=font_hans: b.lineEdit().setCursorPosition(0))
             size_edit.textChanged.connect(
                 lambda _v, s=sel: self._on_control_changed(s, "font-size"))
             weight.currentIndexChanged.connect(
@@ -1775,7 +1805,8 @@ class CssEditorDialog(QDialog):
         ctrls = self._rows[sel]
         if prop == "font-family":
             box = ctrls["font_hant"] if lang != "zh-Hans" else ctrls["font_hans"]
-            return box.currentText().strip()
+            data = box.currentData()
+            return str(data).strip() if data else box.currentText().strip()
         if prop == "font-size":
             return ctrls["size"].text().strip()
         if prop == "font-weight":
@@ -1842,13 +1873,13 @@ class CssEditorDialog(QDialog):
             props = values.get(sel, {})
             suffix = ctrls.get("suffix")
             with QSignalBlocker(ctrls["font_hant"]):
-                ctrls["font_hant"].setCurrentText(
+                self._select_font_value(
+                    ctrls["font_hant"],
                     hant_vars.get("--font-" + suffix, "") if suffix else "")
-                ctrls["font_hant"].lineEdit().setCursorPosition(0)
             with QSignalBlocker(ctrls["font_hans"]):
-                ctrls["font_hans"].setCurrentText(
+                self._select_font_value(
+                    ctrls["font_hans"],
                     hans_vars.get("--font-" + suffix, "") if suffix else "")
-                ctrls["font_hans"].lineEdit().setCursorPosition(0)
             with QSignalBlocker(ctrls["size"]):
                 ctrls["size"].setText(props.get("font-size", ""))
             with QSignalBlocker(ctrls["weight"]):
@@ -1875,17 +1906,53 @@ class CssEditorDialog(QDialog):
         self._on_control_changed(sel, "color")
 
     # ----- 字体分组 -----
+    def _select_font_value(self, box, value):
+        """字体框按栈值选中（短名显示、存完整栈）。
+
+        findData 命中按索引选；未命中（自定义栈）插临时项兜底——
+        当前值恒为可选项，选不回问题不再有；上次临时项先删防堆积。
+        空值回 0 号（"" 占位）。"""
+        value = (value or "").strip()
+        with QSignalBlocker(box):
+            old = box.property("tempStack") or ""
+            if old and old != value:
+                i = box.findText(old)
+                if i >= 0:
+                    box.removeItem(i)
+                box.setProperty("tempStack", "")
+            if not value:
+                box.setCurrentIndex(0)
+                return
+            i = box.findData(value)
+            if i >= 0:
+                box.setCurrentIndex(i)
+                return
+            if box.findText(value) < 0:
+                box.insertItem(1, value, value)
+            box.setProperty("tempStack", value)
+            box.setCurrentIndex(box.findData(value))
+
     def _fill_font_combos(self, fresh=False):
-        """全部字体下拉按 中文buckets/西文三/字库目录 建模；保留当前文本。"""
+        """全部字体下拉建模（不可编辑，只从下拉选；特殊栈去源码页）。
+
+        选项 = ""占位 + 出厂常用栈（短名显示、存完整栈）
+        + 中文buckets/西文/字库单名（名即值）；当前值按栈回选，
+        自定义栈插临时项兜底（重建后仍可选中）。
+        """
         from PySide6.QtGui import QStandardItem, QStandardItemModel
         if fresh:
             clear_qt_alias_cache()  # 重扫后别名表失效
         groups, bundled, _fonts_dir = font_group_model(fresh=fresh)
         order = [g for g, _ks in _CJK_BUCKETS if groups.get(g)] + \
                 (["未分类"] if groups.get("未分类") else [])
+        try:
+            _stacks = stack_display_names(factory_font_stacks())
+        except OSError:
+            _stacks = []
         for _sel, ctrls in self._rows.items():
             for box in (ctrls["font_hant"], ctrls["font_hans"]):
-                cur = box.currentText()
+                cur = box.currentData() or box.currentText()
+                cur = (cur or "").strip()
                 model = QStandardItemModel(box)
 
                 def header(text, _m=model):
@@ -1893,26 +1960,30 @@ class CssEditorDialog(QDialog):
                     it.setEnabled(False)
                     _m.appendRow(it)
 
-                def item(name, _m=model):
-                    it = QStandardItem(name)
-                    it.setData(name, Qt.UserRole)
+                def item(text, data, _m=model):
+                    it = QStandardItem(text)
+                    it.setData(data, Qt.UserRole)
                     _m.appendRow(it)
 
+                item("", "")
+                if _stacks:
+                    header("常用栈")
+                    for text, data in _stacks:
+                        item(text, data)
                 header("中文")
                 for gname in order:
                     header(f"中文·{gname}")
                     for n in sorted(set(groups[gname])):
-                        item(n)
+                        item(n, n)
                 header("西文")
                 for n in _WESTERN_FONTS:
-                    item(n)
+                    item(n, n)
                 header("字库目录（cbeta/fonts）")
                 for _fn, fam in bundled:
-                    item(fam)
+                    item(fam, fam)
                 with QSignalBlocker(box):
                     box.setModel(model)
-                    box.setCurrentText(cur)
-                    box.lineEdit().setCursorPosition(0)
+                self._select_font_value(box, cur)
 
     def _open_fonts_dir(self):
         fonts_dir = os.path.join(REPO_ROOT, "cbeta", "fonts")

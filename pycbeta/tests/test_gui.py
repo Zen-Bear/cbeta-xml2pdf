@@ -605,22 +605,89 @@ class TestCssEditor(unittest.TestCase):
         import pycbeta.gui.css_editor as ce
         dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
         try:
-            dlg._rows["h1.title"]["font_hant"].setCurrentText("HantF")
-            dlg._rows["h1.title"]["font_hans"].setCurrentText("HansF")
-            block = dlg._source_edit.toPlainText()
-            self.assertIn(":root { --font-title: HantF; }", block)
+            # 自定义栈经载入进临时项（仍可选中），写回源码无损
+            block = (":root { --font-title: HantF, serif; }\n"
+                     'html[lang="zh-Hans"] { --font-title: HansF; }\n')
+            dlg._load_block_text(block)
+            box_hant = dlg._rows["h1.title"]["font_hant"]
+            box_hans = dlg._rows["h1.title"]["font_hans"]
+            self.assertEqual(box_hant.currentData(), "HantF, serif")
+            self.assertEqual(box_hans.currentData(), "HansF")
+            out = dlg._source_edit.toPlainText()
+            self.assertIn(":root { --font-title: HantF, serif; }", out)
             self.assertIn('html[lang="zh-Hans"] { --font-title: HansF; }',
-                          block)
+                          out)
             self.assertIn(("h1.title", "font-family", "zh-Hant"),
                           dlg._touched)
             self.assertIn(("h1.title", "font-family", "zh-Hans"),
                           dlg._touched)
-            # 回读联动
-            dlg._load_block_text(block)
-            self.assertEqual(
-                dlg._rows["h1.title"]["font_hant"].currentText(), "HantF")
-            self.assertEqual(
-                dlg._rows["h1.title"]["font_hans"].currentText(), "HansF")
+            dlg._loaded_block = dlg._source_edit.toPlainText()
+        finally:
+            dlg.close()
+
+    def test_font_combo_not_editable(self):
+        import pycbeta.gui.css_editor as ce
+        dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+        try:
+            for sel, row in dlg._rows.items():
+                self.assertFalse(row["font_hant"].isEditable())
+                self.assertFalse(row["font_hans"].isEditable())
+            dlg._loaded_block = dlg._source_edit.toPlainText()
+        finally:
+            dlg.close()
+
+    def test_factory_stack_short_name(self):
+        import pycbeta.gui.css_editor as ce
+        stacks = ce.factory_font_stacks()
+        self.assertIn("新細明體, PMingLiU", stacks)
+        self.assertIn("宋体, SimSun", stacks)
+        self.assertNotIn("Calibri", stacks)  # latin 不进 CJK 下拉
+        self.assertFalse(any("Times New Roman, sans-serif" in s
+                             for s in stacks))  # body 四段栈不进下拉
+        by_stack = dict((s, d)
+                        for d, s in ce.stack_display_names(stacks))
+        # 首段唯一 → 短名显示
+        self.assertEqual(by_stack.get("宋体, SimSun"), "宋体")
+        # body 四段栈排除后新細明體唯一 → 短名
+        self.assertEqual(by_stack.get("新細明體, PMingLiU"), "新細明體")
+        self.assertIn("標楷體, DFKaiShu", stacks)
+        self.assertIn("標楷體, KaiTi, serif", stacks)
+        got = dict((s, d) for d, s in ce.stack_display_names(
+            ["標楷體, DFKaiShu", "標楷體, KaiTi, serif"]))
+        self.assertEqual(got["標楷體, DFKaiShu"], "標楷體, DFKaiShu")
+
+    def test_select_short_name_writes_full_stack(self):
+        import pycbeta.gui.css_editor as ce
+        dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+        try:
+            box = dlg._rows["p"]["font_hans"]
+            i = box.findData("宋体, SimSun")
+            self.assertGreaterEqual(i, 0)  # 出厂栈在选项里
+            box.setCurrentIndex(0)  # 先切走，确保 change 触发
+            box.setCurrentIndex(i)
+            self.assertEqual(box.currentText(), "宋体")  # 框里短名
+            self.assertIn("--font-p: 宋体, SimSun",
+                          dlg._source_edit.toPlainText())  # 存完整栈
+            dlg._loaded_block = dlg._source_edit.toPlainText()
+        finally:
+            dlg.close()
+
+    def test_custom_stack_temp_item_no_pileup(self):
+        import pycbeta.gui.css_editor as ce
+        dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+        try:
+            box = dlg._rows["p"]["font_hant"]
+            n0 = box.count()
+            dlg._load_block_text(":root { --font-p: MyF, serif; }\n")
+            self.assertEqual(box.currentData(), "MyF, serif")
+            self.assertGreaterEqual(box.findData("MyF, serif"), 0)
+            n1 = box.count()
+            # 再换一个自定义栈：旧临时项删、新临时项插，不堆积
+            dlg._load_block_text(":root { --font-p: OtherF; }\n")
+            self.assertEqual(box.currentData(), "OtherF")
+            self.assertLess(box.findText("MyF, serif"), 0)
+            self.assertLessEqual(box.count(), n1)
+            self.assertGreaterEqual(box.count(), n0)
             dlg._loaded_block = dlg._source_edit.toPlainText()
         finally:
             dlg.close()
@@ -844,17 +911,11 @@ class TestCssEditor(unittest.TestCase):
             # 列标题行存在；磅数框收窄
             self.assertEqual(
                 dlg._rows["h1.title"]["size"].maximumWidth(), 80)
-            # 程序写入后光标归0（显示开头）
+            # 出厂栈同步后框里短名、值存完整栈（选得回）
             dlg._sync_controls_from_block(
                 {"h1.title": {"font-family": "宋体, SimSun"}})
-            self.assertEqual(
-                dlg._rows["h1.title"]["font_hant"].lineEdit()
-                .cursorPosition(), 0)
-            # 用户下拉点选后光标同样归0
             box = dlg._rows["h1.title"]["font_hant"]
-            box.lineEdit().setCursorPosition(5)
-            box.activated.emit(box.currentIndex())
-            self.assertEqual(box.lineEdit().cursorPosition(), 0)
+            self.assertGreaterEqual(box.findData("宋体, SimSun"), 0)
             dlg._loaded_block = dlg._source_edit.toPlainText()
         finally:
             dlg.close()
@@ -1146,9 +1207,17 @@ class TestCssEditor(unittest.TestCase):
         dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
         try:
             # 改简栏字体 → 预览自动切简（否则看着繁栏以为没生效）
-            dlg._rows["h1.title"]["font_hans"].setCurrentText("SimSun")
+            box_hans = dlg._rows["h1.title"]["font_hans"]
+            i = box_hans.findData("宋体, SimSun")
+            self.assertGreaterEqual(i, 0)
+            box_hans.setCurrentIndex(0)
+            box_hans.setCurrentIndex(i)
             self.assertEqual(dlg._preview_lang(), "zh-Hans")
-            dlg._rows["h1.title"]["font_hant"].setCurrentText("PMingLiU")
+            box_hant = dlg._rows["h1.title"]["font_hant"]
+            j = box_hant.findData("新細明體, PMingLiU")
+            self.assertGreaterEqual(j, 0)
+            box_hant.setCurrentIndex(0)
+            box_hant.setCurrentIndex(j)
             self.assertEqual(dlg._preview_lang(), "zh-Hant")
             dlg._loaded_block = dlg._source_edit.toPlainText()
         finally:
