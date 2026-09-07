@@ -833,6 +833,46 @@ class _ColorPopup(QDialog):
         return self._selected
 
 
+class PreviewReportDialog(QDialog):
+    """预览检查窗（modeless）：更新信息 + 字体可用性，缺字红色加粗（纠错用）。"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("预览检查")
+        self.resize(560, 420)
+        layout = QVBoxLayout(self)
+        self.view = QTextEdit()
+        self.view.setReadOnly(True)
+        layout.addWidget(self.view)
+
+    def update_report(self, info):
+        import html as _html
+        parts = [f"<h3>预览检查（{ _html.escape(info.get('time', '')) }）</h3>"]
+        parts.append(f"<p>基于：{_html.escape(info.get('base', ''))}<br>"
+                     f"样张：{_html.escape(info.get('sample', ''))}<br>"
+                     f"简体：{'开' if info.get('t2s') else '关'}</p>")
+        fonts = info.get("fonts") or []
+        if fonts:
+            rows = []
+            for name, ok in fonts:
+                if ok:
+                    rows.append(f"<li>{_html.escape(name)} ✓</li>")
+                else:
+                    rows.append(f"<li><b><font color='red'>{_html.escape(name)}"
+                                " ✗ 无可用字形（预览替代显示，导出 DOCX 不受影响）"
+                                "</font></b></li>")
+            parts.append("<p>字体：</p><ul>" + "".join(rows) + "</ul>")
+        if info.get("css_error"):
+            parts.append(f"<p><b><font color='red'>CSS 错误："
+                         f"{_html.escape(info['css_error'])}</font></b></p>")
+        if info.get("error"):
+            parts.append(f"<p><b><font color='red'>渲染失败："
+                         f"{_html.escape(info['error'])}</font></b></p>")
+        if not fonts and not info.get("css_error") and not info.get("error"):
+            parts.append("<p>暂无检查项（等一次预览完成）。</p>")
+        self.view.setHtml("".join(parts))
+
+
 _HANS_BLOCK = 'html[lang="zh-Hans"]'
 
 
@@ -1042,6 +1082,9 @@ class CssEditorDialog(QDialog):
         self._need_refresh = False   # 渲染中又有改动时补一轮
         self._passthrough = ""       # 覆盖块中控件不认识的规则原文
         self._touched = set()        # 用户碰过的 (selector, prop)；只输出这些
+        self._preset_path = None       # 当前缓冲对应的预设文件（保存目标）；出厂/新建为 None
+        self._report = None            # 预览检查信息（_push_report 更新）
+        self._report_dlg = None          # 检查窗（打开检查时懒建）
         self._thread = None
         self._rows = {}              # selector -> 控件组
         self._build(sample_xml or default_sample())
@@ -1078,10 +1121,6 @@ class CssEditorDialog(QDialog):
         browse.clicked.connect(self._browse_sample)
         srow.addWidget(self.sample_edit, 1)
         srow.addWidget(browse)
-        self.t2s_box = QCheckBox("简体")
-        self.t2s_box.setToolTip("OpenCC t2s 简体预览/导出（自动用简体字库）")
-        self.t2s_box.toggled.connect(lambda _v: self._on_t2s_toggled())
-        srow.addWidget(self.t2s_box)
         layout.addLayout(srow)
         # 左右分栏
         split = QSplitter(Qt.Horizontal)
@@ -1093,6 +1132,10 @@ class CssEditorDialog(QDialog):
         tip.setStyleSheet("color: gray")
         trow = QHBoxLayout()
         trow.addWidget(tip, 1)
+        self.t2s_box = QCheckBox("繁转简")
+        self.t2s_box.setToolTip("OpenCC t2s 简体预览/导出（自动用简体字库）")
+        self.t2s_box.toggled.connect(lambda _v: self._on_t2s_toggled())
+        trow.addWidget(self.t2s_box)
         trow.addWidget(QLabel("预览字库"))
         self.preview_lang = QComboBox()
         self.preview_lang.addItem("繁体", "zh-Hant")
@@ -1115,12 +1158,19 @@ class CssEditorDialog(QDialog):
         brow = QHBoxLayout()
         self.btn_docx = QPushButton("保存DOCX")
         self.btn_pdf = QPushButton("导出PDF")
+        self.btn_save = QPushButton("保存")
+        self.btn_save.setToolTip("保存当前修改到选中的预设文件（出厂默认则走另存）")
+        self.btn_check = QPushButton("检查")
+        self.btn_check.setToolTip("打开预览检查窗（更新信息 + 缺字体醒目提示）")
         self.btn_reset = QPushButton("恢复出厂")
         self.btn_reset.setToolTip("编辑器装载出厂样式（不删预设、不改默认）")
         self.btn_docx.clicked.connect(self._export_docx)
         self.btn_pdf.clicked.connect(self._export_pdf)
-        self.btn_reset.clicked.connect(self._reset_factory)
-        for b in (self.btn_docx, self.btn_pdf, self.btn_reset):
+        self.btn_save.clicked.connect(lambda _v: self._save_current())
+        self.btn_check.clicked.connect(self._open_report)
+        self.btn_reset.clicked.connect(self._reset_editor_state)
+        for b in (self.btn_save, self.btn_docx, self.btn_pdf, self.btn_check,
+                  self.btn_reset):
             brow.addWidget(b)
         brow.addStretch(1)
         layout.addLayout(brow)
@@ -1182,9 +1232,15 @@ class CssEditorDialog(QDialog):
         except OSError as exc:
             QMessageBox.warning(self, "载入失败", str(exc))
             return
-        self._load_block_text(strip_factory_prefix(text))
+        if self._load_block_text(strip_factory_prefix(text)):
+            self._preset_path = path
 
     def _on_preset_chosen(self, _index):
+        if not self._confirm_discard():
+            self.preset_box.refresh(current_theme_value())
+            if self._preset_path:
+                self.preset_box.select_path(self._preset_path)
+            return
         value = self.preset_box.selected_value()
         path = self.preset_box.selected_path()
         if value == "pdf_docx.css" or not path:
@@ -1211,7 +1267,10 @@ class CssEditorDialog(QDialog):
 
     def _reset_editor_state(self):
         """回到出厂缓冲（只装载出厂文本；不删预设、不改默认）。"""
+        if not self._confirm_discard():
+            return
         self._base_css = factory_css_text()
+        self._preset_path = None
         self._passthrough = ""
         self._touched = set()
         with QSignalBlocker(self._source_edit):
@@ -1245,7 +1304,51 @@ class CssEditorDialog(QDialog):
             return
         self.preset_box.refresh(current_theme_value())
         self.preset_box.select_path(path)
+        self._preset_path = path
+        self._loaded_block = self._source_edit.toPlainText()
         self.status.setText(f"预设已存：{path}")
+
+    def _save_current(self):
+        """保存当前修改：有预设文件则直接写回；出厂默认/新建则走另存。返回是否已保存。"""
+        if self._source_err.text().strip():
+            QMessageBox.warning(self, "保存失败", "源码页有解析错误，先修好再存。")
+            return False
+        if not self._preset_path:
+            self._save_preset_as()
+            return not self._is_dirty()
+        try:
+            with open(self._preset_path, "w", encoding="utf-8") as f:
+                f.write(self._source_edit.toPlainText())
+        except OSError as exc:
+            QMessageBox.warning(self, "保存失败", str(exc))
+            return False
+        self._loaded_block = self._source_edit.toPlainText()
+        self.status.setText(f"已保存：{self._preset_path}")
+        return True
+
+    def _ask_save_discard_cancel(self):
+        """未保存修改的三选一（纯交互，可单测 mock）；返回 save/discard/cancel。"""
+        box = QMessageBox(self)
+        box.setWindowTitle("未保存的修改")
+        box.setText("当前样式有未保存的修改，怎么办？")
+        save_btn = box.addButton("保存", QMessageBox.AcceptRole)
+        box.addButton("不保存", QMessageBox.DestructiveRole)
+        box.addButton("取消", QMessageBox.RejectRole)
+        box.exec()
+        if box.clickedButton() == save_btn:
+            return "save"
+        return "cancel" if box.result() == QMessageBox.Rejected else "discard"
+
+    def _confirm_discard(self):
+        """无修改返回 True；有修改弹三选一。保存失败/取消返回 False。"""
+        if not self._is_dirty():
+            return True
+        choice = self._ask_save_discard_cancel()
+        if choice == "discard":
+            return True
+        if choice == "save":
+            return self._save_current()
+        return False
 
     def _delete_preset(self):
         path = self.preset_box.selected_path()
@@ -1285,17 +1388,26 @@ class CssEditorDialog(QDialog):
         cv.addLayout(frow)
         form = QFormLayout()
         cv.addLayout(form)
+        # 列标题行（替代各输入框的占位提示）
+        chead = QHBoxLayout()
+        for text, stretch, width in (("繁字体", 1, 0), ("简字体", 1, 0),
+                                     ("字号", 0, 80), ("粗细", 0, 80),
+                                     ("颜色", 0, 64)):
+            lab = QLabel(f"<b>{text}</b>")
+            lab.setStyleSheet("color: gray")
+            if width:
+                lab.setFixedWidth(width)
+            chead.addWidget(lab, stretch)
+        form.addRow("", chead)
         for sel, label in EDITABLE_ROWS:
             row = QHBoxLayout()
             suffix = _var_suffix(sel)
             font_hant = QComboBox()
             font_hant.setEditable(True)
-            font_hant.setPlaceholderText("繁字体")
             font_hant.setMinimumWidth(150)
             font_hant.setInsertPolicy(QComboBox.NoInsert)
             font_hans = QComboBox()
             font_hans.setEditable(True)
-            font_hans.setPlaceholderText("简字体")
             font_hans.setMinimumWidth(150)
             font_hans.setInsertPolicy(QComboBox.NoInsert)
             if suffix is None:
@@ -1303,8 +1415,7 @@ class CssEditorDialog(QDialog):
                     _box.setEnabled(False)
                     _box.setToolTip("该行无字体变量（只调字号/颜色）")
             size_edit = QLineEdit()
-            size_edit.setPlaceholderText("如 20pt / 0.75em")
-            size_edit.setFixedWidth(110)
+            size_edit.setFixedWidth(80)
             weight = QComboBox()
             for wlabel, data in WEIGHT_ITEMS:
                 weight.addItem(wlabel, data)
@@ -1333,9 +1444,13 @@ class CssEditorDialog(QDialog):
             font_hant.currentTextChanged.connect(
                 lambda _v, s=sel: self._on_control_changed(s, "font-family",
                                                           "zh-Hant"))
+            font_hant.activated.connect(
+                lambda _i, b=font_hant: b.lineEdit().setCursorPosition(0))
             font_hans.currentTextChanged.connect(
                 lambda _v, s=sel: self._on_control_changed(s, "font-family",
                                                           "zh-Hans"))
+            font_hans.activated.connect(
+                lambda _i, b=font_hans: b.lineEdit().setCursorPosition(0))
             size_edit.textChanged.connect(
                 lambda _v, s=sel: self._on_control_changed(s, "font-size"))
             weight.currentIndexChanged.connect(
@@ -1439,9 +1554,11 @@ class CssEditorDialog(QDialog):
             with QSignalBlocker(ctrls["font_hant"]):
                 ctrls["font_hant"].setCurrentText(
                     hant_vars.get("--font-" + suffix, "") if suffix else "")
+                ctrls["font_hant"].lineEdit().setCursorPosition(0)
             with QSignalBlocker(ctrls["font_hans"]):
                 ctrls["font_hans"].setCurrentText(
                     hans_vars.get("--font-" + suffix, "") if suffix else "")
+                ctrls["font_hans"].lineEdit().setCursorPosition(0)
             with QSignalBlocker(ctrls["size"]):
                 ctrls["size"].setText(props.get("font-size", ""))
             with QSignalBlocker(ctrls["weight"]):
@@ -1505,6 +1622,7 @@ class CssEditorDialog(QDialog):
                 with QSignalBlocker(box):
                     box.setModel(model)
                     box.setCurrentText(cur)
+                    box.lineEdit().setCursorPosition(0)
 
     def _open_fonts_dir(self):
         fonts_dir = os.path.join(REPO_ROOT, "cbeta", "fonts")
@@ -1594,14 +1712,44 @@ class CssEditorDialog(QDialog):
                           bookmarks=False).render_work(work, out, "preview.docx")
         return fn if isinstance(fn, str) else fn[0]
 
+    def _report_info(self, error=None):
+        """当前预览检查信息（纯数据，可单测）；字体可用性经别名判定。"""
+        import datetime
+        aliases = qt_aliases()
+        used = _spec_fonts(getattr(self, "_last_spec", None) or {"paras": []})
+        fonts = [(f, bool(resolve_qt_family(f, aliases))) for f in used]
+        return {"time": datetime.datetime.now().strftime("%H:%M:%S"),
+                "base": getattr(self, "_base_label", ""),
+                "sample": self.sample_edit.text().strip(),
+                "t2s": self.t2s_box.isChecked(),
+                "fonts": fonts,
+                "css_error": self._source_err.text().strip() or "",
+                "error": error or ""}
+
+    def _push_report(self, error=None):
+        self._report = self._report_info(error)
+        if self._report_dlg is not None:
+            self._report_dlg.update_report(self._report)
+
+    def _open_report(self):
+        if self._report_dlg is None:
+            self._report_dlg = PreviewReportDialog(self)
+        self._report_dlg.update_report(
+            getattr(self, "_report", None) or self._report_info())
+        self._report_dlg.show()
+        self._report_dlg.raise_()
+        self._report_dlg.activateWindow()
+
     def _on_rendered(self, docx_path):
         import datetime
         try:
             spec = docx_spec(docx_path)
         except Exception as exc:  # noqa: BLE001
             self.status.setText(f"预览解析失败：{exc}")
+            self._push_report(f"预览解析失败：{exc}")
             return
         self._last_docx = docx_path
+        self._last_spec = spec
         aliases = qt_aliases()
         self._show_spec(spec, aliases)
         now = datetime.datetime.now().strftime("%H:%M:%S")
@@ -1612,12 +1760,14 @@ class CssEditorDialog(QDialog):
             msg += (f"（{'、'.join(missing[:6])}无可用字形，替代显示；"
                     "导出 DOCX 不受影响）")
         self.status.setText(msg)
+        self._push_report()
         if self._need_refresh:
             self._need_refresh = False
             QTimer.singleShot(0, self.refresh_preview)
 
     def _on_render_failed(self, msg):
         self.status.setText(f"重渲失败：{msg}")
+        self._push_report(msg)
         if self._need_refresh:
             self._need_refresh = False
             QTimer.singleShot(0, self.refresh_preview)
@@ -1740,22 +1890,10 @@ class CssEditorDialog(QDialog):
             QApplication.restoreOverrideCursor()
         self.status.setText(f"PDF 已导出：{path}")
 
-    def _reset_factory(self):
-        """恢复出厂缓冲：装载出厂文本（不删预设、不改默认）。"""
-        self._base_css = factory_css_text()
-        self._passthrough = ""
-        self._touched = set()
-        self._loaded_block = ""
-        with QSignalBlocker(self._source_edit):
-            self._source_edit.setPlainText("")
-        self._source_err.setText("")
-        factory_values, _, _ = split_override_block(self._base_css)
-        self._sync_controls_from_block(factory_values)
-        self.preset_box.refresh("pdf_docx.css")
-        self.status.setText("基于：内置出厂")
-        self.refresh_preview()
-
     def closeEvent(self, event):
+        if not self._confirm_discard():
+            event.ignore()
+            return
         try:
             if self._thread is not None and self._thread.isRunning():
                 self._thread.wait(2000)

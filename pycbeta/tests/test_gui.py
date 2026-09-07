@@ -621,6 +621,7 @@ class TestCssEditor(unittest.TestCase):
                 dlg._rows["h1.title"]["font_hant"].currentText(), "HantF")
             self.assertEqual(
                 dlg._rows["h1.title"]["font_hans"].currentText(), "HansF")
+            dlg._loaded_block = dlg._source_edit.toPlainText()
         finally:
             dlg.close()
 
@@ -772,6 +773,94 @@ class TestCssEditor(unittest.TestCase):
         finally:
             dlg.close()
 
+    def test_editor_save_and_discard_prompt(self):
+        import shutil
+        import unittest.mock as mock
+        import pycbeta.gui.css_editor as ce
+        root = tempfile.mkdtemp()
+        try:
+            fn = os.path.join(root, "mine.css")
+            with open(fn, "w", encoding="utf-8") as f:
+                f.write("/* base */\n")
+            dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+            try:
+                # 干净时直接放行，不弹窗
+                self.assertTrue(dlg._confirm_discard())
+                # 载入预设后改动 → 脏
+                dlg._load_preset_path(fn)
+                self.assertFalse(dlg._is_dirty())
+                dlg._rows["h1.title"]["size"].setText("40pt")
+                self.assertTrue(dlg._is_dirty())
+                # 保存写回文件并变干净
+                self.assertTrue(dlg._save_current())
+                self.assertFalse(dlg._is_dirty())
+                with open(fn, encoding="utf-8") as f:
+                    self.assertIn("font-size: 40pt", f.read())
+                # 脏 + 选取消 → 不放行
+                dlg._rows["h1.title"]["size"].setText("41pt")
+                with mock.patch.object(
+                        dlg, "_ask_save_discard_cancel",
+                        return_value="cancel"):
+                    self.assertFalse(dlg._confirm_discard())
+                # 脏 + 选不保存 → 放行
+                with mock.patch.object(
+                        dlg, "_ask_save_discard_cancel",
+                        return_value="discard"):
+                    self.assertTrue(dlg._confirm_discard())
+                # 保存后变干净，关闭不再弹窗
+                self.assertTrue(dlg._save_current())
+                self.assertFalse(dlg._is_dirty())
+            finally:
+                dlg.close()
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+    def test_report_dialog_highlights_missing(self):
+        import pycbeta.gui.css_editor as ce
+        from pycbeta.gui.css_editor import PreviewReportDialog
+        from PySide6.QtWidgets import QApplication
+        QApplication.instance() or QApplication([])
+        w = PreviewReportDialog()
+        try:
+            w.update_report({"time": "t", "base": "b", "sample": "s",
+                             "t2s": True, "fonts": [("A", True), ("B", False)],
+                             "css_error": "", "error": ""})
+            html = w.view.toHtml()
+            self.assertIn("B", html)
+            self.assertIn("#ff0000", html)  # 缺字体红色醒目（Qt 归一化 red）
+        finally:
+            w.close()
+
+    def test_control_header_and_widths(self):
+        import pycbeta.gui.css_editor as ce
+        dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+        try:
+            # 列标题行存在；磅数框收窄
+            self.assertEqual(
+                dlg._rows["h1.title"]["size"].maximumWidth(), 80)
+            # 程序写入后光标归0（显示开头）
+            dlg._sync_controls_from_block(
+                {"h1.title": {"font-family": "宋体, SimSun"}})
+            self.assertEqual(
+                dlg._rows["h1.title"]["font_hant"].lineEdit()
+                .cursorPosition(), 0)
+            # 用户下拉点选后光标同样归0
+            box = dlg._rows["h1.title"]["font_hant"]
+            box.lineEdit().setCursorPosition(5)
+            box.activated.emit(box.currentIndex())
+            self.assertEqual(box.lineEdit().cursorPosition(), 0)
+            dlg._loaded_block = dlg._source_edit.toPlainText()
+        finally:
+            dlg.close()
+
+    def test_t2s_moved_to_preview(self):
+        import pycbeta.gui.css_editor as ce
+        dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+        try:
+            self.assertEqual(dlg.t2s_box.text(), "繁转简")
+        finally:
+            dlg.close()
+
     def test_qt_alias_bridges_localized_names(self):
         import pycbeta.gui.css_editor as ce
         rows = [["ZhaohuaMinB", "朝華見出明朝B", "朝华标题B",
@@ -831,6 +920,7 @@ class TestCssEditor(unittest.TestCase):
             self.assertEqual(dlg._preview_lang(), "zh-Hans")
             dlg._rows["h1.title"]["font_hant"].setCurrentText("PMingLiU")
             self.assertEqual(dlg._preview_lang(), "zh-Hant")
+            dlg._loaded_block = dlg._source_edit.toPlainText()
         finally:
             dlg.close()
 
@@ -1132,6 +1222,7 @@ class TestCssEditor(unittest.TestCase):
             dlg._rows["h1.title"]["size"].setText("34pt")
             self.assertIn("h1.title { font-size: 34pt; }",
                           dlg._source_edit.toPlainText())
+            dlg._loaded_block = dlg._source_edit.toPlainText()
         finally:
             dlg.close()
 
