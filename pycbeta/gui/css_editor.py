@@ -1211,6 +1211,7 @@ class CssEditorDialog(QDialog):
         self._need_refresh = False   # 渲染中又有改动时补一轮
         self._passthrough = ""       # 覆盖块中控件不认识的规则原文
         self._touched = set()        # 用户碰过的 (selector, prop)；只输出这些
+        self._status_linked = False    # 状态行 linkActivated 是否已连接
         self._preset_path = None       # 当前缓冲对应的预设文件（保存目标）；出厂/新建为 None
         self._report = None            # 预览检查信息（_push_report 更新）
         self._last_gaps = {}             # 字形覆盖缺口 {字体: [码位]}（纠错用）
@@ -1888,13 +1889,14 @@ class CssEditorDialog(QDialog):
     def _set_status(self, text, issues=0, tip=""):
         """状态行：平时只显示正文；有问题追加可点击 ⚠（点开检查窗）。
 
-        issues: 问题数；tip: 悬停摘要。
+        issues: 问题数；tip: 悬停摘要。连接状态走 _status_linked
+        显式跟踪（裸 disconnect 无连接时打 RuntimeWarning）。
         """
         if issues:
-            try:
-                self.status.linkActivated.disconnect()
-            except Exception:  # noqa: BLE001 —— 首次尚无连接
-                pass
+            if not self._status_linked:
+                self.status.linkActivated.connect(
+                    lambda _u: self._open_report())
+                self._status_linked = True
             self.status.setTextFormat(Qt.RichText)
             self.status.setText(
                 f'{text} <a href="#" style="color:red">⚠{issues}</a>')
@@ -1902,12 +1904,10 @@ class CssEditorDialog(QDialog):
             self.status.setOpenExternalLinks(False)
             self.status.setTextInteractionFlags(Qt.TextBrowserInteraction)
             self.status.setCursor(Qt.PointingHandCursor)
-            self.status.linkActivated.connect(lambda _u: self._open_report())
         else:
-            try:
+            if self._status_linked:
                 self.status.linkActivated.disconnect()
-            except Exception:  # noqa: BLE001
-                pass
+                self._status_linked = False
             self.status.setTextFormat(Qt.PlainText)
             self.status.setText(text)
             self.status.setToolTip("")

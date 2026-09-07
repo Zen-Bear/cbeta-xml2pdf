@@ -875,12 +875,21 @@ class TestCssEditor(unittest.TestCase):
             self.assertFalse(hasattr(dlg, "btn_check"))  # 检查按钮已删
             dlg._set_status("预览已更新 00:00:00")
             self.assertEqual(dlg.status.text(), "预览已更新 00:00:00")
+            self.assertFalse(dlg._status_linked)
             dlg._set_status("预览已更新 00:00:00", 2, "缺A；缺B")
             self.assertIn("⚠2", dlg.status.text())
             self.assertEqual(dlg.status.toolTip(), "缺A；缺B")
+            self.assertTrue(dlg._status_linked)
             with mock.patch.object(dlg, "_open_report") as m:
                 dlg.status.linkActivated.emit("#")
                 m.assert_called_once_with()
+            import warnings
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")
+                dlg._set_status("预览已更新 00:00:01")  # 断开无警告
+                dlg._set_status("预览已更新 00:00:02", 1, "x")
+                dlg._set_status("预览已更新 00:00:03", 1, "x")  # 重复不断不连
+            self.assertTrue(dlg._status_linked)
         finally:
             dlg.close()
 

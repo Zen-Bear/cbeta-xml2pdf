@@ -139,8 +139,14 @@ _STYLED_PARAS = ("title", "head", "juan", "pin", "p", "verse", "footnote", "byli
                  "author", "translator")
 
 # 缺字回退链（render-time 按字 fallback，保证无 tofu；与预览 PREVIEW_FALLBACKS 对应。
-# SimSun 在前：Ext-A~G 覆盖最全；原字体文件缺失时不验证、保持原样。）
-RENDER_FALLBACKS = ("SimSun", "PMingLiU", "Microsoft YaHei")
+# 按渲染语言分栏（gaiji_lang）：繁体优先明体、简体优先宋体；SimSunExtB 管 Ext-B 及以后；
+# CBETA Supplement 管 Ext C-G 与私用区；原字体文件缺失时不验证、保持原样。）
+RENDER_FALLBACKS = {
+    "zh-Hant": ("PMingLiU", "SimSun", "SimSunExtB", "CBETA Supplement",
+                "Microsoft YaHei"),
+    "zh-Hans": ("SimSun", "SimSunExtB", "PMingLiU", "CBETA Supplement",
+                "Microsoft YaHei"),
+}
 _EASTASIA_RE = re.compile(r'w:eastAsia="([^"]+)"')
 
 
@@ -309,8 +315,10 @@ class DocxRenderer:
         return cmap
 
     def _fallback_for(self, family, ch):
-        """某字在主字体缺字形时的回退字体（链内首个覆盖者）；无则 None（真 tofu）。"""
-        for fb in RENDER_FALLBACKS:
+        """某字在主字体缺字形时的回退字体（本语言链内首个覆盖者）；
+        无则 None（真 tofu）。"""
+        chain = RENDER_FALLBACKS.get(self.gaiji_lang) or RENDER_FALLBACKS["zh-Hant"]
+        for fb in chain:
             if fb == family:
                 continue
             cmap = self._fallback_cmap(fb)

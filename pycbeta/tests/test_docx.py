@@ -431,6 +431,27 @@ class TestRenderFallback(unittest.TestCase):
                             "PMingLiU": "/pm.ttf"})
         self.assertEqual(r._fallback_for("Kai", "䏶"), "SimSun")
 
+    def test_fallback_hant_prefers_ming(self):
+        import unittest.mock as mock
+        m1 = mock.patch("pycbeta.fonts.locator")
+        m2 = mock.patch("pycbeta.fonts.font_cmap")
+        ml = m1.start()
+        mc = m2.start()
+        self.addCleanup(m1.stop)
+        self.addCleanup(m2.stop)
+        ml.return_value.path.side_effect = {
+            "Kai": "/kai.ttf", "SimSun": "/song.ttf",
+            "PMingLiU": "/pm.ttf"}.get
+        mc.side_effect = lambda p: {
+            "/kai.ttf": frozenset({0x41}),
+            "/song.ttf": frozenset({0x41, 0x43F6}),
+            "/pm.ttf": frozenset({0x41, 0x43F6}),
+        }.get(p, frozenset())
+        rh = DocxRenderer()  # 默认 zh-Hant
+        self.assertEqual(rh._fallback_for("Kai", "䏶"), "PMingLiU")
+        rs = DocxRenderer(gaiji_lang="zh-Hans")
+        self.assertEqual(rs._fallback_for("Kai", "䏶"), "SimSun")
+
     def test_verse_end_to_end(self):
         import tempfile
         import zipfile
