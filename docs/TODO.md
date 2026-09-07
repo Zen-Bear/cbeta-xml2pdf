@@ -4,6 +4,7 @@
 - [x] **已完成 render-time 按字回退**（2026-09-06 用户报 標楷體 U+43F6 预览/Word 双 tofu）：`RENDER_FALLBACKS=(SimSun,PMingLiU,微软雅黑)`，`_fb_emit` 按 cmap 查覆盖、缺字拆 run（只换 eastAsia）；无文件不断言保持原样；真全缺（如悉昙 PUA）保持 tofu + 预览点名。T0672 对账文本一致；单测 TestRenderFallback 6 项；全量 302 OK，verify 8/0
   - 追补（2026-09-06）：回退链分繁简（Hant 首选 PMingLiU，Hans 首选 SimSun；跟 gaiji_lang；含 SimSunExtB/CBETA Supplement）；`output.docx.gaijiFonts` 未动（删的只是顶层 font_sets）；`linkActivated` 改 flag 跟踪消 RuntimeWarning；Ranjana.ttf/Siddam.ttf 实测 0/58 样本 PUA（纯装饰 CJK，不接线）
   - RJ 悉昙接线（2026-09-06）：官方 docx 实锤 `eastAsia="Ranjana"` + rjchar 常规字（不用 PUA）；parser 收 `rjchar`，`_resolve_gaiji` RJ 优先，`_ranjana_font_for` 按覆盖选字体（Ranjana→Siddam），无则主题字体直显（可读）；sample plane-16 PUA 清零，101 Ranjana run；单测 TestRanjana 5 项；全量 308 OK，verify 8/0
+  - 回退链/siddhamFonts 进 config（2026-09-06）：`output.docx.fallbackFonts{zh-Hant,zh-Hans}`（替代硬编码，微软雅黑垫底）+ `output.docx.siddhamFonts`（缺省 ["Ranjana","Siddam"]）；`cbeta/fonts/README.md` 补悉昙节；单测 311 OK，verify 8/0
 
 - [ ] **P1 高** GUI 链路 B（设计文档已完成：`docs/GUI设计.md`（选项卡面板 + 佛典編號列表输入/自动下载）；可复用模块调用见 `docs/第三方调用说明.md` §6.1）
   - 目录清理执行（2026-09-04）：git 首提交 3168e76（安全网，.gitignore 覆盖 out*/__pycache__/用户槽）→ 缺字库搬家 ruby-cbeta→cbeta/data（gaiji.py 改道，三处文档引用同步；data 与原逐字节一致；names.py 出处注释保留）→ 删 ruby-cbeta 整目录/engines僵尸config/out产物/test/out*/__pycache__/空pycbeta/fonts → docs 三 txt 转 md（无交叉引用）→ 清 tmp 调试残留；验证：缺字冒烟（33893 条，𤬪正常解析）+ 单测 217 OK + T0349 端到端；第二提交 3eb588b；1.75GB 两 zip 用户已移走冷盘（从未入库，工作区干净，无需提交）

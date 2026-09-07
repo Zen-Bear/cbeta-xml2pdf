@@ -119,7 +119,17 @@
                                    //   繁体用补充字形，简体优先 SimSunExtB、缺失再补补充字形；全缺则写首项（Word 再回退）
         "zh-Hant": ["CBETA Supplement"],
         "zh-Hans": ["SimSunExtB", "CBETA Supplement"]
-      }
+      },
+      "fallbackFonts": {           //   按字回退链（render-time 缺字拆 run，缺字不出 tofu）：按序取首个覆盖该字者；
+                                   //   繁优先明体、简优先宋体；SimSunExtB 管 Ext-B 及以后；补充字形管 Ext C-G 与私用区；
+                                   //   微软雅黑垫底（系统必带最后兜底）；空/缺省走内置默认
+        "zh-Hant": ["PMingLiU", "SimSun", "SimSunExtB", "CBETA Supplement",
+                    "Microsoft YaHei"],
+        "zh-Hans": ["SimSun", "SimSunExtB", "PMingLiU", "CBETA Supplement",
+                    "Microsoft YaHei"]
+      },
+      "siddhamFonts": ["Ranjana", "Siddam"]  //   悉昙字体（RJ 码按覆盖选用，官方同款 eastAsia="Ranjana"）：
+                                             //   字体文件放 cbeta/fonts/；未装则主题字体直显 rjchar（可读非悉昙体）
     },
     "pagination": {                // [docx] 智能分页（总闸 enabled + 6 项子规则全可配置）
       "enabled": true,            //   总闸：true=启用智能分页（出厂默认开）；false=以下 6 项全部失活，保持自然排版

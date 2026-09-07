@@ -23,5 +23,25 @@
 
 ---
 
+# 悉曇字型（Ranjana / Siddam，RJ 缺字用）
+
+## 用途
+
+`Ranjana.ttf`、`Siddam.ttf` 为悉昙体装饰中文字型：同一码位（如 歾 U+6B7E）
+渲染为悉昙种子字形。本管线 RJ 缺字（`<g ref="#RJ-…">`）解析为 charDecl
+`rjchar` 常规字后，按 `config output.docx.siddhamFonts`（缺省
+`["Ranjana","Siddam"]`）取本机已装且覆盖该字者写入 `w:rFonts`
+（官方 docx 同款 `eastAsia="Ranjana"`）。
+
+## 安装与行为
+
+- 把 TTF 拷入本目录或系统字体目录并右键安装（本机已装即用，无需配置）。
+- 未装：主题字体直显 rjchar（可读的常规汉字，只是非悉昙体）。
+- 注意：二者**不含** CBETA 私用区（`U+10Cxx` 悉昙 PUA，如 U+10CCBA）
+  与标准悉昙区（`U+11580`）字形；该区字符暂无可用字体，
+  预览/Word 均为 tofu（检查窗点名），等 CBETA 出含 PUA 的悉昙字库。
+
+---
+
 CBETA (Comprehensive Buddhist Electronic Text Archive Foundation)  
 http://www.cbeta.org

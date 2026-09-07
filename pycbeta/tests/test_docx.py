@@ -508,6 +508,52 @@ class TestRenderFallback(unittest.TestCase):
         rs = DocxRenderer(gaiji_lang="zh-Hans")
         self.assertEqual(rs._fallback_for("Kai", "䏶"), "SimSun")
 
+    def test_config_fallback_keys(self):
+        from pycbeta.theme import load_presets
+        import os as _os
+        cfg = load_presets(_os.path.join(
+            _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
+            "config.json")).get("output", {}).get("docx", {})
+        self.assertEqual(cfg["fallbackFonts"]["zh-Hant"][0], "PMingLiU")
+        self.assertEqual(cfg["fallbackFonts"]["zh-Hans"][0], "SimSun")
+        self.assertEqual(cfg["fallbackFonts"]["zh-Hant"][-1],
+                         "Microsoft YaHei")
+        self.assertEqual(cfg["siddhamFonts"], ["Ranjana", "Siddam"])
+
+    def test_custom_fallback_chain(self):
+        import unittest.mock as mock
+        m1 = mock.patch("pycbeta.fonts.locator")
+        m2 = mock.patch("pycbeta.fonts.font_cmap")
+        ml = m1.start()
+        mc = m2.start()
+        self.addCleanup(m1.stop)
+        self.addCleanup(m2.stop)
+        ml.return_value.path.side_effect = {
+            "Kai": "/kai.ttf", "OnlyFb": "/only.ttf"}.get
+        mc.side_effect = lambda p: {
+            "/kai.ttf": frozenset({0x41}),
+            "/only.ttf": frozenset({0x41, 0x43F6}),
+        }.get(p, frozenset())
+        r = DocxRenderer(fallback_fonts={"zh-Hant": ["OnlyFb"]})
+        self.assertEqual(r._fallback_for("Kai", "䏶"), "OnlyFb")
+        # 空配置回默认值
+        r2 = DocxRenderer(fallback_fonts={})
+        self.assertIn("SimSun", r2._fallback_chain())
+
+    def test_custom_siddham_list(self):
+        import unittest.mock as mock
+        m1 = mock.patch("pycbeta.fonts.locator")
+        m2 = mock.patch("pycbeta.fonts.font_cmap")
+        ml = m1.start()
+        mc = m2.start()
+        self.addCleanup(m1.stop)
+        self.addCleanup(m2.stop)
+        ml.return_value.path.side_effect = {"OnlyS": "/s.ttf"}.get
+        mc.side_effect = lambda p: frozenset({ord("屇")}) \
+            if p == "/s.ttf" else frozenset()
+        r = DocxRenderer(siddham_fonts=["OnlyS"])
+        self.assertEqual(r._ranjana_font_for("屇"), "OnlyS")
+
     def test_verse_end_to_end(self):
         import tempfile
         import zipfile

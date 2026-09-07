@@ -138,15 +138,19 @@ def split_sections(body, rules: dict) -> list:
 _STYLED_PARAS = ("title", "head", "juan", "pin", "p", "verse", "footnote", "byline",
                  "author", "translator")
 
-# 缺字回退链（render-time 按字 fallback，保证无 tofu；与预览 PREVIEW_FALLBACKS 对应。
+# 缺字回退链默认值（config output.docx.fallbackFonts 可覆盖；与预览 PREVIEW_FALLBACKS 对应。
 # 按渲染语言分栏（gaiji_lang）：繁体优先明体、简体优先宋体；SimSunExtB 管 Ext-B 及以后；
-# CBETA Supplement 管 Ext C-G 与私用区；原字体文件缺失时不验证、保持原样。）
-RENDER_FALLBACKS = {
+# CBETA Supplement 管 Ext C-G 与私用区；微软雅黑垫底（系统必带、覆盖广，最后兜底）；
+# 原字体文件缺失时不验证、保持原样。）
+DEFAULT_FALLBACK_FONTS = {
     "zh-Hant": ("PMingLiU", "SimSun", "SimSunExtB", "CBETA Supplement",
                 "Microsoft YaHei"),
     "zh-Hans": ("SimSun", "SimSunExtB", "PMingLiU", "CBETA Supplement",
                 "Microsoft YaHei"),
 }
+# 悉昙字体默认值（config output.docx.siddhamFonts 可覆盖；RJ 码按覆盖选用，
+# 官方 docx 同款 eastAsia="Ranjana"；语言无关，单列即可）
+DEFAULT_SIDDHAM_FONTS = ("Ranjana", "Siddam")
 _EASTASIA_RE = re.compile(r'w:eastAsia="([^"]+)"')
 
 
@@ -174,8 +178,9 @@ class DocxRenderer:
                  footnote_per_page=True, show_notes=True,
                   suppress_title_notes=False, footnote_separator=None,
                   series_title=None, pagination=None, latin_font: Optional[str] = None,
-                  annotations=None, gaiji_fonts=None, gaiji_lang: str = "zh-Hant",
-                  vertical: bool = False, notes_marker_font: Optional[str] = None):
+                   annotations=None, gaiji_fonts=None, gaiji_lang: str = "zh-Hant",
+                   fallback_fonts=None, siddham_fonts=None,
+                   vertical: bool = False, notes_marker_font: Optional[str] = None):
         self.gaiji_db = gaiji_db if gaiji_db is not None else GaijiDb()
         self.theme = theme if theme is not None else Theme()
         self.ignore_xml_style = ignore_xml_style  # 忽略 <p style> 的 margin-left 脏数据
@@ -200,6 +205,11 @@ class DocxRenderer:
         self.gaiji_fonts = gaiji_fonts or {}
         self.gaiji_lang = gaiji_lang or "zh-Hant"
         self._gaiji_font_resolved = None  # None=未解析；解析后为字体名字符串
+        # 按字回退链（output.docx.fallbackFonts，{zh-Hant:[...],zh-Hans:[...]}；
+        # 空走默认值；语言 key 缺失回繁体栏）
+        self.fallback_fonts = fallback_fonts or {}
+        # 悉昙字体（output.docx.siddhamFonts，单列；空走默认值 ["Ranjana","Siddam"]）
+        self.siddham_fonts = list(siddham_fonts) if siddham_fonts else None
         self._fb_cmap = {}                # 按字回退：家族名 -> cmap|None（无文件），进程内复用
         self.notes_marker_font = ((notes_marker_font or "").strip()
                                 or "Times New Roman")  # 注释注码字体（[N]/脚注编号上标，output.notes_marker_font 可配）
@@ -314,11 +324,18 @@ class DocxRenderer:
         self._fb_cmap[family] = cmap
         return cmap
 
+    def _fallback_chain(self):
+        """本语言回退链（配置优先，缺省默认值；key 缺失回繁体栏）。"""
+        chain = (self.fallback_fonts or {}).get(self.gaiji_lang)
+        if not chain:
+            chain = (self.fallback_fonts or {}).get("zh-Hant")
+        return chain or DEFAULT_FALLBACK_FONTS.get(
+            self.gaiji_lang) or DEFAULT_FALLBACK_FONTS["zh-Hant"]
+
     def _fallback_for(self, family, ch):
         """某字在主字体缺字形时的回退字体（本语言链内首个覆盖者）；
         无则 None（真 tofu）。"""
-        chain = RENDER_FALLBACKS.get(self.gaiji_lang) or RENDER_FALLBACKS["zh-Hant"]
-        for fb in chain:
+        for fb in self._fallback_chain():
             if fb == family:
                 continue
             cmap = self._fallback_cmap(fb)
@@ -703,14 +720,16 @@ class DocxRenderer:
         return char
 
     def _ranjana_font_for(self, ch):
-        """RJ 悉昙字形：首个已装且覆盖该字者（Ranjana→Siddam）；无则 None。
+        """RJ 悉昙字形：首个已装且覆盖该字者（配置 output.docx.siddhamFonts，
+        缺省 ["Ranjana","Siddam"]）；无则 None。
 
         有则 run 指定该字体（官方 docx 同款 eastAsia="Ranjana"）；无则回退主题字体——
         rjchar 本身是常规汉字，依然可读，只是非悉昙体（用户实证：没装显示歾，装了显示种子字）。
         """
         if not ch:
             return None
-        for fam in ("Ranjana", "Siddam"):
+        for fam in (self.siddham_fonts if self.siddham_fonts is not None
+                    else DEFAULT_SIDDHAM_FONTS):
             cmap = self._fallback_cmap(fam)
             if cmap is not None and ord(ch[0]) in cmap:
                 return fam

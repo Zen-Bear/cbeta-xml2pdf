@@ -135,6 +135,8 @@ def render_one(w, fmt, out_dir, out_name, args, theme):
                             series_title=args.series_title,
                             gaiji_fonts=getattr(args, "gaiji_fonts", None),
                             gaiji_lang=getattr(args, "gaiji_lang", "zh-Hant"),
+                            fallback_fonts=getattr(args, "fallback_fonts", None),
+                            siddham_fonts=getattr(args, "siddham_fonts", None),
                            vertical=getattr(args, "vertical", False),
                            notes_marker_font=getattr(args, "notes_marker_font",
                                getattr(args, "marker_font", None)),
@@ -191,6 +193,8 @@ def render_one(w, fmt, out_dir, out_name, args, theme):
                                     series_title=args.series_title,
                                     gaiji_fonts=getattr(args, "gaiji_fonts", None),
                                     gaiji_lang=getattr(args, "gaiji_lang", "zh-Hant"),
+                                    fallback_fonts=getattr(args, "fallback_fonts", None),
+                                    siddham_fonts=getattr(args, "siddham_fonts", None),
                                     vertical=getattr(args, "vertical", False),
                                     notes_marker_font=getattr(args, "notes_marker_font",
                                         getattr(args, "marker_font", None)),
@@ -490,6 +494,8 @@ def main(argv=None):
     args.footnote_separator = (cfg_docx := out_defaults.get("docx") or {}).get("footnoteSeparator")
     args.notes_marker_font = _notes_marker_font(out_defaults)  # 注释注码字体（旧键 marker_font 回退）
     args.gaiji_fonts = cfg_docx.get("gaijiFonts")  # 缺字字体链 {zh-Hant:[...], zh-Hans:[...]}，渲染时懒解析首个已装
+    args.fallback_fonts = cfg_docx.get("fallbackFonts")  # 按字回退链（缺省内置分栏）；空走默认值
+    args.siddham_fonts = cfg_docx.get("siddhamFonts")  # 悉昙字体（缺省 ["Ranjana","Siddam"]）
     # 难字注音（P6）：config-only（无 CLI 开关），顶层 annotations；装载为 {"table","scheme"} 或 None
     from .annotate import resolve_annotations
     ann_spec, ann_base = _annotations_source(
