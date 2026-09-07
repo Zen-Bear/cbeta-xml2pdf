@@ -1544,5 +1544,81 @@ class TestCssEditor(unittest.TestCase):
         self.assertEqual(panel.btn_editor.text(), "打开 CSS 编辑器…")
 
 
+class TestFontStacks(unittest.TestCase):
+    """字体栈检查（纯函数 + 检查窗渲染）。"""
+
+    def test_ok_stack_passes(self):
+        from pycbeta.gui.css_editor import check_font_stacks
+        css = (":root { --font-p: 宋体, SimSun; "
+               "--font-latin: Calibri; }\n")
+        self.assertEqual(
+            check_font_stacks(css, {"宋体": "SimSun"},
+                              ["SimSun", "Calibri"]), [])
+
+    def test_unknown_name_errors(self):
+        from pycbeta.gui.css_editor import check_font_stacks
+        css = ":root { --font-p: 宋体, SimSn; }\n"
+        got = check_font_stacks(css, {"宋体": "SimSun"}, ["SimSun"])
+        self.assertEqual(len(got), 1)
+        self.assertEqual(got[0][3], "error")
+        self.assertIn("SimSn", got[0][4])
+
+    def test_fullwidth_comma_errors(self):
+        from pycbeta.gui.css_editor import check_font_stacks
+        css = ":root { --font-p: 宋体， SimSun; }\n"
+        got = check_font_stacks(css, {"宋体": "SimSun"}, ["SimSun"])
+        self.assertEqual(len(got), 1)
+        self.assertEqual(got[0][3], "error")
+        self.assertIn("全角", got[0][4])
+
+    def test_missing_side_warns(self):
+        from pycbeta.gui.css_editor import check_font_stacks
+        got = check_font_stacks(":root { --font-p: 宋体; }\n",
+                                {"宋体": "SimSun"}, ["SimSun"])
+        self.assertEqual(len(got), 1)
+        self.assertEqual(got[0][3], "warn")
+        self.assertIn("缺英文", got[0][4])
+        got2 = check_font_stacks(":root { --font-p: SimSun; }\n",
+                                 {}, ["SimSun"])
+        self.assertEqual(len(got2), 1)
+        self.assertIn("缺中文", got2[0][4])
+
+    def test_uninstalled_known_warns(self):
+        from pycbeta.gui.css_editor import check_font_stacks
+        css = ":root { --font-body: 新細明體, Songti TC, serif; }\n"
+        got = check_font_stacks(css, {"新細明體": "PMingLiU"},
+                                ["PMingLiU"])
+        self.assertEqual(len(got), 1)  # 仅 Songti TC 未装警告，中英俱全
+        self.assertEqual(got[0][3], "warn")
+        self.assertIn("Songti TC", got[0][4])
+
+    def test_hans_lang_and_latin_exempt(self):
+        from pycbeta.gui.css_editor import check_font_stacks
+        css = ('html[lang="zh-Hans"] { --font-p: 宋体; }\n'
+               ":root { --font-latin: Calibri; }\n")
+        got = check_font_stacks(css, {"宋体": "SimSun"},
+                                ["SimSun", "Calibri"])
+        self.assertEqual(len(got), 1)
+        self.assertEqual(got[0][0], "简体")  # 栏位标注
+        self.assertIn("缺英文", got[0][4])  # latin 纯英文不告
+
+    def test_report_renders_stacks(self):
+        from pycbeta.gui.css_editor import PreviewReportDialog
+        from PySide6.QtWidgets import QApplication
+        QApplication.instance() or QApplication([])
+        w = PreviewReportDialog()
+        try:
+            w.update_report({"time": "t", "base": "b", "sample": "s",
+                             "t2s": False, "fonts": [], "gaps": {},
+                             "stacks": [("繁体", "--font-p", "宋体, SimSn",
+                                          "error", "SimSn 未知")],
+                             "css_error": "", "error": ""})
+            html = w.view.toHtml()
+            self.assertIn("字体栈", html)
+            self.assertIn("SimSn", html)
+        finally:
+            w.close()
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -98,6 +98,24 @@ _CJK_BUCKETS = (
 )
 _WESTERN_FONTS = ("Times New Roman", "Courier New", "Aptos")
 
+_GENERIC_FAMILIES = frozenset({
+    "serif", "sans-serif", "monospace", "cursive", "fantasy", "system-ui",
+    "ui-serif", "ui-sans-serif", "ui-monospace",
+})
+
+# 管线引用的跨平台已知字体：本机未装只警告（Word/他机可用），不报错。
+# 覆盖出厂 CSS / 回退链 / 缺字链 / 悉昙配置里出现过的名字。
+_KNOWN_FONTS = frozenset({
+    "Songti TC", "Songti SC", "PMingLiU", "MingLiU", "SimSun", "NSimSun",
+    "SimHei", "SimKai", "KaiTi", "FangSong", "FangSong_GB2312", "LiSu",
+    "DFKaiShu", "DFKai-SB", "SimSun-ExtB", "MingLiU-ExtB",
+    "Microsoft YaHei", "Microsoft JhengHei", "Microsoft JhengHei UI",
+    "微軟正黑體", "微軟雅黑", "新細明體", "細明體", "標楷體",
+    "宋体", "黑体", "楷体", "仿宋", "隶书", "隸書", "朝华标题B",
+    "ZhaohuaMinB", "Calibri", "Cambria",
+    "CBETA Supplement", "Ranjana", "Siddam",
+})
+
 
 def group_font_names(names):
     """[字体名] → {组名: [字体]}（纯函数，可单测）。西文三固定另行，不进 buckets。"""
@@ -880,6 +898,84 @@ def _gaps_text(gaps, limit=6):
     return out
 
 
+_CJK_RE = re.compile(
+    r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\U00020000-\U0003134f]")
+
+
+def check_font_stacks(css_text, aliases=None, qt_families=None,
+                      western=None, bundled=None):
+    """字体栈检查（纯函数，可单测）→ [(栏, 变量, 栈, 级别, 说明)]。
+
+    查有效 CSS 双栏全部 --font-*（--font-latin 豁免，本就纯西文）：
+    名称正确性逐名判定——本机可认/通用族通过；已知但本机未装警告；
+    未知（拼写？）/全角逗号/空名报错；整栈缺中文或缺英文回退警告。
+    aliases: {别名: Qt可认名}；qt_families: Qt家族名；
+    western/bundled: 额外已知名单（缺省西文三；bundled 缺省空——
+    已装字体已在 aliases 键里）。
+    """
+    import re as _re
+    aliases = aliases or {}
+    low = {f.lower() for f in (qt_families or [])}
+    known = set(_KNOWN_FONTS) | set(western or _WESTERN_FONTS) \
+        | set(bundled or ()) | set(aliases or {})
+    known_low = {k.lower() for k in known}
+
+    def _classify(name):
+        n = name.strip().strip('"').strip("'").strip()
+        if not n:
+            return ("empty", "")
+        if n.lower() in _GENERIC_FAMILIES or n.lower() in low:
+            return ("ok", n)
+        tgt = (aliases or {}).get(n)
+        if tgt and tgt.lower() in low:
+            return ("ok", n)
+        if n in known or n.lower() in known_low:
+            return ("warn", n)
+        return ("error", n)
+
+    found = {}
+    for m in _re.finditer(
+            r'(html\[lang=["\']zh-Hans["\']\]|:root)\s*\{([^}]*)\}',
+            css_text or "", _re.S):
+        lang = "简体" if "zh-Hans" in m.group(1) else "繁体"
+        for vm in _re.finditer(r'(--font-[\w-]+)\s*:\s*([^;{}]+);',
+                               m.group(2)):
+            found[(lang, vm.group(1))] = vm.group(2).strip()
+    out = []
+    for (lang, var), raw in found.items():
+        if var == "--font-latin":
+            continue
+        if "，" in raw or "、" in raw:
+            out.append((lang, var, raw, "error",
+                        "含全角逗号/顿号，分隔失效（请用半角逗号）"))
+            continue
+        parts = [p.strip().strip('"').strip("'").strip()
+                 for p in raw.split(",")]
+        if any(not p for p in parts):
+            out.append((lang, var, raw, "error", "含空字体名（多余逗号？）"))
+            continue
+        has_cjk = has_asc = False
+        for p in parts:
+            kind, _n = _classify(p)
+            if kind == "error":
+                out.append((lang, var, raw, "error",
+                            f"{p} 未知（拼写？本机无此字体）"))
+            elif kind == "warn":
+                out.append((lang, var, raw, "warn",
+                            f"{p} 本机未装（跨平台/Word 端可用，预览替代显示）"))
+            if _CJK_RE.search(p):
+                has_cjk = True
+            if p.isascii():
+                has_asc = True
+        if not has_cjk:
+            out.append((lang, var, raw, "warn",
+                        "缺中文名（中日韩文字符可能降级显示）"))
+        elif not has_asc:
+            out.append((lang, var, raw, "warn",
+                        "缺英文回退（建议补英文名或 serif，保拉丁/跨平台）"))
+    return out
+
+
 # ---------------- 后台重渲线程 ----------------
 
 class _RenderThread(QThread):
@@ -1004,11 +1100,24 @@ class PreviewReportDialog(QDialog):
         if info.get("css_error"):
             parts.append(f"<p><b><font color='red'>CSS 错误："
                          f"{_html.escape(info['css_error'])}</font></b></p>")
+        stacks = info.get("stacks") or []
+        if stacks:
+            srows = []
+            for lang, var, stack, level, msg in stacks:
+                label = (f"[{_html.escape(lang)}]{_html.escape(var)} = "
+                         f"{_html.escape(stack)}：{_html.escape(msg)}")
+                if level == "error":
+                    srows.append("<li><b><font color='red'>"
+                                 f"{label}</font></b></li>")
+                else:
+                    srows.append("<li><font color='#cc6600'>"
+                                 f"{label}</font></li>")
+            parts.append("<p>字体栈：</p><ul>" + "".join(srows) + "</ul>")
         if info.get("error"):
             parts.append(f"<p><b><font color='red'>渲染失败："
                          f"{_html.escape(info['error'])}</font></b></p>")
         if not fonts and not info.get("gaps") and not info.get("css_error") \
-                and not info.get("error"):
+                and not info.get("error") and not info.get("stacks"):
             parts.append("<p>暂无检查项（等一次预览完成）。</p>")
         self.view.setHtml("".join(parts))
 
@@ -1226,6 +1335,7 @@ class CssEditorDialog(QDialog):
         self._preset_path = None       # 当前缓冲对应的预设文件（保存目标）；出厂/新建为 None
         self._report = None            # 预览检查信息（_push_report 更新）
         self._last_gaps = {}             # 字形覆盖缺口 {字体: [码位]}（纠错用）
+        self._last_stacks = []           # 字体栈检查 [(栏, 变量, 栈, 级别, 说明)]
         self._report_dlg = None          # 检查窗（打开检查时懒建）
         self._thread = None
         self._rows = {}              # selector -> 控件组
@@ -1910,6 +2020,7 @@ class CssEditorDialog(QDialog):
                 "t2s": self.t2s_box.isChecked(),
                 "fonts": fonts,
                 "gaps": getattr(self, "_last_gaps", None) or {},
+                "stacks": list(getattr(self, "_last_stacks", None) or []),
                 "css_error": self._source_err.text().strip() or "",
                 "error": error or ""}
 
@@ -1972,14 +2083,24 @@ class CssEditorDialog(QDialog):
                    if f and not resolve_qt_family(f, aliases)]
         gaps = glyph_gaps(spec)
         self._last_gaps = gaps
+        try:
+            from PySide6.QtGui import QFontDatabase as _QFD
+            _fams = _QFD.families()
+        except Exception:  # noqa: BLE001
+            _fams = []
+        stacks = check_font_stacks(self.work_css(), aliases, _fams)
+        self._last_stacks = stacks
         tips = []
         if missing:
             tips.append(f"{'、'.join(missing[:6])}无可用字形，替代显示；"
                         "导出 DOCX 不受影响")
         if gaps:
             tips.append(f"缺字形：{_gaps_text(gaps)}")
+        if stacks:
+            tips.append(f"字体栈{len(stacks)}项（详见检查窗）")
         self._set_status(f"预览已更新 {now}",
-                         len(missing) + len(gaps), "；".join(tips))
+                         len(missing) + len(gaps) + len(stacks),
+                         "；".join(tips))
         self._push_report()
         if self._need_refresh:
             self._need_refresh = False
