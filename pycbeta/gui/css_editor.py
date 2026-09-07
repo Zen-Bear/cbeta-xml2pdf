@@ -1328,6 +1328,7 @@ class CssEditorDialog(QDialog):
         self._loaded_block = ""
         self._source_edit.setPlaceholderText("在此追加/覆盖规则；解析失败红字且预览保持上次")
         base_values, _, _ = split_override_block(self._base_css)
+        self._base_values = base_values
         self._sync_controls_from_block(base_values)
         self.preset_box.refresh(current_theme_value())
         self.status.setText(f"基于：{self._base_label}")
@@ -1350,6 +1351,15 @@ class CssEditorDialog(QDialog):
         return factory, "内置出厂"
 
     # ----- 预设库 -----
+    def _display_values(self, values):
+        """控件显示用有效值：base + 覆盖块层叠（后者胜）。
+        touched 仍只记覆盖块自有——显示继承值、保存只写自有（与打开时一致）。"""
+        merged = {s: dict(p) for s, p in
+                  (getattr(self, "_base_values", None) or {}).items()}
+        for s, props in (values or {}).items():
+            merged.setdefault(s, {}).update(props)
+        return merged
+
     def _load_block_text(self, block_text):
         """覆盖块文本装载进编辑器（源码页+控件+touched 联动）；返回 True/False。"""
         values, passthrough, err = split_override_block(block_text or "")
@@ -1363,7 +1373,7 @@ class CssEditorDialog(QDialog):
         self._passthrough = passthrough
         self._touched = _touched_from_values(values)
         self._loaded_block = self._source_edit.toPlainText()
-        self._sync_controls_from_block(values)
+        self._sync_controls_from_block(self._display_values(values))
         self._schedule()
         return True
 
@@ -1422,7 +1432,7 @@ class CssEditorDialog(QDialog):
             return False
         self._passthrough = passthrough
         self._touched = _touched_from_values(values)
-        self._sync_controls_from_block(values)
+        self._sync_controls_from_block(self._display_values(values))
         self._schedule()
         return True
 
@@ -1439,6 +1449,7 @@ class CssEditorDialog(QDialog):
         self._loaded_block = ""
         self._source_err.setText("")
         factory_values, _, _ = split_override_block(self._base_css)
+        self._base_values = factory_values
         self._sync_controls_from_block(factory_values)
         self.preset_box.refresh("pdf_docx.css")
         self.status.setText("基于：内置出厂")
@@ -1707,7 +1718,7 @@ class CssEditorDialog(QDialog):
         self._source_err.setText("")
         self._passthrough = passthrough
         self._touched = _touched_from_values(values)
-        self._sync_controls_from_block(values)
+        self._sync_controls_from_block(self._display_values(values))
         self._schedule()
 
     def _sync_controls_from_block(self, values=None):

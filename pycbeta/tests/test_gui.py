@@ -980,6 +980,34 @@ class TestCssEditor(unittest.TestCase):
         finally:
             dlg.close()
 
+    def test_load_shows_inherited_values(self):
+        import shutil
+        import pycbeta.gui.css_editor as ce
+        root = tempfile.mkdtemp()
+        try:
+            fn = os.path.join(root, "mine.css")
+            with open(fn, "w", encoding="utf-8") as f:
+                f.write("/* base */\np.head { font-size: 40pt; }\n")
+            dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+            try:
+                open30 = dlg._rows["h1.title"]["size"].text()
+                self.assertEqual(open30, "30pt")  # 打开时显示出厂有效值
+                dlg._load_preset_path(fn)
+                # 预设自有生效
+                self.assertEqual(
+                    dlg._rows["p.head"]["size"].text(), "40pt")
+                # 未覆盖的显示继承（base），不是空白
+                self.assertEqual(
+                    dlg._rows["h1.title"]["size"].text(), "30pt")
+                # touched 只记预设自有——保存不写继承值
+                self.assertNotIn(("h1.title", "font-size"), dlg._touched)
+                self.assertIn(("p.head", "font-size"), dlg._touched)
+                dlg._loaded_block = dlg._source_edit.toPlainText()
+            finally:
+                dlg.close()
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
     def test_margins_real_display(self):
         import pycbeta.gui.css_editor as ce
         self.assertEqual(
