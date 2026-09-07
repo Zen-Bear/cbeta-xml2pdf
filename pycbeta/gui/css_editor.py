@@ -616,7 +616,8 @@ def _para_style(p):
 STYLE_ROW_LABEL = {"title": "书名", "head": "标题", "juan": "卷名",
                    "pin": "品名", "p": "正文", "verse": "偈颂",
                    "footnote": "脚注", "byline": "题署", "author": "作者",
-                   "translator": "译者", "div-note": "字义", "": "正文"}
+                   "translator": "译者", "div-note": "字义",
+                   "series-title": "经藏名", "": "正文"}
 
 
 def div_note_color(css_text):
@@ -633,15 +634,15 @@ def div_note_color(css_text):
 
 
 def _name_label_format(dirty=False):
-    """元素名标签块格式：橙底（#cc6600）白字粗体（正文/脚注/字义共用）。
+    """元素名标签块格式：干净蓝底（#0066cc）/脏橙底（#cc6600），白字粗体。
 
-    dirty: 该元素有未保存改动（touched）→ 深红底，保存后回橙色。
+    脏 = 有未保存改动（touched 且源码与载入不一致）；保存/恢复后回蓝。
     """
     ncf = QTextCharFormat()
     ncf.setFontPointSize(8)
     ncf.setFontWeight(QFont.Bold)
     ncf.setForeground(QColor("#ffffff"))
-    ncf.setBackground(QColor("#c00000" if dirty else "#cc6600"))
+    ncf.setBackground(QColor("#cc6600" if dirty else "#0066cc"))
     return ncf
 
 
@@ -651,11 +652,16 @@ _LABEL_TOUCHED_SEL = {"title": "h1.title", "head": "p.head",
                       "verse": "div.lg", "footnote": ".footnote",
                       "byline": "p.byline", "author": "p.author",
                       "translator": "p.translator", "div-note": "div.div-note",
-                      "": "p"}
+                      "series-title": "p.series-title", "": "p"}
 
 
-def label_is_dirty(label_key, touched):
-    """该标签对应选择器有未保存改动 → True（纯函数，可单测）。"""
+def label_is_dirty(label_key, touched, is_dirty):
+    """该标签脏（对应选择器被碰过**且**整体有未保存改动）→ True。
+
+    保存/恢复后 is_dirty 为 False，全回干净（纯函数，可单测）。
+    """
+    if not is_dirty:
+        return False
     sel = _LABEL_TOUCHED_SEL.get(label_key or "", "p")
     return any(isinstance(t, tuple) and t and t[0] == sel
                for t in (touched or set()))
@@ -1646,6 +1652,7 @@ class CssEditorDialog(QDialog):
         self._sync_controls_from_block(factory_values)
         self.preset_box.refresh("pdf_docx.css")
         self.status.setText("基于：内置出厂")
+        self._paint_row_labels()
         self.refresh_preview()
 
     def _save_preset_as(self):
@@ -1672,6 +1679,27 @@ class CssEditorDialog(QDialog):
         self._preset_path = path
         self._loaded_block = self._source_edit.toPlainText()
         self.status.setText(f"预设已存：{path}")
+        self._paint_row_labels()
+
+    def _paint_row_labels(self):
+        """左栏行名：脏（未保存改动）橙字加粗，干净恢复默认。
+
+        改动路径（控件/源码/载入/恢复）都经 _schedule；保存/出厂另调。
+        """
+        try:
+            dirty_all = self._is_dirty()
+        except RuntimeError:  # noqa: BLE001 —— 关闭中控件已销毁
+            return
+        touched_sels = {t[0] for t in (self._touched or set())
+                        if isinstance(t, tuple) and t}
+        for sel, ctrls in self._rows.items():
+            lab = (ctrls or {}).get("name_label")
+            if lab is None:
+                continue
+            if dirty_all and sel in touched_sels:
+                lab.setStyleSheet("color: #cc6600; font-weight: bold")
+            else:
+                lab.setStyleSheet("")
 
     def _save_current(self):
         """保存当前修改：有预设文件则直接写回；出厂默认/新建则走另存。返回是否已保存。"""
@@ -1689,6 +1717,7 @@ class CssEditorDialog(QDialog):
             return False
         self._loaded_block = self._source_edit.toPlainText()
         self.status.setText(f"已保存：{self._preset_path}")
+        self._paint_row_labels()
         return True
 
     def _ask_save_discard_cancel(self):
@@ -1813,7 +1842,7 @@ class CssEditorDialog(QDialog):
             self._rows[sel] = {"font_hant": font_hant, "font_hans": font_hans,
                                "suffix": suffix, "size": size_edit,
                                "weight": weight, "color": color_btn,
-                               "color_value": ""}
+                               "color_value": "", "name_label": lab}
             font_hant.currentTextChanged.connect(
                 lambda _v, s=sel: self._on_control_changed(s, "font-family",
                                                           "zh-Hant"))
@@ -2075,6 +2104,7 @@ class CssEditorDialog(QDialog):
 
     # ----- 预览 -----
     def _schedule(self):
+        self._paint_row_labels()
         self._timer.start()
 
     def refresh_preview(self):
@@ -2285,7 +2315,8 @@ class CssEditorDialog(QDialog):
                                  for r in texts):
                     label_key = "div-note"
             if show_names and label_key != prev_key:
-                dirty = label_is_dirty(label_key, self._touched)
+                dirty = label_is_dirty(label_key, self._touched,
+                                       self._is_dirty())
                 cur.insertText(f"【{STYLE_ROW_LABEL.get(label_key, label_key)}】",
                                _name_label_format(dirty))
             prev_key = label_key
@@ -2328,7 +2359,8 @@ class CssEditorDialog(QDialog):
                 _block_margins(ffmt, fn.get("margin"))
                 cur.setBlockFormat(ffmt)
                 if show_names and prev_fn != "footnote":
-                    dirty = label_is_dirty("footnote", self._touched)
+                    dirty = label_is_dirty("footnote", self._touched,
+                                           self._is_dirty())
                     cur.insertText("【脚注】",
                                    _name_label_format(dirty))
                 prev_fn = "footnote"

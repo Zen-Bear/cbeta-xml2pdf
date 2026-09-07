@@ -316,6 +316,18 @@ class TestDocxBookmarksSplit(unittest.TestCase):
         styles = z.read("word/styles.xml").decode("utf-8")
         self.assertNotIn("outlineLvl", styles)
 
+    def test_series_para_has_style(self):
+        from pycbeta.model import Work, E, Text
+        w = Work(id="T", source_file="", metadata={"title": "t", "series": "X經"},
+                 body=[E(tag="p", attrs={}, children=[Text("文")])],
+                 notes_by_n={}, apps=[])
+        fn = DocxRenderer().render_work(w, self.tmp, "series.docx")
+        z = zipfile.ZipFile(fn)
+        doc = z.read("word/document.xml").decode("utf-8")
+        self.assertIn('w:val="series-title"', doc)  # 经藏名挂命名样式，预览可标【经藏名】
+        styles = z.read("word/styles.xml").decode("utf-8")
+        self.assertIn('w:styleId="series-title"', styles)
+
     def test_split(self):
         files = DocxRenderer(split=True).render_work(self.work, self.tmp, "sp.docx")
         self.assertEqual(len(files), 7)

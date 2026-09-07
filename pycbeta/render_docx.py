@@ -136,7 +136,7 @@ def split_sections(body, rules: dict) -> list:
 
 # 段落级命名样式（styles.xml 里定义，段落用 <w:pStyle> 引用而非内联 pPr）
 _STYLED_PARAS = ("title", "head", "juan", "pin", "p", "verse", "footnote", "byline",
-                 "author", "translator")
+                 "author", "translator", "series-title")
 
 # 缺字回退链默认值（config output.docx.fallbackFonts 可覆盖；与预览 PREVIEW_FALLBACKS 对应。
 # 按渲染语言分栏（gaiji_lang）：繁体优先明体、简体优先宋体；SimSunExtB 管 Ext-B 及以后；
@@ -1326,7 +1326,8 @@ class DocxRenderer:
                     f'<w:rPr><w:rFonts w:ascii="{self.latin_font}" w:eastAsia="{ff}" w:hAnsi="{self.latin_font}"/>'
                     f'<w:sz w:val="{size}"/><w:szCs w:val="{size}"/></w:rPr>')
                 series_para = (
-                    f'<w:p><w:pPr><w:jc w:val="left"/></w:pPr>'
+                    f'<w:p><w:pPr><w:pStyle w:val="series-title"/>'
+                    f'<w:jc w:val="left"/></w:pPr>'
                     f'{self._fb_emit(series, _srpr)}</w:p>'
                 )
         header_xml = ""  # 保留扩展点：如需页眉可在此生成 header1.xml

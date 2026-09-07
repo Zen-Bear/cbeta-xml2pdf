@@ -1123,15 +1123,53 @@ class TestCssEditor(unittest.TestCase):
     def test_label_dirty_highlight(self):
         import pycbeta.gui.css_editor as ce
         self.assertTrue(ce.label_is_dirty(
-            "head", {("p.head", "font-size")}))
+            "head", {("p.head", "font-size")}, True))
         self.assertTrue(ce.label_is_dirty(
-            "div-note", {("div.div-note", "color")}))
-        self.assertFalse(ce.label_is_dirty("p", set()))
+            "div-note", {("div.div-note", "color")}, True))
+        self.assertFalse(ce.label_is_dirty("p", set(), True))
         self.assertFalse(ce.label_is_dirty(
-            "head", {("p", "font-size")}))
+            "head", {("p", "font-size")}, True))
+        # 保存/恢复后整体干净 → 全回蓝
+        self.assertFalse(ce.label_is_dirty(
+            "head", {("p.head", "font-size")}, False))
         clean = ce._name_label_format(False).background().color().name()
         dirty = ce._name_label_format(True).background().color().name()
         self.assertNotEqual(clean, dirty)
+
+    def test_row_label_paints_dirty(self):
+        import pycbeta.gui.css_editor as ce
+        dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+        try:
+            lab = dlg._rows["p.head"]["name_label"]
+            self.assertEqual(lab.styleSheet(), "")
+            dlg._rows["p.head"]["size"].setText("40pt")
+            dlg._paint_row_labels()
+            self.assertIn("cc6600", lab.styleSheet())  # 脏行橙字
+            # 模拟保存：loaded 追平 → 恢复默认
+            dlg._loaded_block = dlg._source_edit.toPlainText()
+            dlg._paint_row_labels()
+            self.assertEqual(lab.styleSheet(), "")
+            self.assertEqual(
+                dlg._rows["h1.title"]["name_label"].styleSheet(), "")
+        finally:
+            dlg.close()
+
+    def test_series_label(self):
+        import pycbeta.gui.css_editor as ce
+        dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+        try:
+            run = {"text": "X經", "size": 9.0, "font": "", "bold": False,
+                   "color": "", "super": False, "dim": False}
+            spec = {"paras": [
+                {"style": "series-title", "align": "", "line": None,
+                 "runs": [run]}],
+                "footnotes": []}
+            dlg.names_box.setChecked(True)
+            dlg._show_spec(spec, {})
+            self.assertIn("【经藏名】", dlg.preview.toPlainText())
+            dlg._loaded_block = dlg._source_edit.toPlainText()
+        finally:
+            dlg.close()
 
     def test_export_status_opens_file(self):
         import tempfile
