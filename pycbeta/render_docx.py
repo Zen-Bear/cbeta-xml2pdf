@@ -138,6 +138,11 @@ def split_sections(body, rules: dict) -> list:
 _STYLED_PARAS = ("title", "head", "juan", "pin", "p", "verse", "footnote", "byline",
                  "author", "translator")
 
+# 缺字回退链（render-time 按字 fallback，保证无 tofu；与预览 PREVIEW_FALLBACKS 对应。
+# SimSun 在前：Ext-A~G 覆盖最全；原字体文件缺失时不验证、保持原样。）
+RENDER_FALLBACKS = ("SimSun", "PMingLiU", "Microsoft YaHei")
+_EASTASIA_RE = re.compile(r'w:eastAsia="([^"]+)"')
+
 
 def _x(s: str) -> str:
     from xml.sax.saxutils import escape
@@ -189,6 +194,7 @@ class DocxRenderer:
         self.gaiji_fonts = gaiji_fonts or {}
         self.gaiji_lang = gaiji_lang or "zh-Hant"
         self._gaiji_font_resolved = None  # None=未解析；解析后为字体名字符串
+        self._fb_cmap = {}                # 按字回退：家族名 -> cmap|None（无文件），进程内复用
         self.notes_marker_font = ((notes_marker_font or "").strip()
                                 or "Times New Roman")  # 注释注码字体（[N]/脚注编号上标，output.notes_marker_font 可配）
         # 难字注音（P6）：None 或 {"table", "scheme"}（CLI 已由 resolve_annotations 装载；渲染器内不做 IO）
@@ -265,11 +271,73 @@ class DocxRenderer:
         rpr = self._run_rpr(tags, props)
         if self._in_pre:
             # 换行拆成多个 <w:t> run，中间用 <w:r><w:br/></w:r>（不能裸 <w:br/>，否则 WPS 忽略）
-            runs = [f"<w:r>{rpr}<w:t xml:space=\"preserve\">{_x(p)}</w:t></w:r>"
-                    for p in text.split("\n")]
+            runs = [self._fb_emit(p, rpr) for p in text.split("\n")]
             return "<w:r><w:br/></w:r>".join(runs)
-        inner = _x(text.replace("\n", ""))
-        return f"<w:r>{rpr}<w:t xml:space=\"preserve\">{inner}</w:t></w:r>"
+        return self._fb_emit(text.replace("\n", ""), rpr)
+
+    def _fb_emit(self, text: str, rpr: str) -> str:
+        """单文本 run 发射（含按字回退）：主字体缺字形的字拆出，用回退字体另起 run。
+
+        无缺字/无法验证（字体文件缺失）时输出与旧路径字节一致，保证零回归。
+        """
+        m = _EASTASIA_RE.search(rpr)
+        chunks = self._split_covered(text, m.group(1)) if m else None
+        if not chunks:
+            return (f"<w:r>{rpr}<w:t xml:space=\"preserve\">"
+                    f"{_x(text)}</w:t></w:r>")
+        out = []
+        for chunk, fb in chunks:
+            rr = rpr if not fb else re.sub(
+                f'w:eastAsia="[^"]+"', f'w:eastAsia="{fb}"', rpr, count=1)
+            out.append(f"<w:r>{rr}<w:t xml:space=\"preserve\">"
+                       f"{_x(chunk)}</w:t></w:r>")
+        return "".join(out)
+
+    def _fallback_cmap(self, family):
+        """主字体文件 cmap（无文件返回 None=无法验证，保持原样）；随 renderer 缓存。"""
+        if family in self._fb_cmap:
+            return self._fb_cmap[family]
+        cmap = None
+        try:
+            from .fonts import locator as _loc, font_cmap as _fc
+            path = _loc().path(family)
+            if path:
+                cmap = _fc(path)
+        except Exception:  # noqa: BLE001 —— 查不到不断渲染
+            cmap = None
+        self._fb_cmap[family] = cmap
+        return cmap
+
+    def _fallback_for(self, family, ch):
+        """某字在主字体缺字形时的回退字体（链内首个覆盖者）；无则 None（真 tofu）。"""
+        for fb in RENDER_FALLBACKS:
+            if fb == family:
+                continue
+            cmap = self._fallback_cmap(fb)
+            if cmap is not None and ord(ch) in cmap:
+                return fb
+        return None
+
+    def _split_covered(self, text, family):
+        """文本按主字体覆盖切分 → None（全覆盖/无法验证）或 [(chunk, fb|None)]。"""
+        cmap = self._fallback_cmap(family)
+        if cmap is None:
+            return None
+        chunks, buf, cur = [], [], None
+        started = False
+        for ch in text:
+            fb = None if ord(ch) in cmap else self._fallback_for(family, ch)
+            if not started:
+                cur, started = fb, True
+            if fb != cur:
+                chunks.append(("".join(buf), cur))
+                buf, cur = [], fb
+            buf.append(ch)
+        if buf:
+            chunks.append(("".join(buf), cur))
+        if len(chunks) == 1 and chunks[0][1] is None:
+            return None
+        return chunks
 
     def _rt_rpr(self, tags, props, hps: int, rt_font: str) -> str:
         """注音 rt run 属性：字号=注音字号（hps 半磅），字体=rt_font 或正文字体；
@@ -291,9 +359,8 @@ class DocxRenderer:
         return rpr
 
     def _plain_run(self, seg: str, rpr: str) -> str:
-        """普通文本 run（注音未匹配片段共用）。"""
-        return (f"<w:r>{rpr}<w:t xml:space=\"preserve\">"
-                f"{_x(seg.replace(chr(10), ''))}</w:t></w:r>")
+        """普通文本 run（注音未匹配片段共用；含按字回退）。"""
+        return self._fb_emit(seg.replace(chr(10), ""), rpr)
 
     def _eq_field(self, base: str, reading: str, hps: int, up: int, font: str) -> str:
         """单个 EQ 拼音指南域（WPS 原生模板字节级复刻）：
@@ -337,11 +404,9 @@ class DocxRenderer:
                     continue
                 seg = seg.replace(chr(10), "")
                 if reading is None:
-                    out.append(f"<w:r>{rpr}<w:t xml:space=\"preserve\">"
-                               f"{_x(seg)}</w:t></w:r>")
+                    out.append(self._fb_emit(seg, rpr))
                 else:
-                    out.append(f"<w:r>{rpr}<w:t xml:space=\"preserve\">"
-                               f"{_x(seg)}{l}{_x(reading)}{r}</w:t></w:r>")
+                    out.append(self._fb_emit(f"{seg}{l}{reading}{r}", rpr))
             return "".join(out)
         if ann.get("style", "inline") == "field":
             # 上方 EQ 域（WPS/Word 可见）：逐字拼音指南域；读音按音节分配，整词兜底
@@ -381,15 +446,13 @@ class DocxRenderer:
             if not seg:
                 continue
             if reading is None:
-                out.append(f"<w:r>{rpr}<w:t xml:space=\"preserve\">"
-                           f"{_x(seg.replace(chr(10), ''))}</w:t></w:r>")
+                out.append(self._fb_emit(seg.replace(chr(10), ""), rpr))
             else:
                 out.append(
                     f"<w:ruby>{ruby_pr}"
                     f"<w:rt><w:r>{rt_rpr}<w:t xml:space=\"preserve\">"
                     f"{_x(reading)}</w:t></w:r></w:rt>"
-                    f"<w:rubyBase><w:r>{rpr}<w:t xml:space=\"preserve\">"
-                    f"{_x(seg)}</w:t></w:r></w:rubyBase></w:ruby>")
+                    f"<w:rubyBase>{self._fb_emit(seg, rpr)}</w:rubyBase></w:ruby>")
         return "".join(out)
 
     def _marker_rpr(self) -> str:
@@ -1209,11 +1272,12 @@ class DocxRenderer:
                     ff = self.series_title.get("font") or "隸書, LiSu"
                     ff = [n.strip().strip('"').strip("'") for n in ff.split(",")][0]
                 size = self._series_size_pt(st)
+                _srpr = (
+                    f'<w:rPr><w:rFonts w:ascii="{self.latin_font}" w:eastAsia="{ff}" w:hAnsi="{self.latin_font}"/>'
+                    f'<w:sz w:val="{size}"/><w:szCs w:val="{size}"/></w:rPr>')
                 series_para = (
                     f'<w:p><w:pPr><w:jc w:val="left"/></w:pPr>'
-                    f'<w:r><w:rPr><w:rFonts w:ascii="{self.latin_font}" w:eastAsia="{ff}" w:hAnsi="{self.latin_font}"/>'
-                    f'<w:sz w:val="{size}"/><w:szCs w:val="{size}"/></w:rPr>'
-                    f'<w:t xml:space="preserve">{_x(series)}</w:t></w:r></w:p>'
+                    f'{self._fb_emit(series, _srpr)}</w:p>'
                 )
         header_xml = ""  # 保留扩展点：如需页眉可在此生成 header1.xml
 

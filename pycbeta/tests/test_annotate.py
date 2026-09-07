@@ -460,7 +460,8 @@ class TestRender(unittest.TestCase):
         out = HtmlRenderer(annotations=ruby)._render_gaiji(g)
         self.assertIn("<ruby>𤬪<rt>dù</rt></ruby>", out)
         out = DocxRenderer(annotations=rare)._render_node(g)
-        self.assertIn("𤬪〔dù〕", out)
+        import re as _re
+        self.assertIn("𤬪〔dù〕", _re.sub(r"<[^>]+>", "", out))
         self.assertNotIn("<w:ruby>", out)
         # 未启用注音：原文直通
         self.assertEqual(MdRenderer()._render_node(g), "𤬪")

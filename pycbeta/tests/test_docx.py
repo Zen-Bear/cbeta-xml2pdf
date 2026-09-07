@@ -378,6 +378,78 @@ class TestGaijiFonts(unittest.TestCase):
         self.assertEqual(cfg["zh-Hans"], ["SimSunExtB", "CBETA Supplement"])
 
 
+class TestRenderFallback(unittest.TestCase):
+    """render-time 按字回退：主字体缺字形的字拆出用回退字体，保证无 tofu。
+
+    如 標楷體缺 U+43F6 → 该字 SimSun run，其余保留原字体（2026-09-06 用户报 tofu）。
+    """
+
+    def _renderer(self, files):
+        import unittest.mock as mock
+        m1 = mock.patch("pycbeta.fonts.locator")
+        m2 = mock.patch("pycbeta.fonts.font_cmap")
+        ml = m1.start()
+        mc = m2.start()
+        self.addCleanup(m1.stop)
+        self.addCleanup(m2.stop)
+        ml.return_value.path.side_effect = files.get
+        mc.side_effect = lambda p: {
+            "/kai.ttf": frozenset({0x41, 0x42}),
+            "/song.ttf": frozenset({0x41, 0x42, 0x43F6}),
+            "/pm.ttf": frozenset({0x41}),
+        }.get(p, frozenset())
+        return DocxRenderer()
+
+    def test_all_covered_single_run(self):
+        r = self._renderer({"Kai": "/kai.ttf", "SimSun": "/song.ttf"})
+        out = r._run("AB", "p", fonts="Kai")
+        self.assertEqual(out.count("<w:r>"), 1)
+        self.assertIn('w:eastAsia="Kai"', out)
+
+    def test_missing_char_splits_fallback(self):
+        r = self._renderer({"Kai": "/kai.ttf", "SimSun": "/song.ttf"})
+        out = r._run("A䏶B", "p", fonts="Kai")
+        self.assertEqual(out.count("<w:r>"), 3)
+        self.assertIn('w:eastAsia="Kai"', out)
+        self.assertIn('w:eastAsia="SimSun"', out)
+        # 回退 run 只换 eastAsia，ascii/hAnsi 不动
+        m = [l for l in out.split("<w:r>") if "䏶" in l][0]
+        self.assertIn('w:eastAsia="SimSun"', m)
+
+    def test_no_file_means_unverified(self):
+        r = self._renderer({})
+        out = r._run("A䏶B", "p", fonts="Nope")
+        self.assertEqual(out.count("<w:r>"), 1)  # 无法验证，保持原样
+
+    def test_true_tofu_stays(self):
+        # 主 chain 全缺 → 不拆（真 tofu，预览警告照报）
+        r = self._renderer({"Kai": "/kai.ttf"})
+        self.assertIsNone(r._split_covered("䏶", "Kai"))
+
+    def test_fallback_order(self):
+        r = self._renderer({"Kai": "/kai.ttf", "SimSun": "/song.ttf",
+                            "PMingLiU": "/pm.ttf"})
+        self.assertEqual(r._fallback_for("Kai", "䏶"), "SimSun")
+
+    def test_verse_end_to_end(self):
+        import tempfile
+        import zipfile
+        from pycbeta.model import Work, E, Text
+        r = self._renderer({"標楷體": "/kai.ttf", "SimSun": "/song.ttf",
+                            "新細明體": "/pm.ttf"})
+        w = Work(id="T", source_file="", metadata={"title": "t"},
+                 body=[E(tag="lg", attrs={}, children=[
+                     E(tag="l", attrs={}, children=[Text(text="AB䏶")])])],
+                 notes_by_n={}, apps=[], simplified=False)
+        # 主题 verse=標楷體走 _run 路径；缺字拆出 SimSun run
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(__import__("shutil").rmtree, tmp, True)
+        fn = r.render_work(w, tmp, "v.docx")
+        x = zipfile.ZipFile(fn).read("word/document.xml").decode("utf-8")
+        self.assertIn('w:eastAsia="SimSun"', x)
+        self.assertIn('w:eastAsia="標楷體"', x)
+
+
 class TestMarker(unittest.TestCase):
     """注释注码（2026-09-06）：字体 output.notes_marker_font 可配（默认 Times New Roman）；
     字号=正文字号×0.75（12pt 正文下 9pt）——不随标题段放大，随 font_scale 等比放大。"""
