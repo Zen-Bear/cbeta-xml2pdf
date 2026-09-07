@@ -600,6 +600,16 @@ STYLE_ROW_LABEL = {"title": "书名", "head": "标题", "juan": "卷名",
                    "translator": "译者", "": "正文"}
 
 
+def _name_label_format():
+    """元素名标签块格式：橙底（#cc6600）白字粗体（正文/脚注两处共用）。"""
+    ncf = QTextCharFormat()
+    ncf.setFontPointSize(8)
+    ncf.setFontWeight(QFont.Bold)
+    ncf.setForeground(QColor("#ffffff"))
+    ncf.setBackground(QColor("#cc6600"))
+    return ncf
+
+
 def _para_runs(p, fn_id_to_num):
     """段落 → [run规格]；ruby/EQ 展开为 原文+灰小字〔读音〕；脚注引用取编号；
     w:br 记 {"br": True}（显示时换块，偈颂/预排分行用）。"""
@@ -1989,12 +1999,8 @@ class CssEditorDialog(QDialog):
             _block_margins(fmt, para.get("margin"))
             cur.setBlockFormat(fmt)
             if show_names and para.get("style", "") != prev_style:
-                ncf = QTextCharFormat()
-                ncf.setFontPointSize(8)
-                ncf.setFontWeight(QFont.Bold)
-                ncf.setForeground(QColor("#ffffff"))
-                ncf.setBackground(QColor("#cc6600"))
-                cur.insertText(f"【{STYLE_ROW_LABEL.get(para.get('style', ''), para.get('style', ''))}】", ncf)
+                cur.insertText(f"【{STYLE_ROW_LABEL.get(para.get('style', ''), para.get('style', ''))}】",
+                               _name_label_format())
             prev_style = para.get("style", "")
             for r in para["runs"]:
                 if r.get("br"):
@@ -2028,16 +2034,15 @@ class CssEditorDialog(QDialog):
             cf.setFontWeight(QFont.Bold)
             cur.insertText("校注（预览统一作尾注显示，页底脚注以 Word 为准）", cf)
             cur.insertBlock()
+            prev_fn = None
             for fn in spec["footnotes"]:
                 ffmt = QTextBlockFormat()
                 _block_line_height(ffmt, fn.get("line"))
                 _block_margins(ffmt, fn.get("margin"))
                 cur.setBlockFormat(ffmt)
-                if show_names:
-                    ncf = QTextCharFormat()
-                    ncf.setFontPointSize(8)
-                    ncf.setForeground(QColor("#888888"))
-                    cur.insertText("【脚注】", ncf)
+                if show_names and prev_fn != "footnote":
+                    cur.insertText("【脚注】", _name_label_format())
+                prev_fn = "footnote"
                 for r in fn["runs"]:
                     if r.get("br"):
                         cur.insertBlock()

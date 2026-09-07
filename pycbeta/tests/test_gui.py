@@ -961,6 +961,25 @@ class TestCssEditor(unittest.TestCase):
         finally:
             dlg.close()
 
+    def test_footnote_name_label_once(self):
+        import pycbeta.gui.css_editor as ce
+        dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+        try:
+            run = {"text": "x", "size": 12.0, "font": "", "bold": False,
+                   "color": "", "super": False, "dim": False}
+            spec = {"paras": [
+                {"style": "p", "align": "", "line": None, "runs": [run]}],
+                "footnotes": [
+                    {"num": 1, "runs": [run], "line": None, "margin": None},
+                    {"num": 2, "runs": [run], "line": None, "margin": None}]}
+            dlg.names_box.setChecked(True)
+            dlg._show_spec(spec, {})
+            text = dlg.preview.toPlainText()
+            self.assertEqual(text.count("【脚注】"), 1)
+            dlg._loaded_block = dlg._source_edit.toPlainText()
+        finally:
+            dlg.close()
+
     def test_margins_real_display(self):
         import pycbeta.gui.css_editor as ce
         self.assertEqual(
