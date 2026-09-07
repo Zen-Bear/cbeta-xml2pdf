@@ -637,6 +637,25 @@ class TestCssEditor(unittest.TestCase):
                          ["b"])
         self.assertEqual(ce.missing_families([], []), [])
 
+    def test_qt_alias_bridges_localized_names(self):
+        import pycbeta.gui.css_editor as ce
+        rows = [["ZhaohuaMinB", "朝華見出明朝B", "朝华标题B",
+                 "ZhaohuaMinB Black"],
+                ["PMingLiU", "新細明體"],
+                ["DFKai-SB", "標楷體"],
+                ["SimSun", "宋体"]]
+        qt = ["ZhaohuaMinB", "PMingLiU", "DFKai-SB", "SimSun",
+              "Microsoft YaHei", "Calibri"]
+        m = ce.build_qt_aliases(rows, qt)
+        self.assertEqual(ce.resolve_qt_family("朝华标题B", m), "ZhaohuaMinB")
+        self.assertEqual(ce.resolve_qt_family("新細明體", m), "PMingLiU")
+        self.assertEqual(ce.resolve_qt_family("標楷體", m), "DFKai-SB")
+        self.assertEqual(ce.resolve_qt_family("宋体", m), "SimSun")
+        self.assertEqual(ce.resolve_qt_family("不存在的字体", m), "")
+        self.assertEqual(ce.resolve_qt_family("", m), "")
+        # 大小写不敏感回退
+        self.assertEqual(ce.resolve_qt_family("simsun", m), "SimSun")
+
     def test_rows_without_var_disable_fonts(self):
         import pycbeta.gui.css_editor as ce
         dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")

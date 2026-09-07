@@ -592,9 +592,73 @@ def docx_spec(docx_path):
 # 保证中文可读（SimSun/宋体系统必带）而非掉到默认西文字体。
 PREVIEW_FALLBACKS = ("SimSun", "宋体", "Microsoft YaHei", "sans-serif")
 
+_qt_alias_cache = None
+
+
+def build_qt_aliases(rows, qt_families):
+    """字体文件别名 → Qt 可认名（纯函数，可单测）。
+
+    rows: [[同一文件的全部家族名]]；qt_families: QFontDatabase.families()。
+    实测 Qt(DirectWrite) 常缺中文本地化名（如"朝华标题B"不认、"ZhaohuaMinB"认），
+    用同文件英文名 bridging；找不到的保持缺失（警告用）。
+    """
+    have = set(qt_families or [])
+    low = {h.lower(): h for h in have}
+    mapping = {}
+    for names in rows or []:
+        names = [n for n in (names or []) if n]
+        if not names:
+            continue
+        hit = next((n for n in names if n in have), None)
+        if hit is None:
+            hit = next((low[n.lower()] for n in names if n.lower() in low),
+                       None)
+        if hit:
+            for n in names:
+                mapping.setdefault(n, hit)
+    return mapping
+
+
+def qt_aliases():
+    """本机别名表（进程级缓存；刷新字体列表后失效重建）。"""
+    global _qt_alias_cache
+    if _qt_alias_cache is None:
+        try:
+            from PySide6.QtGui import QFontDatabase
+            from pycbeta.fonts import locator, iter_installed
+            rows = [names for _p, names, _path in
+                    iter_installed(locator())]
+            _qt_alias_cache = build_qt_aliases(
+                rows, QFontDatabase.families())
+        except Exception:  # noqa: BLE001
+            _qt_alias_cache = {}
+    return _qt_alias_cache
+
+
+def clear_qt_alias_cache():
+    global _qt_alias_cache
+    _qt_alias_cache = None
+
+
+def resolve_qt_family(name, aliases=None):
+    """请求字体名 → Qt 可认名；认不出返回 ""（警告用）。"""
+    if not name:
+        return ""
+    mapping = aliases if aliases is not None else qt_aliases()
+    if name in mapping:
+        return mapping[name]
+    low = name.lower()
+    for k, v in mapping.items():
+        if k.lower() == low:
+            return v
+    return ""
+
 
 def preview_families(requested):
-    """预览字体栈：请求字体 + 回退链（去重保序；Qt 按序取首个可用）。"""
+    """预览字体栈：请求字体（调用方已做 Qt 别名解析）+ 回退链（去重保序）。
+
+    纯函数；Qt 按序取首个可用。
+    """
     out = []
     for name in ([requested] if requested else []) + list(PREVIEW_FALLBACKS):
         if name and name not in out:
@@ -1321,6 +1385,8 @@ class CssEditorDialog(QDialog):
     def _fill_font_combos(self, fresh=False):
         """全部字体下拉按 中文buckets/西文三/字库目录 建模；保留当前文本。"""
         from PySide6.QtGui import QStandardItem, QStandardItemModel
+        if fresh:
+            clear_qt_alias_cache()  # 重扫后别名表失效
         groups, bundled, _fonts_dir = font_group_model(fresh=fresh)
         order = [g for g, _ks in _CJK_BUCKETS if groups.get(g)] + \
                 (["未分类"] if groups.get("未分类") else [])
@@ -1439,17 +1505,15 @@ class CssEditorDialog(QDialog):
             self.status.setText(f"预览解析失败：{exc}")
             return
         self._last_docx = docx_path
-        self._show_spec(spec)
+        aliases = qt_aliases()
+        self._show_spec(spec, aliases)
         now = datetime.datetime.now().strftime("%H:%M:%S")
-        try:
-            from PySide6.QtGui import QFontDatabase
-            missing = missing_families(_spec_fonts(spec),
-                                       QFontDatabase.families())
-        except Exception:  # noqa: BLE001 —— 查不到就当全有，不挡预览
-            missing = []
+        missing = [f for f in _spec_fonts(spec)
+                   if f and not resolve_qt_family(f, aliases)]
         msg = f"预览已更新 {now}"
         if missing:
-            msg += f"（{ '、'.join(missing[:6]) }本机 Qt 不可用，替代显示；请安装字体后重开）"
+            msg += (f"（{'、'.join(missing[:6])}无可用字形，替代显示；"
+                    "导出 DOCX 不受影响）")
         self.status.setText(msg)
         if self._need_refresh:
             self._need_refresh = False
@@ -1461,7 +1525,7 @@ class CssEditorDialog(QDialog):
             self._need_refresh = False
             QTimer.singleShot(0, self.refresh_preview)
 
-    def _show_spec(self, spec):
+    def _show_spec(self, spec, aliases=None):
         from PySide6.QtGui import QTextBlockFormat
         doc = self.preview.document()
         doc.clear()
@@ -1480,7 +1544,8 @@ class CssEditorDialog(QDialog):
                 if r["size"]:
                     cf.setFontPointSize(r["size"])
                 if r["font"]:
-                    cf.setFontFamilies(preview_families(r["font"]))
+                    resolved = resolve_qt_family(r["font"], aliases)
+                    cf.setFontFamilies(preview_families(resolved or r["font"]))
                 if r["bold"]:
                     cf.setFontWeight(QFont.Bold)
                 if r["color"]:
@@ -1506,7 +1571,9 @@ class CssEditorDialog(QDialog):
                     if r["size"]:
                         cf.setFontPointSize(r["size"])
                     if r["font"]:
-                        cf.setFontFamilies(preview_families(r["font"]))
+                        resolved = resolve_qt_family(r["font"], aliases)
+                        cf.setFontFamilies(
+                            preview_families(resolved or r["font"]))
                     if r["bold"]:
                         cf.setFontWeight(QFont.Bold)
                     if r["color"]:
