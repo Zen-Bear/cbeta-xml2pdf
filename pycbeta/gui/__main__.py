@@ -425,6 +425,8 @@ def main(argv=None):
     from pycbeta.gui.css_editor import suppress_font_warnings
     suppress_font_warnings()
     app = QApplication.instance() or QApplication(sys.argv if argv is None else argv)
+    from pycbeta.gui.css_editor import ensure_tooltip_style
+    ensure_tooltip_style()  # 黑 tooltip 可见（应用级一次）
     win = MainWindow()
     win.show()
     return app.exec()

@@ -632,14 +632,33 @@ def div_note_color(css_text):
     return last if last.startswith("#") else ""
 
 
-def _name_label_format():
-    """元素名标签块格式：橙底（#cc6600）白字粗体（正文/脚注两处共用）。"""
+def _name_label_format(dirty=False):
+    """元素名标签块格式：橙底（#cc6600）白字粗体（正文/脚注/字义共用）。
+
+    dirty: 该元素有未保存改动（touched）→ 深红底，保存后回橙色。
+    """
     ncf = QTextCharFormat()
     ncf.setFontPointSize(8)
     ncf.setFontWeight(QFont.Bold)
     ncf.setForeground(QColor("#ffffff"))
-    ncf.setBackground(QColor("#cc6600"))
+    ncf.setBackground(QColor("#c00000" if dirty else "#cc6600"))
     return ncf
+
+
+# 元素名标签键 → 左栏选择器（判 touched 用；正文含 "" 回退）
+_LABEL_TOUCHED_SEL = {"title": "h1.title", "head": "p.head",
+                      "juan": "p.juan", "pin": "p.pin", "p": "p",
+                      "verse": "div.lg", "footnote": ".footnote",
+                      "byline": "p.byline", "author": "p.author",
+                      "translator": "p.translator", "div-note": "div.div-note",
+                      "": "p"}
+
+
+def label_is_dirty(label_key, touched):
+    """该标签对应选择器有未保存改动 → True（纯函数，可单测）。"""
+    sel = _LABEL_TOUCHED_SEL.get(label_key or "", "p")
+    return any(isinstance(t, tuple) and t and t[0] == sel
+               for t in (touched or set()))
 
 
 def _para_runs(p, fn_id_to_num):
@@ -1050,7 +1069,7 @@ class _RenderThread(QThread):
                 lang = "zh-Hans"
             theme = Theme.from_css(self._css, lang)
             fn = DocxRenderer(theme=theme, notes="footnote",
-                              bookmarks=False).render_work(
+                              bookmarks=True).render_work(
                 work, self._out, filename="preview.docx")
             self.done.emit(fn if isinstance(fn, str) else fn[0])
         except Exception as exc:  # noqa: BLE001 —— 错误进状态行，不崩界面
@@ -1101,6 +1120,22 @@ class _ColorPopup(QDialog):
 
     def selected(self):
         return self._selected
+
+
+class _PopupWheelCombo(QComboBox):
+    """下拉框滚轮保护：弹开前滚轮穿透给滚动区（不改值），弹开后正常选。
+
+    左栏在滚动区里，鼠标一滚就改字体/粗细是中国式翻车；popup 可见才吃滚轮。
+    """
+
+    def wheelEvent(self, event):
+        try:
+            if self.view().isVisible():
+                super().wheelEvent(event)
+                return
+        except RuntimeError:  # noqa: BLE001 —— 关闭中 view 已销毁
+            pass
+        event.ignore()
 
 
 class PreviewReportDialog(QDialog):
@@ -1369,6 +1404,7 @@ class CssEditorDialog(QDialog):
                             | Qt.WindowMaximizeButtonHint)
         self.resize(1180, 760)
         self._engine_chain = engine_chain
+        ensure_tooltip_style()  # 黑 tooltip 可见（应用级一次）
         self._tmp = tempfile.mkdtemp(prefix="css-editor-")
         self._work = None            # 当前解析后 Work（样张缓存）
         self._work_src = ("", 0)     # (path, mtime)
@@ -1738,10 +1774,10 @@ class CssEditorDialog(QDialog):
         for sel, label in EDITABLE_ROWS:
             row = QHBoxLayout()
             suffix = _var_suffix(sel)
-            font_hant = QComboBox()
+            font_hant = _PopupWheelCombo()
             font_hant.setEditable(False)  # 只从下拉选（防手打 typo）；特殊栈去源码页
             font_hant.setMinimumWidth(150)
-            font_hans = QComboBox()
+            font_hans = _PopupWheelCombo()
             font_hans.setEditable(False)
             font_hans.setMinimumWidth(150)
             if suffix is None:
@@ -1753,7 +1789,7 @@ class CssEditorDialog(QDialog):
                     _box.setToolTip("下拉选择字体栈；特殊栈去源码页手写")
             size_edit = QLineEdit()
             size_edit.setFixedWidth(80)
-            weight = QComboBox()
+            weight = _PopupWheelCombo()
             for wlabel, data in WEIGHT_ITEMS:
                 weight.addItem(wlabel, data)
             weight.setFixedWidth(80)
@@ -2089,7 +2125,7 @@ class CssEditorDialog(QDialog):
         theme = Theme.from_css(css, lang or self._preview_lang())
         out = _tf.mkdtemp(prefix="css-editor-")
         fn = DocxRenderer(theme=theme, notes="footnote",
-                          bookmarks=False).render_work(work, out, "preview.docx")
+                          bookmarks=True).render_work(work, out, "preview.docx")
         return fn if isinstance(fn, str) else fn[0]
 
     def _report_info(self, error=None):
@@ -2122,6 +2158,30 @@ class CssEditorDialog(QDialog):
         self._report_dlg.raise_()
         self._report_dlg.activateWindow()
 
+    def _on_status_link(self, url):
+        """状态栏链接分发：# → 检查窗；open-export → 打开导出的文件。"""
+        if url == "open-export":
+            path = getattr(self, "_last_export", "")
+            if path and os.path.isfile(path):
+                QDesktopServices.openUrl(
+                    QUrl.fromLocalFile(os.path.abspath(path)))
+            return
+        self._open_report()
+
+    def _set_export_status(self, kind, path):
+        """导出后状态：文件名可点击（系统关联打开），问题仍走 ⚠ 进检查窗。"""
+        self._last_export = path
+        if not self._status_linked:
+            self.status.linkActivated.connect(self._on_status_link)
+            self._status_linked = True
+        self.status.setTextFormat(Qt.RichText)
+        self.status.setText(
+            f'{kind} 已保存：{path} <a href="open-export">（打开文件）</a>')
+        self.status.setToolTip("点击打开文件")
+        self.status.setOpenExternalLinks(False)
+        self.status.setTextInteractionFlags(Qt.TextBrowserInteraction)
+        self.status.setCursor(Qt.PointingHandCursor)
+
     def _set_status(self, text, issues=0, tip=""):
         """状态行：平时只显示正文；有问题追加可点击 ⚠（点开检查窗）。
 
@@ -2130,8 +2190,7 @@ class CssEditorDialog(QDialog):
         """
         if issues:
             if not self._status_linked:
-                self.status.linkActivated.connect(
-                    lambda _u: self._open_report())
+                self.status.linkActivated.connect(self._on_status_link)
                 self._status_linked = True
             self.status.setTextFormat(Qt.RichText)
             self.status.setText(
@@ -2226,8 +2285,9 @@ class CssEditorDialog(QDialog):
                                  for r in texts):
                     label_key = "div-note"
             if show_names and label_key != prev_key:
+                dirty = label_is_dirty(label_key, self._touched)
                 cur.insertText(f"【{STYLE_ROW_LABEL.get(label_key, label_key)}】",
-                               _name_label_format())
+                               _name_label_format(dirty))
             prev_key = label_key
             for r in para["runs"]:
                 if r.get("br"):
@@ -2268,7 +2328,9 @@ class CssEditorDialog(QDialog):
                 _block_margins(ffmt, fn.get("margin"))
                 cur.setBlockFormat(ffmt)
                 if show_names and prev_fn != "footnote":
-                    cur.insertText("【脚注】", _name_label_format())
+                    dirty = label_is_dirty("footnote", self._touched)
+                    cur.insertText("【脚注】",
+                                   _name_label_format(dirty))
                 prev_fn = "footnote"
                 for r in fn["runs"]:
                     if r.get("br"):
@@ -2311,7 +2373,7 @@ class CssEditorDialog(QDialog):
         except OSError as exc:
             QMessageBox.warning(self, "导出失败", str(exc))
             return
-        self.status.setText(f"DOCX 已保存：{path}")
+        self._set_export_status("DOCX", path)
 
     def _export_pdf(self):
         path, _ = QFileDialog.getSaveFileName(self, "导出样张 PDF", "preview.pdf",
@@ -2335,7 +2397,7 @@ class CssEditorDialog(QDialog):
             return
         finally:
             QApplication.restoreOverrideCursor()
-        self.status.setText(f"PDF 已导出：{path}")
+        self._set_export_status("PDF", path)
 
     def closeEvent(self, event):
         if not self._confirm_discard():
@@ -2359,6 +2421,23 @@ def suppress_font_warnings():
     cur = os.environ.get(key, "")
     if rule not in cur:
         os.environ[key] = (cur + ";" + rule) if cur else rule
+
+
+def ensure_tooltip_style():
+    """QToolTip 深底白字（黑按钮的黑 tooltip 可见；全局一次）。
+
+    tooltip 样式只能应用级定制（按控件各调无效）；深底白字对所有色块
+    都对比可读。已设置则跳过，不叠加。
+    """
+    from PySide6.QtWidgets import QApplication
+    app = QApplication.instance()
+    if app is None or getattr(app, "_tooltip_styled", False):
+        return
+    app.setProperty("_tooltip_styled", True)
+    rule = "QToolTip { background-color: #222222; color: #ffffff; " \
+        "border: 1px solid #888888; padding: 2px; }"
+    if rule not in (app.styleSheet() or ""):
+        app.setStyleSheet((app.styleSheet() or "") + "\n" + rule)
 
 
 def main(argv=None):

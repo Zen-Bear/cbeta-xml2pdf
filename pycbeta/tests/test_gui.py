@@ -1104,6 +1104,69 @@ class TestCssEditor(unittest.TestCase):
         finally:
             shutil.rmtree(root, ignore_errors=True)
 
+    def test_wheel_combo_ignores_wheel_when_closed(self):
+        import unittest.mock as mock
+        import pycbeta.gui.css_editor as ce
+        dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+        try:
+            box = dlg._rows["p"]["font_hans"]
+            self.assertIsInstance(box, ce._PopupWheelCombo)
+            self.assertIsInstance(dlg._rows["p"]["weight"],
+                                  ce._PopupWheelCombo)
+            evt = mock.Mock()
+            box.wheelEvent(evt)  # 未弹开 → 吃掉滚轮（滚左栏，不改值）
+            evt.ignore.assert_called_once_with()
+            dlg._loaded_block = dlg._source_edit.toPlainText()
+        finally:
+            dlg.close()
+
+    def test_label_dirty_highlight(self):
+        import pycbeta.gui.css_editor as ce
+        self.assertTrue(ce.label_is_dirty(
+            "head", {("p.head", "font-size")}))
+        self.assertTrue(ce.label_is_dirty(
+            "div-note", {("div.div-note", "color")}))
+        self.assertFalse(ce.label_is_dirty("p", set()))
+        self.assertFalse(ce.label_is_dirty(
+            "head", {("p", "font-size")}))
+        clean = ce._name_label_format(False).background().color().name()
+        dirty = ce._name_label_format(True).background().color().name()
+        self.assertNotEqual(clean, dirty)
+
+    def test_export_status_opens_file(self):
+        import tempfile
+        import unittest.mock as mock
+        import pycbeta.gui.css_editor as ce
+        dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+        try:
+            fd, fn = tempfile.mkstemp(suffix=".docx")
+            import os as _os
+            _os.close(fd)
+            try:
+                dlg._set_export_status("DOCX", fn)
+                self.assertTrue(dlg._status_linked)
+                self.assertIn("打开文件", dlg.status.text())
+                with mock.patch.object(
+                        ce.QDesktopServices, "openUrl") as m:
+                    dlg.status.linkActivated.emit("open-export")
+                    m.assert_called_once()  # 带 QUrl 实参打开文件
+                with mock.patch.object(dlg, "_open_report") as m2:
+                    dlg.status.linkActivated.emit("#")
+                    m2.assert_called_once_with()
+            finally:
+                _os.remove(fn)
+            dlg._loaded_block = dlg._source_edit.toPlainText()
+        finally:
+            dlg.close()
+
+    def test_tooltip_style_once(self):
+        from PySide6.QtWidgets import QApplication
+        import pycbeta.gui.css_editor as ce
+        QApplication.instance() or QApplication([])
+        ce.ensure_tooltip_style()
+        ce.ensure_tooltip_style()  # 重复不叠加
+        self.assertIn("QToolTip", QApplication.instance().styleSheet())
+
     def test_margins_real_display(self):
         import pycbeta.gui.css_editor as ce
         self.assertEqual(
