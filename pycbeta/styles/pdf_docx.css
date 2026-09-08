@@ -28,6 +28,7 @@
   --font-fangsong: 仿宋, FangSong;
   --font-mingti: 新細明體, PMingLiU;
   --font-series-title: 隸書, LiSu;
+  --font-def: 新細明體, PMingLiU;
 }
 html[lang="zh-Hans"] {
   --font-body: 宋体, SimSun, Times New Roman;
@@ -49,6 +50,7 @@ html[lang="zh-Hans"] {
   --font-heiti: 黑体, SimHei;
   --font-mingti: 宋体, SimSun;
   --font-series-title: 隶书, LiSu;
+  --font-def: 宋体, SimSun;
 }
 body {
   line-height: 1.5;   /* 全局行距（1.5倍）；DOCX 由各标签 line-height 覆盖 */
@@ -200,6 +202,9 @@ div.div-xu p.head { color: #0000a0; font-size: 20pt; }
 /* div.div-jing 不加粗：经 = 正文主体，官方 golden 无此规则 */
 div.div-w { color: #777777; }                  /* 附文 */
 div.div-note { color: #666666; }               /* 注记类 div（灰色，与正文区分） */
+/* 释义（<cb:def>，div-note 内）：比正文小一号（0.9em），无颜色（继承灰）；
+   字体走 --font-def（繁简双栏）；DOCX 经 def 标签并入 run，HTML/PDF 浏览器原生。 */
+cb:def { font-size: 0.9em; }
 
 /* ============ 校勘注释 ============ */
 /* 双行夹注（<note place="inline"> 的双行形态）：0.8em 紫色，DOCX 渲染为双行小字。 */

@@ -1,6 +1,7 @@
 # TODO
 
 - **铁律（2026-09-06 用户确认）：改 `pycbeta/styles/pdf_docx.css` 前必须先经用户确认（出值才动手），plan 模式只展示不动。**
+- **死命令（2026-09-07 用户确认）：任何新 XML 元素（cb:* 等）必须入左栏 `EDITABLE_ROWS` + `TAG_SELECTOR` 映射 + CSS 变量/规则，验收 = 左栏可见可调。**
 - [x] **已完成 render-time 按字回退**（2026-09-06 用户报 標楷體 U+43F6 预览/Word 双 tofu）：`RENDER_FALLBACKS=(SimSun,PMingLiU,微软雅黑)`，`_fb_emit` 按 cmap 查覆盖、缺字拆 run（只换 eastAsia）；无文件不断言保持原样；真全缺（如悉昙 PUA）保持 tofu + 预览点名。T0672 对账文本一致；单测 TestRenderFallback 6 项；全量 302 OK，verify 8/0
   - 追补（2026-09-06）：回退链分繁简（Hant 首选 PMingLiU，Hans 首选 SimSun；跟 gaiji_lang；含 SimSunExtB/CBETA Supplement）；`output.docx.gaijiFonts` 未动（删的只是顶层 font_sets）；`linkActivated` 改 flag 跟踪消 RuntimeWarning；Ranjana.ttf/Siddam.ttf 实测 0/58 样本 PUA（纯装饰 CJK，不接线）
   - RJ 悉昙接线（2026-09-06）：官方 docx 实锤 `eastAsia="Ranjana"` + rjchar 常规字（不用 PUA）；parser 收 `rjchar`，`_resolve_gaiji` RJ 优先，`_ranjana_font_for` 按覆盖选字体（Ranjana→Siddam），无则主题字体直显（可读）；sample plane-16 PUA 清零，101 Ranjana run；单测 TestRanjana 5 项；全量 308 OK，verify 8/0
@@ -60,8 +61,16 @@
     div-xu-head 改 標楷體/DFKaiShu 与 楷体/KaiTi；注释同步
   - 字体下拉可编辑可搜（2026-09-07）：去"常用栈"分组；中文/字库单名自动补同字体英文别名
     （data="名, 别名"、显示短名），英文单名不补；`editable+NoInsert` 打字过滤；lost-focus
-    输入非选项 → 警告"本机不存在只能在源码输入"（不还原）；跨字体/未装栈载入走临时项不堆积；
-    粗细改三态按钮（默认灰=未覆盖/加粗/常规，点击轮换）；全量 339 OK、verify 8/0
+    匹配选项自动选中（写 data）、不匹配警告+复原旧选中项；框恒只显示一个名字（临时项首段
+    短名）；删空白占位（空=清显示不写）；触发信号 currentTextChanged→currentIndexChanged
+    （手输不实时写源码）；粗细改三态按钮（默认灰=未覆盖/加粗/常规，点击轮换）
+  - 启动载用户槽 theme（2026-09-07）：`current_theme_value` 解析到 css-presets/ 用户文件即
+    `_load_preset_path`（源码页=其覆盖块、保存按钮亮）；内置默认不载入（保持灰归另存）
+  - 颜色按钮去文字（2026-09-07）：26×26 纯色块，右键清除/tooltip 保留，列头收窄
+  - def 元素入左栏（2026-09-07，新元素死命令首例）：`TAG_SELECTOR["cb:def"]="def"` +
+    `FONT_VAR_TAGS` 加 def；`render_docx._render_e` def 分支（run 带 def 标签，def 内 p 继承）；
+    `pdf_docx.css` `--font-def` 双栏 + `cb:def{font-size:0.9em}`（无颜色）；左栏"释义"行 +
+    tooltip 双向查找（`_row_cb_tip` 各行 tooltip 标 cb 标签）；全量 345 OK、verify 8/0
 - [ ] **P9 中** GUI 界面三语切换（简/繁/英，2026-09-06 用户立项；与输出经文 t2s/font_sets 无关，是界面本身语言）
   - 背景：界面中文串全硬编码（panel 约数百处、`__main__` 状态栏/按钮），无 `QTranslator` 机制
   - 方案：先抽字符串资源（`pycbeta/gui/i18n/*.ts`，Qt Linguist 流程：`pylupdate6` 抽取→翻译→`lrelease` 编译→`QTranslator.load/install`），面板顶部或设置加语言下拉（简/繁/英，存用户槽，重启生效；或动态 `retranslateUi` 热切）

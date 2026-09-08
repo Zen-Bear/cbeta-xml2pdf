@@ -979,18 +979,53 @@ class TestCssEditor(unittest.TestCase):
             dlg._loaded_block = dlg._source_edit.toPlainText()
             dlg.close()
 
-    def test_font_input_validate_warns_no_restore(self):
+    def test_font_input_validate_warns_and_restores(self):
         import unittest.mock as mock
         import pycbeta.gui.css_editor as ce
-        dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+        groups = {"宋体": ["宋体"], "未分类": []}
+        with mock.patch.object(ce, "font_group_model",
+                               return_value=(groups, [], "")), \
+                mock.patch.object(ce, "qt_aliases",
+                                  return_value={"宋体": "SimSun"}):
+            dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
         try:
             box = dlg._rows["p"]["font_hans"]
+            i = box.findData("宋体, SimSun")
+            self.assertGreaterEqual(i, 0)
+            box.setCurrentIndex(i)  # 先选中"宋体"作为旧值
+            box.setCurrentIndex(0)  # 切到第一项（确保有基线）
+            box.setCurrentIndex(i)
+            self.assertEqual(box.currentText(), "宋体")
             with mock.patch.object(ce.QMessageBox, "warning") as m:
                 box.setEditText("NotInstalled")
                 box.lineEdit().editingFinished.emit()
                 m.assert_called_once()
-                # 警告不还原：手输文本保留（本机不存在只能源码输入）
-                self.assertEqual(box.currentText(), "NotInstalled")
+                # 警告 + 复原：文本框回到旧选中项（不再是手输文本）
+                self.assertEqual(box.currentText(), "宋体")
+            dlg._loaded_block = dlg._source_edit.toPlainText()
+        finally:
+            dlg._loaded_block = dlg._source_edit.toPlainText()
+            dlg.close()
+
+    def test_font_input_match_auto_selects(self):
+        import unittest.mock as mock
+        import pycbeta.gui.css_editor as ce
+        groups = {"宋体": ["宋体"], "未分类": []}
+        with mock.patch.object(ce, "font_group_model",
+                               return_value=(groups, [], "")), \
+                mock.patch.object(ce, "qt_aliases",
+                                  return_value={"宋体": "SimSun"}):
+            dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+        try:
+            box = dlg._rows["p"]["font_hans"]
+            box.setCurrentIndex(0)
+            with mock.patch.object(ce.QMessageBox, "warning") as m:
+                box.setEditText("宋体")
+                box.lineEdit().editingFinished.emit()
+                m.assert_not_called()  # 匹配选项，不警告
+            # 自动选中该项 → 写完整栈
+            self.assertIn("--font-p: 宋体, SimSun",
+                          dlg._source_edit.toPlainText())
             dlg._loaded_block = dlg._source_edit.toPlainText()
         finally:
             dlg._loaded_block = dlg._source_edit.toPlainText()
@@ -1219,13 +1254,17 @@ class TestCssEditor(unittest.TestCase):
 
     def test_save_only_when_preset_loaded(self):
         import shutil
+        import unittest.mock as mock
         import pycbeta.gui.css_editor as ce
         root = tempfile.mkdtemp()
         try:
             fn = os.path.join(root, "mine.css")
             with open(fn, "w", encoding="utf-8") as f:
                 f.write("/* base */\np.head { font-size: 40pt; }\n")
-            dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+            # 出厂主题启动（不载用户槽）→ 保存灰
+            with mock.patch.object(ce, "current_theme_value",
+                                   return_value="pdf_docx.css"):
+                dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
             try:
                 # 出厂缓冲：保存置灰，输名字的事归另存
                 self.assertFalse(dlg.btn_save.isEnabled())
@@ -1782,8 +1821,12 @@ class TestCssEditor(unittest.TestCase):
             dlg.close()
 
     def test_controls_default_from_factory(self):
+        import unittest.mock as mock
         from pycbeta.gui.css_editor import CssEditorDialog
-        dlg = CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+        import pycbeta.gui.css_editor as ce
+        with mock.patch.object(ce, "current_theme_value",
+                               return_value="pdf_docx.css"):
+            dlg = CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
         try:
             # 控件预填出厂值，但源码块保持空（不算 touched）
             self.assertEqual(dlg._rows["h1.title"]["size"].text(), "30pt")
@@ -1793,6 +1836,61 @@ class TestCssEditor(unittest.TestCase):
         finally:
             dlg._loaded_block = dlg._source_edit.toPlainText()
             dlg.close()
+
+    def test_color_btn_swatch(self):
+        from pycbeta.gui.css_editor import CssEditorDialog
+        dlg = CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+        try:
+            btn = dlg._rows["h1.title"]["color"]
+            self.assertEqual(btn.text(), "")
+            self.assertEqual(btn.width(), 26)
+            self.assertIn("右键清除", btn.toolTip())
+        finally:
+            dlg.close()
+
+    def test_def_row_present(self):
+        import unittest.mock as mock
+        import pycbeta.gui.css_editor as ce
+        dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+        try:
+            self.assertIn("cb:def", dlg._rows)
+            row = dlg._rows["cb:def"]
+            self.assertEqual(row.get("suffix"), "def")  # 有字体变量
+            self.assertTrue(row["font_hant"].isEnabled())
+            self.assertIn("cb 标签", row["name_label"].toolTip())
+            self.assertIn("def", row["name_label"].toolTip())
+        finally:
+            dlg._loaded_block = dlg._source_edit.toPlainText()
+            dlg.close()
+
+    def test_startup_loads_user_theme(self):
+        import shutil
+        import unittest.mock as mock
+        import pycbeta.gui.css_editor as ce
+        import pycbeta.theme as th
+        root = tempfile.mkdtemp()
+        udir = os.path.join(root, "presets")
+        os.makedirs(udir)
+        fn = os.path.join(udir, "mine.css")
+        with open(fn, "w", encoding="utf-8") as f:
+            f.write("/* base */\np.head { font-size: 40pt; }\n")
+        try:
+            with mock.patch.object(ce, "current_theme_value",
+                                   return_value="mine"), \
+                    mock.patch.object(th, "user_presets_dir",
+                                      return_value=udir):
+                dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+            try:
+                # 启动载用户槽：源码页=文件覆盖块，保存亮
+                self.assertTrue(dlg.btn_save.isEnabled())
+                self.assertIn("font-size: 40pt",
+                              dlg._source_edit.toPlainText())
+                self.assertEqual(
+                    dlg._rows["p.head"]["size"].text(), "40pt")
+            finally:
+                dlg.close()
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
 
     def test_div_note_row(self):
         from pycbeta.gui.css_editor import CssEditorDialog

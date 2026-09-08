@@ -328,6 +328,24 @@ class TestDocxBookmarksSplit(unittest.TestCase):
         styles = z.read("word/styles.xml").decode("utf-8")
         self.assertIn('w:styleId="series-title"', styles)
 
+    def test_def_run_carries_def_style(self):
+        from pycbeta.model import Work, E, Text
+        from pycbeta.theme import Theme
+        css = (":root { --font-def: 新細明體, PMingLiU; }\n"
+               "cb:def { font-size: 0.9em; }\n")
+        t = Theme.from_css(css)
+        w = Work(id="T", source_file="", metadata={"title": "t"},
+                 body=[E(tag="div", attrs={"type": "note"},
+                         children=[E(tag="def", attrs={},
+                                     children=[Text("释义")])])],
+                 notes_by_n={}, apps=[])
+        fn = DocxRenderer(theme=t).render_work(w, self.tmp, "def.docx")
+        z = zipfile.ZipFile(fn)
+        s = z.read("word/document.xml").decode("utf-8")
+        # def run 带 def 标签：字号 0.9em（12pt×0.9=10.8pt→21半磅）与 def 字体
+        self.assertIn('<w:sz w:val="21"/>', s)
+        self.assertIn('w:eastAsia="新細明體"', s)
+
     def test_split(self):
         files = DocxRenderer(split=True).render_work(self.work, self.tmp, "sp.docx")
         self.assertEqual(len(files), 7)

@@ -101,6 +101,17 @@ class TestFontVars(unittest.TestCase):
         t = Theme.from_css(":root { }\np { font-family: var(--nope, FB); }\n")
         self.assertEqual(t.tags["p"]["font-family"], "FB")
 
+    def test_def_selector_mapping(self):
+        from pycbeta.theme import _SELECTOR_TAGS, FONT_VAR_TAGS
+        self.assertEqual(_SELECTOR_TAGS["cb:def"], "def")
+        self.assertIn("def", FONT_VAR_TAGS)
+        t = Theme.from_css(
+            ":root { --font-def: 新細明體, PMingLiU; }\n"
+            "cb:def { font-size: 0.9em; }\n")
+        self.assertEqual(t.tags["def"]["font-family"],
+                         "新細明體, PMingLiU")
+        self.assertEqual(t.tags["def"]["font-size"], "0.9em")
+
 
 class TestLatinFont(unittest.TestCase):
     def test_latin_var_pair(self):

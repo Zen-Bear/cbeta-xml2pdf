@@ -57,6 +57,7 @@ EDITABLE_ROWS = (
     ("pre", "预排"),
     ("div.lg", "偈颂"),
     ("div.div-note", "字义"),
+    ("cb:def", "释义"),
     ("span.doube-line-note", "双行夹注"),
     ("span.interlinear-note", "单行夹注"),
     ("span.note-inline", "括号夹注"),
@@ -79,6 +80,13 @@ ROW_TIPS = {
     "p.head": "标题1–6级在源码页调（仅HTML/PDF，DOCX忽略）",
     "div.lg": "注记类偈行颜色在源码页（div.lg.note1/2）",
 }
+
+
+def _row_cb_tip(selector):
+    """左栏行 → cb 标签名（tooltip 双向查找：中文名 ↔ <cb:…>）。"""
+    from pycbeta.theme import _SELECTOR_TAGS
+    tag = _SELECTOR_TAGS.get(selector or "")
+    return f"cb 标签：{tag}" if tag else ""
 
 # 字体下拉分组：中文按关键字 buckets（首中即停；宋体在明体前吞掉 PMingLiU 类）
 _CJK_BUCKETS = (
@@ -1495,6 +1503,7 @@ class CssEditorDialog(QDialog):
         self._sync_controls_from_block(base_values)
         self.preset_box.refresh(current_theme_value())
         self.status.setText(f"基于：{self._base_label}")
+        self._maybe_load_user_theme()
         self._refresh_save_enabled()
         self.refresh_preview()
 
@@ -1551,6 +1560,21 @@ class CssEditorDialog(QDialog):
         if self._load_block_text(strip_factory_prefix(text)):
             self._preset_path = path
             self._refresh_save_enabled()
+
+    def _maybe_load_user_theme(self):
+        """启动载入用户槽 theme（仅用户目录 css-presets/ 文件）：
+        源码页=其覆盖块、保存按钮亮；内置默认不载入（保持灰归另存）。"""
+        from pycbeta.theme import resolve_theme_css, user_presets_dir
+        path, _label = resolve_theme_css(current_theme_value())
+        if not path:
+            return
+        udir = os.path.abspath(user_presets_dir())
+        try:
+            if os.path.commonpath([os.path.abspath(path), udir]) != udir:
+                return
+        except ValueError:  # noqa: BLE001 —— 不同盘符
+            return
+        self._load_preset_path(path)
 
     def _on_preset_chosen(self, _index):
         if not self._confirm_discard():
@@ -1778,7 +1802,7 @@ class CssEditorDialog(QDialog):
         chead = QHBoxLayout()
         for text, stretch, width in (("繁字体", 1, 0), ("简字体", 1, 0),
                                      ("字号", 0, 80), ("粗细", 0, 80),
-                                     ("颜色", 0, 64)):
+                                     ("颜色", 0, 26)):
             lab = QLabel(f"<b>{text}</b>")
             lab.setStyleSheet("color: gray")
             if width:
@@ -1809,8 +1833,9 @@ class CssEditorDialog(QDialog):
             weight.setFixedWidth(80)
             weight.setToolTip("默认=跟随出厂（未覆盖）；加粗/常规=强制覆盖")
             weight.clicked.connect(lambda _v, s=sel: self._cycle_weight(s))
-            color_btn = QPushButton("颜色")
-            color_btn.setFixedWidth(64)
+            color_btn = QPushButton("")
+            color_btn.setFixedWidth(26)
+            color_btn.setFixedHeight(26)
             color_btn.clicked.connect(
                 lambda _v, s=sel: self._pick_color(s))
             color_btn.setToolTip("CSS 现有颜色 / 自定义取色；右键清除")
@@ -1823,21 +1848,22 @@ class CssEditorDialog(QDialog):
             row.addWidget(weight)
             row.addWidget(color_btn)
             lab = QLabel(label)
-            if sel in ROW_TIPS:
-                lab.setToolTip(ROW_TIPS[sel])
+            tip = ROW_TIPS.get(sel) or _row_cb_tip(sel)
+            if tip:
+                lab.setToolTip(tip)
             form.addRow(lab, row)
             self._rows[sel] = {"font_hant": font_hant, "font_hans": font_hans,
                                "suffix": suffix, "size": size_edit,
                                "weight": weight, "color": color_btn,
                                "color_value": "", "name_label": lab,
                                "weight_value": ""}
-            font_hant.currentTextChanged.connect(
-                lambda _v, s=sel: self._on_control_changed(s, "font-family",
+            font_hant.currentIndexChanged.connect(
+                lambda _i, s=sel: self._on_control_changed(s, "font-family",
                                                           "zh-Hant"))
             font_hant.lineEdit().editingFinished.connect(
                 lambda s=sel: self._validate_font_input(s, "zh-Hant"))
-            font_hans.currentTextChanged.connect(
-                lambda _v, s=sel: self._on_control_changed(s, "font-family",
+            font_hans.currentIndexChanged.connect(
+                lambda _i, s=sel: self._on_control_changed(s, "font-family",
                                                           "zh-Hans"))
             font_hans.lineEdit().editingFinished.connect(
                 lambda s=sel: self._validate_font_input(s, "zh-Hans"))
@@ -1994,7 +2020,8 @@ class CssEditorDialog(QDialog):
         self._on_control_changed(sel, "font-weight")
 
     def _validate_font_input(self, sel, lang):
-        """lost focus：输入文本非任何选项 → 警告（不还原），本机不存在只能源码输入。"""
+        """lost focus：手输文本匹配某选项 → 自动选中（写 data）；
+        不匹配 → 警告 + 复原旧选中项（本机不存在只能源码输入）。"""
         box = self._rows[sel]["font_hans"] if lang == "zh-Hans" \
             else self._rows[sel]["font_hant"]
         text = box.currentText().strip()
@@ -2002,12 +2029,17 @@ class CssEditorDialog(QDialog):
             return
         for i in range(box.count()):
             if box.itemText(i) == text or box.itemData(i) == text:
+                if i != box.currentIndex():
+                    box.setCurrentIndex(i)  # 触发 currentIndexChanged 写 data
                 return
+        old = box.itemData(box.currentIndex()) \
+            or box.itemText(box.currentIndex())
         QMessageBox.warning(
             self, "字体不存在",
-            f"「{text}」在本机未找到。\n\n"
+            f"「{text}」在本机未找到，已复原。\n\n"
             "左栏只能选本机已装字体；本机不存在的字体（如跨平台字型）"
             "请在源码页输入，检查窗会校验。")
+        self._select_font_value(box, old or "")
 
     def _pick_color(self, sel):
         dlg = _ColorPopup(self.work_css(), self._rows[sel]["color_value"], self)
@@ -2023,28 +2055,30 @@ class CssEditorDialog(QDialog):
 
     # ----- 字体分组 -----
     def _select_font_value(self, box, value):
-        """字体框按栈值选中（短名显示、存完整栈）。
+        """字体框按栈值选中（显示单名、存完整栈）。
 
-        findData 命中按索引选；未命中（跨字体/未装栈）插临时项兜底——
-        当前值恒为可选项，选不回问题不再有；上次临时项先删防堆积。
-        空值回 0 号（"" 占位）。"""
+        findData 命中按索引选；未命中（跨字体/未装栈）插临时项（显示首段
+        短名、data 完整栈）兜底——当前值恒为可选项；上次临时项先删防堆积。
+        空值清显示（该元素未设字体）。"""
         value = (value or "").strip()
         with QSignalBlocker(box):
             old = box.property("tempStack") or ""
             if old and old != value:
-                i = box.findText(old)
+                i = box.findData(old)
                 if i >= 0:
                     box.removeItem(i)
                 box.setProperty("tempStack", "")
             if not value:
-                box.setCurrentIndex(0)
+                box.clearEditText()
+                box.setCurrentIndex(-1)
                 return
             i = box.findData(value)
             if i >= 0:
                 box.setCurrentIndex(i)
                 return
-            if box.findText(value) < 0:
-                box.insertItem(1, value, value)
+            if box.findData(value) < 0:
+                short = value.split(",")[0].strip().strip('"').strip("'")
+                box.insertItem(1, short, value)
             box.setProperty("tempStack", value)
             box.setCurrentIndex(box.findData(value))
 
@@ -2087,7 +2121,6 @@ class CssEditorDialog(QDialog):
                     it.setData(data, Qt.UserRole)
                     _m.appendRow(it)
 
-                item("", "")
                 header("中文")
                 for gname in order:
                     header(f"中文·{gname}")

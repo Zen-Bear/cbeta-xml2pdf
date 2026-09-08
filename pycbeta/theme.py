@@ -53,6 +53,7 @@ TAG_SELECTOR = {
     "heiti": "[rend~=heiti]",
     "fangsong": "[rend~=fangsong]",
     "mingti": "[rend~=mingti]",
+    "def": "cb:def",
 }
 
 # reverse: css selector -> tag
@@ -254,7 +255,7 @@ FONT_VAR_TAGS = {
     "verse": "verse", "form": "form", "dharani": "dharani",
     "footnote": "footnote", "note-inline": "note-inline",
     "kaiti": "kaiti", "heiti": "heiti", "fangsong": "fangsong",
-    "mingti": "mingti",
+    "mingti": "mingti", "def": "def",
 }
 FONT_VAR_COMPOUNDS = {"div-xu-head": ("div-xu", "head")}
 

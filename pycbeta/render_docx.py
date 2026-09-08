@@ -1050,6 +1050,10 @@ class DocxRenderer:
             return self._run("□", *self._current_tag())  # 虚缺符号 U+25A1（文字无法辨析）
         if tag == "form":
             return self._para(self._render_children(e, "form", self._rend_tag(a)), "form")
+        if tag == "def":
+            # 释义（cb:def）：run 带 def 标签（字体/字号可调）；def 内 p 经 _tag_stack
+            # 继承 def 样式（docx_run/docx_para 合并 tags）
+            return self._render_children(e, "def")
         return self._render_children(e)
 
     def _body_has_title_m(self) -> bool:
