@@ -593,7 +593,7 @@ class TestCssEditor(unittest.TestCase):
         t = Theme()
         st = t.tags.get("series-title") or {}
         self.assertEqual(st.get("font-size"), "9pt")
-        self.assertIn("LiSu", st.get("font-family", ""))
+        self.assertIn("FangSong", st.get("font-family", ""))
         r = DocxRenderer(theme=t, series_title={})
         self.assertEqual(r._series_size_pt(st), 18)  # 9pt→18 半磅
         # 无规则时回退 config 旧键
@@ -936,7 +936,7 @@ class TestCssEditor(unittest.TestCase):
         try:
             # 列标题行存在；磅数框收窄；粗细是三态按钮（默认=灰）
             self.assertEqual(
-                dlg._rows["h1.title"]["size"].maximumWidth(), 80)
+                dlg._rows["h1.title"]["size"].maximumWidth(), 60)
             from PySide6.QtWidgets import QPushButton
             self.assertIsInstance(dlg._rows["h1.title"]["weight"],
                                   QPushButton)
@@ -1350,6 +1350,16 @@ class TestCssEditor(unittest.TestCase):
         ce.ensure_tooltip_style()
         ce.ensure_tooltip_style()  # 重复不叠加
         self.assertIn("QToolTip", QApplication.instance().styleSheet())
+
+    def test_row_cb_tip_two_segments(self):
+        import pycbeta.gui.css_editor as ce
+        self.assertEqual(ce._row_cb_tip("div.div-xu p.head"),
+                         'cb：div[@type="xu"] 内的 head')
+        self.assertEqual(ce._row_cb_tip("cb:def"), "cb 标签：def")
+        self.assertEqual(ce._row_cb_tip("div.div-note"),
+                         'cb 标签：div[@type="note"]')
+        self.assertEqual(ce._row_cb_tip("p"), "cb 标签：p")
+        self.assertEqual(ce._row_cb_tip("nope"), "")
 
     def test_margins_real_display(self):
         import pycbeta.gui.css_editor as ce

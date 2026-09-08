@@ -83,10 +83,26 @@ ROW_TIPS = {
 
 
 def _row_cb_tip(selector):
-    """左栏行 → cb 标签名（tooltip 双向查找：中文名 ↔ <cb:…>）。"""
+    """左栏行 → cb 标签名（tooltip 双向查找：中文名 ↔ <cb:…>）。
+
+    两段后代（div.div-xu p.head）分别映射祖先/目标；div-* 还原为
+    div[@type="…"] 原名。未知返回 ""。"""
     from pycbeta.theme import _SELECTOR_TAGS
+
+    def cb_name(tag):
+        if tag.startswith("div-"):
+            return f'div[@type="{tag[4:]}"]'
+        return tag
+
+    bits = (selector or "").split()
+    if len(bits) == 2:
+        anc = _SELECTOR_TAGS.get(bits[0])
+        tgt = _SELECTOR_TAGS.get(bits[1])
+        if anc and tgt:
+            return f"cb：{cb_name(anc)} 内的 {cb_name(tgt)}"
+        return ""
     tag = _SELECTOR_TAGS.get(selector or "")
-    return f"cb 标签：{tag}" if tag else ""
+    return f"cb 标签：{cb_name(tag)}" if tag else ""
 
 # 字体下拉分组：中文按关键字 buckets（首中即停；宋体在明体前吞掉 PMingLiU 类）
 _CJK_BUCKETS = (
@@ -1801,7 +1817,7 @@ class CssEditorDialog(QDialog):
         # 列标题行（替代各输入框的占位提示）
         chead = QHBoxLayout()
         for text, stretch, width in (("繁字体", 1, 0), ("简字体", 1, 0),
-                                     ("字号", 0, 80), ("粗细", 0, 80),
+                                     ("字号", 0, 60), ("粗细", 0, 70),
                                      ("颜色", 0, 26)):
             lab = QLabel(f"<b>{text}</b>")
             lab.setStyleSheet("color: gray")
@@ -1815,11 +1831,11 @@ class CssEditorDialog(QDialog):
             font_hant = _PopupWheelCombo()
             font_hant.setEditable(True)  # 可编辑可搜；本机不存在只能源码输入
             font_hant.setInsertPolicy(QComboBox.NoInsert)
-            font_hant.setMinimumWidth(150)
+            font_hant.setMinimumWidth(110)
             font_hans = _PopupWheelCombo()
             font_hans.setEditable(True)
             font_hans.setInsertPolicy(QComboBox.NoInsert)
-            font_hans.setMinimumWidth(150)
+            font_hans.setMinimumWidth(110)
             if suffix is None:
                 for _box in (font_hant, font_hans):
                     _box.setEnabled(False)
@@ -1828,9 +1844,9 @@ class CssEditorDialog(QDialog):
                 for _box in (font_hant, font_hans):
                     _box.setToolTip("可搜索本机字体；本机不存在的字体只能在源码页输入")
             size_edit = QLineEdit()
-            size_edit.setFixedWidth(80)
+            size_edit.setFixedWidth(60)
             weight = QPushButton()
-            weight.setFixedWidth(80)
+            weight.setFixedWidth(70)
             weight.setToolTip("默认=跟随出厂（未覆盖）；加粗/常规=强制覆盖")
             weight.clicked.connect(lambda _v, s=sel: self._cycle_weight(s))
             color_btn = QPushButton("")
