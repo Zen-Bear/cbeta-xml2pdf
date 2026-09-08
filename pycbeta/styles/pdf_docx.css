@@ -159,6 +159,7 @@ p.dharani {
 p.form {
   font-weight: bold;
   text-indent: 0;
+  font-size: 1em;          /* 与正文对齐（恒等于正文；OOXML run 无继承，不写会掉到文档默认 11pt） */
 }
 /* 预排段（<pre>）：保留源换行，不缩进（DOCX 拆成多 run + <w:br/>）。 */
 pre {

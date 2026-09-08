@@ -1355,6 +1355,31 @@ class TestCssEditor(unittest.TestCase):
             dlg._loaded_block = dlg._source_edit.toPlainText()
             dlg.close()
 
+    def test_preview_keeps_scroll_pos(self):
+        import unittest.mock as mock
+        import pycbeta.gui.css_editor as ce
+        dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+        try:
+            run = {"text": "x", "size": 12.0, "font": "", "bold": False,
+                   "color": "", "super": False, "dim": False}
+            spec = {"paras": [
+                {"style": "p", "align": "", "line": None, "runs": [run]}],
+                "footnotes": []}
+            vsb, hsb = mock.Mock(), mock.Mock()
+            vsb.value.return_value = 37
+            hsb.value.return_value = 5
+            with mock.patch.object(dlg.preview, "verticalScrollBar",
+                                   return_value=vsb), \
+                    mock.patch.object(dlg.preview, "horizontalScrollBar",
+                                      return_value=hsb):
+                dlg._show_spec(spec, {})
+            vsb.setValue.assert_called_once_with(37)
+            hsb.setValue.assert_called_once_with(5)
+            dlg._loaded_block = dlg._source_edit.toPlainText()
+        finally:
+            dlg._loaded_block = dlg._source_edit.toPlainText()
+            dlg.close()
+
     def test_export_status_opens_file(self):
         import tempfile
         import unittest.mock as mock

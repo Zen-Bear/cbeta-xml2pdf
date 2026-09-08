@@ -2474,6 +2474,10 @@ class CssEditorDialog(QDialog):
         from PySide6.QtGui import QTextBlockFormat
         show_names = self.names_box.isChecked()
         doc = self.preview.document()
+        # 刷新保持滚动位置（看哪 stay 哪，不回顶）
+        vsb, hsb = (self.preview.verticalScrollBar(),
+                    self.preview.horizontalScrollBar())
+        pos = (vsb.value(), hsb.value())
         doc.clear()
         cur = QTextCursor(doc)
         prev_key = None
@@ -2568,6 +2572,10 @@ class CssEditorDialog(QDialog):
                             QTextCharFormat.VerticalAlignment.AlignSuperScript)
                     cur.insertText(r["text"], cf)
                 cur.insertBlock()
+
+        # 恢复滚动位置（文档变矮自动钳制到最大值，不回顶）
+        vsb.setValue(pos[0])
+        hsb.setValue(pos[1])
 
     # ----- 导出 -----
     def _export_docx(self):
