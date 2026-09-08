@@ -88,7 +88,10 @@
     时有时无）；边距改 `custom_margins` 键（出厂全有 margins，无法区分自定义）：保存写/重勾删、
     载入恢复、`resolve_page` 三级、`write_temp_presets` 同步；取消跟随填预设值作基线，跟随中
     切纸张刷新显示；搭售修 `t2s` 移出 `if margins`；格式栏（formats/engine/font_lang）上轮已
-    入库，本次只验证；全量 381 OK，verify 8/0
+    入库，本次只验证；    全量 381 OK，verify 8/0
+  - 标签锚定+目录可开（2026-09-08）：当前配置恒显示运行组合链（run.json → base 文件/出厂默认），
+    保存/载入/设默认/还原只换后缀不再翻转；"打开用户预设目录"无响应是 `_open_local_file` 用
+    `isfile` 误杀目录，改 `exists`；全量 382 OK
   - 字体栈统一同字体双名（2026-09-07）：出厂各 `--font-*` 一律"中文名, 英文名"（除 body 唯一
     多段链：中英双名+mac 兜底+Times New Roman 拉丁）；删通用族尾段（PDF 端 `_pdf_css` 已追加
     sans-serif）；繁 body 补回 PMingLiU、head 改 微軟正黑體/Microsoft JhengHei、

@@ -889,7 +889,7 @@ class XmlOptionsPanel(QWidget):
     def _on_save(self):
         cur, _actual = load_slot("user")
         save_current(self._presets_merged(cur))
-        self.refresh_slot_label("user", "（已保存）")
+        self.refresh_slot_label("（已保存）")
         self._refresh_load_button()
         self._changed()
 
@@ -904,7 +904,7 @@ class XmlOptionsPanel(QWidget):
     def _on_load_user(self):
         data, _actual = load_slot("user")
         self.set_options(options_from_presets(data))
-        self.refresh_slot_label("user", "（已载入）")
+        self.refresh_slot_label("（已载入）")
         self._changed()
 
     def _on_set_default(self):
@@ -915,7 +915,7 @@ class XmlOptionsPanel(QWidget):
         except OSError as exc:
             QMessageBox.warning(self, "设为默认失败", str(exc))
             return
-        self.refresh_slot_label("run", "（已设默认）")
+        self.refresh_slot_label("（已设默认）")
         self._changed()
 
     def _presets_merged(self, cur):
@@ -949,38 +949,47 @@ class XmlOptionsPanel(QWidget):
     def _on_reset(self):
         reset_factory()
         self.set_options(options_from_presets(load_slot("user")[0]))
-        self.refresh_slot_label("factory", "（已还原）")
+        self.refresh_slot_label("（已还原）")
         self._refresh_load_button()
         self._changed()
 
     @staticmethod
     def _open_local_file(path):
-        """用系统默认程序打开本地文件（样式表/词表）；供各卡的"打开"按钮。"""
-        if path and os.path.isfile(path):
+        """用系统默认程序打开本地文件/目录（样式表/词表/预设目录）；供各卡的"打开"按钮。"""
+        if path and os.path.exists(path):
             QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.abspath(path)))
 
-    def mark_slot(self, actual):
-        self.refresh_slot_label(actual)
+    def mark_slot(self, _actual=None):
+        self.refresh_slot_label()
 
-    def refresh_slot_label(self, actual, suffix=""):
-        """槽标签：当前配置：<链接>（路径，太长中间省略，点击打开文件）。
-        actual ∈ user/factory/run（run.json 组合单）。"""
-        from pycbeta.theme import default_run_path
-        factory, user, _last = slot_paths()
-        if actual == "run":
-            path = default_run_path()
-            name = "运行组合"
-        else:
-            path = user if actual == "user" else factory
-            name = "用户配置" if actual == "user" else "出厂默认"
+    def refresh_slot_label(self, suffix=""):
+        """当前配置：运行组合（run.json → base 文件/出厂默认）。
+
+        锚定 run.json（链接指它），箭头后是 config-json 槽当前值；
+        保存/载入/设默认/还原只换后缀，不再翻转主体。
+        """
+        from pycbeta.theme import (default_run_path, load_run_config,
+                                   resolve_base_config, _PRESETS_PATH)
+        run_path = default_run_path()
+        base, base_name = None, "出厂默认"
+        try:
+            run = load_run_config()
+            hit = resolve_base_config(
+                run, os.path.dirname(os.path.abspath(run_path)))
+            if hit and os.path.abspath(hit) != os.path.abspath(_PRESETS_PATH):
+                base, base_name = hit, os.path.basename(hit)
+        except (OSError, ValueError):
+            base, base_name = None, "出厂默认"
+        chain = f"run.json → {base_name}"
+        tip = run_path + (f"\n→ {base}" if base else "")
+        url = QUrl.fromLocalFile(os.path.abspath(run_path)).toString()
         short = self.slot_label.fontMetrics().elidedText(
-            path, Qt.ElideMiddle, 420)
-        url = QUrl.fromLocalFile(os.path.abspath(path)).toString()
+            chain, Qt.ElideMiddle, 420)
         self.slot_label.setTextFormat(Qt.RichText)
         self.slot_label.setOpenExternalLinks(True)
-        self.slot_label.setToolTip(path)
+        self.slot_label.setToolTip(tip)
         self.slot_label.setText(
-            f'当前配置：<a href="{url}">{name}</a>（{short}）{suffix}')
+            f'当前配置：<a href="{url}">运行组合</a>（{short}）{suffix}')
 
     # ---------- 读写 ----------
     def get_options(self):

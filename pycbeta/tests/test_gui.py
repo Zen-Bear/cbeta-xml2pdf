@@ -580,11 +580,30 @@ class TestLayoutRegroup(unittest.TestCase):
     def test_slot_label_link(self):
         from pycbeta.gui.panel import XmlOptionsPanel
         panel = XmlOptionsPanel(load_presets())
-        panel.mark_slot("user")
-        self.assertIn("用户配置", panel.slot_label.text())
+        panel.mark_slot()
+        # 锚定 run.json，链下游动态显示（本机 run.json 指用户配置）
+        self.assertIn("运行组合", panel.slot_label.text())
         self.assertIn("config.user.json", panel.slot_label.text())
-        self.assertIn("config.user.json", panel.slot_label.toolTip())
+        self.assertIn("run.json", panel.slot_label.toolTip())
         self.assertTrue(panel.slot_label.openExternalLinks())
+        # 动作只换后缀，主体不翻转
+        panel.refresh_slot_label("（已保存）")
+        self.assertIn("运行组合", panel.slot_label.text())
+        self.assertIn("（已保存）", panel.slot_label.text())
+
+    def test_open_local_file_accepts_dir(self):
+        import os
+        import tempfile
+        import unittest.mock as mock
+        from PySide6.QtGui import QDesktopServices
+        from pycbeta.gui.panel import XmlOptionsPanel
+        with mock.patch.object(QDesktopServices, "openUrl") as m:
+            XmlOptionsPanel._open_local_file(tempfile.gettempdir())
+            m.assert_called_once()  # 目录也能打开（之前 isfile 误杀）
+        with mock.patch.object(QDesktopServices, "openUrl") as m2:
+            XmlOptionsPanel._open_local_file(
+                os.path.join(tempfile.gettempdir(), "no-such-xyz"))
+            m2.assert_not_called()
 
 
 class TestMainWindowUx(unittest.TestCase):

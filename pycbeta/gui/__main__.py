@@ -276,7 +276,7 @@ class MainWindow(QMainWindow):
         run, presets = load_run_and_presets()
         self._run = run
         self.panel = XmlOptionsPanel(presets)
-        self.panel.mark_slot("run")
+        self.panel.mark_slot()
         layout.addWidget(self.panel, 1)
         # 批量列表
         self.table = QTableWidget(0, 5)
