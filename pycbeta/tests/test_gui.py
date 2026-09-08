@@ -1238,19 +1238,37 @@ class TestCssEditor(unittest.TestCase):
 
     def test_label_dirty_highlight(self):
         import pycbeta.gui.css_editor as ce
+        dirty = {("p.head", "font-size")}
+        self.assertTrue(ce.label_is_dirty("head", dirty))
         self.assertTrue(ce.label_is_dirty(
-            "head", {("p.head", "font-size")}, True))
-        self.assertTrue(ce.label_is_dirty(
-            "div-note", {("div.div-note", "color")}, True))
-        self.assertFalse(ce.label_is_dirty("p", set(), True))
-        self.assertFalse(ce.label_is_dirty(
-            "head", {("p", "font-size")}, True))
-        # 保存/恢复后整体干净 → 全回蓝
-        self.assertFalse(ce.label_is_dirty(
-            "head", {("p.head", "font-size")}, False))
+            "div-note", {("div.div-note", "color")}))
+        self.assertFalse(ce.label_is_dirty("p", set()))
+        self.assertFalse(ce.label_is_dirty("head", {("p", "font-size")}))
+        # 预设自带但未改不算脏（改 A 时 B 不亮灯）
+        self.assertFalse(ce.label_is_dirty("title", dirty))
         clean = ce._name_label_format(False).background().color().name()
-        dirty = ce._name_label_format(True).background().color().name()
-        self.assertNotEqual(clean, dirty)
+        dirty_fmt = ce._name_label_format(True).background().color().name()
+        self.assertNotEqual(clean, dirty_fmt)
+
+    def test_dirty_keys_ignores_preset_owned(self):
+        import pycbeta.gui.css_editor as ce
+        dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+        try:
+            # 载入的预设自带 h1.title（我的样式场景）
+            dlg._load_block_text(":root { --font-title: F, serif; }\n")
+            self.assertFalse(ce.label_is_dirty(
+                "title", dlg._dirty_keys()))
+            # 再改 p.head：只有 head 脏，title 不亮
+            dlg._rows["p.head"]["size"].setText("40pt")
+            keys = dlg._dirty_keys()
+            self.assertIn(("p.head", "font-size"), keys)
+            self.assertTrue(ce.label_is_dirty("head", keys))
+            self.assertFalse(ce.label_is_dirty("title", keys))
+            self.assertFalse(ce.label_is_dirty("p", keys))
+            dlg._loaded_block = dlg._source_edit.toPlainText()
+        finally:
+            dlg._loaded_block = dlg._source_edit.toPlainText()
+            dlg.close()
 
     def test_save_only_when_preset_loaded(self):
         import shutil

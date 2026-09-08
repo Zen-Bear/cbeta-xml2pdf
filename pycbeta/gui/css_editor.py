@@ -677,16 +677,15 @@ _LABEL_TOUCHED_SEL = {"title": "h1.title", "head": "p.head",
                       "series-title": "p.series-title", "": "p"}
 
 
-def label_is_dirty(label_key, touched, is_dirty):
-    """该标签脏（对应选择器被碰过**且**整体有未保存改动）→ True。
+def label_is_dirty(label_key, dirty_keys):
+    """该标签脏（对应选择器在“当前源码 vs 载入块”差异键里）→ True。
 
-    保存/恢复后 is_dirty 为 False，全回干净（纯函数，可单测）。
+    差异键由 _dirty_keys 计算（含预设自带内容不算脏）；保存/恢复后
+    差异为空，全回干净（纯函数，可单测）。
     """
-    if not is_dirty:
-        return False
     sel = _LABEL_TOUCHED_SEL.get(label_key or "", "p")
     return any(isinstance(t, tuple) and t and t[0] == sel
-               for t in (touched or set()))
+               for t in (dirty_keys or set()))
 
 
 def _para_runs(p, fn_id_to_num):
@@ -1389,6 +1388,24 @@ def _touched_from_values(values):
     return touched
 
 
+def _flat_keys(values):
+    """覆盖块 values → {(选择器, 属性[, 语言]): 值}（键级比对用）。"""
+    rev = _suffix_rows()
+    out = {}
+    for s, props in (values or {}).items():
+        if s == ":root" or s == _HANS_BLOCK:
+            lang = "zh-Hans" if s == _HANS_BLOCK else "zh-Hant"
+            for var, v in (props or {}).items():
+                if var.startswith("--font-"):
+                    row = rev.get(var[7:])
+                    if row:
+                        out[(row, "font-family", lang)] = v
+        else:
+            for p, v in (props or {}).items():
+                out[(s, p)] = v
+    return out
+
+
 class CssEditorDialog(QDialog):
     """所见即所得样式编辑器：左调参 / 右预览 / 底导出。"""
 
@@ -1608,6 +1625,23 @@ class CssEditorDialog(QDialog):
     def _is_dirty(self):
         return self._source_edit.toPlainText() != (self._loaded_block or "")
 
+    def _dirty_keys(self):
+        """当前源码 vs 载入块的差异键（(选择器, 属性[, 语言]) 集合）。
+
+        预设自带但未改动的内容不算脏——改 A 时 B 不亮灯；保存/恢复后
+        为空。解析失败回退 _touched（保守全亮，不断纠错）。
+        """
+        try:
+            cur, _, e1 = split_override_block(
+                self._source_edit.toPlainText())
+            lod, _, e2 = split_override_block(self._loaded_block or "")
+        except Exception:  # noqa: BLE001
+            return set(self._touched)
+        if e1 or e2:
+            return set(self._touched)
+        c, l = _flat_keys(cur), _flat_keys(lod)
+        return {k for k in set(c) | set(l) if c.get(k) != l.get(k)}
+
     def _apply_default(self):
         """选中项设为默认（写用户槽 theme；未保存修改不在内）。"""
         value = self.preset_box.selected_value()
@@ -1695,16 +1729,16 @@ class CssEditorDialog(QDialog):
         改动路径（控件/源码/载入/恢复）都经 _schedule；保存/出厂另调。
         """
         try:
-            dirty_all = self._is_dirty()
+            dirty_keys = self._dirty_keys()
         except RuntimeError:  # noqa: BLE001 —— 关闭中控件已销毁
             return
-        touched_sels = {t[0] for t in (self._touched or set())
-                        if isinstance(t, tuple) and t}
+        dirty_sels = {t[0] for t in dirty_keys
+                      if isinstance(t, tuple) and t}
         for sel, ctrls in self._rows.items():
             lab = (ctrls or {}).get("name_label")
             if lab is None:
                 continue
-            if dirty_all and sel in touched_sels:
+            if sel in dirty_sels:
                 lab.setStyleSheet("color: #cc6600; font-weight: bold")
             else:
                 lab.setStyleSheet("")
@@ -1817,7 +1851,7 @@ class CssEditorDialog(QDialog):
         # 列标题行（替代各输入框的占位提示）
         chead = QHBoxLayout()
         for text, stretch, width in (("繁字体", 1, 0), ("简字体", 1, 0),
-                                     ("字号", 0, 60), ("粗细", 0, 70),
+                                     ("字号", 0, 60), ("粗细", 0, 60),
                                      ("颜色", 0, 26)):
             lab = QLabel(f"<b>{text}</b>")
             lab.setStyleSheet("color: gray")
@@ -1831,11 +1865,11 @@ class CssEditorDialog(QDialog):
             font_hant = _PopupWheelCombo()
             font_hant.setEditable(True)  # 可编辑可搜；本机不存在只能源码输入
             font_hant.setInsertPolicy(QComboBox.NoInsert)
-            font_hant.setMinimumWidth(110)
+            font_hant.setMinimumWidth(100)
             font_hans = _PopupWheelCombo()
             font_hans.setEditable(True)
             font_hans.setInsertPolicy(QComboBox.NoInsert)
-            font_hans.setMinimumWidth(110)
+            font_hans.setMinimumWidth(100)
             if suffix is None:
                 for _box in (font_hant, font_hans):
                     _box.setEnabled(False)
@@ -1846,7 +1880,7 @@ class CssEditorDialog(QDialog):
             size_edit = QLineEdit()
             size_edit.setFixedWidth(60)
             weight = QPushButton()
-            weight.setFixedWidth(70)
+            weight.setFixedWidth(60)
             weight.setToolTip("默认=跟随出厂（未覆盖）；加粗/常规=强制覆盖")
             weight.clicked.connect(lambda _v, s=sel: self._cycle_weight(s))
             color_btn = QPushButton("")
@@ -2384,6 +2418,7 @@ class CssEditorDialog(QDialog):
         prev_key = None
         # 字义（div-note）无段落样式，DOCX 只留 run 灰色：颜色全中即推断
         note_gray = div_note_color(self.work_css()) if show_names else ""
+        dirty_keys = self._dirty_keys() if show_names else set()
         for para in spec["paras"]:
             fmt = QTextBlockFormat()
             if para["align"] == "center":
@@ -2404,8 +2439,7 @@ class CssEditorDialog(QDialog):
                                  for r in texts):
                     label_key = "div-note"
             if show_names and label_key != prev_key:
-                dirty = label_is_dirty(label_key, self._touched,
-                                       self._is_dirty())
+                dirty = label_is_dirty(label_key, dirty_keys)
                 cur.insertText(f"【{STYLE_ROW_LABEL.get(label_key, label_key)}】",
                                _name_label_format(dirty))
             prev_key = label_key
@@ -2448,8 +2482,7 @@ class CssEditorDialog(QDialog):
                 _block_margins(ffmt, fn.get("margin"))
                 cur.setBlockFormat(ffmt)
                 if show_names and prev_fn != "footnote":
-                    dirty = label_is_dirty("footnote", self._touched,
-                                           self._is_dirty())
+                    dirty = label_is_dirty("footnote", dirty_keys)
                     cur.insertText("【脚注】",
                                    _name_label_format(dirty))
                 prev_fn = "footnote"
