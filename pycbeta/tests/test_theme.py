@@ -280,12 +280,31 @@ class TestResolveThemeCss(unittest.TestCase):
 
     def test_builtin_preset_by_name(self):
         import os
-        from pycbeta.theme import resolve_theme_css
-        path, label = resolve_theme_css("large-print")
-        self.assertTrue(path and os.path.isfile(path))
-        self.assertIn("内置", label)
-        path2, _l2 = resolve_theme_css("large-print.css")
-        self.assertEqual(path, path2)
+        import shutil
+        import tempfile
+        import pycbeta.theme as _theme
+        from pycbeta.theme import list_presets, resolve_theme_css
+        root = tempfile.mkdtemp()
+        try:
+            # 内置组退役后查找仍认旧名（向后兼容）：mock 内置目录
+            bdir = os.path.join(root, "b")
+            os.makedirs(bdir)
+            with open(os.path.join(bdir, "old.css"), "w",
+                      encoding="utf-8") as f:
+                f.write("/* x */\n")
+            import unittest.mock as mock
+            nodir = os.path.join(root, "nodir")  # 不创建：用户目录缺席
+            with mock.patch.object(_theme, "BUILTIN_PRESETS_DIR", bdir), \
+                    mock.patch.object(_theme, "user_presets_dir",
+                                      lambda root=None: nodir):
+                found = [n for k, n, _p in list_presets()
+                         if k == "builtin"]
+                self.assertIn("old", found)
+                path, label = resolve_theme_css("old")
+                self.assertTrue(path and os.path.isfile(path))
+                self.assertIn("内置", label)
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
 
     def test_missing_falls_back_with_warning(self):
         import io

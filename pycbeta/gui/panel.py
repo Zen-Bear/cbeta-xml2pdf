@@ -572,10 +572,10 @@ class XmlOptionsPanel(QWidget):
         from pycbeta.gui.css_editor import CssComboBox, set_user_theme
         trow = QHBoxLayout()
         self.theme_box = CssComboBox()
-        self.theme_box.setToolTip("默认 CSS（config.theme；出厂默认第一）")
+        self.theme_box.setToolTip("默认样式（run.json 的 pdf-docx-user-theme 槽；出厂默认第一）")
         trow.addWidget(self.theme_box, 1)
         self.theme_default_btn = QPushButton("设为默认")
-        self.theme_default_btn.setToolTip("选中项写入用户槽 theme（永久生效）")
+        self.theme_default_btn.setToolTip("选中项写入 run.json 主题槽（永久生效）")
         self.theme_default_btn.clicked.connect(self._on_theme_default)
         trow.addWidget(self.theme_default_btn)
         self.theme_dir_btn = QPushButton("打开用户预设目录")

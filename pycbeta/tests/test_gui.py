@@ -1371,7 +1371,7 @@ class TestCssEditor(unittest.TestCase):
         import pycbeta.gui.css_editor as ce
         dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
         try:
-            # 载入的预设自带 h1.title（我的样式场景）
+            # 载入的预设自带 h1.title（用户预设场景）
             dlg._load_block_text(":root { --font-title: F, serif; }\n")
             self.assertFalse(ce.label_is_dirty(
                 "title", dlg._dirty_keys()))
@@ -1778,7 +1778,10 @@ class TestCssEditor(unittest.TestCase):
                 texts = [box.itemText(i) for i in range(box.count())]
                 self.assertTrue(texts[0].startswith("（默认）"))
                 self.assertIn("［用户］mine", texts[0])
-                self.assertIn("［内置］a", texts)
+                # 内置组已退役：不陈列（查找仍认旧名，向后兼容）
+                self.assertFalse(any("［内置］" in t for t in texts))
+                self.assertTrue(any("出厂默认样式" in t for t in texts))
+                self.assertIn("── 用户预设 ──", texts)
                 self.assertEqual(box.selected_value(), "mine")
                 box.refresh("pdf_docx.css")
                 self.assertTrue(box.itemText(0).startswith("（默认）出厂默认"))
@@ -1886,19 +1889,26 @@ class TestCssEditor(unittest.TestCase):
             shutil.rmtree(root, ignore_errors=True)
 
     def test_example_preset_parses(self):
+        import shutil
         import pycbeta.gui.css_editor as ce
         from pycbeta.theme import Theme, theme_file_text
-        path = os.path.join(os.path.dirname(
-            os.path.dirname(os.path.abspath(ce.__file__))),
-            "styles", "presets", "large-print.css")
-        self.assertTrue(os.path.isfile(path))
-        # 预设只存覆盖块：加载时出厂+覆盖合并
-        with open(path, encoding="utf-8") as f:
-            raw = f.read()
-        self.assertNotIn("text-align: justify", raw)
-        t = Theme.from_css(theme_file_text(path))
-        self.assertEqual((t.tags.get("p") or {}).get("font-size"), "14pt")
-        self.assertEqual((t.tags.get("title") or {}).get("font-size"), "36pt")
+        # 大字版示例（与 css-presets/large-print.css 同形）：覆盖块可合并
+        tmp = tempfile.mkdtemp()
+        try:
+            fn = os.path.join(tmp, "large-print.css")
+            with open(fn, "w", encoding="utf-8") as f:
+                f.write("/* large-print */\n"
+                        "h1.title { font-size: 36pt; }\n"
+                        "p { font-size: 14pt; }\n")
+            with open(fn, encoding="utf-8") as f:
+                raw = f.read()
+            self.assertNotIn("text-align: justify", raw)
+            t = Theme.from_css(theme_file_text(fn))
+            self.assertEqual((t.tags.get("p") or {}).get("font-size"), "14pt")
+            self.assertEqual((t.tags.get("title") or {}).get("font-size"),
+                             "36pt")
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
 
     def test_load_theme_merges_factory(self):
         import shutil
@@ -1944,7 +1954,7 @@ class TestCssEditor(unittest.TestCase):
                     texts = [dlg.preset_box.itemText(i)
                              for i in range(dlg.preset_box.count())]
                     self.assertTrue(texts[0].startswith("（默认）"))
-                    self.assertIn("［内置］b", texts)
+                    self.assertFalse(any("［内置］" in t for t in texts))
                     self.assertIn("［用户］mine", texts)
                     # 装载用户预设 → 控件+touched 联动
                     dlg._load_preset_path(os.path.join(udir, "mine.css"))

@@ -1308,7 +1308,8 @@ def set_user_theme(value, root=None):
 class CssComboBox(QComboBox):
     """CSS 变种下拉（面板样式表卡 + 编辑器预设行共用）。
 
-    顺序：当前默认（（默认））→ 出厂组 → 用户组；itemData={"value","path"}。
+    顺序：当前默认（（默认））→ 出厂默认 → 用户预设；itemData={"value","path"}。
+    内置组已退役（large-print.css 搬进 css-presets/ 当用户预设）；查找仍认旧名。
     选中只选择不写默认；设默认走独立按钮（set_user_theme）。
     """
 
@@ -1325,8 +1326,10 @@ class CssComboBox(QComboBox):
             os.path.dirname(os.path.abspath(__file__)), "..", "styles",
             "pdf_docx.css"))
 
-        def entry(value, path, label):
-            return (value, path, label)
+        def add_row(label, data, tip=""):
+            self.addItem(label, data)
+            if tip:
+                self.model().item(self.count() - 1).setToolTip(tip)
 
         def find_current():
             if cur == "pdf_docx.css":
@@ -1340,39 +1343,30 @@ class CssComboBox(QComboBox):
             return None
 
         found = find_current()
-        rows = []  # (value, path, label, header?)
 
         def label_of(value, path):
             for k, n, p in items:
                 if p == path:
                     return f"［{'内置' if k == 'builtin' else '用户'}］{n}"
-            return "出厂默认（pdf_docx.css）"
-
-        if found:
-            value, path = found
-            rows.append((value, path, f"（默认）{label_of(value, path)}",
-                         False))
-        else:
-            rows.append((cur, None, f"（默认）{cur}（找不到）", False))
-        rows.append((None, None, "── 出厂 ──", True))
-        rows.append(("pdf_docx.css", builtin_css, "出厂默认（pdf_docx.css）",
-                     False))
-        for k, n, p in items:
-            if k == "builtin" and (not found or p != found[1]):
-                rows.append((n, p, f"［内置］{n}", False))
-        rows.append((None, None, "── 用户 ──", True))
-        for k, n, p in items:
-            if k == "user" and (not found or p != found[1]):
-                rows.append((n, p, f"［用户］{n}", False))
+            return "出厂默认样式（pdf_docx.css）"
 
         with QSignalBlocker(self):
             self.clear()
-            for value, path, label, header in rows:
-                if header:
-                    self.addItem(label, None)
-                    self.model().item(self.count() - 1).setEnabled(False)
-                else:
-                    self.addItem(label, {"value": value, "path": path})
+            if found:
+                value, path = found
+                add_row(f"（默认）{label_of(value, path)}",
+                        {"value": value, "path": path}, path or "")
+            else:
+                add_row(f"（默认）{cur}（找不到）",
+                        {"value": cur, "path": None})
+            add_row("出厂默认样式（pdf_docx.css）",
+                    {"value": "pdf_docx.css", "path": builtin_css},
+                    "随包分发的出厂样式；直接改它先经确认，一般只读不管")
+            add_row("── 用户预设 ──", None)
+            self.model().item(self.count() - 1).setEnabled(False)
+            for k, n, p in items:
+                if k == "user" and (not found or p != found[1]):
+                    add_row(f"［用户］{n}", {"value": n, "path": p}, p)
             self.setCurrentIndex(0)
 
     def selected_value(self):

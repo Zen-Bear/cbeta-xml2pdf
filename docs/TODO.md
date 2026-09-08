@@ -71,6 +71,10 @@
   - set_run_slot 文本级手术（2026-09-08）：run.json 带 `//` 注释，裸 `json.dump` 重写会丢注释
     （且读失败会误判损坏进 .bad）；改逐行替换目标槽（注释/顺序/其余键原样保留）+ 注释模板新建；
     `current_theme_value` 读路径同修；    全量 376 OK
+  - 内置预设退役（2026-09-08）：`large-print.css` 搬 `css-presets/` 当用户预设、
+    `我的样式.css` 改名 `my.css`（run.json 槽同步改名，文本级手术保注释）；
+    下拉去内置组（只剩出厂默认+用户预设，tooltip 标路径）；`styles/presets/` 只剩 README；
+    相关单测改 mock/同形文件；全量 377 OK，verify 8/0
   - 面板纸张默认持久化（2026-09-08）：`options_from_presets` 读 `default_page` 但
     `_presets_merged` 从不写回去——选 A5 保存再开仍回 a4；补写 `data["default_page"]`；
     用户 `config.user.json` 已置 a5（CLI/面板初值三端一致）；全量 377 OK，verify 8/0
