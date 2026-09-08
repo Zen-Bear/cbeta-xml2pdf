@@ -16,41 +16,14 @@ from .render_pdf import PdfRenderer, docx_to_pdf, DOCX_PDF_CHAIN
 from .render_docx import DocxRenderer
 from .render_md import MdRenderer
 from .render_epub import EpubRenderer
-from .theme import Theme, PAGE_PRESETS, OUTPUT_PRESETS, ENGINE_PRESETS, load_presets, resolve_theme_css, _PRESETS_PATH
+from .theme import Theme, PAGE_PRESETS, OUTPUT_PRESETS, ENGINE_PRESETS, load_presets, _PRESETS_PATH
+from .theme import (load_run_config, resolve_base_config, resolve_pdf_docx_css,
+                    resolve_html_base_css, default_run_path, check_run_placeholders)
 from .filename import apply_template
 
 _ALL_FORMATS = ["html", "pdf", "docx", "md", "epub"]
 _FORMAT_EXT = {"html": "", "pdf": ".pdf", "docx": ".docx", "md": ".md", "epub": ".epub"}
 _FONT_LANGS = ("zh-Hant", "zh-Hans")
-
-
-_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-
-def _user_slot_theme():
-    """用户槽 theme 键（无槽/无键/非法返回 ""）；CLI 无 --config 时优先于出厂。"""
-    try:
-        with open(os.path.join(_REPO_ROOT, "config.user.json"), encoding="utf-8") as f:
-            data = json.load(f)
-    except (OSError, ValueError):
-        return ""
-    v = (data or {}).get("theme", "")
-    return v if isinstance(v, str) else ""
-
-
-def _resolve_cli_theme(args, presets, config_path):
-    """CLI 主题四档 → (path|None, 说明)：显式 --theme > config.theme 槽 > 内置。
-    无 --config 时用户槽 theme 优先于出厂 config。"""
-    if getattr(args, "theme", None):
-        return args.theme, "显式 --theme"
-    value = (presets or {}).get("theme", "") or ""
-    base_dir = os.path.dirname(os.path.abspath(config_path)) if config_path else None
-    if not getattr(args, "config", None):
-        value = _user_slot_theme() or value
-    return resolve_theme_css(value, base_dir)
-
-
-
 
 
 def scaled_page_presets(page_presets, factor: float):
@@ -93,7 +66,7 @@ def _annotations_source(config_path, presets):
         return None, None
 
 
-def render_one(w, fmt, out_dir, out_name, args, theme):
+def render_one(w, fmt, out_dir, out_name, args, theme, html_base=None):
     # pdf 默认 footnote：docx2pdf 中间 docx 用真页底脚注（html2pdf 下 HtmlRenderer 无分页，footnote 与 endnote 同归文末，无影响）
     note_mode = args.notes or ("footnote" if fmt in ("docx", "pdf") else "endnote")
     os.makedirs(out_dir, exist_ok=True)
@@ -102,7 +75,8 @@ def render_one(w, fmt, out_dir, out_name, args, theme):
     ann = getattr(args, "annotations", None)
 
     if fmt == "html":
-        files = HtmlRenderer(theme=theme, notes=note_mode,
+        # html 纯基底（golden 默认）：pdf_docx 主题不再追加
+        files = HtmlRenderer(theme=None, base_css=html_base, notes=note_mode,
                              name_template=args.name_template,
                              ignore_xml_style=args.ignore_xml_style,
                              ignore_xml_space=args.ignore_xml_space,
@@ -155,7 +129,8 @@ def render_one(w, fmt, out_dir, out_name, args, theme):
         print(f"{w.id}: md({note_mode}) -> {fn}")
 
     elif fmt == "epub":
-        fn = EpubRenderer(theme=theme, notes=note_mode,
+        # epub 纯基底（章节 + style.css 同源，不再进 pdf_docx 主题）
+        fn = EpubRenderer(theme=None, base_css=html_base, notes=note_mode,
                           ignore_xml_style=args.ignore_xml_style,
                           ignore_xml_space=args.ignore_xml_space,
                           show_notes=args.show_notes,
@@ -269,7 +244,7 @@ def resolve_output(xml_fn, fmt, args, work):
     return src_dir, out_name
 
 
-def process_file(xml_fn, formats, args, theme):
+def process_file(xml_fn, formats, args, theme, html_base=None):
     w = P5Parser().parse(xml_fn)
     if args.t2s:
         from .simplify import simplify_work
@@ -283,7 +258,8 @@ def process_file(xml_fn, formats, args, theme):
     for fmt in formats:
         out_dir, out_name = resolve_output(xml_fn, fmt, args, w)
         try:
-            render_one(w, fmt, out_dir, out_name, args, theme)
+            render_one(w, fmt, out_dir, out_name, args, theme,
+                       html_base=html_base)
         except NotImplementedError as e:
             print(f"{w.id}: {fmt} skipped - {e}", file=sys.stderr)
 
@@ -355,10 +331,18 @@ def main(argv=None):
                         help="output file or directory (default: same name+ext in source dir)")
     shared.add_argument("-f", "--format", required=False, default=None,
                         help="formats: html,pdf,docx,md,epub (comma list) or all")
-    shared.add_argument("--theme",
-                        help="自定义主题，替换默认主题层 styles/pdf_docx.css "
-                             "(作用于 pdf/docx)；html/epub 默认不带主题层，"
-                             "传 --theme 会在官方基底 cbeta_golden.css 之上追加")
+    shared.add_argument("--theme", default=None,
+                        help="已废弃：请用 --pdf-docx-theme/--pdf-docx-user-theme "
+                             "（pdf/docx）；html/epub 默认纯官方样式")
+    shared.add_argument("--pdf-docx-theme", default=None,
+                        help="pdf/docx 标准 CSS（整套替换出厂 pdf_docx.css 全文；"
+                             "缺省 run.json 的 pdf-docx-theme 槽）")
+    shared.add_argument("--pdf-docx-user-theme", default=None,
+                        help="pdf/docx 增量 CSS（名走 css-presets/ 双目录或路径，"
+                             "追加在标准之后；缺省 run.json 的 pdf-docx-user-theme 槽）")
+    shared.add_argument("--html-epub-theme", default=None,
+                        help="html/epub 基底 CSS 全文（缺省 run.json 的 "
+                             "html-epub-theme 槽，即官方 cbeta_golden.css）")
     shared.add_argument("--font-lang", choices=["zh-Hant", "zh-Hans"],
                         default=None,
                         help="字库：zh-Hant 繁体（默认）/ zh-Hans 简体（CSS :root 双栏变量切换）。"
@@ -375,8 +359,9 @@ def main(argv=None):
                         help="字号等比缩放（重排式大字，老人版推荐 1.33/1.5；"
                              "默认取 config output.font_scale；与 --verify 互斥）")
     shared.add_argument("--config", "--presets-file",
-                        help="自定义全局配置 JSON（复制 pycbeta/config.json 修改，"
-                             "含 pages/engines/output/theme）")
+                        help="run.json 组合单（5 槽：config-json/html-epub-theme/"
+                             "html-epub-user-theme/pdf-docx-theme/pdf-docx-user-theme）；"
+                             "缺省仓库根 run.json，没有就全出厂")
     shared.add_argument("--xml-dir", default=None,
                         help="本地 XML 源目录（-i 佛典編號 查找；默认 config source.xml_dir）")
     shared.add_argument("--download-dir", default=None,
@@ -453,14 +438,24 @@ def main(argv=None):
         if bad:
             ap.error(f"unknown format: {', '.join(bad)} (allowed: html,pdf,docx,md,epub,all)")
 
-    args.page_presets = PAGE_PRESETS
-    out_defaults = OUTPUT_PRESETS
-    engines_cfg = ENGINE_PRESETS
-    if args.config:
-        presets = load_presets(args.config)
-        args.page_presets = presets.get("pages") or PAGE_PRESETS
-        out_defaults = presets.get("output") or {}
-        engines_cfg = presets.get("engines") or {}
+    if getattr(args, "theme", None):
+        ap.error("--theme 已废弃：pdf/docx 请用 --pdf-docx-theme（整套替换）/"
+                 "--pdf-docx-user-theme（增量追加）；html/epub 默认纯官方样式")
+    try:
+        run = load_run_config(args.config) if args.config else load_run_config()
+    except (OSError, ValueError) as exc:
+        ap.error(f"--config 读取失败: {exc}")
+    run_dir = os.path.dirname(os.path.abspath(args.config)) if args.config \
+        else os.path.dirname(os.path.abspath(default_run_path()))
+    check_run_placeholders(run)
+    base_cfg = resolve_base_config(run, run_dir)
+    try:
+        presets = load_presets(base_cfg)
+    except (OSError, ValueError):
+        presets = {}
+    args.page_presets = presets.get("pages") or PAGE_PRESETS
+    out_defaults = presets.get("output") or {}
+    engines_cfg = presets.get("engines") or {}
 
     args.ignore_xml_style = bool(out_defaults.get("ignore_xml_style"))
     args.ignore_xml_space = bool(out_defaults.get("ignore_xml_space"))
@@ -519,27 +514,21 @@ def main(argv=None):
                               or [(engines_cfg.get("html2pdf") or {}).get("engine")
                                   or "chromium"])
 
-    theme_path, _theme_label = _resolve_cli_theme(
-        args, presets if args.config else None,
-        args.config if args.config else None)
     if args.t2s_flag is not None:
         args.t2s = args.t2s_flag
     # 字库语言：显式 --font-lang > t2s 自动简体 > 繁体
     font_lang = args.font_lang or ("zh-Hans" if args.t2s else "zh-Hant")
-    if theme_path:
-        theme = load_theme(theme_path, font_lang)
-    elif font_lang != "zh-Hant" or args.font_scale != 1.0:
-        theme = Theme(lang=font_lang)
-    else:
-        theme = None  # 渲染器内置 Theme()（=出厂 pdf_docx.css 繁体）
+    # pdf/docx 主题必建（显式开关 > run.json 槽 > 内置出厂）
+    pdf_css = resolve_pdf_docx_css(run, run_dir, std=args.pdf_docx_theme,
+                                   user=args.pdf_docx_user_theme)
+    theme = Theme.from_css(pdf_css, font_lang)
+    # html/epub 基底（显式开关 > run.json 槽 > 内置 golden）；html/epub 纯基底
+    html_base = resolve_html_base_css(run, run_dir, std=args.html_epub_theme)
     # 西文字体随语言切换（页面方案显式 latin_font 仍优先，见 DocxRenderer）
-    _th = theme if theme is not None else Theme(lang=font_lang)
-    args.latin_font = _th.font_var("latin", "Calibri")
+    args.latin_font = theme.font_var("latin", "Calibri")
     args.gaiji_lang = font_lang  # 缺字字体链按此语言选表（render_docx 懒解析）
     if args.font_scale != 1.0:
         # 大字版：主题字号等比缩放 + 页面兜底字号跟随（版心/边距不动，自动重排）
-        if theme is None:
-            theme = Theme(lang=font_lang)
         theme.scale_font_sizes(args.font_scale)
         args.page_presets = scaled_page_presets(args.page_presets, args.font_scale)
 
@@ -552,9 +541,9 @@ def main(argv=None):
         if not xmls:
             ap.error(f"no XML files under {args.input}")
         for x in xmls:
-            process_file(x, formats, args, theme)
+            process_file(x, formats, args, theme, html_base=html_base)
     elif os.path.isfile(args.input):
-        process_file(args.input, formats, args, theme)
+        process_file(args.input, formats, args, theme, html_base=html_base)
     else:
         # -i 佛典編號：先查本地 XML 源，缺失则从官方下载
         from .fetch import is_work_id, parse_work_id, find_local_xml, fetch_work
@@ -574,7 +563,7 @@ def main(argv=None):
         if not xmls:
             ap.error(f"{work_id}: 本地与官方均未取得 XML")
         for x in xmls:
-            process_file(x, formats, args, theme)
+            process_file(x, formats, args, theme, html_base=html_base)
 
     # --verify：复用 pycbeta/verify.py 模块化能力，供 GUI 调用同一入口
     if args.verify:

@@ -15,7 +15,6 @@ from typing import List, Optional
 from .model import Work
 from .annotate import active as _ann_active
 from .render_html import HtmlRenderer, CSS
-from .theme import Theme
 
 
 def _x(s: str) -> str:
@@ -26,7 +25,9 @@ class EpubRenderer:
     def __init__(self, gaiji_db=None, theme=None, notes="endnote", base_css=None,
                  ignore_xml_style=False, ignore_xml_space=False, show_notes=True,
                  annotations=None):
-        self.theme = theme if theme is not None else Theme()
+        # theme=None → 纯基底（golden 默认）；pdf_docx 主题不再进 epub
+        #（render_html 章节与 style.css 同源 base_css）。
+        self.theme = theme
         self.notes = notes
         self.gaiji_db = gaiji_db
         self.base_css = base_css
@@ -138,7 +139,7 @@ class EpubRenderer:
         )
 
     def _zip(self, work_id, chapters, opf, nav, ncx, lang="zh-Hant") -> bytes:
-        css = self.theme.raw_css or self.theme.css()
+        css = self.base_css if self.base_css is not None else CSS
         zio = io.BytesIO()
         with zipfile.ZipFile(zio, "w") as z:
             z.writestr("mimetype", "application/epub+zip",

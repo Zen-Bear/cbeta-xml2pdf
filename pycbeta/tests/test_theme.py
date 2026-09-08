@@ -298,6 +298,116 @@ class TestResolveThemeCss(unittest.TestCase):
         self.assertIn("内置", label)
         self.assertIn("no-such-preset-xyz", buf.getvalue())
 
+
+class TestRunConfig(unittest.TestCase):
+    """run.json 组合单：缺省/补键/非法/旧格式/槽解析。"""
+
+    def test_missing_file_gives_defaults_silently(self):
+        import io
+        import tempfile
+        from contextlib import redirect_stdout
+        from pycbeta.theme import load_run_config, DEFAULT_RUN_CONFIG
+        root = tempfile.mkdtemp()
+        try:
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                run = load_run_config(None, root)  # 默认路径不存在 → 静默缺省
+            self.assertEqual({k: run[k] for k in DEFAULT_RUN_CONFIG},
+                             DEFAULT_RUN_CONFIG)
+            self.assertEqual(buf.getvalue(), "")
+            # 显式指定的缺失文件 → OSError（CLI 转 ap.error）
+            with self.assertRaises(OSError):
+                load_run_config(os.path.join(root, "nope.json"))
+        finally:
+            import shutil
+            shutil.rmtree(root, ignore_errors=True)
+
+    def test_missing_keys_filled(self):
+        import json
+        import tempfile
+        from pycbeta.theme import load_run_config, DEFAULT_RUN_CONFIG
+        fd, fn = tempfile.mkstemp(suffix=".json")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump({"pdf-docx-user-theme": "mine"}, f)
+            run = load_run_config(fn)
+            self.assertEqual(run["pdf-docx-user-theme"], "mine")
+            self.assertEqual(run["pdf-docx-theme"],
+                             DEFAULT_RUN_CONFIG["pdf-docx-theme"])
+        finally:
+            os.remove(fn)
+
+    def test_bad_json_raises(self):
+        import tempfile
+        from pycbeta.theme import load_run_config
+        fd, fn = tempfile.mkstemp(suffix=".json")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write("{not json")
+            with self.assertRaises(ValueError):
+                load_run_config(fn)
+        finally:
+            os.remove(fn)
+
+    def test_legacy_snapshot_rejected(self):
+        import json
+        import tempfile
+        from pycbeta.theme import load_run_config
+        fd, fn = tempfile.mkstemp(suffix=".json")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump({"output": {}, "theme": "x"}, f)
+            with self.assertRaises(ValueError) as ctx:
+                load_run_config(fn)
+            self.assertIn("run.json", str(ctx.exception))
+        finally:
+            os.remove(fn)
+
+    def test_base_config_factory_and_relative(self):
+        import io
+        import json
+        import tempfile
+        from contextlib import redirect_stdout
+        from pycbeta.theme import (load_run_config, resolve_base_config,
+                                   _PRESETS_PATH)
+        self.assertEqual(resolve_base_config({}, None), _PRESETS_PATH)
+        root = tempfile.mkdtemp()
+        try:
+            cfg = os.path.join(root, "mine.json")
+            with open(cfg, "w", encoding="utf-8") as f:
+                json.dump({"output": {}}, f)
+            run = load_run_config(None, root)  # 无文件 → 缺省
+            run["config-json"] = "mine.json"
+            self.assertEqual(resolve_base_config(run, root), cfg)
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                run["config-json"] = "nope.json"
+                self.assertEqual(resolve_base_config(run, root),
+                                 _PRESETS_PATH)
+            self.assertIn("不存在", buf.getvalue())
+        finally:
+            import shutil
+            shutil.rmtree(root, ignore_errors=True)
+
+    def test_html_base_defaults_golden(self):
+        from pycbeta.theme import resolve_html_base_css
+        css = resolve_html_base_css({}, None)
+        self.assertIn("cbetarc", css)
+        self.assertNotIn("--font-body", css)
+
+    def test_placeholder_warns(self):
+        import io
+        from contextlib import redirect_stdout
+        from pycbeta.theme import check_run_placeholders
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            check_run_placeholders({"html-epub-user-theme": "x.css"})
+        self.assertIn("尚未接线", buf.getvalue())
+        buf2 = io.StringIO()
+        with redirect_stdout(buf2):
+            check_run_placeholders({})
+        self.assertEqual(buf2.getvalue(), "")
+
     def test_absolute_and_relative_path(self):
         import os
         import tempfile

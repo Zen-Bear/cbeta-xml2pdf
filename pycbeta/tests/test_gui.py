@@ -1672,24 +1672,31 @@ class TestCssEditor(unittest.TestCase):
             shutil.rmtree(root, ignore_errors=True)
 
     def test_cli_theme_priority(self):
-        import argparse
-        import unittest.mock as mock
-        from pycbeta.cli import _resolve_cli_theme
-        args = argparse.Namespace(theme=None, config=None)
-        # 用户槽优先于出厂
-        with mock.patch("pycbeta.cli._user_slot_theme",
-                        return_value="large-print"):
-            path, _label = _resolve_cli_theme(args, {"theme": "pdf_docx.css"},
-                                              None)
-            self.assertTrue(path and path.endswith("large-print.css"))
-        # 显式 --theme 最大
-        args2 = argparse.Namespace(theme="x.css", config=None)
-        path2, _l2 = _resolve_cli_theme(args2, {}, None)
-        self.assertEqual(path2, "x.css")
-        # 空槽回内置
-        with mock.patch("pycbeta.cli._user_slot_theme", return_value=""):
-            path3, _l3 = _resolve_cli_theme(args, {}, None)
-            self.assertIsNone(path3)
+        import shutil
+        from pycbeta.theme import resolve_pdf_docx_css
+        root = tempfile.mkdtemp()
+        try:
+            std = os.path.join(root, "std.css")
+            usr = os.path.join(root, "usr.css")
+            std2 = os.path.join(root, "std2.css")
+            for p, body in ((std, "p { color: #111111; }"),
+                            (usr, "p { color: #222222; }"),
+                            (std2, "p { color: #333333; }")):
+                with open(p, "w", encoding="utf-8") as f:
+                    f.write(body + "\n")
+            run = {"pdf-docx-theme": std, "pdf-docx-user-theme": usr}
+            # 显式开关最大
+            css = resolve_pdf_docx_css(run, root, std=std2)
+            self.assertIn("#333333", css)
+            self.assertNotIn("#111111", css)
+            # run.json 槽次之：标准 + 增量层叠（增量在后）
+            css2 = resolve_pdf_docx_css(run, root)
+            self.assertLess(css2.index("#111111"), css2.index("#222222"))
+            # 空槽回内置出厂
+            css3 = resolve_pdf_docx_css({}, root)
+            self.assertIn("新細明體", css3)
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
 
     def test_font_set_arg_gone(self):
         import subprocess

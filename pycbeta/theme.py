@@ -392,6 +392,146 @@ def resolve_theme_css(value, base_dir=None):
     return None, "内置出厂（文件缺失）"
 
 
+# ---------------- run.json（一次运行的组合单；替代旧 --config 全量快照） ----------------
+# 5 槽：config-json（基础配置）+ 按格式分的标准/增量主题槽。
+# 优先级（逐槽）：显式开关 > run.json 槽 > 内置默认。
+# 不带 --config 时自动读仓库根 run.json（没有就全出厂）；config.user.json 已废弃。
+RUN_CONFIG_NAME = "run.json"
+RUN_KEYS = ("config-json", "html-epub-theme", "html-epub-user-theme",
+            "pdf-docx-theme", "pdf-docx-user-theme")
+DEFAULT_RUN_CONFIG = {
+    "config-json": "config.json",          # 基础配置：出厂 pycbeta/config.json
+    "html-epub-theme": "cbeta_golden.css",  # html/epub 标准基底（官方）
+    "html-epub-user-theme": "",            # 占位：非空警告+忽略（纯 golden）
+    "pdf-docx-theme": "pdf_docx.css",      # pdf/docx 标准（整套替换出厂全文）
+    "pdf-docx-user-theme": "",             # pdf/docx 增量（双目录名/路径，追加）
+}
+_LEGACY_CONFIG_KEYS = ("pages", "output", "engines", "theme", "verify",
+                       "annotations", "source")
+_DEFAULT_CSS = os.path.join(_STYLES_DIR, "pdf_docx.css")
+_GOLDEN_CSS = os.path.join(_STYLES_DIR, "cbeta_golden.css")
+
+
+def default_run_path(root=None):
+    """默认 run.json 路径（仓库根；不入库，常改）。"""
+    base = root or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base, RUN_CONFIG_NAME)
+
+
+def load_run_config(path=None, root=None):
+    """读 run.json → 5 键 dict（缺键按 DEFAULT_RUN_CONFIG 补）。
+
+    path=None → root/run.json，不存在则全缺省（静默）。
+    非法 JSON → ValueError；旧全量快照（有 pages/output/engines/theme 等
+    且无 run 键）→ ValueError 指新格式（硬切换，不兼容）。
+    """
+    if path is None:
+        path = default_run_path(root)
+        if not os.path.isfile(path):
+            return dict(DEFAULT_RUN_CONFIG)
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+    try:
+        data = json.loads(text)
+    except ValueError as exc:
+        raise ValueError(f"run.json 非法 JSON（{path}）：{exc}")
+    if not isinstance(data, dict):
+        raise ValueError(f"run.json 顶层必须是对象（{path}）")
+    if not any(k in data for k in RUN_KEYS) and \
+            any(k in data for k in _LEGACY_CONFIG_KEYS):
+        raise ValueError(
+            f"旧 --config 全量快照已废弃（{path}）：请改用 run.json（5 槽组合单，"
+            "见 docs/主题与样式.md），旧 theme 键对应 pdf-docx-user-theme")
+    out = dict(DEFAULT_RUN_CONFIG)
+    for k in RUN_KEYS:
+        v = data.get(k)
+        out[k] = v if isinstance(v, str) else DEFAULT_RUN_CONFIG[k]
+    out["_path"] = os.path.abspath(path)
+    return out
+
+
+def _resolve_run_file(value, run_dir, label):
+    """run.json 槽值 → 文件 abspath；缺文件警告+None（调用方回内置）。"""
+    value = (value or "").strip()
+    if not value:
+        return None
+    cands = []
+    if os.path.isabs(value):
+        cands.append(value)
+    else:
+        if run_dir:
+            cands.append(os.path.join(run_dir, value))
+        cands.append(os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            value))
+    for c in cands:
+        if os.path.isfile(c):
+            return os.path.abspath(c)
+    print(f"run.json: {label} {value!r} 不存在，回内置")
+    return None
+
+
+def _read_text(path):
+    with open(path, encoding="utf-8") as f:
+        return f.read()
+
+
+def resolve_base_config(run, run_dir=None):
+    """config-json 槽 → 基础配置文件 abspath（默认出厂；缺文件警告+出厂）。"""
+    value = (run.get("config-json") or "").strip() or "config.json"
+    if value == "config.json":
+        return _PRESETS_PATH
+    hit = _resolve_run_file(value, run_dir, "config-json")
+    return hit or _PRESETS_PATH
+
+
+def _builtin_text(path):
+    try:
+        return _read_text(path)
+    except OSError:
+        return ""
+
+
+def resolve_pdf_docx_css(run, run_dir=None, std=None, user=None):
+    """pdf/docx 生效 CSS 全文：显式开关 > run.json 槽 > 内置。
+
+    标准槽：内置名（pdf_docx.css）用出厂全文；自定义文件全文替换出厂。
+    增量槽：双目录名/路径，追加（复用 theme_file_text 层叠语义）。
+    """
+    std = (std if std is not None else run.get("pdf-docx-theme") or "").strip() \
+        or "pdf_docx.css"
+    if std == "pdf_docx.css" or std.endswith("/pdf_docx.css") or \
+            std.endswith("\\pdf_docx.css"):
+        base = _builtin_text(_DEFAULT_CSS)
+    else:
+        hit = _resolve_run_file(std, run_dir, "pdf-docx-theme")
+        base = _read_text(hit) if hit else _builtin_text(_DEFAULT_CSS)
+    usr = (user if user is not None else run.get("pdf-docx-user-theme")
+           or "").strip()
+    if usr:
+        upath, _label = resolve_theme_css(usr, run_dir)
+        if upath:
+            return theme_file_text(upath, base)
+    return base
+
+
+def resolve_html_base_css(run, run_dir=None, std=None):
+    """html/epub 基底 CSS 全文：显式开关 > run.json 槽 > 内置 golden。"""
+    std = (std if std is not None else run.get("html-epub-theme") or "").strip() \
+        or "cbeta_golden.css"
+    if std == "cbeta_golden.css" or std.endswith("/cbeta_golden.css") or \
+            std.endswith("\\cbeta_golden.css"):
+        return _builtin_text(_GOLDEN_CSS)
+    hit = _resolve_run_file(std, run_dir, "html-epub-theme")
+    return _read_text(hit) if hit else _builtin_text(_GOLDEN_CSS)
+
+
+def check_run_placeholders(run):
+    """占位槽非空 → 警告（html-epub-user-theme 尚未接线，忽略）。"""
+    if (run.get("html-epub-user-theme") or "").strip():
+        print("run.json: html-epub-user-theme 尚未接线，已忽略（html/epub 纯基底）")
+
+
 # 内置页面尺寸（mm），presets.json 的 pages 可覆盖/扩展
 BUILTIN_PAGES: Dict[str, Dict] = {
     "a4": {"size": [210, 297]},

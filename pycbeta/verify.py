@@ -14,7 +14,7 @@ from .render_html import HtmlRenderer
 from .render_docx import DocxRenderer
 from .render_epub import EpubRenderer
 from .render_md import MdRenderer
-from .theme import Theme, load_presets, _PRESETS_PATH
+from .theme import load_presets, _PRESETS_PATH
 
 def normalize(text: str, ruby_brackets=None) -> str:
     # 官方基线 unclear 用 ▆，本管线渲染用 □（U+25A1）：两侧归一到 □ 再比较
@@ -346,13 +346,20 @@ def generate_formal(xml_fn: str, work, fmt: str, outdir: str, config_path: Optio
     os.makedirs(outdir, exist_ok=True)
     stem = os.path.splitext(os.path.basename(xml_fn))[0]
     presets = {}
-    if config_path:
-        presets = load_presets(config_path)
-        out_defaults = {** (presets.get("output") or {}), ** (presets.get("verify") or {})}
-    else:
+    _run = None
+    _rdir = None
+    try:
+        from .theme import (load_run_config, resolve_base_config,
+                            default_run_path)
+        _run = load_run_config(config_path) if config_path else load_run_config()
+        _rdir = os.path.dirname(os.path.abspath(config_path)) if config_path \
+            else os.path.dirname(os.path.abspath(default_run_path()))
+        presets = load_presets(resolve_base_config(_run, _rdir))
+        out_defaults = {**(presets.get("output") or {}), **(presets.get("verify") or {})}
+    except Exception:
         try:
             presets = load_presets()
-            out_defaults = {** (presets.get("output") or {}), ** (presets.get("verify") or {})}
+            out_defaults = {**(presets.get("output") or {}), **(presets.get("verify") or {})}
         except Exception:
             from .theme import OUTPUT_PRESETS as _DO, VERIFY_PRESETS as _DV
             out_defaults = {**dict(_DO), **dict(_DV)}
@@ -365,18 +372,13 @@ def generate_formal(xml_fn: str, work, fmt: str, outdir: str, config_path: Optio
     except Exception:
         _ann = None
     theme = None
-    # 主题槽跟随（与主程序一致；字体系与提取文本无关，lang 恒繁体）
-    _tv = (presets or {}).get("theme", "") or ""
-    if _tv:
+    # 主题跟随 run.json 的 pdf-docx 槽（与主程序一致；字体系与提取文本无关，
+    # lang 恒繁体）；html/epub 恒纯基底，不吃主题
+    if fmt in ("docx", "md") and _run is not None:
         try:
-            from .theme import resolve_theme_css
-            _tp, _ = resolve_theme_css(
-                _tv, os.path.dirname(os.path.abspath(config_path))
-                if config_path else None)
-            if _tp:
-                with open(_tp, encoding="utf-8") as _f:
-                    theme = Theme.from_css(_f.read())
-        except OSError:
+            from .theme import resolve_pdf_docx_css, Theme as _Theme
+            theme = _Theme.from_css(resolve_pdf_docx_css(_run, _rdir), "zh-Hant")
+        except (OSError, ValueError):
             theme = None
     p = lambda k, d=None: out_defaults.get(k, d)
     if fmt == "html":

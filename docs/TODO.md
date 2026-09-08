@@ -55,6 +55,22 @@
     编辑器双栏/下拉复用 + `user.css` 概念删除（详见本条）：T0672 繁字节一致、简仅经藏名
     隸書→隶书一处；用户槽朝华标题B搬入 `css-presets/我的样式.css` 并设默认；`--font-set`
     用到即报错；publish 桥需同日跟进（跨仓）
+  - [ ] **待修 html/epub 主题污染（2026-09-08 用户立案）**：`8d534a4` 之前 `cli.py` 是
+    `theme = load_theme(args.theme) if args.theme else None`——不带 `--theme` 时 html/epub
+    纯 golden（`theme=None`），与原始设计决策一致（`docs/设计报告-代码评审.md` Q7/§8：
+    "HTML 默认只输出 cbeta_golden.css，pdf_docx.css 只作用于 PDF/DOCX，两者互不加载、
+    互不影响；回官方 = 不传 `--theme`"）；`8d534a4` 引入 `_resolve_cli_theme` 后无 `--theme`
+    也能解出主题，同一 theme 对象喂给所有 renderer，经 `render_html.py:200-201` theme_block
+    追加在 golden 之后，且选择器真实碰撞（HTML 输出 `<p class="form">`/`<p class="head">`/
+    `div.lg` 与 pdf_docx.css 同名）→ 用户增量漏进 html/epub。PDF 两条管线（docx2pdf 经 Word、
+    html2pdf 经 chromium）都吃 pdf_docx 主题，不受影响，不动。待决策：A 永远纯 golden
+    （连显式 `--theme` 也不吃）/ B 显式 `--theme` 保留追加；另确认 publish 仓是否依赖 html 带主题。
+  - [ ] **待议 出厂/用户 theme 槽重设计（2026-09-08 用户立项，上条落地后再议）**：现状三层
+    （出厂 `pycbeta/config.json` theme 入库 / 用户槽 `config.user.json` theme“设为默认”写入不入库 /
+    单次 `--config` 文件槽，GUI 临时文件从用户槽抄值）+ `_resolve_cli_theme` 按"有没有 `--config`"
+    分叉（有则只看文件槽忽略用户槽；无则只看用户槽，出厂槽成死代码）。用户主张"设为默认就是
+    直接改 config 的 theme"。候选：统一单规则 `--theme > 用户槽 > 出厂`（GUI 改传显式 `--theme`，
+    `--config` 内 theme 键废弃）/ 单槽直写 `pycbeta/config.json`（config.user.json 不再存 theme）。
   - 字体栈统一同字体双名（2026-09-07）：出厂各 `--font-*` 一律"中文名, 英文名"（除 body 唯一
     多段链：中英双名+mac 兜底+Times New Roman 拉丁）；删通用族尾段（PDF 端 `_pdf_css` 已追加
     sans-serif）；繁 body 补回 PMingLiU、head 改 微軟正黑體/Microsoft JhengHei、
