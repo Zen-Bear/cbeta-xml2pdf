@@ -409,6 +409,28 @@ DEFAULT_RUN_CONFIG = {
 }
 _LEGACY_CONFIG_KEYS = ("pages", "output", "engines", "theme", "verify",
                        "annotations", "source")
+_RUN_TEMPLATE = """{{
+  // 一次运行的组合单（5 槽；显式开关优先）。常改文件，不入库。
+  // config-json：基础配置（名或路径；缺省出厂 pycbeta/config.json）
+  "config-json": {config_json},
+  // html/epub 标准基底（默认官方 cbeta_golden.css，一般不动）
+  "html-epub-theme": {html_epub_theme},
+  // html/epub 增量：占位（非空警告+忽略，html/epub 纯基底）
+  "html-epub-user-theme": {html_epub_user_theme},
+  // pdf/docx 标准（整套替换出厂 pdf_docx.css 全文）
+  "pdf-docx-theme": {pdf_docx_theme},
+  // pdf/docx 增量（名走 css-presets/ 双目录或路径，追加在标准之后）
+  "pdf-docx-user-theme": {pdf_docx_user_theme}
+}}
+"""
+
+
+def _render_run_template(values):
+    """注释模板渲染（新建 run.json 用；注释是文档的一部分，必须保留）。"""
+    return _RUN_TEMPLATE.format(**{
+        k.replace("-", "_"): json.dumps(values.get(k, DEFAULT_RUN_CONFIG[k]),
+                                        ensure_ascii=False)
+        for k in RUN_KEYS})
 _DEFAULT_CSS = os.path.join(_STYLES_DIR, "pdf_docx.css")
 _GOLDEN_CSS = os.path.join(_STYLES_DIR, "cbeta_golden.css")
 
@@ -533,33 +555,56 @@ def check_run_placeholders(run):
         print("run.json: html-epub-user-theme 尚未接线，已忽略（html/epub 纯基底）")
 
 
+def _replace_json_string_slot(text, key, value):
+    """文本级换槽值：只动目标行，其余字节（含注释/空行/顺序）原样保留。
+    键不存在则插到末尾 `}` 之前。"""
+    pat = re.compile(r'("%s"\s*:\s*)"(?:[^"\\\n]|\\.)*"' % re.escape(key))
+    rep = r"\1" + json.dumps(value, ensure_ascii=False)
+    new, n = pat.subn(rep, text, count=1)
+    if n:
+        return new
+    ins = '\n  "%s": %s\n' % (key, json.dumps(value, ensure_ascii=False))
+    idx = text.rfind("}")
+    if idx < 0:
+        return text.rstrip("\n") + "\n{" + ins + "}\n"
+    head, tail = text[:idx], text[idx:]
+    if head.rstrip().endswith("{"):
+        return head + ins + tail
+    return head.rstrip("\n") + ",\n" + ins.lstrip("\n") + tail
+
+
 def set_run_slot(key, value, root=None):
-    """run.json 单槽写入（只改此槽；无文件按缺省建；非法原文件改名 .bad）。
-    返回 run.json 路径。"""
+    """run.json 单槽写入（文本级手术，只改目标行；注释/顺序/其余键原样保留）。
+    无文件按注释模板建；非法原文件改名 .bad 后按模板建。返回 run.json 路径。"""
     if key not in RUN_KEYS:
         raise ValueError(f"未知 run.json 槽：{key!r}")
     path = default_run_path(root)
     if os.path.isfile(path):
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
         try:
-            with open(path, encoding="utf-8") as f:
-                data = json.loads(_strip_json_comments(f.read())) or {}
+            data = json.loads(_strip_json_comments(text))
             if not isinstance(data, dict):
-                data = {}
+                raise ValueError("顶层非对象")
         except ValueError:
             bad = path + ".bad"
             try:
                 os.replace(path, bad)
             except OSError:
                 pass
-            data = {}
+            text = None
+        if text is None:
+            vals = dict(DEFAULT_RUN_CONFIG)
+            vals[key] = value
+            text = _render_run_template(vals)
+        else:
+            text = _replace_json_string_slot(text, key, value)
     else:
-        data = {}
-    for k in RUN_KEYS:
-        data.setdefault(k, DEFAULT_RUN_CONFIG[k])
-    data[key] = value
+        vals = dict(DEFAULT_RUN_CONFIG)
+        vals[key] = value
+        text = _render_run_template(vals)
     with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-        f.write("\n")
+        f.write(text if text.endswith("\n") else text + "\n")
     return path
 
 

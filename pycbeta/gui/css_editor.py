@@ -1284,11 +1284,11 @@ def current_theme_value(root=None):
     """有效默认主题值：run.json 的 pdf-docx-user-theme → pdf-docx-theme → ''。
     config.user.json 不再是默认来源（仅面板存档/可显式引用）。"""
     import json
-    from pycbeta.theme import DEFAULT_RUN_CONFIG
+    from pycbeta.theme import DEFAULT_RUN_CONFIG, _strip_json_comments
     root = root or REPO_ROOT
     try:
         with open(os.path.join(root, "run.json"), encoding="utf-8") as f:
-            data = json.load(f) or {}
+            data = json.loads(_strip_json_comments(f.read())) or {}
     except (OSError, ValueError):
         data = {}
     for k in ("pdf-docx-user-theme", "pdf-docx-theme"):

@@ -409,20 +409,63 @@ class TestRunConfig(unittest.TestCase):
         self.assertEqual(buf2.getvalue(), "")
 
     def test_set_run_slot(self):
-        import json
         import shutil
         import tempfile
-        from pycbeta.theme import set_run_slot, DEFAULT_RUN_CONFIG
+        from pycbeta.theme import (set_run_slot, load_run_config,
+                                   DEFAULT_RUN_CONFIG)
         root = tempfile.mkdtemp()
         try:
             p = set_run_slot("pdf-docx-user-theme", "mine", root)
             self.assertTrue(p.endswith("run.json"))
-            d = json.load(open(p, encoding="utf-8"))
+            d = load_run_config(p)  # 模板带注释，走 loader 解析
             self.assertEqual(d["pdf-docx-user-theme"], "mine")
             self.assertEqual(d["pdf-docx-theme"],
                              DEFAULT_RUN_CONFIG["pdf-docx-theme"])
             with self.assertRaises(ValueError):
                 set_run_slot("nope", "x", root)
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+    def test_set_slot_preserves_comments(self):
+        import shutil
+        import tempfile
+        from pycbeta.theme import set_run_slot, load_run_config
+        root = tempfile.mkdtemp()
+        try:
+            fn = os.path.join(root, "run.json")
+            with open(fn, "w", encoding="utf-8") as f:
+                f.write('{\n  // 我的注释\n  "config-json": "a.json",\n'
+                        '  "pdf-docx-user-theme": "old"\n}\n')
+            set_run_slot("pdf-docx-user-theme", "new", root)
+            text = open(fn, encoding="utf-8").read()
+            self.assertIn("// 我的注释", text)  # 注释保留
+            self.assertIn('"config-json": "a.json"', text)  # 其余键原样
+            self.assertEqual(load_run_config(fn)["pdf-docx-user-theme"],
+                             "new")
+            # 缺键插入
+            set_run_slot("pdf-docx-theme", "std.css", root)
+            text2 = open(fn, encoding="utf-8").read()
+            self.assertIn("// 我的注释", text2)
+            self.assertEqual(load_run_config(fn)["pdf-docx-theme"],
+                             "std.css")
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+    def test_set_slot_bad_file(self):
+        import shutil
+        import tempfile
+        from pycbeta.theme import set_run_slot, load_run_config
+        root = tempfile.mkdtemp()
+        try:
+            fn = os.path.join(root, "run.json")
+            with open(fn, "w", encoding="utf-8") as f:
+                f.write("{broken")
+            set_run_slot("pdf-docx-user-theme", "mine", root)
+            self.assertTrue(os.path.isfile(fn + ".bad"))
+            text = open(fn, encoding="utf-8").read()
+            self.assertIn("//", text)  # 按注释模板重建
+            self.assertEqual(load_run_config(fn)["pdf-docx-user-theme"],
+                             "mine")
         finally:
             shutil.rmtree(root, ignore_errors=True)
 

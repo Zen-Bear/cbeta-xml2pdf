@@ -1940,19 +1940,18 @@ class TestCssEditor(unittest.TestCase):
         finally:
             shutil.rmtree(root, ignore_errors=True)
     def test_user_theme_slot(self):
-        import json
         import shutil
         from pycbeta.gui.css_editor import current_theme_value, set_user_theme
+        from pycbeta.theme import load_run_config
         root = tempfile.mkdtemp()
         try:
             # 无 run.json → 标准槽值（pdf_docx.css）
             self.assertEqual(current_theme_value(root), "pdf_docx.css")
-            # 写槽 → run.json 的 pdf-docx-user-theme
+            # 写槽 → run.json 的 pdf-docx-user-theme（注释保留，走 loader 读）
             p = set_user_theme("large-print", root)
             self.assertTrue(p.endswith("run.json"))
             self.assertEqual(current_theme_value(root), "large-print")
-            d = json.load(open(os.path.join(root, "run.json"),
-                               encoding="utf-8"))
+            d = load_run_config(os.path.join(root, "run.json"))
             self.assertEqual(d["pdf-docx-user-theme"], "large-print")
             self.assertEqual(d["pdf-docx-theme"], "pdf_docx.css")
         finally:

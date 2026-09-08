@@ -68,6 +68,9 @@
     轮转废弃；出厂 `theme` 键删除；有效配置 = 出厂 ← base 文件按鍵深合并（整包替换退役）；
         新开关 `--pdf-docx-theme`/`--pdf-docx-user-theme`/`--html-epub-theme`（逐槽覆盖）。
     全量 362+ OK，verify 8/0
+  - set_run_slot 文本级手术（2026-09-08）：run.json 带 `//` 注释，裸 `json.dump` 重写会丢注释
+    （且读失败会误判损坏进 .bad）；改逐行替换目标槽（注释/顺序/其余键原样保留）+ 注释模板新建；
+    `current_theme_value` 读路径同修；全量 376 OK
   - [x] **已落实 配置栏四按钮+默认纸张（2026-09-08 用户立项）**：面板配置栏"保存到配置"改名
     "保存用户配置"（写 `config.user.json` 不变）；新增"载入用户配置"（读回面板，文件缺失置灰）；
     新增"设为默认"（run.json `config-json` 槽指向 `config.user.json`）；"还原出厂"保留。
