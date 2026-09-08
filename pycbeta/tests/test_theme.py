@@ -408,6 +408,40 @@ class TestRunConfig(unittest.TestCase):
             check_run_placeholders({})
         self.assertEqual(buf2.getvalue(), "")
 
+    def test_deep_merge(self):
+        from pycbeta.theme import deep_merge
+        base = {"output": {"t2s": False, "pagination": {"enabled": True}},
+                "pages": {"a4": {}}}
+        over = {"output": {"pagination": {"enabled": False}}}
+        got = deep_merge(base, over)
+        self.assertFalse(got["output"]["pagination"]["enabled"])
+        self.assertFalse(got["output"]["t2s"])  # 未覆盖键保留
+        self.assertIn("pages", got)
+        self.assertEqual(base["output"]["pagination"]["enabled"], True)  # 不污染
+
+    def test_effective_config_and_legacy_theme_warn(self):
+        import io
+        import json
+        import tempfile
+        from contextlib import redirect_stdout
+        from pycbeta.theme import resolve_effective_config
+        root = tempfile.mkdtemp()
+        try:
+            cfg = os.path.join(root, "mine.json")
+            with open(cfg, "w", encoding="utf-8") as f:
+                json.dump({"output": {"t2s": True}, "theme": "x"}, f)
+            run = {"config-json": "mine.json"}
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                got = resolve_effective_config(run, root)
+            # 按鍵合并：用户 t2s 生效，出厂其他键保留；遗留 theme 键警告
+            self.assertTrue(got["output"]["t2s"])
+            self.assertIn("pages", got)
+            self.assertIn("theme", buf.getvalue())
+        finally:
+            import shutil
+            shutil.rmtree(root, ignore_errors=True)
+
     def test_absolute_and_relative_path(self):
         import os
         import tempfile

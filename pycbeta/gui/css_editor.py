@@ -1281,53 +1281,53 @@ def _suffix_rows():
 
 
 def current_theme_value(root=None):
-    """有效默认槽值：用户槽 theme → 出厂 config theme → ''。"""
+    """有效默认主题值：run.json 的 pdf-docx-user-theme → pdf-docx-theme → ''。
+    config.user.json 不再是默认来源（仅面板存档/可显式引用）。"""
     import json
-    from pycbeta.theme import load_presets
+    from pycbeta.theme import DEFAULT_RUN_CONFIG
     root = root or REPO_ROOT
     try:
-        with open(os.path.join(root, "config.user.json"), encoding="utf-8") as f:
-            v = (json.load(f) or {}).get("theme", "")
+        with open(os.path.join(root, "run.json"), encoding="utf-8") as f:
+            data = json.load(f) or {}
+    except (OSError, ValueError):
+        data = {}
+    for k in ("pdf-docx-user-theme", "pdf-docx-theme"):
+        v = data.get(k, "") if isinstance(data, dict) else ""
         if isinstance(v, str) and v.strip():
             return v.strip()
-    except (OSError, ValueError):
-        pass
-    try:
-        v = load_presets(os.path.join(root, "pycbeta", "config.json")).get(
-            "theme", "")
-        if isinstance(v, str):
-            return v.strip()
-    except (OSError, ValueError):
-        pass
-    return ""
+    return DEFAULT_RUN_CONFIG["pdf-docx-theme"]
 
 
 def set_user_theme(value, root=None):
-    """用户槽 theme 键写入（只改此键；无用户槽时按出厂全量建）。返回用户槽路径。"""
+    """run.json 的 pdf-docx-user-theme 槽写入（只改此槽；无文件按缺省建）。
+    返回 run.json 路径。"""
     import json
-    from pycbeta.theme import load_presets
+    from pycbeta.theme import DEFAULT_RUN_CONFIG
     root = root or REPO_ROOT
-    upath = os.path.join(root, "config.user.json")
-    if os.path.isfile(upath):
+    rpath = os.path.join(root, "run.json")
+    if os.path.isfile(rpath):
         try:
-            with open(upath, encoding="utf-8") as f:
+            with open(rpath, encoding="utf-8") as f:
                 data = json.load(f) or {}
             if not isinstance(data, dict):
                 data = {}
         except ValueError:
-            bad = upath + ".bad"
+            bad = rpath + ".bad"
             try:
-                os.replace(upath, bad)
+                os.replace(rpath, bad)
             except OSError:
                 pass
             data = {}
     else:
-        data = dict(load_presets(os.path.join(root, "pycbeta", "config.json")))
-    data["theme"] = value
-    with open(upath, "w", encoding="utf-8") as f:
+        data = {}
+    for k in ("config-json", "html-epub-theme", "html-epub-user-theme",
+              "pdf-docx-theme", "pdf-docx-user-theme"):
+        data.setdefault(k, DEFAULT_RUN_CONFIG[k])
+    data["pdf-docx-user-theme"] = value
+    with open(rpath, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
         f.write("\n")
-    return upath
+    return rpath
 
 
 class CssComboBox(QComboBox):
@@ -1656,7 +1656,7 @@ class CssEditorDialog(QDialog):
             self._refresh_save_enabled()
 
     def _maybe_load_user_theme(self):
-        """启动载入用户槽 theme（仅用户目录 css-presets/ 文件）：
+        """启动载入默认主题（run.json 槽值；仅用户目录 css-presets/ 文件）：
         源码页=其覆盖块、保存按钮亮；内置默认不载入（保持灰归另存）。"""
         from pycbeta.theme import resolve_theme_css, user_presets_dir
         path, _label = resolve_theme_css(current_theme_value())

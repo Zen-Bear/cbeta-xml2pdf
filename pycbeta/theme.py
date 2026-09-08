@@ -13,6 +13,7 @@ tag -> property map for DOCX translation.
 config.json font_sets 已删除（历史包袱，不再读取）。
 """
 
+import copy
 import json
 import os
 import re
@@ -432,7 +433,7 @@ def load_run_config(path=None, root=None):
     with open(path, encoding="utf-8") as f:
         text = f.read()
     try:
-        data = json.loads(text)
+        data = json.loads(_strip_json_comments(text))
     except ValueError as exc:
         raise ValueError(f"run.json 非法 JSON（{path}）：{exc}")
     if not isinstance(data, dict):
@@ -530,6 +531,38 @@ def check_run_placeholders(run):
     """占位槽非空 → 警告（html-epub-user-theme 尚未接线，忽略）。"""
     if (run.get("html-epub-user-theme") or "").strip():
         print("run.json: html-epub-user-theme 尚未接线，已忽略（html/epub 纯基底）")
+
+
+def deep_merge(base, over):
+    """递归合并（over 按鍵胜；list/标量整体替换；仅 dict 递归）。纯函数。"""
+    out = dict(base or {})
+    for k, v in (over or {}).items():
+        if isinstance(v, dict) and isinstance(out.get(k), dict):
+            out[k] = deep_merge(out[k], v)
+        else:
+            out[k] = copy.deepcopy(v)
+    return out
+
+
+def resolve_effective_config(run, run_dir=None):
+    """有效配置（面板显示/CLI 输出选项共用）：出厂 ← base 文件，按鍵深合并。
+
+    base 文件的遗留 theme 键警告（出厂文件除外；主题唯一来源是 run.json 槽）。
+    工厂文件损坏 → {}（调用方用 or 回退）。
+    """
+    try:
+        factory = load_presets(_PRESETS_PATH)
+    except (OSError, ValueError):
+        return {}
+    try:
+        bpath = resolve_base_config(run, run_dir)
+        base = load_presets(bpath)
+    except (OSError, ValueError):
+        return dict(factory)
+    if os.path.abspath(bpath) != os.path.abspath(_PRESETS_PATH) and \
+            isinstance(base, dict) and "theme" in base:
+        print("配置：基础配置文件的 theme 键已废弃，请用 run.json 主题槽")
+    return deep_merge(factory, base)
 
 
 # 内置页面尺寸（mm），presets.json 的 pages 可覆盖/扩展

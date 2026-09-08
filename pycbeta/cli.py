@@ -17,8 +17,9 @@ from .render_docx import DocxRenderer
 from .render_md import MdRenderer
 from .render_epub import EpubRenderer
 from .theme import Theme, PAGE_PRESETS, OUTPUT_PRESETS, ENGINE_PRESETS, load_presets, _PRESETS_PATH
-from .theme import (load_run_config, resolve_base_config, resolve_pdf_docx_css,
-                    resolve_html_base_css, default_run_path, check_run_placeholders)
+from .theme import (load_run_config, resolve_pdf_docx_css,
+                    resolve_html_base_css, default_run_path, check_run_placeholders,
+                    resolve_effective_config)
 from .filename import apply_template
 
 _ALL_FORMATS = ["html", "pdf", "docx", "md", "epub"]
@@ -448,11 +449,7 @@ def main(argv=None):
     run_dir = os.path.dirname(os.path.abspath(args.config)) if args.config \
         else os.path.dirname(os.path.abspath(default_run_path()))
     check_run_placeholders(run)
-    base_cfg = resolve_base_config(run, run_dir)
-    try:
-        presets = load_presets(base_cfg)
-    except (OSError, ValueError):
-        presets = {}
+    presets = resolve_effective_config(run, run_dir)  # 出厂 ← base 文件按鍵合并
     args.page_presets = presets.get("pages") or PAGE_PRESETS
     out_defaults = presets.get("output") or {}
     engines_cfg = presets.get("engines") or {}

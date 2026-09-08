@@ -349,12 +349,12 @@ def generate_formal(xml_fn: str, work, fmt: str, outdir: str, config_path: Optio
     _run = None
     _rdir = None
     try:
-        from .theme import (load_run_config, resolve_base_config,
-                            default_run_path)
+        from .theme import (load_run_config, default_run_path,
+                            resolve_effective_config)
         _run = load_run_config(config_path) if config_path else load_run_config()
         _rdir = os.path.dirname(os.path.abspath(config_path)) if config_path \
             else os.path.dirname(os.path.abspath(default_run_path()))
-        presets = load_presets(resolve_base_config(_run, _rdir))
+        presets = resolve_effective_config(_run, _rdir)
         out_defaults = {**(presets.get("output") or {}), **(presets.get("verify") or {})}
     except Exception:
         try:

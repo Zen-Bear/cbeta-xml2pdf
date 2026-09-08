@@ -1851,20 +1851,59 @@ class TestCssEditor(unittest.TestCase):
         from pycbeta.gui.css_editor import current_theme_value, set_user_theme
         root = tempfile.mkdtemp()
         try:
-            # 无槽 → 出厂（无 theme 键 → ""）
-            os.makedirs(os.path.join(root, "pycbeta"))
-            with open(os.path.join(root, "pycbeta", "config.json"), "w",
-                      encoding="utf-8") as f:
-                json.dump({"theme": "pdf_docx.css"}, f)
+            # 无 run.json → 标准槽值（pdf_docx.css）
             self.assertEqual(current_theme_value(root), "pdf_docx.css")
-            # 写槽 → 用户槽优先
+            # 写槽 → run.json 的 pdf-docx-user-theme
             p = set_user_theme("large-print", root)
-            self.assertTrue(p.endswith("config.user.json"))
+            self.assertTrue(p.endswith("run.json"))
             self.assertEqual(current_theme_value(root), "large-print")
-            # 全量快照不变量：出厂键都在
-            d = json.load(open(os.path.join(root, "config.user.json"),
+            d = json.load(open(os.path.join(root, "run.json"),
                                encoding="utf-8"))
-            self.assertIn("theme", d)
+            self.assertEqual(d["pdf-docx-user-theme"], "large-print")
+            self.assertEqual(d["pdf-docx-theme"], "pdf_docx.css")
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+    def test_write_temp_run(self):
+        import json
+        import shutil
+        from pycbeta.gui.panel import write_temp_run, write_temp_presets
+        from pycbeta.gui.panel import XmlOptions
+        run = {"config-json": "config.json", "html-epub-theme": "cbeta_golden.css",
+               "html-epub-user-theme": "", "pdf-docx-theme": "pdf_docx.css",
+               "pdf-docx-user-theme": "mine"}
+        opts = XmlOptions(page="a4")
+        snap = write_temp_presets({"output": {}}, opts)
+        try:
+            rp = write_temp_run(run, snap)
+            try:
+                with open(rp, encoding="utf-8") as f:
+                    data = json.load(f)
+            finally:
+                os.remove(rp)
+            # 槽照抄，config-json 指快照；快照无遗留 theme 键
+            self.assertEqual(data["pdf-docx-user-theme"], "mine")
+            self.assertEqual(data["config-json"], snap)
+            with open(snap, encoding="utf-8") as f:
+                self.assertNotIn("theme", json.load(f))
+        finally:
+            os.remove(snap)
+
+    def test_load_run_and_presets(self):
+        import json
+        import shutil
+        from pycbeta.gui.panel import load_run_and_presets
+        root = tempfile.mkdtemp()
+        try:
+            with open(os.path.join(root, "run.json"), "w",
+                      encoding="utf-8") as f:
+                json.dump({"config-json": "config.json",
+                           "pdf-docx-user-theme": "mine"}, f)
+            run, presets = load_run_and_presets(root)
+            self.assertEqual(run["pdf-docx-user-theme"], "mine")
+            # 有效配置含出厂键（base 出厂，run 未覆盖输出选项）
+            self.assertIn("output", presets)
+            self.assertIn("pages", presets)
         finally:
             shutil.rmtree(root, ignore_errors=True)
 

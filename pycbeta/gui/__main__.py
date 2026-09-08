@@ -16,7 +16,8 @@ from PySide6.QtWidgets import (
 )
 
 from pycbeta.gui.panel import (
-    XmlOptionsPanel, load_slot, slot_paths, write_temp_presets,
+    XmlOptionsPanel, load_run_and_presets, write_temp_presets,
+    write_temp_run,
 )
 
 
@@ -55,7 +56,7 @@ def build_render_cmd(opts, xml, fmt, out_dir, tmpcfg):
     """子进程桥命令（纯函数，可单测）：批量渲染一行。
 
     - 字库语言只在简体时传 --font-lang（默认繁体省略；t2s 自动简体）；
-    - 默认主题走 --config 里的 theme 槽（CLI 解析），此处不传 --theme。
+    - tmpcfg 是临时 run.json（5 槽组合单；主题走槽，不传 --theme）。
     """
     cmd = [sys.executable, "-m", "pycbeta", "-i", xml, "-f", fmt,
            "--page", opts.page, "--config", tmpcfg, "-o", out_dir]
@@ -101,9 +102,11 @@ class BatchWorker(QThread):
         from pycbeta import fetch
         from pycbeta.parser import P5Parser
         from pycbeta.verify import verify_one
-        presets, out_dir, tmpcfg = self.paths["presets"], self.paths["out"], None
+        presets, out_dir = self.paths["presets"], self.paths["out"]
+        run, snapshot, tmpcfg = self.paths.get("run") or {}, None, None
         try:
-            tmpcfg = write_temp_presets(presets, self.opts)
+            snapshot = write_temp_presets(presets, self.opts)
+            tmpcfg = write_temp_run(run, snapshot)
             total_units = sum(len(self.opts.formats) for _j in self.jobs)
             done_units = 0
             for idx, job in enumerate(self.jobs):
@@ -131,11 +134,12 @@ class BatchWorker(QThread):
                         self.row_file.emit(idx, ";".join(dict.fromkeys(produced)))
                     self.row_status.emit(idx, "完成" if ok else "失败")
         finally:
-            if tmpcfg and os.path.isfile(tmpcfg):
-                try:
-                    os.remove(tmpcfg)
-                except Exception:
-                    pass
+            for p in (tmpcfg, snapshot):
+                if p and os.path.isfile(p):
+                    try:
+                        os.remove(p)
+                    except Exception:
+                        pass
             self.finished_all.emit()
 
     def _resolve(self, job, idx, fetch, presets):
@@ -268,10 +272,11 @@ class MainWindow(QMainWindow):
         src.addWidget(out_browse, 4, 2)
         src.addWidget(out_open, 4, 3)
         layout.addLayout(src)
-        # 设置面板
-        presets, actual = load_slot("user")
+        # 设置面板（有效配置：run.json → base 文件 → 出厂）
+        run, presets = load_run_and_presets()
+        self._run = run
         self.panel = XmlOptionsPanel(presets)
-        self.panel.mark_slot(actual)
+        self.panel.mark_slot("run")
         layout.addWidget(self.panel, 1)
         # 批量列表
         self.table = QTableWidget(0, 5)
@@ -292,8 +297,8 @@ class MainWindow(QMainWindow):
         bar.addWidget(self.btn_cancel)
         bar.addWidget(self.progress, 1)
         layout.addLayout(bar)
-        factory, _u, _l = slot_paths()
-        self.statusBar().showMessage(f"配置槽: {factory}")
+        from pycbeta.theme import default_run_path
+        self.statusBar().showMessage(f"运行组合: {default_run_path()}")
 
     def _browse(self):
         d = QFileDialog.getExistingDirectory(self, "选择 XML 目录")
@@ -344,7 +349,7 @@ class MainWindow(QMainWindow):
         out_dir = self.out_edit.text().strip() or os.path.join(os.getcwd(), "out")
         os.makedirs(out_dir, exist_ok=True)
         opts = self.panel.get_options()
-        presets, _a = load_slot("user")
+        _run, presets = load_run_and_presets()
         self.table.setRowCount(len(jobs))
         for i, job in enumerate(jobs):
             self.table.setItem(i, 0, QTableWidgetItem(job.get("id", "")))
@@ -356,8 +361,9 @@ class MainWindow(QMainWindow):
         flags = {"auto_xml": self.auto_xml.isChecked(),
                  "auto_base": self.auto_base.isChecked()}
         self.worker = BatchWorker(jobs, opts,
-                                  {"presets": presets, "out": out_dir},
-                                  flags)
+                                   {"presets": presets, "run": _run,
+                                    "out": out_dir},
+                                   flags)
         self.worker.row_status.connect(self._on_status)
         self.worker.row_source.connect(lambda i, v: self.table.item(i, 2).setText(v))
         self.worker.row_title.connect(lambda i, v: self.table.item(i, 1).setText(v))

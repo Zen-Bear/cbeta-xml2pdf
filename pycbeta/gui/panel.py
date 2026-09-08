@@ -251,6 +251,39 @@ def reset_factory(root=None):
     return _read_json(factory)
 
 
+def load_run_and_presets(root=None):
+    """(run, 有效配置)：run.json 缺失 → 缺省 run；非法 → 缺省 run（打印，不崩界面）。
+    有效配置 = 出厂 ← base 文件按鍵合并（与 CLI 一致；面板显示/批量快照共用）。"""
+    from pycbeta.theme import (load_run_config, resolve_effective_config,
+                               default_run_path, DEFAULT_RUN_CONFIG)
+    try:
+        run = load_run_config(None, root)
+    except ValueError as exc:
+        print(f"run.json 非法，用缺省：{exc}")
+        run = dict(DEFAULT_RUN_CONFIG)
+    try:
+        rdir = os.path.dirname(os.path.abspath(default_run_path(root)))
+        presets = resolve_effective_config(run, rdir)
+    except Exception:
+        presets = {}
+    return run, presets
+
+
+def write_temp_run(run, snapshot_path, path=None):
+    """临时 run.json（GUI 批量桥用）：复用当前 run 槽，config-json 指快照文件。
+    调用方用后删除。返回路径。"""
+    import tempfile
+    from pycbeta.theme import RUN_KEYS
+    data = {k: (run or {}).get(k, "") for k in RUN_KEYS}
+    data["config-json"] = snapshot_path
+    if path is None:
+        fd, path = tempfile.mkstemp(prefix="xml2pdf-gui-run-", suffix=".json")
+        os.close(fd)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    return path
+
+
 @dataclass
 class XmlOptions:
     """面板数据模型（字段含义见 docs/GUI设计.md §2）。"""
@@ -296,6 +329,7 @@ def write_temp_presets(base, opts, path=None):
     以 base（当前槽）为底，合并 output/pagination/series_title/annotations/verify
     与页面边距；调用方用后删除。返回路径。"""
     data = copy.deepcopy(base)
+    data.pop("theme", None)  # 遗留 theme 键退役（主题唯一来源是 run.json 槽）
     data.setdefault("output", {}).update(copy.deepcopy(opts.output or {}))
     if opts.pagination:
         data["output"]["pagination"] = copy.deepcopy(opts.pagination)
@@ -573,8 +607,8 @@ class XmlOptionsPanel(QWidget):
 
     def _refresh_theme_box(self, keep_value=None):
         from pycbeta.theme import resolve_theme_css
-        cur = keep_value if keep_value is not None else (
-            self._presets.get("theme", "") or "")
+        from pycbeta.gui.css_editor import current_theme_value
+        cur = keep_value if keep_value is not None else current_theme_value()
         self.theme_box.refresh(cur)
         _path, label = resolve_theme_css(cur)
         shown = _path or "内置 pdf_docx.css"
@@ -595,7 +629,6 @@ class XmlOptionsPanel(QWidget):
             self.theme_status.setText(f"写入失败：{exc}")
             self.theme_status.setStyleSheet("color: red")
             return
-        self._presets["theme"] = value
         self._refresh_theme_box(keep_value=value)
         self._changed()
 
@@ -858,10 +891,16 @@ class XmlOptionsPanel(QWidget):
         self.refresh_slot_label(actual)
 
     def refresh_slot_label(self, actual, suffix=""):
-        """槽标签：当前配置：<链接>（路径，太长中间省略，点击打开文件）。"""
+        """槽标签：当前配置：<链接>（路径，太长中间省略，点击打开文件）。
+        actual ∈ user/factory/run（run.json 组合单）。"""
+        from pycbeta.theme import default_run_path
         factory, user, _last = slot_paths()
-        path = user if actual == "user" else factory
-        name = "用户配置" if actual == "user" else "出厂默认"
+        if actual == "run":
+            path = default_run_path()
+            name = "运行组合"
+        else:
+            path = user if actual == "user" else factory
+            name = "用户配置" if actual == "user" else "出厂默认"
         short = self.slot_label.fontMetrics().elidedText(
             path, Qt.ElideMiddle, 420)
         url = QUrl.fromLocalFile(os.path.abspath(path)).toString()
