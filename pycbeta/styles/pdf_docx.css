@@ -207,7 +207,7 @@ div.div-note { font-weight: bold; }              /* 字义：与正文同字号�
    必须显式写 1em，否则掉到文档默认 11pt 比正文小）；无特殊色；
    字体走 --font-def（繁简双栏）；DOCX 经 def 标签并入 run（段挂 pStyle def，
    预览标【释义】），HTML/PDF 浏览器原生。 */
-cb:def { font-size: 1em; }
+cb:def { font-weight: normal; font-size: 1em; }
 
 /* ============ 校勘注释 ============ */
 /* 双行夹注（<note place="inline"> 的双行形态）：0.8em 紫色，DOCX 渲染为双行小字。 */
