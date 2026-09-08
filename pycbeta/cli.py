@@ -32,20 +32,6 @@ def resolve_default_page(args_page, presets):
     return args_page or (presets or {}).get("default_page") or "a4"
 
 
-def scaled_page_presets(page_presets, factor: float):
-    """大字版：页面方案的 doc_size 兜底字号跟随 font_scale 等比放大（不改原配置）。"""
-    out = {}
-    for name, cfg in (page_presets or {}).items():
-        cfg = dict(cfg or {})
-        try:
-            if "doc_size" in cfg:
-                cfg["doc_size"] = round(float(cfg["doc_size"]) * factor, 2)
-        except (TypeError, ValueError):
-            pass
-        out[name] = cfg
-    return out
-
-
 def load_theme(path, lang="zh-Hant"):
     if path.endswith(".css"):
         from .theme import theme_file_text
@@ -532,9 +518,8 @@ def main(argv=None):
     args.latin_font = theme.font_var("latin", "Calibri")
     args.gaiji_lang = font_lang  # 缺字字体链按此语言选表（render_docx 懒解析）
     if args.font_scale != 1.0:
-        # 大字版：主题字号等比缩放 + 页面兜底字号跟随（版心/边距不动，自动重排）
+        # 大字版：主题字号等比缩放（版心/边距不动，自动重排；em 随基准自动跟）
         theme.scale_font_sizes(args.font_scale)
-        args.page_presets = scaled_page_presets(args.page_presets, args.font_scale)
 
     if os.path.isdir(args.input):
         xmls = []

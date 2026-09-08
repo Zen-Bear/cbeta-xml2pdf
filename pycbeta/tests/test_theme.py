@@ -4,9 +4,8 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from pycbeta.cli import scaled_page_presets
 from pycbeta.theme import Theme, _scale_font_size, resolve_font_vars, resolve_page, \
-    resolve_theme_css
+    resolve_theme_css, _abs_pt
 
 
 class TestScaleHelper(unittest.TestCase):
@@ -155,16 +154,28 @@ class TestLatinFont(unittest.TestCase):
         self.assertEqual(DocxRenderer().latin_font, "Calibri")
 
 
-class TestScaledPagePresets(unittest.TestCase):
-    def test_doc_size_follows(self):
-        pages = {"a4": {"size": [210, 297], "doc_size": 11, "latin_font": "Calibri"}}
-        out = scaled_page_presets(pages, 1.5)
-        self.assertEqual(out["a4"]["doc_size"], 16.5)
-        self.assertEqual(pages["a4"]["doc_size"], 11)  # 不改原配置
+class TestBasePtSingleSource(unittest.TestCase):
+    def test_abs_pt(self):
+        self.assertEqual(_abs_pt("12pt", 12.0), 12.0)
+        self.assertEqual(_abs_pt("1.5em", 12.0), 18.0)
+        self.assertEqual(_abs_pt("75%", 12.0), 9.0)
+        self.assertIsNone(_abs_pt("abc", 12.0))
+        self.assertIsNone(_abs_pt("", 12.0))
 
-    def test_missing_doc_size(self):
-        out = scaled_page_presets({"x": {"size": [1, 2]}}, 2.0)
-        self.assertNotIn("doc_size", out["x"])
+    def test_base_pt_single_source(self):
+        from pycbeta.theme import Theme
+        # body 单源：p 无字号走 body；都无回 12.0；doc 默认回 11
+        t = Theme.from_css("body { font-size: 14pt; }\np { color: #000; }\n")
+        self.assertEqual(t.base_pt(), 14.0)
+        t2 = Theme.from_css("p { font-size: 12pt; }\n")
+        self.assertEqual(t2.base_pt(), 12.0)
+        t3 = Theme.from_css("p { color: #000; }\n")
+        self.assertEqual(t3.base_pt(), 12.0)  # DEFAULT p 兜底
+        self.assertEqual(t3.base_pt(fallback=11), 12.0)
+        # doc 默认跟 base（未知回 11，保持旧 pages 默认行为）
+        from pycbeta.render_docx import DocxRenderer
+        self.assertEqual(DocxRenderer(theme=t).doc_size, 14.0)
+        self.assertEqual(DocxRenderer(theme=t3).doc_size, 12.0)
 
     def test_name_case_insensitive(self):
         from pycbeta.theme import resolve_page

@@ -342,8 +342,8 @@ class TestDocxBookmarksSplit(unittest.TestCase):
         fn = DocxRenderer(theme=t).render_work(w, self.tmp, "def.docx")
         z = zipfile.ZipFile(fn)
         s = z.read("word/document.xml").decode("utf-8")
-        # def run 带 def 标签：字号 0.9em（12pt×0.9=10.8pt→21半磅）与 def 字体
-        self.assertIn('<w:sz w:val="21"/>', s)
+        # def run 带 def 标签：字号 0.9em（12pt×0.9=10.8pt→round 取 22 半磅=11pt）与 def 字体
+        self.assertIn('<w:sz w:val="22"/>', s)
         self.assertIn('w:eastAsia="新細明體"', s)
 
     def test_def_p_has_def_pstyle(self):
@@ -361,9 +361,9 @@ class TestDocxBookmarksSplit(unittest.TestCase):
         fn = DocxRenderer(theme=t).render_work(w, self.tmp, "defp.docx")
         z = zipfile.ZipFile(fn)
         s = z.read("word/document.xml").decode("utf-8")
-        # def 内 p 挂 pStyle def（预览标【释义】），run 照旧 0.9em，缩进保留
+        # def 内 p 挂 pStyle def（预览标【释义】），run 照旧 0.9em（round 取 22），缩进保留
         self.assertIn('w:val="def"', s)
-        self.assertIn('<w:sz w:val="21"/>', s)
+        self.assertIn('<w:sz w:val="22"/>', s)
         self.assertIn("<w:ind", s)
 
     def test_div_note_p_has_div_note_pstyle(self):

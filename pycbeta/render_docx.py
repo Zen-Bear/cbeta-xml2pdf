@@ -225,7 +225,8 @@ class DocxRenderer:
         self.page_w = int(w_mm * 56.6929)   # 1mm = 56.6929 twips
         self.page_h = int(h_mm * 56.6929)
         self.page_margins = {k: int(v * 56.6929) for k, v in cfg["margins"].items()}
-        self.doc_size = cfg["doc_size"]      # 文档兜底字号(pt)
+        # 文档兜底字号：跟主题 base（body 单源；未知回 11，保持旧 pages 默认行为）
+        self.doc_size = self.theme.base_pt(fallback=11)
         # 西文字体优先级：显式参数（font_sets 组合 latin）> 页面方案 latin_font > "Calibri"
         self.latin_font = latin_font or cfg["latin_font"]
         self.notes = notes  # 'footnote' | 'endnote' | 'inline'
@@ -255,13 +256,13 @@ class DocxRenderer:
         return {"none": 2, "disc": 1, "bullet": 1, "circle": 1, "decimal": 3}.get(style, 2)
 
     def _tag_base_pt(self, tags) -> float:
-        """段落级标签的 pt 字号，作为 em 换算基准（默认 12pt）。"""
+        """段落级标签的 pt 字号，作为 em 换算基准（默认主题 base，旧 12.0）。"""
         for t in reversed(tags):
             fs = (self.theme.tags.get(t) or {}).get("font-size")
             m = re.match(r"([\d.]+)pt", fs or "")
             if m:
                 return float(m.group(1))
-        return 12.0
+        return self.theme.base_pt()
 
     def _run_rpr(self, tags, props) -> str:
         """run 属性（含 <w:rPr> 包裹）：_run 与 _run_annotated 共用，保证注音 run 样式一致。"""

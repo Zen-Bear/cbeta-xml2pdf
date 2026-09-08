@@ -7,52 +7,43 @@
   "default_page": "a4",  // 默认纸张（--page 未指定时用它；键大小写不敏感；非法回 a4）
 
   "pages": {
-    // 页面方案：--page 选名字（只管几何：尺寸/边距/兜底字号；字体走 CSS :root 双栏变量）
-    // size=[宽mm,高mm]；margins=上下左右 mm；doc_size=DOCX 文档兜底字号(pt)
+    // 页面方案：--page 选名字（只管几何：尺寸/边距；字体走 CSS :root 双栏变量）
+    // size=[宽mm,高mm]；margins=上下左右 mm；文档兜底字号跟主题 base（body 单源）
     "a4": {
       "size": [210, 297],
-      "margins": { "top": 25.4, "right": 25.4, "bottom": 25.4, "left": 25.4 },
-      "doc_size": 11
+      "margins": { "top": 25.4, "right": 25.4, "bottom": 25.4, "left": 25.4 }
     },
     "a5": {
       "size": [148, 210],
-      "margins": { "top": 25.4, "right": 25.4, "bottom": 25.4, "left": 25.4 },
-      "doc_size": 11
+      "margins": { "top": 25.4, "right": 25.4, "bottom": 25.4, "left": 25.4 }
     },
     "信纸": {  // letter 美式信纸（216×279mm）
       "size": [216, 279],
-      "margins": { "top": 25.4, "right": 25.4, "bottom": 25.4, "left": 25.4 },
-      "doc_size": 11
+      "margins": { "top": 25.4, "right": 25.4, "bottom": 25.4, "left": 25.4 }
     },
     "手机": {  // 约 8 寸 16:9（100×178mm）
       "size": [100, 178],
-      "margins": { "top": 10, "right": 10, "bottom": 10, "left": 10 },
-      "doc_size": 11
+      "margins": { "top": 10, "right": 10, "bottom": 10, "left": 10 }
     },
     "平板8寸": {  // 8寸（172×108mm，竖版宽×高下同）
       "size": [108, 172],
-      "margins": { "top": 10, "right": 10, "bottom": 10, "left": 10 },
-      "doc_size": 11
+      "margins": { "top": 10, "right": 10, "bottom": 10, "left": 10 }
     },
     "平板9寸": {  // 9寸（194×121mm）
       "size": [121, 194],
-      "margins": { "top": 10, "right": 10, "bottom": 10, "left": 10 },
-      "doc_size": 11
+      "margins": { "top": 10, "right": 10, "bottom": 10, "left": 10 }
     },
     "平板11寸": {  // 11寸（237×148mm）
       "size": [148, 237],
-      "margins": { "top": 10, "right": 10, "bottom": 10, "left": 10 },
-      "doc_size": 11
+      "margins": { "top": 10, "right": 10, "bottom": 10, "left": 10 }
     },
     "32开": {  // 32开（130×184mm）
       "size": [130, 184],
-      "margins": { "top": 20, "right": 20, "bottom": 20, "left": 20 },
-      "doc_size": 11
+      "margins": { "top": 20, "right": 20, "bottom": 20, "left": 20 }
     },
     "16开": {  // 16开（185×260mm）
       "size": [185, 260],
-      "margins": { "top": 20, "right": 20, "bottom": 20, "left": 20 },
-      "doc_size": 11
+      "margins": { "top": 20, "right": 20, "bottom": 20, "left": 20 }
     }
   },
 

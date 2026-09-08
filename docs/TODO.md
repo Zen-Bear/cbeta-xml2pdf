@@ -89,6 +89,11 @@
     载入恢复、`resolve_page` 三级、`write_temp_presets` 同步；取消跟随填预设值作基线，跟随中
     切纸张刷新显示；搭售修 `t2s` 移出 `if margins`；格式栏（formats/engine/font_lang）上轮已
     入库，本次只验证；    全量 381 OK，verify 8/0
+  - 字号单源 body（2026-09-08 用户立项并定 A）：`body{font-size:12pt}` 为唯一源，`p` 删字号走继承；
+    `pages.doc_size` 键删除（9 纸张），doc 默认跟 `Theme.base_pt`（p→body 绝对值，未知回 11）；
+    `docx_run` 半磅 `int`→`round` + 支持 `%`，`docx_para` font_pt 同样解 em，`_tag_base_pt` 默认走
+    base；其余保持 pt（精确直观），em 只留天生相对处；编辑器字号显示回退 body 值（只显示不写回）；
+    附带 0.9em 由 21 变 22（注音小字 10.5→11pt，唯一视觉变化，需目检）；全量 382 OK，verify 8/0
   - 标签锚定+目录可开（2026-09-08）：当前配置恒显示运行组合链（run.json → base 文件/出厂默认），
     保存/载入/设默认/还原只换后缀不再翻转；"打开用户预设目录"无响应是 `_open_local_file` 用
     `isfile` 误杀目录，改 `exists`；全量 382 OK

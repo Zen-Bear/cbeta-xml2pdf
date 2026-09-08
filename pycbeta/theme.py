@@ -232,6 +232,18 @@ def _hex6(color: object):
     return None
 
 
+def _abs_pt(value: object, base_pt: float):
+    """font-size 值 → pt 浮点（pt 直接；em/% 按 base 换算；非法 None）。纯函数。"""
+    m = re.match(r"^\s*([\d.]+)\s*pt\s*$", value or "")
+    if m:
+        return float(m.group(1))
+    m = re.match(r"^\s*([\d.]+)\s*(em|%)\s*$", value or "")
+    if m:
+        v = float(m.group(1))
+        return v / 100.0 * base_pt if m.group(2) == "%" else v * base_pt
+    return None
+
+
 def _scale_font_size(value: object, factor: float) -> Optional[str]:
     """把单个 font-size 值等比缩放：只放绝对单位 pt；em/% 是相对单位，
     随其基准（段落字号/父元素）自动放大，不在此乘——否则与放大的基准相乘造成双重放大
@@ -671,9 +683,10 @@ def resolve_page(name: str, page_presets: Optional[Dict] = None) -> Dict:
     """把 --page 名字解析成页面配置。
 
     返回 {size: [w_mm, h_mm], margins: {top,right,bottom,left} mm,
-          doc_size: 文档兜底字号(pt), latin_font: 西文字体}。
+          latin_font: 西文字体}。
     presets.json 的 pages 优先（键大小写不敏感）；否则回退内置 BUILTIN_PAGES/a4。
-    边距：custom_margins（用户改的）> margins（预设自带）> 25.4 默认。
+    边距 custom_margins（用户改的）> margins（预设自带）> 25.4 默认；
+    兜底字号不走这里（跟主题 base，见 Theme.base_pt）。
     """
     p = _lookup_ci(page_presets or {}, name)
     if not p:
@@ -684,7 +697,6 @@ def resolve_page(name: str, page_presets: Optional[Dict] = None) -> Dict:
     return {
         "size": list(p.get("size") or BUILTIN_PAGES["a4"]["size"]),
         "margins": margins,
-        "doc_size": p.get("doc_size", 11),
         "latin_font": p.get("latin_font", "Calibri"),
     }
 
@@ -759,6 +771,18 @@ class Theme:
         """active lang 的 --font-<suffix> 值（如 latin）；缺省 default。"""
         v = (self._font_vars or {}).get("--font-" + suffix)
         return v if v else default
+
+    def base_pt(self, fallback: float = 12.0) -> float:
+        """基准字号：body → p 的绝对 pt；找不到回 fallback。
+        单源：body{font-size} 为唯一源（p 继承）；DOCX em 换算与文档默认锚定它。
+        注意只认绝对 pt（em 基准必须保持绝对，否则复利）；body 优先于 p，
+        否则 p 的 DEFAULT 默认值（12pt）会盖住 body 显式值。"""
+        for tag in ("body", "p"):
+            m = re.match(r"^\s*([\d.]+)\s*pt\s*$",
+                         (self.tags.get(tag) or {}).get("font-size") or "")
+            if m:
+                return float(m.group(1))
+        return fallback
 
     @staticmethod
     def _parse_css_tags(css_text: str, lang: str = "zh-Hant"):
@@ -892,17 +916,12 @@ class Theme:
         """
         props = self._props(*tags)
         out = []
-        sz = props.get("font-size")
-        pt = None
-        m = re.match(r"([\d.]+)pt", sz or "")
-        if m:
-            pt = float(m.group(1))
-        else:
-            m = re.match(r"([\d.]+)em", sz or "")
-            if m:
-                pt = float(m.group(1)) * (base_pt if base_pt is not None else 12.0)
+        base = base_pt if base_pt is not None else self.base_pt()
+        pt = _abs_pt(props.get("font-size"), base)
         if pt is not None:
-            half = int(pt * 2)
+            # round（非 int 截断）：em 写法精确还原（如 1.333em@12→32）；
+            # 附带 0.9em 由 21 变 22（10.5→11pt，注音小字类，目检确认）
+            half = round(pt * 2)
             out.append(f'<w:sz w:val="{half}"/><w:szCs w:val="{half}"/>')
         if props.get("font-weight") == "bold":
             out.append("<w:b/>")
@@ -953,10 +972,9 @@ class Theme:
         for t in reversed(tags):
             props.update(self.tags.get(t) or {})
         props = self._apply_compounds(props, tags)
-        font_pt = 12.0
-        m = re.match(r"([\d.]+)pt", props.get("font-size") or "")
-        if m:
-            font_pt = float(m.group(1))
+        base = self.base_pt()
+        # em 边距/缩进的基准是元素自身解算字号（未知则 base），与 docx_run 一致
+        font_pt = _abs_pt(props.get("font-size"), base) or base
         parts = {}
         spacing_attrs = []
         lh = props.get("line-height")

@@ -676,6 +676,17 @@ STYLE_ROW_LABEL = {"title": "书名", "head": "标题", "juan": "卷名",
                    "series-title": "经藏名", "": "正文"}
 
 
+def body_font_size(css_text):
+    """工作 CSS 里 body{font-size} 最后一个（层叠后胜）→ 原文；无则 ""。
+
+    左栏字号显示回退：无自有字号的行显示 body 值（浏览器继承语义）；
+    只影响显示，不进 touched/写回。
+    """
+    found = re.findall(r"body\s*\{[^}]*?font-size\s*:\s*([^;}]+)",
+                       css_text or "")
+    return found[-1].strip() if found else ""
+
+
 def div_note_color(css_text):
     """工作 CSS 里 div.div-note 的颜色（小写 #hex；无则 ""）。
 
@@ -2055,6 +2066,7 @@ class CssEditorDialog(QDialog):
         ovr, _oe = parse_override_block(self._source_edit.toPlainText())
         hant_vars = values.get(":root", {})
         hans_vars = values.get(_HANS_BLOCK, {})
+        body_sz = body_font_size(self.work_css())
         for sel, ctrls in self._rows.items():
             props = values.get(sel, {})
             suffix = ctrls.get("suffix")
@@ -2067,7 +2079,7 @@ class CssEditorDialog(QDialog):
                     ctrls["font_hans"],
                     hans_vars.get("--font-" + suffix, "") if suffix else "")
             with QSignalBlocker(ctrls["size"]):
-                ctrls["size"].setText(props.get("font-size", ""))
+                ctrls["size"].setText(props.get("font-size", "") or body_sz)
             ctrls["weight_value"] = (ovr.get(sel) or {}).get("font-weight", "")
             self._paint_weight(sel)
             ctrls["color_value"] = props.get("color", "")
