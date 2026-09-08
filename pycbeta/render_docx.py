@@ -136,7 +136,7 @@ def split_sections(body, rules: dict) -> list:
 
 # 段落级命名样式（styles.xml 里定义，段落用 <w:pStyle> 引用而非内联 pPr）
 _STYLED_PARAS = ("title", "head", "juan", "pin", "p", "verse", "footnote", "byline",
-                 "author", "translator", "series-title", "def")
+                 "author", "translator", "series-title", "def", "div-note")
 
 # 缺字回退链默认值（config output.docx.fallbackFonts 可覆盖；与预览 PREVIEW_FALLBACKS 对应。
 # 按渲染语言分栏（gaiji_lang）：繁体优先明体、简体优先宋体；SimSunExtB 管 Ext-B 及以后；
@@ -539,6 +539,10 @@ class DocxRenderer:
         # 此时 div 栈为空，不受影响；脚注内容另由 _footnote_content 清栈隔离。
         tags = tuple(dict.fromkeys(tuple(self._div_stack) + tags))
         para = tags[-1] if tags else "p"
+        # div-note 内 p/form 挂 div-note 样式（预览标【字义】；def 结尾标【释义】不动）：
+        # 样式在 styles.xml 内联拷贝 p 布局+粗体，视觉与原来（p 样式+粗体 run）一致。
+        if "div-note" in tags and para in ("p", "form"):
+            para = "div-note"
         if count:
             self._body_para_count += 1
         pb = "<w:pageBreakBefore/>" if page_break else ""
@@ -1426,14 +1430,17 @@ class DocxRenderer:
             document = _strip_color(document)
             footnotes = _strip_color(footnotes)
         def _style(tag: str) -> str:
-            ppr = self.theme.docx_para(tag)
+            # div-note 样式内联拷贝 p 布局+粗体（自包含，渲染时按 live 主题计算，
+            # 不腐烂；免 basedOn 链兼容风险；预览回落无需跟链）。
+            base = ("p", "div-note") if tag == "div-note" else (tag,)
+            ppr = self.theme.docx_para(*base)
             if self.bookmarks and tag == "juan":
                 # 大纲级别 1 → Word 导航窗格可见卷目录
                 ppr += '<w:outlineLvl w:val="0"/>'
             elif self.bookmarks and tag == "pin":
                 # 品名 = 第二级目录（挂在卷之下）
                 ppr += '<w:outlineLvl w:val="1"/>'
-            rpr = self.theme.docx_run(tag)
+            rpr = self.theme.docx_run(*base)
             ppr_x = f"<w:pPr>{ppr}</w:pPr>" if ppr else ""
             rpr_x = f"<w:rPr>{rpr}</w:rPr>" if rpr else ""
             return (f'<w:style w:type="paragraph" w:styleId="{tag}">'

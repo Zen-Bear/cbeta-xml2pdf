@@ -71,6 +71,13 @@
     `FONT_VAR_TAGS` 加 def；`render_docx._render_e` def 分支（run 带 def 标签，def 内 p 继承）；
     `pdf_docx.css` `--font-def` 双栏 + `cb:def{font-size:0.9em}`（无颜色）；左栏"释义"行 +
     tooltip 双向查找（`_row_cb_tip` 各行 tooltip 标 cb 标签）；全量 345 OK、verify 8/0
+  - 字义/释义正文化（2026-09-07）：`div.div-note` 去灰改加粗、`cb:def` 改 1em（恒等于正文；
+    OOXML run 无继承，必须显式）；div-note 内 p/form 挂 pStyle div-note（样式内联拷贝 p
+    布局+粗体，视觉不变；预览标【字义】，def 优先标【释义】）；内联路径（缩进段）一律挂
+    命名样式（直接属性覆盖，视觉不变）；无 sz run 回落命名样式→文档默认（form 唵者预览
+    11pt 与 Word 一致，不再掉 Qt 默认小字）；设为默认等全按钮取消 autoDefault（回车不
+    误触）；左栏 480；状态条声明图片不显示；字号 400ms 防抖（输入"12"只刷一次）；
+    全量 354 OK、verify 8/0
 - [ ] **P9 中** GUI 界面三语切换（简/繁/英，2026-09-06 用户立项；与输出经文 t2s/font_sets 无关，是界面本身语言）
   - 背景：界面中文串全硬编码（panel 约数百处、`__main__` 状态栏/按钮），无 `QTranslator` 机制
   - 方案：先抽字符串资源（`pycbeta/gui/i18n/*.ts`，Qt Linguist 流程：`pylupdate6` 抽取→翻译→`lrelease` 编译→`QTranslator.load/install`），面板顶部或设置加语言下拉（简/繁/英，存用户槽，重启生效；或动态 `retranslateUi` 热切）

@@ -524,6 +524,40 @@ def _para_margin(p):
     return out
 
 
+def _style_sizes(styles_root):
+    """styles.xml → {styleId: pt}（命名样式字号；供无 sz run 回退，与 Word 一致）。"""
+    out = {}
+    if styles_root is None:
+        return out
+    for st in styles_root.findall(_w("style")):
+        sid = _a(st, "styleId")
+        if not sid:
+            continue
+        rpr = st.find(_w("rPr"))
+        sz = rpr.find(_w("sz")) if rpr is not None else None
+        try:
+            val = float(_a(sz, "val")) / 2.0 if sz is not None else None
+        except (TypeError, ValueError):
+            val = None
+        if val:
+            out[sid] = val
+    return out
+
+
+def _doc_default_size(styles_root):
+    """styles.xml docDefaults → pt（无 sz run 的最终回落；缺省 None）。"""
+    if styles_root is None:
+        return None
+    dd = styles_root.find(_w("docDefaults"))
+    rpr = dd.find(_w("rPrDefault")).find(_w("rPr")) \
+        if dd is not None and dd.find(_w("rPrDefault")) is not None else None
+    sz = rpr.find(_w("sz")) if rpr is not None else None
+    try:
+        return float(_a(sz, "val")) / 2.0 if sz is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
 def _style_margins(styles_root):
     """styles.xml → {styleId: {"before","after"}}（供无行内边距段落回退，与 Word 一致）。"""
     out = {}
@@ -750,6 +784,8 @@ def docx_spec(docx_path):
 
     正文段落取 w:p（含 pStyle 对齐）；脚注取 footnotes.xml（跳过分隔符 0/1），
     统一归并 —— 预览尾注陈列，页底位置以 Word 为准。
+    无 sz run 回落到命名样式字号 → 文档默认（与 Word 一致；form 等无字号
+    标签不再掉到 Qt 默认小字）。
     """
     from lxml import etree
     spec = {"paras": [], "footnotes": []}
@@ -762,6 +798,19 @@ def docx_spec(docx_path):
                    if "word/styles.xml" in names else None)
     style_lines = _style_lines(st_root)
     style_margins = _style_margins(st_root)
+    style_sizes = _style_sizes(st_root)
+    doc_default = _doc_default_size(st_root)
+
+    def _fill_size(runs, style):
+        # 无 sz run 回落：命名样式字号 → 文档默认（与 Word 一致）；
+        # 注音小字（dim）保持 None（0.7×10.5 路径不动）。
+        fb = style_sizes.get(style) or doc_default
+        if not fb:
+            return
+        for r in runs:
+            if not r.get("br") and not r.get("dim") \
+                    and r.get("text") and not r.get("size"):
+                r["size"] = fb
     fn_id_to_num, fn_bodies = {}, {}
     if fn_root is not None:
         num = 0
@@ -781,7 +830,9 @@ def docx_spec(docx_path):
                         or style_lines.get("Normal")
                     fn_margin = _para_margin(p) or style_margins.get(st) \
                         or style_margins.get("Normal")
-                runs.extend(_para_runs(p, {}))
+                new_runs = _para_runs(p, {})
+                _fill_size(new_runs, _para_style(p))  # 无样式走文档默认
+                runs.extend(new_runs)
             fn_bodies[num] = (runs, fn_line, fn_margin)
     for p in doc.iter(_w("p")):
         style = _para_style(p)
@@ -799,6 +850,7 @@ def docx_spec(docx_path):
                 or style_lines.get("Normal")
             margin = _para_margin(p) or style_margins.get(style) \
                 or style_margins.get("Normal")
+            _fill_size(runs, style)
             spec["paras"].append({"style": style, "align": align,
                                   "line": line, "margin": margin,
                                   "runs": runs})
@@ -1498,7 +1550,7 @@ class CssEditorDialog(QDialog):
         self.status = QLabel("就绪")
         self.status.setStyleSheet("color: gray")
         rl.addWidget(self.status)
-        self.sim_tip = QLabel("预览为模拟显示（字体四参数为真值），分页/页边距以 Word 为准")
+        self.sim_tip = QLabel("预览为模拟显示（字体四参数为真值），分页/页边距以 Word 为准；图片不显示")
         self.sim_tip.setStyleSheet("color: gray")
         self.sim_tip.setWordWrap(True)
         rl.addWidget(self.sim_tip)
@@ -1508,7 +1560,7 @@ class CssEditorDialog(QDialog):
         layout.addWidget(split, 1)
         # 左栏初始宽度定死（内容已收窄，splitter 默认会按 sizeHint 撑宽）；
         # 用户仍可拖分隔条，窗口拉大时多余宽度全给预览。
-        split.setSizes([450, 708])
+        split.setSizes([480, 678])
         # 底栏
         brow = QHBoxLayout()
         self.btn_docx = QPushButton("保存DOCX")
@@ -1542,6 +1594,11 @@ class CssEditorDialog(QDialog):
         self.status.setText(f"基于：{self._base_label}")
         self._maybe_load_user_theme()
         self._refresh_save_enabled()
+        # 回车不误触：全部按钮取消 autoDefault/default（设为默认是静默永久写入，
+        # 必须点，不能回车）。刻意按键仍可用空格触发聚焦按钮。
+        for _b in self.findChildren(QPushButton):
+            _b.setAutoDefault(False)
+            _b.setDefault(False)
         self.refresh_preview()
 
     def _effective_base_css(self):

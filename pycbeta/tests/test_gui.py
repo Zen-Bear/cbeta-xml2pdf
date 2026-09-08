@@ -1046,6 +1046,7 @@ class TestCssEditor(unittest.TestCase):
         try:
             self.assertIn("模拟显示", dlg.sim_tip.text())
             self.assertIn("分页", dlg.sim_tip.text())
+            self.assertIn("图片", dlg.sim_tip.text())  # 图片不显示已声明
         finally:
             dlg._loaded_block = dlg._source_edit.toPlainText()
             dlg.close()
@@ -1173,19 +1174,20 @@ class TestCssEditor(unittest.TestCase):
         import pycbeta.gui.css_editor as ce
         dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
         try:
-            gray = {"text": "x", "size": 12.0, "font": "", "bold": False,
-                    "color": "#666666", "super": False, "dim": False}
-            black = dict(gray, color="")
+            run = {"text": "x", "size": 12.0, "font": "", "bold": True,
+                   "color": "", "super": False, "dim": False}
             spec = {"paras": [
-                {"style": "p", "align": "", "line": None, "runs": [black]},
-                {"style": "p", "align": "", "line": None, "runs": [gray]},
-                {"style": "p", "align": "", "line": None, "runs": [gray]},
-                {"style": "p", "align": "", "line": None, "runs": [black]}],
+                {"style": "p", "align": "", "line": None, "runs": [run]},
+                {"style": "div-note", "align": "", "line": None,
+                 "runs": [run]},
+                {"style": "div-note", "align": "", "line": None,
+                 "runs": [run]},
+                {"style": "p", "align": "", "line": None, "runs": [run]}],
                 "footnotes": []}
             dlg.names_box.setChecked(True)
             dlg._show_spec(spec, {})
             text = dlg.preview.toPlainText()
-            # 出厂 div.div-note 灰色 → 灰段标【字义】（相邻去重），黑段仍【正文】
+            # pStyle div-note → 标【字义】（相邻去重），p 仍【正文】
             self.assertEqual(text.count("【字义】"), 1)
             self.assertEqual(text.count("【正文】"), 2)
             dlg._loaded_block = dlg._source_edit.toPlainText()
@@ -1433,6 +1435,37 @@ class TestCssEditor(unittest.TestCase):
                 dlg._loaded_block = dlg._source_edit.toPlainText()
             finally:
                 dlg.close()
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_unsized_run_falls_back(self):
+        import pycbeta.gui.css_editor as ce
+        import shutil
+        import zipfile
+        tmp = tempfile.mkdtemp()
+        try:
+            doc = ('<w:document xmlns:w="http://schemas.openxmlformats.org'
+                   '/wordprocessingml/2006/main"><w:body>'
+                   '<w:p><w:r><w:t>无样式无字号</w:t></w:r></w:p>'
+                   '<w:p><w:pPr><w:pStyle w:val="footnote"/></w:pPr>'
+                   '<w:r><w:t>注无字号</w:t></w:r></w:p>'
+                   "</w:body></w:document>")
+            styles = ('<w:styles xmlns:w="http://schemas.openxmlformats.org'
+                      '/wordprocessingml/2006/main">'
+                      '<w:docDefaults><w:rPrDefault><w:rPr>'
+                      '<w:sz w:val="22"/>'
+                      '</w:rPr></w:rPrDefault></w:docDefaults>'
+                      '<w:style w:styleId="footnote"><w:rPr>'
+                      '<w:sz w:val="18"/>'
+                      '</w:rPr></w:style></w:styles>')
+            fn = os.path.join(tmp, "s.docx")
+            with zipfile.ZipFile(fn, "w") as z:
+                z.writestr("word/document.xml", doc)
+                z.writestr("word/styles.xml", styles)
+            spec = ce.docx_spec(fn)
+            # 无样式段回落文档默认 11pt；footnote 样式段回落样式 9pt
+            self.assertEqual(spec["paras"][0]["runs"][0]["size"], 11.0)
+            self.assertEqual(spec["paras"][1]["runs"][0]["size"], 9.0)
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
@@ -1963,11 +1996,41 @@ class TestCssEditor(unittest.TestCase):
         dlg = CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
         try:
             row = dlg._rows["div.div-note"]
-            # 无字体变量：字体栏置灰；颜色取 base（#666666）
+            # 无字体变量：字体栏置灰；字义=正文大小+无特殊色；
+            # 粗细按钮显示覆盖态（出厂粗不算覆盖，显示"默认"）
             self.assertIsNone(row.get("suffix"))
             self.assertFalse(row["font_hant"].isEnabled())
             self.assertFalse(row["font_hans"].isEnabled())
-            self.assertEqual(row["color_value"], "#666666")
+            self.assertEqual(row["color_value"], "")
+            self.assertEqual(row["weight"].text(), "默认")
+            dlg._loaded_block = dlg._source_edit.toPlainText()
+        finally:
+            dlg._loaded_block = dlg._source_edit.toPlainText()
+            dlg.close()
+
+    def test_no_button_is_default(self):
+        from PySide6.QtWidgets import QPushButton
+        from pycbeta.gui.css_editor import CssEditorDialog
+        dlg = CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+        try:
+            btns = dlg.findChildren(QPushButton)
+            self.assertTrue(btns)
+            for b in btns:
+                # 回车不误触（设为默认是静默永久写入，必须点）
+                self.assertFalse(b.autoDefault(), b.text())
+                self.assertFalse(b.isDefault(), b.text())
+            dlg._loaded_block = dlg._source_edit.toPlainText()
+        finally:
+            dlg._loaded_block = dlg._source_edit.toPlainText()
+            dlg.close()
+
+    def test_size_refresh_debounced(self):
+        from pycbeta.gui.css_editor import CssEditorDialog
+        dlg = CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+        try:
+            # 字号输入 400ms 防抖（单发重启）：连输"12"只刷一次，不逐字渲染
+            self.assertTrue(dlg._timer.isSingleShot())
+            self.assertEqual(dlg._timer.interval(), 400)
             dlg._loaded_block = dlg._source_edit.toPlainText()
         finally:
             dlg._loaded_block = dlg._source_edit.toPlainText()

@@ -366,6 +366,27 @@ class TestDocxBookmarksSplit(unittest.TestCase):
         self.assertIn('<w:sz w:val="21"/>', s)
         self.assertIn("<w:ind", s)
 
+    def test_div_note_p_has_div_note_pstyle(self):
+        from pycbeta.model import Work, E, Text
+        from pycbeta.theme import Theme
+        css = ("p { font-size: 12pt; }\n"
+               "div.div-note { font-weight: bold; }\n")
+        t = Theme.from_css(css)
+        w = Work(id="T", source_file="", metadata={"title": "t"},
+                 body=[E(tag="div", attrs={"type": "note"},
+                         children=[E(tag="p", attrs={},
+                                     children=[Text("注文")])])],
+                 notes_by_n={}, apps=[])
+        fn = DocxRenderer(theme=t).render_work(w, self.tmp, "divnote.docx")
+        z = zipfile.ZipFile(fn)
+        s = z.read("word/document.xml").decode("utf-8")
+        styles = z.read("word/styles.xml").decode("utf-8")
+        # div-note 内 p 挂 pStyle div-note（预览标【字义】）
+        self.assertIn('w:val="div-note"', s)
+        # 样式自包含 p 布局+粗体（字号 12pt + w:b）
+        self.assertIn('w:styleId="div-note"', styles)
+        self.assertIn("<w:b/>", styles)
+
     def test_split(self):
         files = DocxRenderer(split=True).render_work(self.work, self.tmp, "sp.docx")
         self.assertEqual(len(files), 7)
