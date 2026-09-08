@@ -448,6 +448,12 @@ class TestRunConfig(unittest.TestCase):
             self.assertIn("// 我的注释", text2)
             self.assertEqual(load_run_config(fn)["pdf-docx-theme"],
                              "std.css")
+            # 配置栏写 config-json 槽：theme 行逐字节不动（槽隔离）
+            set_run_slot("config-json", "other.json", root)
+            text3 = open(fn, encoding="utf-8").read()
+            for line in text2.splitlines():
+                if "pdf-docx-user-theme" in line or "pdf-docx-theme" in line:
+                    self.assertIn(line, text3.splitlines())
         finally:
             shutil.rmtree(root, ignore_errors=True)
 

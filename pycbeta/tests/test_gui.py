@@ -241,6 +241,27 @@ class TestConfigBar(unittest.TestCase):
         finally:
             panel.close() if hasattr(panel, "close") else None
 
+    def test_save_persists_default_page(self):
+        import unittest.mock as mock
+        import pycbeta.gui.panel as pm
+        base = {"output": {}, "pages": {"a4": {}, "a5": {}}}
+        saved = {}
+        with mock.patch.object(pm, "load_slot",
+                               return_value=(dict(base), "user")), \
+                mock.patch.object(pm, "save_current",
+                                  side_effect=lambda d, root=None: saved.update(
+                                      data=d)), \
+                mock.patch("os.path.isfile", return_value=True):
+            panel = pm.XmlOptionsPanel(dict(base))
+            i = panel.page_box.findData("a5")
+            self.assertGreaterEqual(i, 0)
+            panel.page_box.setCurrentIndex(i)
+            panel._on_save()
+            self.assertEqual(saved["data"]["default_page"], "a5")
+            # 回读：初值跟随已存默认纸张
+            o = pm.options_from_presets({**saved["data"], "pages": base["pages"]})
+            self.assertEqual(o.page, "a5")
+
     def test_resolve_default_page(self):
         from pycbeta.cli import resolve_default_page
         self.assertEqual(resolve_default_page("a5", {}), "a5")

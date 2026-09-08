@@ -70,7 +70,10 @@
     全量 362+ OK，verify 8/0
   - set_run_slot 文本级手术（2026-09-08）：run.json 带 `//` 注释，裸 `json.dump` 重写会丢注释
     （且读失败会误判损坏进 .bad）；改逐行替换目标槽（注释/顺序/其余键原样保留）+ 注释模板新建；
-    `current_theme_value` 读路径同修；全量 376 OK
+    `current_theme_value` 读路径同修；    全量 376 OK
+  - 面板纸张默认持久化（2026-09-08）：`options_from_presets` 读 `default_page` 但
+    `_presets_merged` 从不写回去——选 A5 保存再开仍回 a4；补写 `data["default_page"]`；
+    用户 `config.user.json` 已置 a5（CLI/面板初值三端一致）；全量 377 OK，verify 8/0
   - [x] **已落实 配置栏四按钮+默认纸张（2026-09-08 用户立项）**：面板配置栏"保存到配置"改名
     "保存用户配置"（写 `config.user.json` 不变）；新增"载入用户配置"（读回面板，文件缺失置灰）；
     新增"设为默认"（run.json `config-json` 槽指向 `config.user.json`）；"还原出厂"保留。

@@ -894,9 +894,10 @@ class XmlOptionsPanel(QWidget):
         self._changed()
 
     def _presets_merged(self, cur):
-        """当前槽为底 + 面板值合并 → 可存 presets。"""
+        """当前槽为底 + 面板值合并 → 可存 presets（含所选纸张作默认纸张）。"""
         data = copy.deepcopy(cur)
         opts = self.get_options()
+        data["default_page"] = opts.page
         data.setdefault("output", {}).update(copy.deepcopy(opts.output or {}))
         if opts.pagination:
             data["output"]["pagination"] = copy.deepcopy(opts.pagination)
