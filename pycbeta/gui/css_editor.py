@@ -1505,6 +1505,9 @@ class CssEditorDialog(QDialog):
         split.setStretchFactor(0, 0)
         split.setStretchFactor(1, 1)
         layout.addWidget(split, 1)
+        # 左栏初始宽度定死（内容已收窄，splitter 默认会按 sizeHint 撑宽）；
+        # 用户仍可拖分隔条，窗口拉大时多余宽度全给预览。
+        split.setSizes([450, 708])
         # 底栏
         brow = QHBoxLayout()
         self.btn_docx = QPushButton("保存DOCX")
@@ -1910,6 +1913,10 @@ class CssEditorDialog(QDialog):
             font_hant.currentIndexChanged.connect(
                 lambda _i, s=sel: self._on_control_changed(s, "font-family",
                                                           "zh-Hant"))
+            font_hant.activated.connect(
+                lambda _i, b=font_hant: b.lineEdit().setCursorPosition(0))
+            font_hans.activated.connect(
+                lambda _i, b=font_hans: b.lineEdit().setCursorPosition(0))
             font_hant.lineEdit().editingFinished.connect(
                 lambda s=sel: self._validate_font_input(s, "zh-Hant"))
             font_hans.currentIndexChanged.connect(
@@ -1966,18 +1973,14 @@ class CssEditorDialog(QDialog):
         return ""
 
     def _on_control_changed(self, sel=None, prop=None, lang=""):
+        # 注意：改字体不自动切预览栏——预览栏只跟"预览字库"下拉；
+        # 简栏改动不影响繁体预览（各自独立，所见即所选）。
         if sel and prop:
             key = (sel, prop, lang) if prop == "font-family" else (sel, prop)
             if self._control_value(sel, prop, lang):
                 self._touched.add(key)
             else:
                 self._touched.discard(key)
-            if prop == "font-family" and lang:
-                # 改哪栏字体，预览就切哪栏（否则改了简栏、看着繁栏，以为没生效）
-                i = self.preview_lang.findData(lang)
-                if i >= 0:
-                    with QSignalBlocker(self.preview_lang):
-                        self.preview_lang.setCurrentIndex(i)
         values = {}
         for entry in self._touched:
             if len(entry) == 3:

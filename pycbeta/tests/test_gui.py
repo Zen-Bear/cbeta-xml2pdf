@@ -1515,7 +1515,7 @@ class TestCssEditor(unittest.TestCase):
         self.assertEqual(ce.default_sample(), ce.SAMPLE_CANDIDATES[0])
         self.assertTrue(os.path.isfile(ce.default_sample()))
 
-    def test_font_edit_switches_preview_lang(self):
+    def test_font_edit_keeps_preview_lang(self):
         import unittest.mock as mock
         import pycbeta.gui.css_editor as ce
         groups = {"宋体": ["宋体", "新細明體"], "未分类": []}
@@ -1526,19 +1526,38 @@ class TestCssEditor(unittest.TestCase):
                                                 "新細明體": "PMingLiU"}):
             dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
         try:
-            # 改简栏字体 → 预览自动切简（否则看着繁栏以为没生效）
+            # 预览栏只跟"预览字库"下拉：简栏改动不影响繁体预览，反之亦然
+            self.assertEqual(dlg._preview_lang(), "zh-Hant")
             box_hans = dlg._rows["h1.title"]["font_hans"]
             i = box_hans.findData("宋体, SimSun")
             self.assertGreaterEqual(i, 0)
             box_hans.setCurrentIndex(0)
             box_hans.setCurrentIndex(i)
-            self.assertEqual(dlg._preview_lang(), "zh-Hans")
+            self.assertEqual(dlg._preview_lang(), "zh-Hant")
+            self.assertIn("--font-title: 宋体, SimSun",
+                          dlg._source_edit.toPlainText())
+            # 手动切简后改繁栏，仍保持简体预览
+            dlg.preview_lang.setCurrentIndex(
+                dlg.preview_lang.findData("zh-Hans"))
             box_hant = dlg._rows["h1.title"]["font_hant"]
             j = box_hant.findData("新細明體, PMingLiU")
             self.assertGreaterEqual(j, 0)
             box_hant.setCurrentIndex(0)
             box_hant.setCurrentIndex(j)
-            self.assertEqual(dlg._preview_lang(), "zh-Hant")
+            self.assertEqual(dlg._preview_lang(), "zh-Hans")
+            dlg._loaded_block = dlg._source_edit.toPlainText()
+        finally:
+            dlg._loaded_block = dlg._source_edit.toPlainText()
+            dlg.close()
+
+    def test_font_combo_cursor_to_zero_on_activate(self):
+        import pycbeta.gui.css_editor as ce
+        dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+        try:
+            box = dlg._rows["p"]["font_hant"]
+            box.lineEdit().setCursorPosition(5)
+            box.activated.emit(box.currentIndex())
+            self.assertEqual(box.lineEdit().cursorPosition(), 0)
             dlg._loaded_block = dlg._source_edit.toPlainText()
         finally:
             dlg._loaded_block = dlg._source_edit.toPlainText()
