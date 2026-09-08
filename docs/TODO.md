@@ -54,6 +54,14 @@
     编辑器双栏/下拉复用 + `user.css` 概念删除（详见本条）：T0672 繁字节一致、简仅经藏名
     隸書→隶书一处；用户槽朝华标题B搬入 `css-presets/我的样式.css` 并设默认；`--font-set`
     用到即报错；publish 桥需同日跟进（跨仓）
+  - 字体栈统一同字体双名（2026-09-07）：出厂各 `--font-*` 一律"中文名, 英文名"（除 body 唯一
+    多段链：中英双名+mac 兜底+Times New Roman 拉丁）；删通用族尾段（PDF 端 `_pdf_css` 已追加
+    sans-serif）；繁 body 补回 PMingLiU、head 改 微軟正黑體/Microsoft JhengHei、
+    div-xu-head 改 標楷體/DFKaiShu 与 楷体/KaiTi；注释同步
+  - 字体下拉可编辑可搜（2026-09-07）：去"常用栈"分组；中文/字库单名自动补同字体英文别名
+    （data="名, 别名"、显示短名），英文单名不补；`editable+NoInsert` 打字过滤；lost-focus
+    输入非选项 → 警告"本机不存在只能在源码输入"（不还原）；跨字体/未装栈载入走临时项不堆积；
+    粗细改三态按钮（默认灰=未覆盖/加粗/常规，点击轮换）；全量 339 OK、verify 8/0
 - [ ] **P9 中** GUI 界面三语切换（简/繁/英，2026-09-06 用户立项；与输出经文 t2s/font_sets 无关，是界面本身语言）
   - 背景：界面中文串全硬编码（panel 约数百处、`__main__` 状态栏/按钮），无 `QTranslator` 机制
   - 方案：先抽字符串资源（`pycbeta/gui/i18n/*.ts`，Qt Linguist 流程：`pylupdate6` 抽取→翻译→`lrelease` 编译→`QTranslator.load/install`），面板顶部或设置加语言下拉（简/繁/英，存用户槽，重启生效；或动态 `retranslateUi` 热切）

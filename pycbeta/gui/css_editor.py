@@ -80,8 +80,6 @@ ROW_TIPS = {
     "div.lg": "注记类偈行颜色在源码页（div.lg.note1/2）",
 }
 
-WEIGHT_ITEMS = [("（跟随）", ""), ("加粗", "bold"), ("正常", "normal")]
-
 # 字体下拉分组：中文按关键字 buckets（首中即停；宋体在明体前吞掉 PMingLiU 类）
 _CJK_BUCKETS = (
     ("黑体", ("黑", "雅黑", "苹方", "pingfang", "gothic", "hei")),
@@ -873,39 +871,6 @@ def missing_families(used, available):
     for name in used or []:
         if name and name.lower() not in have and name not in out:
             out.append(name)
-    return out
-
-
-def factory_font_stacks():
-    """出厂 :root 双栏 --font-* 栈去重（保序；纯函数，可单测）→ [栈]。
-
-    左栏下拉"常用栈"选项来源；显示短名、值存完整栈，选不回问题不再有。
-    --font-body（无左栏行）与 --font-latin（纯西文）不进 CJK 下拉。
-    """
-    stacks = []
-    for m in re.finditer(
-            r'(html\[lang=["\']zh-Hans["\']\]|:root)\s*\{([^}]*)\}',
-            factory_css_text(), re.S):
-        for vm in re.finditer(r'(--font-[\w-]+)\s*:\s*([^;{}]+);',
-                               m.group(2)):
-            if vm.group(1) in ("--font-body", "--font-latin"):
-                continue
-            stack = vm.group(2).strip()
-            if stack and stack not in stacks:
-                stacks.append(stack)
-    return stacks
-
-
-def stack_display_names(stacks):
-    """[栈] → [(显示名, 栈)]：显示名取首段名；首段冲突用全栈（防选错）。"""
-    firsts = {}
-    for s in stacks or []:
-        first = s.split(",")[0].strip().strip('"').strip("'")
-        firsts.setdefault(first, []).append(s)
-    out = []
-    for s in stacks or []:
-        first = s.split(",")[0].strip().strip('"').strip("'")
-        out.append((first if len(firsts[first]) == 1 else s, s))
     return out
 
 
@@ -1824,10 +1789,12 @@ class CssEditorDialog(QDialog):
             row = QHBoxLayout()
             suffix = _var_suffix(sel)
             font_hant = _PopupWheelCombo()
-            font_hant.setEditable(False)  # 只从下拉选（防手打 typo）；特殊栈去源码页
+            font_hant.setEditable(True)  # 可编辑可搜；本机不存在只能源码输入
+            font_hant.setInsertPolicy(QComboBox.NoInsert)
             font_hant.setMinimumWidth(150)
             font_hans = _PopupWheelCombo()
-            font_hans.setEditable(False)
+            font_hans.setEditable(True)
+            font_hans.setInsertPolicy(QComboBox.NoInsert)
             font_hans.setMinimumWidth(150)
             if suffix is None:
                 for _box in (font_hant, font_hans):
@@ -1835,13 +1802,13 @@ class CssEditorDialog(QDialog):
                     _box.setToolTip("该行无字体变量（只调字号/颜色）")
             else:
                 for _box in (font_hant, font_hans):
-                    _box.setToolTip("下拉选择字体栈；特殊栈去源码页手写")
+                    _box.setToolTip("可搜索本机字体；本机不存在的字体只能在源码页输入")
             size_edit = QLineEdit()
             size_edit.setFixedWidth(80)
-            weight = _PopupWheelCombo()
-            for wlabel, data in WEIGHT_ITEMS:
-                weight.addItem(wlabel, data)
+            weight = QPushButton()
             weight.setFixedWidth(80)
+            weight.setToolTip("默认=跟随出厂（未覆盖）；加粗/常规=强制覆盖")
+            weight.clicked.connect(lambda _v, s=sel: self._cycle_weight(s))
             color_btn = QPushButton("颜色")
             color_btn.setFixedWidth(64)
             color_btn.clicked.connect(
@@ -1862,17 +1829,20 @@ class CssEditorDialog(QDialog):
             self._rows[sel] = {"font_hant": font_hant, "font_hans": font_hans,
                                "suffix": suffix, "size": size_edit,
                                "weight": weight, "color": color_btn,
-                               "color_value": "", "name_label": lab}
+                               "color_value": "", "name_label": lab,
+                               "weight_value": ""}
             font_hant.currentTextChanged.connect(
                 lambda _v, s=sel: self._on_control_changed(s, "font-family",
                                                           "zh-Hant"))
+            font_hant.lineEdit().editingFinished.connect(
+                lambda s=sel: self._validate_font_input(s, "zh-Hant"))
             font_hans.currentTextChanged.connect(
                 lambda _v, s=sel: self._on_control_changed(s, "font-family",
                                                           "zh-Hans"))
+            font_hans.lineEdit().editingFinished.connect(
+                lambda s=sel: self._validate_font_input(s, "zh-Hans"))
             size_edit.textChanged.connect(
                 lambda _v, s=sel: self._on_control_changed(s, "font-size"))
-            weight.currentIndexChanged.connect(
-                lambda _i, s=sel: self._on_control_changed(s, "font-weight"))
         self._fill_font_combos(False)
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -1903,12 +1873,18 @@ class CssEditorDialog(QDialog):
         ctrls = self._rows[sel]
         if prop == "font-family":
             box = ctrls["font_hant"] if lang != "zh-Hans" else ctrls["font_hans"]
-            data = box.currentData()
-            return str(data).strip() if data else box.currentText().strip()
+            # editable 下：手输文本与当前项文本一致 → 用 data（别名栈）；
+            # 否则手输原文（当前Data可能还停在上一个选中项，不能信）
+            text = box.currentText().strip()
+            i = box.currentIndex()
+            if i >= 0 and box.itemText(i) == text:
+                data = box.itemData(i)
+                return str(data).strip() if data else text
+            return text
         if prop == "font-size":
             return ctrls["size"].text().strip()
         if prop == "font-weight":
-            return ctrls["weight"].currentData() or ""
+            return (ctrls.get("weight_value") or "").strip()
         if prop == "color":
             return ctrls["color_value"]
         return ""
@@ -1965,6 +1941,9 @@ class CssEditorDialog(QDialog):
         if values is None:
             values, _err = parse_override_block(self._source_edit.toPlainText())
         values = values or {}
+        # 粗细三态显示"覆盖态"（未覆盖=默认灰），不从 base 合并——
+        # 否则出厂 h1.title bold 会让按钮恒显"加粗"，"默认"态永远不出现。
+        ovr, _oe = parse_override_block(self._source_edit.toPlainText())
         hant_vars = values.get(":root", {})
         hans_vars = values.get(_HANS_BLOCK, {})
         for sel, ctrls in self._rows.items():
@@ -1980,9 +1959,8 @@ class CssEditorDialog(QDialog):
                     hans_vars.get("--font-" + suffix, "") if suffix else "")
             with QSignalBlocker(ctrls["size"]):
                 ctrls["size"].setText(props.get("font-size", ""))
-            with QSignalBlocker(ctrls["weight"]):
-                i = ctrls["weight"].findData(props.get("font-weight", ""))
-                ctrls["weight"].setCurrentIndex(i if i >= 0 else 0)
+            ctrls["weight_value"] = (ovr.get(sel) or {}).get("font-weight", "")
+            self._paint_weight(sel)
             ctrls["color_value"] = props.get("color", "")
             self._paint_color_button(sel)
 
@@ -1990,6 +1968,46 @@ class CssEditorDialog(QDialog):
         btn = self._rows[sel]["color"]
         val = self._rows[sel]["color_value"]
         btn.setStyleSheet(f"background-color: {val}" if val else "")
+
+    # ----- 粗细三态 -----
+    _WEIGHT_CYCLE = (("默认", ""), ("加粗", "bold"), ("常规", "normal"))
+
+    def _weight_index(self, sel):
+        v = self._rows[sel].get("weight_value") or ""
+        for i, (_t, wv) in enumerate(self._WEIGHT_CYCLE):
+            if wv == v:
+                return i
+        return 0
+
+    def _paint_weight(self, sel):
+        """三态按钮：默认=灰字（未覆盖）；加粗/常规=正常色。"""
+        btn = self._rows[sel]["weight"]
+        text, _v = self._WEIGHT_CYCLE[self._weight_index(sel)]
+        btn.setText(text)
+        btn.setStyleSheet("color: #888888" if text == "默认" else "")
+
+    def _cycle_weight(self, sel):
+        i = (self._weight_index(sel) + 1) % len(self._WEIGHT_CYCLE)
+        _text, v = self._WEIGHT_CYCLE[i]
+        self._rows[sel]["weight_value"] = v
+        self._paint_weight(sel)
+        self._on_control_changed(sel, "font-weight")
+
+    def _validate_font_input(self, sel, lang):
+        """lost focus：输入文本非任何选项 → 警告（不还原），本机不存在只能源码输入。"""
+        box = self._rows[sel]["font_hans"] if lang == "zh-Hans" \
+            else self._rows[sel]["font_hant"]
+        text = box.currentText().strip()
+        if not text:
+            return
+        for i in range(box.count()):
+            if box.itemText(i) == text or box.itemData(i) == text:
+                return
+        QMessageBox.warning(
+            self, "字体不存在",
+            f"「{text}」在本机未找到。\n\n"
+            "左栏只能选本机已装字体；本机不存在的字体（如跨平台字型）"
+            "请在源码页输入，检查窗会校验。")
 
     def _pick_color(self, sel):
         dlg = _ColorPopup(self.work_css(), self._rows[sel]["color_value"], self)
@@ -2007,7 +2025,7 @@ class CssEditorDialog(QDialog):
     def _select_font_value(self, box, value):
         """字体框按栈值选中（短名显示、存完整栈）。
 
-        findData 命中按索引选；未命中（自定义栈）插临时项兜底——
+        findData 命中按索引选；未命中（跨字体/未装栈）插临时项兜底——
         当前值恒为可选项，选不回问题不再有；上次临时项先删防堆积。
         空值回 0 号（"" 占位）。"""
         value = (value or "").strip()
@@ -2031,11 +2049,11 @@ class CssEditorDialog(QDialog):
             box.setCurrentIndex(box.findData(value))
 
     def _fill_font_combos(self, fresh=False):
-        """全部字体下拉建模（不可编辑，只从下拉选；特殊栈去源码页）。
+        """全部字体下拉建模（可编辑可搜；本机不存在只能源码输入）。
 
-        选项 = ""占位 + 出厂常用栈（短名显示、存完整栈）
-        + 中文buckets/西文/字库单名（名即值）；当前值按栈回选，
-        自定义栈插临时项兜底（重建后仍可选中）。
+        选项 = ""占位 + 中文buckets/西文/字库单名；中文单名自动补同字体
+        英文别名（data="名, 别名"），英文单名不补。跨字体/未装栈载入走
+        临时项兜底（重建后仍可选中）。
         """
         from PySide6.QtGui import QStandardItem, QStandardItemModel
         if fresh:
@@ -2043,10 +2061,16 @@ class CssEditorDialog(QDialog):
         groups, bundled, _fonts_dir = font_group_model(fresh=fresh)
         order = [g for g, _ks in _CJK_BUCKETS if groups.get(g)] + \
                 (["未分类"] if groups.get("未分类") else [])
-        try:
-            _stacks = stack_display_names(factory_font_stacks())
-        except OSError:
-            _stacks = []
+        _aliases = qt_aliases()
+
+        def alias(name):
+            """单名 → 补同字体英文别名（中文名且已装且非同名）；否则原名。"""
+            if _CJK_NAME_RE.search(name):
+                tgt = _aliases.get(name)
+                if tgt and tgt != name:
+                    return f"{name}, {tgt}"
+            return name
+
         for _sel, ctrls in self._rows.items():
             for box in (ctrls["font_hant"], ctrls["font_hans"]):
                 cur = box.currentData() or box.currentText()
@@ -2064,21 +2088,17 @@ class CssEditorDialog(QDialog):
                     _m.appendRow(it)
 
                 item("", "")
-                if _stacks:
-                    header("常用栈")
-                    for text, data in _stacks:
-                        item(text, data)
                 header("中文")
                 for gname in order:
                     header(f"中文·{gname}")
                     for n in sorted(set(groups[gname])):
-                        item(n, n)
+                        item(n, alias(n))
                 header("西文")
                 for n in _WESTERN_FONTS:
                     item(n, n)
                 header("字库目录（cbeta/fonts）")
                 for _fn, fam in bundled:
-                    item(fam, fam)
+                    item(fam, alias(fam))
                 with QSignalBlocker(box):
                     box.setModel(model)
                 self._select_font_value(box, cur)

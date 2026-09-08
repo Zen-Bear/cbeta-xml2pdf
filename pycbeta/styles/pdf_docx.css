@@ -8,15 +8,15 @@
    DOCX 由 theme.py 按 Theme(lang) 代入。字体只此一处，别处不再重复。 */
 :root {
   --font-latin: Calibri;
-  --font-body: 新細明體, Songti TC, Times New Roman, sans-serif;
+  --font-body: 新細明體, PMingLiU, Songti TC, Times New Roman;
   --font-title: 標楷體, DFKaiShu;
   --font-author: 新細明體, PMingLiU;
   --font-translator: 新細明體, PMingLiU;
   --font-byline: 新細明體, PMingLiU;
-  --font-head: 微軟正黑體, 新細明體;
+  --font-head: 微軟正黑體, Microsoft JhengHei;
   --font-juan: 標楷體, DFKaiShu;
   --font-pin: 新細明體, PMingLiU;
-  --font-div-xu-head: 標楷體, KaiTi, serif;
+  --font-div-xu-head: 標楷體, DFKaiShu;
   --font-p: 新細明體, PMingLiU;
   --font-verse: 標楷體, DFKaiShu;
   --font-form: 新細明體, PMingLiU;
@@ -30,7 +30,7 @@
   --font-series-title: 隸書, LiSu;
 }
 html[lang="zh-Hans"] {
-  --font-body: 宋体, SimSun, Times New Roman, sans-serif;
+  --font-body: 宋体, SimSun, Times New Roman;
   --font-title: 楷体, KaiTi;
   --font-author: 宋体, SimSun;
   --font-translator: 宋体, SimSun;
@@ -38,7 +38,7 @@ html[lang="zh-Hans"] {
   --font-head: 黑体, SimHei;
   --font-juan: 楷体, KaiTi;
   --font-pin: 宋体, SimSun;
-  --font-div-xu-head: 楷体, serif;
+  --font-div-xu-head: 楷体, KaiTi;
   --font-p: 宋体, SimSun;
   --font-verse: 楷体, KaiTi;
   --font-form: 宋体, SimSun;
@@ -53,11 +53,12 @@ html[lang="zh-Hans"] {
 body {
   line-height: 1.5;   /* 全局行距（1.5倍）；DOCX 由各标签 line-height 覆盖 */
 }
-/* body 字体栈（--font-body，繁体五段回退）：
-   微軟正黑體（Win 繁体首选）→ 新細明體（Win 繁体兜底，生僻字覆盖多）
-   → Songti TC（macOS 繁体）→ Times New Roman（拉丁字母/数字）
-   → sans-serif（通用族兜底，永不加引号，保证不断字）。
-   简体栈同理：黑体 → 宋体 → Times New Roman → sans-serif。
+/* body 字体栈（--font-body）：正文全局默认，唯一多段"链"——
+   新細明體（Win 繁体首选）→ PMingLiU（同字体英文名）→ Songti TC（macOS 繁体）
+   → Times New Roman（拉丁字母/数字）。
+   简体栈同理：宋体 → SimSun → Times New Roman。
+   PDF 端另有 sans-serif 通用族兜底（render_pdf._pdf_css 追加），此处不再写。
+   其它元素均为"同字体中英双名"（中文名, 英文名），拉丁数字由 body 链 / --font-latin 兜。
    DOCX 只取首个中文字体作 eastAsia，西文另走 --font-latin。 */
 a { text-decoration: none; }
 

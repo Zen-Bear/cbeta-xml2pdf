@@ -623,46 +623,61 @@ class TestCssEditor(unittest.TestCase):
                           dlg._touched)
             dlg._loaded_block = dlg._source_edit.toPlainText()
         finally:
+            dlg._loaded_block = dlg._source_edit.toPlainText()
             dlg.close()
 
-    def test_font_combo_not_editable(self):
+    def test_font_combo_editable_searchable(self):
+        from PySide6.QtWidgets import QComboBox
         import pycbeta.gui.css_editor as ce
         dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
         try:
             for sel, row in dlg._rows.items():
-                self.assertFalse(row["font_hant"].isEditable())
-                self.assertFalse(row["font_hans"].isEditable())
+                self.assertTrue(row["font_hant"].isEditable())
+                self.assertTrue(row["font_hans"].isEditable())
+                self.assertEqual(row["font_hant"].insertPolicy(),
+                                 QComboBox.NoInsert)
             dlg._loaded_block = dlg._source_edit.toPlainText()
         finally:
+            dlg._loaded_block = dlg._source_edit.toPlainText()
             dlg.close()
 
-    def test_factory_stack_short_name(self):
+    def test_chinese_name_gets_english_alias(self):
+        import unittest.mock as mock
         import pycbeta.gui.css_editor as ce
-        stacks = ce.factory_font_stacks()
-        self.assertIn("新細明體, PMingLiU", stacks)
-        self.assertIn("宋体, SimSun", stacks)
-        self.assertNotIn("Calibri", stacks)  # latin 不进 CJK 下拉
-        self.assertFalse(any("Times New Roman, sans-serif" in s
-                             for s in stacks))  # body 四段栈不进下拉
-        by_stack = dict((s, d)
-                        for d, s in ce.stack_display_names(stacks))
-        # 首段唯一 → 短名显示
-        self.assertEqual(by_stack.get("宋体, SimSun"), "宋体")
-        # body 四段栈排除后新細明體唯一 → 短名
-        self.assertEqual(by_stack.get("新細明體, PMingLiU"), "新細明體")
-        self.assertIn("標楷體, DFKaiShu", stacks)
-        self.assertIn("標楷體, KaiTi, serif", stacks)
-        got = dict((s, d) for d, s in ce.stack_display_names(
-            ["標楷體, DFKaiShu", "標楷體, KaiTi, serif"]))
-        self.assertEqual(got["標楷體, DFKaiShu"], "標楷體, DFKaiShu")
+        groups = {"宋体": ["宋体"], "未分类": []}
+        with mock.patch.object(ce, "font_group_model",
+                               return_value=(groups, [], "")), \
+                mock.patch.object(ce, "qt_aliases",
+                                  return_value={"宋体": "SimSun"}):
+            dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+        try:
+            box = dlg._rows["p"]["font_hans"]
+            # 中文单名项补同字体英文别名：data="名, 别名"，显示短名
+            i = box.findData("宋体, SimSun")
+            self.assertGreaterEqual(i, 0)
+            self.assertEqual(box.itemText(i), "宋体")
+            # 西文/英文单名不补（data 即自身）
+            j = box.findText("Times New Roman")
+            self.assertGreaterEqual(j, 0)
+            self.assertEqual(box.itemData(j), "Times New Roman")
+            dlg._loaded_block = dlg._source_edit.toPlainText()
+        finally:
+            dlg._loaded_block = dlg._source_edit.toPlainText()
+            dlg.close()
 
     def test_select_short_name_writes_full_stack(self):
+        import unittest.mock as mock
         import pycbeta.gui.css_editor as ce
-        dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+        groups = {"宋体": ["宋体"], "未分类": []}
+        with mock.patch.object(ce, "font_group_model",
+                               return_value=(groups, [], "")), \
+                mock.patch.object(ce, "qt_aliases",
+                                  return_value={"宋体": "SimSun"}):
+            dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
         try:
             box = dlg._rows["p"]["font_hans"]
             i = box.findData("宋体, SimSun")
-            self.assertGreaterEqual(i, 0)  # 出厂栈在选项里
+            self.assertGreaterEqual(i, 0)
             box.setCurrentIndex(0)  # 先切走，确保 change 触发
             box.setCurrentIndex(i)
             self.assertEqual(box.currentText(), "宋体")  # 框里短名
@@ -670,6 +685,7 @@ class TestCssEditor(unittest.TestCase):
                           dlg._source_edit.toPlainText())  # 存完整栈
             dlg._loaded_block = dlg._source_edit.toPlainText()
         finally:
+            dlg._loaded_block = dlg._source_edit.toPlainText()
             dlg.close()
 
     def test_custom_stack_temp_item_no_pileup(self):
@@ -690,6 +706,7 @@ class TestCssEditor(unittest.TestCase):
             self.assertGreaterEqual(box.count(), n0)
             dlg._loaded_block = dlg._source_edit.toPlainText()
         finally:
+            dlg._loaded_block = dlg._source_edit.toPlainText()
             dlg.close()
 
     def test_preview_font_fallback(self):
@@ -725,6 +742,7 @@ class TestCssEditor(unittest.TestCase):
         try:
             self.assertEqual(dlg._source_edit.font().family(), "Consolas")
         finally:
+            dlg._loaded_block = dlg._source_edit.toPlainText()
             dlg.close()
 
     def test_spec_captures_line_spacing(self):
@@ -785,6 +803,7 @@ class TestCssEditor(unittest.TestCase):
                 QTextBlockFormat.LineHeightTypes.ProportionalHeight.value)
             self.assertAlmostEqual(fmt.lineHeight(), 180.0)
         finally:
+            dlg._loaded_block = dlg._source_edit.toPlainText()
             dlg.close()
 
     def test_preview_breaks_on_br(self):
@@ -838,6 +857,7 @@ class TestCssEditor(unittest.TestCase):
             self.assertIn("准提", texts)  # 準→准（简体）
             self.assertNotIn("準提", texts)
         finally:
+            dlg._loaded_block = dlg._source_edit.toPlainText()
             dlg.close()
 
     def test_editor_save_and_discard_prompt(self):
@@ -905,19 +925,75 @@ class TestCssEditor(unittest.TestCase):
             w.close()
 
     def test_control_header_and_widths(self):
+        import unittest.mock as mock
         import pycbeta.gui.css_editor as ce
-        dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+        groups = {"宋体": ["宋体"], "未分类": []}
+        with mock.patch.object(ce, "font_group_model",
+                               return_value=(groups, [], "")), \
+                mock.patch.object(ce, "qt_aliases",
+                                  return_value={"宋体": "SimSun"}):
+            dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
         try:
-            # 列标题行存在；磅数框收窄
+            # 列标题行存在；磅数框收窄；粗细是三态按钮（默认=灰）
             self.assertEqual(
                 dlg._rows["h1.title"]["size"].maximumWidth(), 80)
-            # 出厂栈同步后框里短名、值存完整栈（选得回）
+            from PySide6.QtWidgets import QPushButton
+            self.assertIsInstance(dlg._rows["h1.title"]["weight"],
+                                  QPushButton)
+            self.assertEqual(
+                dlg._rows["h1.title"]["weight"].text(), "默认")
             dlg._sync_controls_from_block(
                 {"h1.title": {"font-family": "宋体, SimSun"}})
             box = dlg._rows["h1.title"]["font_hant"]
             self.assertGreaterEqual(box.findData("宋体, SimSun"), 0)
             dlg._loaded_block = dlg._source_edit.toPlainText()
         finally:
+            dlg._loaded_block = dlg._source_edit.toPlainText()
+            dlg.close()
+
+    def test_weight_three_state_cycle(self):
+        import pycbeta.gui.css_editor as ce
+        dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+        try:
+            sel = "h1.title"
+            btn = dlg._rows[sel]["weight"]
+            # 默认（未覆盖）→ 加粗
+            dlg._cycle_weight(sel)
+            self.assertEqual(btn.text(), "加粗")
+            self.assertIn("h1.title { font-weight: bold; }",
+                          dlg._source_edit.toPlainText())
+            self.assertIn((sel, "font-weight"), dlg._touched)
+            # 加粗 → 常规
+            dlg._cycle_weight(sel)
+            self.assertEqual(btn.text(), "常规")
+            self.assertIn("font-weight: normal",
+                          dlg._source_edit.toPlainText())
+            # 常规 → 默认（不写值，touched 清空）
+            dlg._cycle_weight(sel)
+            self.assertEqual(btn.text(), "默认")
+            self.assertNotIn("font-weight",
+                             dlg._source_edit.toPlainText())
+            self.assertNotIn((sel, "font-weight"), dlg._touched)
+            dlg._loaded_block = dlg._source_edit.toPlainText()
+        finally:
+            dlg._loaded_block = dlg._source_edit.toPlainText()
+            dlg.close()
+
+    def test_font_input_validate_warns_no_restore(self):
+        import unittest.mock as mock
+        import pycbeta.gui.css_editor as ce
+        dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+        try:
+            box = dlg._rows["p"]["font_hans"]
+            with mock.patch.object(ce.QMessageBox, "warning") as m:
+                box.setEditText("NotInstalled")
+                box.lineEdit().editingFinished.emit()
+                m.assert_called_once()
+                # 警告不还原：手输文本保留（本机不存在只能源码输入）
+                self.assertEqual(box.currentText(), "NotInstalled")
+            dlg._loaded_block = dlg._source_edit.toPlainText()
+        finally:
+            dlg._loaded_block = dlg._source_edit.toPlainText()
             dlg.close()
 
     def test_t2s_moved_to_preview(self):
@@ -926,6 +1002,7 @@ class TestCssEditor(unittest.TestCase):
         try:
             self.assertEqual(dlg.t2s_box.text(), "繁转简")
         finally:
+            dlg._loaded_block = dlg._source_edit.toPlainText()
             dlg.close()
 
     def test_sim_tip_below_status(self):
@@ -935,6 +1012,7 @@ class TestCssEditor(unittest.TestCase):
             self.assertIn("模拟显示", dlg.sim_tip.text())
             self.assertIn("分页", dlg.sim_tip.text())
         finally:
+            dlg._loaded_block = dlg._source_edit.toPlainText()
             dlg.close()
 
     def test_restore_loaded(self):
@@ -994,6 +1072,7 @@ class TestCssEditor(unittest.TestCase):
                 dlg._set_status("预览已更新 00:00:03", 1, "x")  # 重复不断不连
             self.assertTrue(dlg._status_linked)
         finally:
+            dlg._loaded_block = dlg._source_edit.toPlainText()
             dlg.close()
 
     def test_names_merge_consecutive(self):
@@ -1020,6 +1099,7 @@ class TestCssEditor(unittest.TestCase):
             self.assertNotIn("【", dlg.preview.toPlainText())
             dlg._loaded_block = dlg._source_edit.toPlainText()
         finally:
+            dlg._loaded_block = dlg._source_edit.toPlainText()
             dlg.close()
 
     def test_footnote_name_label_once(self):
@@ -1039,6 +1119,7 @@ class TestCssEditor(unittest.TestCase):
             self.assertEqual(text.count("【脚注】"), 1)
             dlg._loaded_block = dlg._source_edit.toPlainText()
         finally:
+            dlg._loaded_block = dlg._source_edit.toPlainText()
             dlg.close()
 
     def test_div_note_color(self):
@@ -1074,6 +1155,7 @@ class TestCssEditor(unittest.TestCase):
             self.assertEqual(text.count("【正文】"), 2)
             dlg._loaded_block = dlg._source_edit.toPlainText()
         finally:
+            dlg._loaded_block = dlg._source_edit.toPlainText()
             dlg.close()
 
     def test_load_shows_inherited_values(self):
@@ -1111,13 +1193,12 @@ class TestCssEditor(unittest.TestCase):
         try:
             box = dlg._rows["p"]["font_hans"]
             self.assertIsInstance(box, ce._PopupWheelCombo)
-            self.assertIsInstance(dlg._rows["p"]["weight"],
-                                  ce._PopupWheelCombo)
             evt = mock.Mock()
             box.wheelEvent(evt)  # 未弹开 → 吃掉滚轮（滚左栏，不改值）
             evt.ignore.assert_called_once_with()
             dlg._loaded_block = dlg._source_edit.toPlainText()
         finally:
+            dlg._loaded_block = dlg._source_edit.toPlainText()
             dlg.close()
 
     def test_label_dirty_highlight(self):
@@ -1175,6 +1256,7 @@ class TestCssEditor(unittest.TestCase):
             self.assertEqual(
                 dlg._rows["h1.title"]["name_label"].styleSheet(), "")
         finally:
+            dlg._loaded_block = dlg._source_edit.toPlainText()
             dlg.close()
 
     def test_series_label(self):
@@ -1192,6 +1274,7 @@ class TestCssEditor(unittest.TestCase):
             self.assertIn("【经藏名】", dlg.preview.toPlainText())
             dlg._loaded_block = dlg._source_edit.toPlainText()
         finally:
+            dlg._loaded_block = dlg._source_edit.toPlainText()
             dlg.close()
 
     def test_export_status_opens_file(self):
@@ -1218,6 +1301,7 @@ class TestCssEditor(unittest.TestCase):
                 _os.remove(fn)
             dlg._loaded_block = dlg._source_edit.toPlainText()
         finally:
+            dlg._loaded_block = dlg._source_edit.toPlainText()
             dlg.close()
 
     def test_tooltip_style_once(self):
@@ -1309,6 +1393,7 @@ class TestCssEditor(unittest.TestCase):
             self.assertIn("【正文】", text)
             dlg._loaded_block = dlg._source_edit.toPlainText()
         finally:
+            dlg._loaded_block = dlg._source_edit.toPlainText()
             dlg.close()
 
     def test_qt_alias_bridges_localized_names(self):
@@ -1340,6 +1425,7 @@ class TestCssEditor(unittest.TestCase):
                 dlg._rows["a.noteAnchor"]["font_hant"].isEnabled())
             self.assertTrue(dlg._rows["h1.title"]["font_hant"].isEnabled())
         finally:
+            dlg._loaded_block = dlg._source_edit.toPlainText()
             dlg.close()
 
     def test_preview_lang_toggle(self):
@@ -1351,6 +1437,7 @@ class TestCssEditor(unittest.TestCase):
                 dlg.preview_lang.findData("zh-Hans"))
             self.assertEqual(dlg._preview_lang(), "zh-Hans")
         finally:
+            dlg._loaded_block = dlg._source_edit.toPlainText()
             dlg.close()
 
     def test_default_sample_is_user_sample(self):
@@ -1362,8 +1449,15 @@ class TestCssEditor(unittest.TestCase):
         self.assertTrue(os.path.isfile(ce.default_sample()))
 
     def test_font_edit_switches_preview_lang(self):
+        import unittest.mock as mock
         import pycbeta.gui.css_editor as ce
-        dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+        groups = {"宋体": ["宋体", "新細明體"], "未分类": []}
+        with mock.patch.object(ce, "font_group_model",
+                               return_value=(groups, [], "")), \
+                mock.patch.object(ce, "qt_aliases",
+                                  return_value={"宋体": "SimSun",
+                                                "新細明體": "PMingLiU"}):
+            dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
         try:
             # 改简栏字体 → 预览自动切简（否则看着繁栏以为没生效）
             box_hans = dlg._rows["h1.title"]["font_hans"]
@@ -1380,6 +1474,7 @@ class TestCssEditor(unittest.TestCase):
             self.assertEqual(dlg._preview_lang(), "zh-Hant")
             dlg._loaded_block = dlg._source_edit.toPlainText()
         finally:
+            dlg._loaded_block = dlg._source_edit.toPlainText()
             dlg.close()
 
     def test_css_combo_ordering(self):
@@ -1671,6 +1766,7 @@ class TestCssEditor(unittest.TestCase):
             self.assertEqual(len(dlg._rows), len(EDITABLE_ROWS))
             self.assertTrue(dlg.preview.isReadOnly())
         finally:
+            dlg._loaded_block = dlg._source_edit.toPlainText()
             dlg.close()
 
     def test_control_to_block(self):
@@ -1682,6 +1778,7 @@ class TestCssEditor(unittest.TestCase):
                           dlg._source_edit.toPlainText())
             dlg._loaded_block = dlg._source_edit.toPlainText()
         finally:
+            dlg._loaded_block = dlg._source_edit.toPlainText()
             dlg.close()
 
     def test_controls_default_from_factory(self):
@@ -1694,6 +1791,7 @@ class TestCssEditor(unittest.TestCase):
             self.assertEqual(dlg._touched, set())
             self.assertNotIn("h1.title {", dlg._source_edit.toPlainText())
         finally:
+            dlg._loaded_block = dlg._source_edit.toPlainText()
             dlg.close()
 
     def test_div_note_row(self):
@@ -1708,6 +1806,7 @@ class TestCssEditor(unittest.TestCase):
             self.assertEqual(row["color_value"], "#666666")
             dlg._loaded_block = dlg._source_edit.toPlainText()
         finally:
+            dlg._loaded_block = dlg._source_edit.toPlainText()
             dlg.close()
 
     def test_left_panel_scrolls(self):
@@ -1718,6 +1817,7 @@ class TestCssEditor(unittest.TestCase):
             self.assertTrue(any(isinstance(w, QScrollArea)
                                 for w in dlg.findChildren(QScrollArea)))
         finally:
+            dlg._loaded_block = dlg._source_edit.toPlainText()
             dlg.close()
 
     def test_pick_display_name(self):
