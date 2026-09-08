@@ -346,6 +346,26 @@ class TestDocxBookmarksSplit(unittest.TestCase):
         self.assertIn('<w:sz w:val="21"/>', s)
         self.assertIn('w:eastAsia="新細明體"', s)
 
+    def test_def_p_has_def_pstyle(self):
+        from pycbeta.model import Work, E, Text
+        from pycbeta.theme import Theme
+        css = (":root { --font-def: 新細明體, PMingLiU; }\n"
+               "cb:def { font-size: 0.9em; }\n")
+        t = Theme.from_css(css)
+        w = Work(id="T", source_file="", metadata={"title": "t"},
+                 body=[E(tag="div", attrs={"type": "note"},
+                         children=[E(tag="def", attrs={},
+                                     children=[E(tag="p", attrs={"style": "margin-left:1em"},
+                                                 children=[Text("释义段")])])])],
+                 notes_by_n={}, apps=[])
+        fn = DocxRenderer(theme=t).render_work(w, self.tmp, "defp.docx")
+        z = zipfile.ZipFile(fn)
+        s = z.read("word/document.xml").decode("utf-8")
+        # def 内 p 挂 pStyle def（预览标【释义】），run 照旧 0.9em，缩进保留
+        self.assertIn('w:val="def"', s)
+        self.assertIn('<w:sz w:val="21"/>', s)
+        self.assertIn("<w:ind", s)
+
     def test_split(self):
         files = DocxRenderer(split=True).render_work(self.work, self.tmp, "sp.docx")
         self.assertEqual(len(files), 7)

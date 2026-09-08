@@ -1334,6 +1334,25 @@ class TestCssEditor(unittest.TestCase):
             dlg._loaded_block = dlg._source_edit.toPlainText()
             dlg.close()
 
+    def test_def_label(self):
+        import pycbeta.gui.css_editor as ce
+        dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+        try:
+            run = {"text": "释义", "size": 10.8, "font": "", "bold": False,
+                   "color": "#666666", "super": False, "dim": False}
+            spec = {"paras": [
+                {"style": "def", "align": "", "line": None, "runs": [run]},
+                {"style": "def", "align": "", "line": None, "runs": [run]}],
+                "footnotes": []}
+            dlg.names_box.setChecked(True)
+            dlg._show_spec(spec, {})
+            text = dlg.preview.toPlainText()
+            self.assertEqual(text.count("【释义】"), 1)  # 相邻去重
+            dlg._loaded_block = dlg._source_edit.toPlainText()
+        finally:
+            dlg._loaded_block = dlg._source_edit.toPlainText()
+            dlg.close()
+
     def test_export_status_opens_file(self):
         import tempfile
         import unittest.mock as mock

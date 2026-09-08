@@ -136,7 +136,7 @@ def split_sections(body, rules: dict) -> list:
 
 # 段落级命名样式（styles.xml 里定义，段落用 <w:pStyle> 引用而非内联 pPr）
 _STYLED_PARAS = ("title", "head", "juan", "pin", "p", "verse", "footnote", "byline",
-                 "author", "translator", "series-title")
+                 "author", "translator", "series-title", "def")
 
 # 缺字回退链默认值（config output.docx.fallbackFonts 可覆盖；与预览 PREVIEW_FALLBACKS 对应。
 # 按渲染语言分栏（gaiji_lang）：繁体优先明体、简体优先宋体；SimSunExtB 管 Ext-B 及以后；
@@ -567,7 +567,10 @@ class DocxRenderer:
             p = f"<w:p><w:pPr>{ppr}</w:pPr>{runs}</w:p>"
             return self._with_bookmark(p)
         ppr = self.theme.docx_para(*tags, indent_em=indent)
-        ppr = f"<w:pPr>{ppr}</w:pPr>" if ppr else ""
+        # 内联路径也挂命名样式（直接属性照旧覆盖样式，视觉不变；
+        # Word 样式窗格/预览标签可识别，如 def>p 的“释义”）
+        sty = f'<w:pStyle w:val="{para}"/>' if para in _STYLED_PARAS else ""
+        ppr = f"<w:pPr>{sty}{ppr}</w:pPr>" if (sty or ppr) else ""
         p = f"<w:p>{ppr}{runs}</w:p>"
         return self._with_bookmark(p)
 
@@ -1051,10 +1054,39 @@ class DocxRenderer:
         if tag == "form":
             return self._para(self._render_children(e, "form", self._rend_tag(a)), "form")
         if tag == "def":
-            # 释义（cb:def）：run 带 def 标签（字体/字号可调）；def 内 p 经 _tag_stack
-            # 继承 def 样式（docx_run/docx_para 合并 tags）
-            return self._render_children(e, "def")
+            # 释义（cb:def）：run 带 def 标签（def 字号/字体生效）；
+            # def 内 p 见 _render_def_p（run/段落同时带 def，p 上下文保留）。
+            self._tag_stack.append("def")
+            try:
+                out = []
+                for c in e.children:
+                    if isinstance(c, E) and c.tag == "p":
+                        out.append(self._render_def_p(c))
+                    else:
+                        out.append(self._render_node(c))
+                return "".join(out)
+            finally:
+                self._tag_stack.pop()
         return self._render_children(e)
+
+    def _render_def_p(self, p):
+        """def 内的 p 段落：run 带 def（def 字号/字体生效），段落标签以
+        "def" 结尾挂 pStyle（预览标【释义】）；p 的缩进/边距照旧内联，
+        视觉不变（直接属性覆盖样式）。"""
+        a = p.attrs
+        ptype = a.get("cb:type") or a.get("type")
+        ptag = ptype if ptype in self.theme.tags else None
+        style = a.get("style") or ""
+        indent = 0
+        if not self.ignore_xml_style:
+            m = re.search(r"margin-left:\s*([\d.]+)em", style)
+            if m:
+                indent = float(m.group(1))
+        tags = tuple(dict.fromkeys(tuple(self._div_stack) + ("p", "def")
+                                   + ((ptag,) if ptag else ())))
+        runs = self._render_children(p, "p", *((ptag,) if ptag else ()),
+                                     self._rend_tag(a), "def")
+        return self._para(runs, *tags, indent=indent)
 
     def _body_has_title_m(self) -> bool:
         """body 树中是否含 <title level="m"> 节点（含则书名由正文渲染，避免 title_para 重复）。"""

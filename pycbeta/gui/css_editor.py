@@ -638,7 +638,7 @@ def _para_style(p):
 STYLE_ROW_LABEL = {"title": "书名", "head": "标题", "juan": "卷名",
                    "pin": "品名", "p": "正文", "verse": "偈颂",
                    "footnote": "脚注", "byline": "题署", "author": "作者",
-                   "translator": "译者", "div-note": "字义",
+                   "translator": "译者", "div-note": "字义", "def": "释义",
                    "series-title": "经藏名", "": "正文"}
 
 
@@ -668,12 +668,13 @@ def _name_label_format(dirty=False):
     return ncf
 
 
-# 元素名标签键 → 左栏选择器（判 touched 用；正文含 "" 回退）
+# 元素名标签键 → 左栏选择器（判脏用；正文含 "" 回退）
 _LABEL_TOUCHED_SEL = {"title": "h1.title", "head": "p.head",
                       "juan": "p.juan", "pin": "p.pin", "p": "p",
                       "verse": "div.lg", "footnote": ".footnote",
                       "byline": "p.byline", "author": "p.author",
                       "translator": "p.translator", "div-note": "div.div-note",
+                      "def": "cb:def",
                       "series-title": "p.series-title", "": "p"}
 
 
