@@ -1300,9 +1300,12 @@ def current_theme_value(root=None):
 
 def set_user_theme(value, root=None):
     """run.json 的 pdf-docx-user-theme 槽写入（只改此槽；无文件按缺省建）。
-    返回 run.json 路径。"""
+    值归一化带 .css 后缀（下拉给的是去后缀 stem）。返回 run.json 路径。"""
     from pycbeta.theme import set_run_slot
-    return set_run_slot("pdf-docx-user-theme", value, root)
+    v = (value or "").strip()
+    if v and not v.lower().endswith(".css"):
+        v += ".css"
+    return set_run_slot("pdf-docx-user-theme", v, root)
 
 
 class CssComboBox(QComboBox):

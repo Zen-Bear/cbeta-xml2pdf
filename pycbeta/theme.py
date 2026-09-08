@@ -673,11 +673,12 @@ def resolve_page(name: str, page_presets: Optional[Dict] = None) -> Dict:
     返回 {size: [w_mm, h_mm], margins: {top,right,bottom,left} mm,
           doc_size: 文档兜底字号(pt), latin_font: 西文字体}。
     presets.json 的 pages 优先（键大小写不敏感）；否则回退内置 BUILTIN_PAGES/a4。
+    边距：custom_margins（用户改的）> margins（预设自带）> 25.4 默认。
     """
     p = _lookup_ci(page_presets or {}, name)
     if not p:
         p = dict(_lookup_ci(BUILTIN_PAGES, name) or BUILTIN_PAGES["a4"])
-    margins = dict(p.get("margins") or {})
+    margins = dict(p.get("custom_margins") or p.get("margins") or {})
     for k in ("top", "right", "bottom", "left"):
         margins.setdefault(k, 25.4)
     return {

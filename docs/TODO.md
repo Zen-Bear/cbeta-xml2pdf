@@ -84,6 +84,11 @@
     出厂 `config.json` 加顶层 `"default_page": "a4"`；CLI `--page` 默认改 None →
     `显式 > 有效配置 default_page > a4`；GUI `options_from_presets` 跟随该键（非法值
     `resolve_page` 本来就警告回 a4）。config.user.json 保留（面板存档/显式引用），仅不再是默认。
+  - 后缀归一+边距持久化+格式入库验证（2026-09-08）：`set_user_theme` 补 `.css`（下拉 stem
+    时有时无）；边距改 `custom_margins` 键（出厂全有 margins，无法区分自定义）：保存写/重勾删、
+    载入恢复、`resolve_page` 三级、`write_temp_presets` 同步；取消跟随填预设值作基线，跟随中
+    切纸张刷新显示；搭售修 `t2s` 移出 `if margins`；格式栏（formats/engine/font_lang）上轮已
+    入库，本次只验证；全量 381 OK，verify 8/0
   - 字体栈统一同字体双名（2026-09-07）：出厂各 `--font-*` 一律"中文名, 英文名"（除 body 唯一
     多段链：中英双名+mac 兜底+Times New Roman 拉丁）；删通用族尾段（PDF 端 `_pdf_css` 已追加
     sans-serif）；繁 body 补回 PMingLiU、head 改 微軟正黑體/Microsoft JhengHei、

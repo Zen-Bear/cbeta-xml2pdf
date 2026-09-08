@@ -83,11 +83,24 @@ class TestTempPresets(unittest.TestCase):
         self.assertFalse(data["output"]["pagination"]["enabled"])
         self.assertTrue(data["annotations"]["enabled"])
         self.assertEqual(data["verify"]["maxDiff"], 3)
-        self.assertEqual(data["pages"]["a4"]["margins"], {"top": 2.0})
+        self.assertEqual(data["pages"]["a4"]["custom_margins"], {"top": 2.0})
         self.assertTrue(data["output"]["t2s"])
         self.assertEqual(data["output"]["font_scale"], 1.5)
         # base 未被污染
         self.assertTrue(base["output"]["show_notes"])
+
+    def test_temp_presets_t2s_without_margins(self):
+        from pycbeta.gui.panel import write_temp_presets, XmlOptions
+        base = {"output": {}}
+        opts = XmlOptions(page="a4", t2s=True)  # margins=None（跟随）
+        path = write_temp_presets(base, opts)
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+        finally:
+            os.remove(path)
+        self.assertTrue(data["output"]["t2s"])  # 不依赖 margins 照写
+        self.assertNotIn("custom_margins", data.get("pages", {}).get("a4", {}))
 
 
 class TestOptionsModel(unittest.TestCase):
@@ -268,6 +281,40 @@ class TestConfigBar(unittest.TestCase):
             self.assertIn("html", o.formats)
             self.assertEqual(o.font_lang, "zh-Hans")
             self.assertTrue(o.engine.startswith("docx2pdf"))
+
+    def test_save_persists_margins_custom(self):
+        import unittest.mock as mock
+        import pycbeta.gui.panel as pm
+        base = {"output": {}, "pages": {"a4": {"margins": {"top": 25.4,
+                                                           "right": 25.4,
+                                                           "bottom": 25.4,
+                                                           "left": 25.4}}}}
+        saved = {}
+        with mock.patch.object(pm, "load_slot",
+                               return_value=(dict(base), "user")), \
+                mock.patch.object(pm, "save_current",
+                                  side_effect=lambda d, root=None: saved.update(
+                                      data=d)), \
+                mock.patch("os.path.isfile", return_value=True):
+            panel = pm.XmlOptionsPanel(dict(base))
+            # 取消跟随 → spin 填预设值作基线；改一个值保存
+            panel.margin_follow.setChecked(False)
+            self.assertEqual(panel.margin_spins["top"].value(), 25.4)
+            panel.margin_spins["top"].setValue(20.0)
+            panel._on_save()
+            cm = saved["data"]["pages"]["a4"]["custom_margins"]
+            self.assertEqual(cm["top"], 20.0)
+            # 回读：自定义边距恢复
+            o = pm.options_from_presets(saved["data"])
+            self.assertEqual(o.margins["top"], 20.0)
+            panel.set_options(o)
+            self.assertFalse(panel.margin_follow.isChecked())
+            self.assertEqual(panel.margin_spins["top"].value(), 20.0)
+            # 重勾跟随 → 僵尸键删除
+            panel.margin_follow.setChecked(True)
+            panel._on_save()
+            self.assertNotIn("custom_margins",
+                             saved["data"]["pages"]["a4"])
 
     def test_save_persists_default_page(self):
         import unittest.mock as mock
@@ -2014,12 +2061,12 @@ class TestCssEditor(unittest.TestCase):
         try:
             # 无 run.json → 标准槽值（pdf_docx.css）
             self.assertEqual(current_theme_value(root), "pdf_docx.css")
-            # 写槽 → run.json 的 pdf-docx-user-theme（注释保留，走 loader 读）
+            # 写槽 → run.json 的 pdf-docx-user-theme（补 .css 后缀）
             p = set_user_theme("large-print", root)
             self.assertTrue(p.endswith("run.json"))
-            self.assertEqual(current_theme_value(root), "large-print")
+            self.assertEqual(current_theme_value(root), "large-print.css")
             d = load_run_config(os.path.join(root, "run.json"))
-            self.assertEqual(d["pdf-docx-user-theme"], "large-print")
+            self.assertEqual(d["pdf-docx-user-theme"], "large-print.css")
             self.assertEqual(d["pdf-docx-theme"], "pdf_docx.css")
         finally:
             shutil.rmtree(root, ignore_errors=True)

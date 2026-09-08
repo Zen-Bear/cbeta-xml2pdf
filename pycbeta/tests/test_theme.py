@@ -133,6 +133,16 @@ class TestLatinFont(unittest.TestCase):
             resolve_page("a4", {"a4": {"size": [210, 297], "latin_font": "OldStyle"}})["latin_font"],
             "OldStyle")
 
+    def test_resolve_page_custom_margins(self):
+        # custom_margins（用户改的）> margins（预设自带）> 25.4 默认
+        m = resolve_page("a4", {"a4": {"margins": {"top": 25.4, "right": 25.4,
+                                                   "bottom": 25.4, "left": 25.4},
+                                       "custom_margins": {"top": 20.0}}})["margins"]
+        self.assertEqual(m["top"], 20.0)
+        self.assertEqual(m["right"], 25.4)
+        m2 = resolve_page("a4", {"a4": {}})["margins"]
+        self.assertEqual(m2["top"], 25.4)
+
     def test_docx_renderer_precedence(self):
         # 显式参数 > 页面方案 > Calibri
         from pycbeta.render_docx import DocxRenderer

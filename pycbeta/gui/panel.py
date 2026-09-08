@@ -307,12 +307,14 @@ def options_from_presets(presets):
     out = (presets.get("output") or {})
     pages = (presets.get("pages") or {})
     dflt = presets.get("default_page") or "a4"
+    page = dflt if dflt in pages else ("a4" if "a4" in pages
+                                       else next(iter(pages), "a4"))
+    cm = (pages.get(page) or {}).get("custom_margins")
     return XmlOptions(
-        page=dflt if dflt in pages else ("a4" if "a4" in pages
-                                         else next(iter(pages), "a4")),
+        page=page,
         font_lang=presets.get("font_lang") or "zh-Hant",
         engine=presets.get("engine") or "docx2pdf",
-        margins=None,
+        margins=dict(cm) if isinstance(cm, dict) else None,
         formats=list(presets.get("formats") or ["pdf"]),
         output={k: copy.deepcopy(v) for k, v in out.items()
                 if k not in ("pagination", "series_title")},
@@ -342,9 +344,9 @@ def write_temp_presets(base, opts, path=None):
     if opts.verify:
         data.setdefault("verify", {}).update(copy.deepcopy(opts.verify))
     if opts.margins:
-        data.setdefault("pages", {}).setdefault(opts.page, {})["margins"] = \
-            copy.deepcopy(opts.margins)
-        data["output"]["t2s"] = bool(opts.t2s)
+        data.setdefault("pages", {}).setdefault(opts.page, {})[
+            "custom_margins"] = copy.deepcopy(opts.margins)
+    data["output"]["t2s"] = bool(opts.t2s)
     data["output"]["vertical"] = bool(opts.vertical)
     data["output"]["font_scale"] = float(opts.font_scale or 1.0)
     if path is None:
@@ -443,12 +445,13 @@ class XmlOptionsPanel(QWidget):
             else:
                 label = name
             self.page_box.addItem(label, name)
-        self.page_box.setFixedWidth(220)
-        self.page_box.currentIndexChanged.connect(lambda _i: self._changed())
+            self.page_box.setFixedWidth(220)
+            self.page_box.currentIndexChanged.connect(self._on_page_changed)
         form.addRow("纸张", self.page_box)
         self.margin_follow = QCheckBox("边距跟随页面预设")
         self.margin_follow.setChecked(True)
-        self.margin_follow.toggled.connect(self._on_margin_follow)
+        self.margin_follow.toggled.connect(
+            lambda v: self._on_margin_follow(v, fill=True))
         form.addRow("", self.margin_follow)
         self.margin_spins = {}
         grid = QGridLayout()
@@ -475,9 +478,31 @@ class XmlOptionsPanel(QWidget):
         form.addRow("", self.border_box)
         return w
 
-    def _on_margin_follow(self, follow):
+    def _preset_margins(self):
+        """当前纸张预设边距（取消跟随时填入作改 baseline；显示刷新同源）。"""
+        from pycbeta.theme import resolve_page
+        page = self.page_box.currentData() or self.page_box.currentText()
+        return resolve_page(page, self._presets.get("pages"))["margins"]
+
+    def _on_margin_follow(self, follow, fill=False):
         for spin in self.margin_spins.values():
             spin.setEnabled(not follow)
+        if not follow and fill:
+            from PySide6.QtCore import QSignalBlocker
+            base = self._preset_margins()
+            for k, sp in self.margin_spins.items():
+                with QSignalBlocker(sp):
+                    sp.setValue(float(base.get(k, 25.4)))
+        self._changed()
+
+    def _on_page_changed(self, _i):
+        # 跟随中切纸张：spin 显示刷新为新预设（disabled 仅展示）
+        if self.margin_follow.isChecked():
+            from PySide6.QtCore import QSignalBlocker
+            base = self._preset_margins()
+            for k, sp in self.margin_spins.items():
+                with QSignalBlocker(sp):
+                    sp.setValue(float(base.get(k, 25.4)))
         self._changed()
 
     def _on_t2s(self, checked):
@@ -902,6 +927,11 @@ class XmlOptionsPanel(QWidget):
         data["formats"] = list(opts.formats or ["pdf"])
         data["engine"] = opts.engine or "docx2pdf"
         data["font_lang"] = opts.font_lang or "zh-Hant"
+        _pg = data.setdefault("pages", {}).setdefault(opts.page, {})
+        if opts.margins:
+            _pg["custom_margins"] = copy.deepcopy(opts.margins)
+        else:
+            _pg.pop("custom_margins", None)  # 重勾跟随后真还原，不留僵尸
         data.setdefault("output", {}).update(copy.deepcopy(opts.output or {}))
         if opts.pagination:
             data["output"]["pagination"] = copy.deepcopy(opts.pagination)
@@ -911,9 +941,6 @@ class XmlOptionsPanel(QWidget):
             data["annotations"] = copy.deepcopy(opts.annotations)
         if opts.verify:
             data.setdefault("verify", {}).update(copy.deepcopy(opts.verify))
-        if opts.margins:
-            data.setdefault("pages", {}).setdefault(opts.page, {})["margins"] = \
-                copy.deepcopy(opts.margins)
         data["output"]["t2s"] = bool(opts.t2s)
         data["output"]["vertical"] = bool(opts.vertical)
         data["output"]["font_scale"] = float(opts.font_scale or 1.0)
@@ -1021,7 +1048,9 @@ class XmlOptionsPanel(QWidget):
                 for k, sp in self.margin_spins.items():
                     if k in opts.margins:
                         sp.setValue(float(opts.margins[k]))
-            self._on_margin_follow(opts.margins is None)
+            self._on_margin_follow(opts.margins is None, fill=False)
+            if opts.margins is None:
+                self._on_page_changed(-1)  # 跟随时显示刷新为预设值
             self.grayscale_box.setChecked(bool(opts.output.get("grayscale", False)))
             self.border_box.setChecked(bool(opts.output.get("page_border", False)))
             i = self.lang_box.findData(opts.font_lang or "zh-Hant")
