@@ -30,7 +30,9 @@ class TestScaleFontSizes(unittest.TestCase):
         # note-ref 取用户 CSS 值（现为 0.75em，随资源走，旧 9pt 已作废）
         self.assertEqual(t.tags["p"]["font-size"], "18pt")
         self.assertEqual(t.tags["title"]["font-size"], "45pt")
-        self.assertEqual(t.tags["footnote"]["font-size"], "13.5pt")
+        # footnote 出厂已是 0.75em：字符串不动，有效值随放大的 base 走
+        self.assertEqual(t.tags["footnote"]["font-size"], "0.75em")
+        self.assertIn('w:val="27"', t.docx_run("footnote"))
         self.assertEqual(t.tags["note-ref"]["font-size"], "0.75em")
         self.assertEqual(t.tags["verse"]["font-size"], "18pt")
 

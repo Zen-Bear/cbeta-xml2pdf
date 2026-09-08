@@ -256,13 +256,25 @@ class DocxRenderer:
         return {"none": 2, "disc": 1, "bullet": 1, "circle": 1, "decimal": 3}.get(style, 2)
 
     def _tag_base_pt(self, tags) -> float:
-        """段落级标签的 pt 字号，作为 em 换算基准（默认主题 base，旧 12.0）。"""
+        """段落级标签的 pt 字号，作为 em 换算基准（默认主题 base，旧 12.0）。
+        只认绝对 pt（em 由调用方按上下文解，这里保持父级语义，避免复利）。"""
         for t in reversed(tags):
             fs = (self.theme.tags.get(t) or {}).get("font-size")
             m = re.match(r"([\d.]+)pt", fs or "")
             if m:
                 return float(m.group(1))
         return self.theme.base_pt()
+
+    def _resolve_tag_pt(self, tags) -> float:
+        """标签栈由外向内解算 pt（绝对替换，em 按已解基准乘；基准主题 base）。
+        注音等相对尺寸的锚：脚注 0.75em→9.0，不回落 12。"""
+        from pycbeta.theme import _abs_pt
+        cur = self.theme.base_pt()
+        for t in (tags or ()):
+            pt = _abs_pt((self.theme.tags.get(t) or {}).get("font-size"), cur)
+            if pt is not None:
+                cur = pt
+        return cur
 
     def _run_rpr(self, tags, props) -> str:
         """run 属性（含 <w:rPr> 包裹）：_run 与 _run_annotated 共用，保证注音 run 样式一致。"""
@@ -436,7 +448,7 @@ class DocxRenderer:
             return "".join(out)
         if ann.get("style", "inline") == "field":
             # 上方 EQ 域（WPS/Word 可见）：逐字拼音指南域；读音按音节分配，整词兜底
-            base_pt = self._tag_base_pt(tags)
+            base_pt = self._resolve_tag_pt(tags)
             rt_pt = _parse_rt_size(ann.get("rt_size"), base_pt) or base_pt * 0.5
             hps = max(1, int(round(rt_pt * 2)))
             # 抬升量 up：默认 100% 正文字号（一个整字高，构造上不与正文相交；
@@ -458,7 +470,7 @@ class DocxRenderer:
             return "".join(out)
         # 上方 ruby：rubyPr 补完（hps/hpsRaise/hpsBaseText/lid，Word 拼音指南完整结构；
         # 旧版仅 rubyAlign 会被严格 Reader 忽略；WPS 另见 field 模式）
-        base_pt = self._tag_base_pt(tags)
+        base_pt = self._resolve_tag_pt(tags)
         rt_pt = _parse_rt_size(ann.get("rt_size"), base_pt) or base_pt * 0.5
         rt_font = (ann.get("rt_font") or "").strip() if isinstance(ann.get("rt_font"), str) else ""
         hps = max(1, int(round(rt_pt * 2)))

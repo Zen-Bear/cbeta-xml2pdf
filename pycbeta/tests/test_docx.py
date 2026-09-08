@@ -387,6 +387,18 @@ class TestDocxBookmarksSplit(unittest.TestCase):
         self.assertIn('w:styleId="div-note"', styles)
         self.assertIn("<w:b/>", styles)
 
+    def test_tag_base_pt_resolves_em(self):
+        from pycbeta.theme import Theme
+        t = Theme.from_css(":root {}\n.footnote { font-size: 0.75em; }\n")
+        r = DocxRenderer(theme=t)
+        # _tag_base_pt 是父级语义（绝对值 only，供自身 em 换算，不复利）
+        self.assertEqual(r._tag_base_pt(("footnote",)), 12.0)
+        self.assertEqual(r._tag_base_pt(("p",)), 12.0)
+        # _resolve_tag_pt 由外向内解算（注音锚：脚注 0.75em→9.0，不回落 12）
+        self.assertEqual(r._resolve_tag_pt(("footnote",)), 9.0)
+        self.assertEqual(r._resolve_tag_pt(("p",)), 12.0)
+        self.assertEqual(r._resolve_tag_pt(("nope",)), 12.0)
+
     def test_split(self):
         files = DocxRenderer(split=True).render_work(self.work, self.tmp, "sp.docx")
         self.assertEqual(len(files), 7)
