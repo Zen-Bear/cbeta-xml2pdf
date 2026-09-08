@@ -66,8 +66,14 @@
     pdf-docx-user-theme）；`config.user.json` 不再是默认（仅面板存档/显式引用）；不带 `--config`
     自动读仓库根 `run.json`；旧 `--theme` 与旧全量快照硬切换（报错指新格式）；`config.last.json`
     轮转废弃；出厂 `theme` 键删除；有效配置 = 出厂 ← base 文件按鍵深合并（整包替换退役）；
-    新开关 `--pdf-docx-theme`/`--pdf-docx-user-theme`/`--html-epub-theme`（逐槽覆盖）。
+        新开关 `--pdf-docx-theme`/`--pdf-docx-user-theme`/`--html-epub-theme`（逐槽覆盖）。
     全量 362+ OK，verify 8/0
+  - [x] **已落实 配置栏四按钮+默认纸张（2026-09-08 用户立项）**：面板配置栏"保存到配置"改名
+    "保存用户配置"（写 `config.user.json` 不变）；新增"载入用户配置"（读回面板，文件缺失置灰）；
+    新增"设为默认"（run.json `config-json` 槽指向 `config.user.json`）；"还原出厂"保留。
+    出厂 `config.json` 加顶层 `"default_page": "a4"`；CLI `--page` 默认改 None →
+    `显式 > 有效配置 default_page > a4`；GUI `options_from_presets` 跟随该键（非法值
+    `resolve_page` 本来就警告回 a4）。config.user.json 保留（面板存档/显式引用），仅不再是默认。
   - 字体栈统一同字体双名（2026-09-07）：出厂各 `--font-*` 一律"中文名, 英文名"（除 body 唯一
     多段链：中英双名+mac 兜底+Times New Roman 拉丁）；删通用族尾段（PDF 端 `_pdf_css` 已追加
     sans-serif）；繁 body 补回 PMingLiU、head 改 微軟正黑體/Microsoft JhengHei、
@@ -81,8 +87,7 @@
     `_load_preset_path`（源码页=其覆盖块、保存按钮亮）；内置默认不载入（保持灰归另存）
   - 颜色按钮去文字（2026-09-07）：26×26 纯色块，右键清除/tooltip 保留，列头收窄
   - def 元素入左栏（2026-09-07，新元素死命令首例）：`TAG_SELECTOR["cb:def"]="def"` +
-    `FONT_VAR_TAGS` 加 def；`render_docx._render_e` def 分支（run 带 def 标签，def 内 p 继承）；
-    `pdf_docx.css` `--font-def` 双栏 + `cb:def{font-size:0.9em}`（无颜色）；左栏"释义"行 +
+    `FONT_VAR_TAGS` 加 def；`render_docx._render_e` def 分支（run 带 def 标签，def 内 p 继承）；    `pdf_docx.css` `--font-def` 双栏 + `cb:def{font-size:0.9em}`（无颜色）；左栏"释义"行 +
     tooltip 双向查找（`_row_cb_tip` 各行 tooltip 标 cb 标签）；全量 345 OK、verify 8/0
   - 字义/释义正文化（2026-09-07）：`div.div-note` 去灰改加粗、`cb:def` 改 1em（恒等于正文；
     OOXML run 无继承，必须显式）；div-note 内 p/form 挂 pStyle div-note（样式内联拷贝 p

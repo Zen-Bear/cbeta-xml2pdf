@@ -27,6 +27,11 @@ _FORMAT_EXT = {"html": "", "pdf": ".pdf", "docx": ".docx", "md": ".md", "epub": 
 _FONT_LANGS = ("zh-Hant", "zh-Hans")
 
 
+def resolve_default_page(args_page, presets):
+    """默认纸张：显式 --page > 有效配置 default_page > a4（纯函数，可单测）。"""
+    return args_page or (presets or {}).get("default_page") or "a4"
+
+
 def scaled_page_presets(page_presets, factor: float):
     """大字版：页面方案的 doc_size 兜底字号跟随 font_scale 等比放大（不改原配置）。"""
     out = {}
@@ -381,9 +386,10 @@ def main(argv=None):
                            "html/pdf/md/epub=endnote（文末校注）")
 
     pg = ap.add_argument_group("页面（pdf/docx；纯 HTML 输出不适用）")
-    pg.add_argument("--page", default="a4",
-                    help="页面方案名（config.json 的 pages，键大小写不敏感；"
-                         "或内置 a4/a5/信纸/手机/平板8寸/平板9寸/平板11寸/32开/16开）")
+    pg.add_argument("--page", default=None,
+                    help="页面方案名（缺省有效配置 default_page；config.json 的 "
+                         "pages，键大小写不敏感；或内置 a4/a5/信纸/手机/平板8寸/"
+                         "平板9寸/平板11寸/32开/16开）")
 
     pdfg = ap.add_argument_group("PDF 专属")
     pdfg.add_argument("--vertical", action="store_true",
@@ -450,6 +456,7 @@ def main(argv=None):
         else os.path.dirname(os.path.abspath(default_run_path()))
     check_run_placeholders(run)
     presets = resolve_effective_config(run, run_dir)  # 出厂 ← base 文件按鍵合并
+    args.page = resolve_default_page(args.page, presets)
     args.page_presets = presets.get("pages") or PAGE_PRESETS
     out_defaults = presets.get("output") or {}
     engines_cfg = presets.get("engines") or {}

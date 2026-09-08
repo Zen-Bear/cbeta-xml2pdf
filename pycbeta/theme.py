@@ -533,6 +533,36 @@ def check_run_placeholders(run):
         print("run.json: html-epub-user-theme 尚未接线，已忽略（html/epub 纯基底）")
 
 
+def set_run_slot(key, value, root=None):
+    """run.json 单槽写入（只改此槽；无文件按缺省建；非法原文件改名 .bad）。
+    返回 run.json 路径。"""
+    if key not in RUN_KEYS:
+        raise ValueError(f"未知 run.json 槽：{key!r}")
+    path = default_run_path(root)
+    if os.path.isfile(path):
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.loads(_strip_json_comments(f.read())) or {}
+            if not isinstance(data, dict):
+                data = {}
+        except ValueError:
+            bad = path + ".bad"
+            try:
+                os.replace(path, bad)
+            except OSError:
+                pass
+            data = {}
+    else:
+        data = {}
+    for k in RUN_KEYS:
+        data.setdefault(k, DEFAULT_RUN_CONFIG[k])
+    data[key] = value
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+    return path
+
+
 def deep_merge(base, over):
     """递归合并（over 按鍵胜；list/标量整体替换；仅 dict 递归）。纯函数。"""
     out = dict(base or {})

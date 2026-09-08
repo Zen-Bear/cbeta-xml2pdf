@@ -1301,33 +1301,8 @@ def current_theme_value(root=None):
 def set_user_theme(value, root=None):
     """run.json 的 pdf-docx-user-theme 槽写入（只改此槽；无文件按缺省建）。
     返回 run.json 路径。"""
-    import json
-    from pycbeta.theme import DEFAULT_RUN_CONFIG
-    root = root or REPO_ROOT
-    rpath = os.path.join(root, "run.json")
-    if os.path.isfile(rpath):
-        try:
-            with open(rpath, encoding="utf-8") as f:
-                data = json.load(f) or {}
-            if not isinstance(data, dict):
-                data = {}
-        except ValueError:
-            bad = rpath + ".bad"
-            try:
-                os.replace(rpath, bad)
-            except OSError:
-                pass
-            data = {}
-    else:
-        data = {}
-    for k in ("config-json", "html-epub-theme", "html-epub-user-theme",
-              "pdf-docx-theme", "pdf-docx-user-theme"):
-        data.setdefault(k, DEFAULT_RUN_CONFIG[k])
-    data["pdf-docx-user-theme"] = value
-    with open(rpath, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-        f.write("\n")
-    return rpath
+    from pycbeta.theme import set_run_slot
+    return set_run_slot("pdf-docx-user-theme", value, root)
 
 
 class CssComboBox(QComboBox):

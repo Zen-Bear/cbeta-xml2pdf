@@ -164,6 +164,100 @@ class TestPanelSmoke(unittest.TestCase):
         self.assertTrue(panel.vert_box.isChecked())
 
 
+class TestConfigBar(unittest.TestCase):
+    """配置栏：保存用户配置/载入用户配置/设为默认 + default_page。"""
+
+    @classmethod
+    def setUpClass(cls):
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PySide6.QtWidgets import QApplication
+        cls.app = QApplication.instance() or QApplication([])
+
+    def _panel(self):
+        from pycbeta.gui.panel import XmlOptionsPanel
+        from pycbeta.theme import load_presets
+        return XmlOptionsPanel(load_presets())
+
+    def test_buttons_present(self):
+        panel = self._panel()
+        try:
+            self.assertEqual(panel.btn_save.text(), "保存用户配置")
+            self.assertEqual(panel.btn_load.text(), "载入用户配置")
+            self.assertEqual(panel.btn_set_default.text(), "设为默认")
+        finally:
+            panel.close() if hasattr(panel, "close") else None
+
+    def test_save_writes_user_file(self):
+        import unittest.mock as mock
+        import pycbeta.gui.panel as pm
+        saved = {}
+        with mock.patch.object(pm, "load_slot",
+                               return_value=({"output": {}}, "user")), \
+                mock.patch.object(pm, "save_current",
+                                  side_effect=lambda d, root=None: saved.update(
+                                      data=d)), \
+                mock.patch("os.path.isfile", return_value=True):
+            panel = pm.XmlOptionsPanel({"output": {}})
+            try:
+                panel.t2s_box.setChecked(True)
+                panel._on_save()
+                self.assertTrue(saved["data"]["output"]["t2s"])
+                self.assertTrue(panel.btn_load.isEnabled())
+            finally:
+                panel.close() if hasattr(panel, "close") else None
+
+    def test_load_fills_panel(self):
+        import unittest.mock as mock
+        import pycbeta.gui.panel as pm
+        panel = self._panel()
+        try:
+            with mock.patch.object(pm, "load_slot", return_value=(
+                    {"output": {"t2s": True}}, "user")):
+                panel._on_load_user()
+            self.assertTrue(panel.t2s_box.isChecked())
+        finally:
+            panel.close() if hasattr(panel, "close") else None
+
+    def test_load_disabled_when_missing(self):
+        import unittest.mock as mock
+        panel = self._panel()
+        try:
+            with mock.patch("os.path.isfile", return_value=False):
+                panel._refresh_load_button()
+                self.assertFalse(panel.btn_load.isEnabled())
+            with mock.patch("os.path.isfile", return_value=True):
+                panel._refresh_load_button()
+                self.assertTrue(panel.btn_load.isEnabled())
+        finally:
+            panel.close() if hasattr(panel, "close") else None
+
+    def test_set_default_writes_run_slot(self):
+        import unittest.mock as mock
+        panel = self._panel()
+        try:
+            with mock.patch("pycbeta.theme.set_run_slot") as m:
+                panel._on_set_default()
+                m.assert_called_once_with("config-json", "config.user.json")
+        finally:
+            panel.close() if hasattr(panel, "close") else None
+
+    def test_resolve_default_page(self):
+        from pycbeta.cli import resolve_default_page
+        self.assertEqual(resolve_default_page("a5", {}), "a5")
+        self.assertEqual(
+            resolve_default_page(None, {"default_page": "a5"}), "a5")
+        self.assertEqual(resolve_default_page("", {}), "a4")
+        self.assertEqual(resolve_default_page(None, {}), "a4")
+
+    def test_options_default_page(self):
+        from pycbeta.gui.panel import options_from_presets
+        o = options_from_presets({"pages": {"a4": {}, "a5": {}},
+                                  "default_page": "a5"})
+        self.assertEqual(o.page, "a5")
+        o2 = options_from_presets({"pages": {"a4": {}}})
+        self.assertEqual(o2.page, "a4")
+
+
 class TestEngineSingles(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

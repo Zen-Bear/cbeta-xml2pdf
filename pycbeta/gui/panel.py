@@ -306,8 +306,10 @@ def options_from_presets(presets):
     """presets → XmlOptions（面板 set_options 用；缺键取设计默认值）。"""
     out = (presets.get("output") or {})
     pages = (presets.get("pages") or {})
+    dflt = presets.get("default_page") or "a4"
     return XmlOptions(
-        page="a4" if "a4" in pages else (next(iter(pages), "a4")),
+        page=dflt if dflt in pages else ("a4" if "a4" in pages
+                                         else next(iter(pages), "a4")),
         font_lang="zh-Hant",
         engine="docx2pdf",
         margins=None,
@@ -367,6 +369,7 @@ class XmlOptionsPanel(QWidget):
             self._build()
         finally:
             self._emitting = False
+        self._refresh_load_button()
         if presets:
             self.set_options(options_from_presets(presets))
 
@@ -376,13 +379,23 @@ class XmlOptionsPanel(QWidget):
         cfg = QGroupBox("配置")
         bar = QHBoxLayout(cfg)
         self.slot_label = QLabel("当前：出厂默认")
-        self.btn_save = QPushButton("保存到配置")
+        self.btn_save = QPushButton("保存用户配置")
+        self.btn_save.setToolTip("面板当前值存入 config.user.json（出厂文件不动）")
+        self.btn_load = QPushButton("载入用户配置")
+        self.btn_load.setToolTip("从 config.user.json 读回面板")
+        self.btn_set_default = QPushButton("设为默认")
+        self.btn_set_default.setToolTip(
+            "run.json 的 config-json 槽指向 config.user.json（命令行/GUI 默认用它）")
         self.btn_reset = QPushButton("还原出厂")
         self.btn_save.clicked.connect(self._on_save)
+        self.btn_load.clicked.connect(self._on_load_user)
+        self.btn_set_default.clicked.connect(self._on_set_default)
         self.btn_reset.clicked.connect(self._on_reset)
         bar.addWidget(self.slot_label)
         bar.addStretch(1)
         bar.addWidget(self.btn_save)
+        bar.addWidget(self.btn_load)
+        bar.addWidget(self.btn_set_default)
         bar.addWidget(self.btn_reset)
         layout.addWidget(cfg)
         self.tabs = QTabWidget()
@@ -852,6 +865,32 @@ class XmlOptionsPanel(QWidget):
         cur, _actual = load_slot("user")
         save_current(self._presets_merged(cur))
         self.refresh_slot_label("user", "（已保存）")
+        self._refresh_load_button()
+        self._changed()
+
+    def _user_config_path(self, root=None):
+        _factory, user, _last = slot_paths(root)
+        return user
+
+    def _refresh_load_button(self, root=None):
+        """载入用户配置按钮：文件存在才可用。"""
+        self.btn_load.setEnabled(os.path.isfile(self._user_config_path(root)))
+
+    def _on_load_user(self):
+        data, _actual = load_slot("user")
+        self.set_options(options_from_presets(data))
+        self.refresh_slot_label("user", "（已载入）")
+        self._changed()
+
+    def _on_set_default(self):
+        """run.json 的 config-json 槽指向 config.user.json（默认用它）。"""
+        from pycbeta.theme import set_run_slot
+        try:
+            set_run_slot("config-json", "config.user.json")
+        except OSError as exc:
+            QMessageBox.warning(self, "设为默认失败", str(exc))
+            return
+        self.refresh_slot_label("run", "（已设默认）")
         self._changed()
 
     def _presets_merged(self, cur):
@@ -879,6 +918,7 @@ class XmlOptionsPanel(QWidget):
         reset_factory()
         self.set_options(options_from_presets(load_slot("user")[0]))
         self.refresh_slot_label("factory", "（已还原）")
+        self._refresh_load_button()
         self._changed()
 
     @staticmethod

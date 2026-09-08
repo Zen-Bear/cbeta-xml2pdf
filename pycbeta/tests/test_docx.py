@@ -446,7 +446,8 @@ class TestGaijiFonts(unittest.TestCase):
             _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
             "config.json")).get("output", {}).get("docx", {}).get("gaijiFonts")
         self.assertEqual(cfg["zh-Hant"], ["CBETA Supplement"])
-        self.assertEqual(cfg["zh-Hans"], ["SimSunExtB", "CBETA Supplement"])
+        self.assertEqual(cfg["zh-Hans"], ["SimSun-ExtB", "SimSun-ExtG",
+                                          "CBETA Supplement"])
 
 
 class TestRanjana(unittest.TestCase):

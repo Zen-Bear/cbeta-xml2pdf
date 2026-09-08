@@ -408,6 +408,24 @@ class TestRunConfig(unittest.TestCase):
             check_run_placeholders({})
         self.assertEqual(buf2.getvalue(), "")
 
+    def test_set_run_slot(self):
+        import json
+        import shutil
+        import tempfile
+        from pycbeta.theme import set_run_slot, DEFAULT_RUN_CONFIG
+        root = tempfile.mkdtemp()
+        try:
+            p = set_run_slot("pdf-docx-user-theme", "mine", root)
+            self.assertTrue(p.endswith("run.json"))
+            d = json.load(open(p, encoding="utf-8"))
+            self.assertEqual(d["pdf-docx-user-theme"], "mine")
+            self.assertEqual(d["pdf-docx-theme"],
+                             DEFAULT_RUN_CONFIG["pdf-docx-theme"])
+            with self.assertRaises(ValueError):
+                set_run_slot("nope", "x", root)
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
     def test_deep_merge(self):
         from pycbeta.theme import deep_merge
         base = {"output": {"t2s": False, "pagination": {"enabled": True}},

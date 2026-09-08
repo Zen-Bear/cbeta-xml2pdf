@@ -4,6 +4,8 @@
   // 支持 // 行注释；生效格式标注在每条注释尾部
   // ============================================================
 
+  "default_page": "a4",  // 默认纸张（--page 未指定时用它；键大小写不敏感；非法回 a4）
+
   "pages": {
     // 页面方案：--page 选名字（只管几何：尺寸/边距/兜底字号；字体走 CSS :root 双栏变量）
     // size=[宽mm,高mm]；margins=上下左右 mm；doc_size=DOCX 文档兜底字号(pt)
@@ -116,14 +118,14 @@
       "gaijiFonts": {              //   缺字（>0xFFFF，如 Ext G/H）字体链：按序取本机已装首个写入 w:rFonts；
                                    //   繁体用补充字形，简体优先 SimSunExtB、缺失再补补充字形；全缺则写首项（Word 再回退）
         "zh-Hant": ["CBETA Supplement"],
-        "zh-Hans": ["SimSunExtB", "CBETA Supplement"]
+        "zh-Hans": ["SimSun-ExtB", "SimSun-ExtG", "CBETA Supplement"]
       },
       "fallbackFonts": {           //   按字回退链（render-time 缺字拆 run，缺字不出 tofu）：按序取首个覆盖该字者；
                                    //   繁优先明体、简优先宋体；SimSunExtB 管 Ext-B 及以后；补充字形管 Ext C-G 与私用区；
                                    //   微软雅黑垫底（系统必带最后兜底）；空/缺省走内置默认
-        "zh-Hant": ["PMingLiU", "SimSun", "SimSunExtB", "CBETA Supplement",
+        "zh-Hant": ["PMingLiU", "SimSun", "SimSun-ExtB", "SimSun-ExtG", "CBETA Supplement",
                     "Microsoft YaHei"],
-        "zh-Hans": ["SimSun", "SimSunExtB", "PMingLiU", "CBETA Supplement",
+        "zh-Hans": ["SimSun", "SimSun-ExtB", "SimSun-ExtG", "CBETA Supplement",
                     "Microsoft YaHei"]
       },
       "siddhamFonts": ["Ranjana", "Siddam"]  //   悉昙字体（RJ 码按覆盖选用，官方同款 eastAsia="Ranjana"）：
