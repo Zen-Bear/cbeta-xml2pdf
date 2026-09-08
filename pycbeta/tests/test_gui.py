@@ -241,6 +241,34 @@ class TestConfigBar(unittest.TestCase):
         finally:
             panel.close() if hasattr(panel, "close") else None
 
+    def test_save_persists_formats(self):
+        import unittest.mock as mock
+        import pycbeta.gui.panel as pm
+        base = {"output": {}, "pages": {"a4": {}}}
+        saved = {}
+        with mock.patch.object(pm, "load_slot",
+                               return_value=(dict(base), "user")), \
+                mock.patch.object(pm, "save_current",
+                                  side_effect=lambda d, root=None: saved.update(
+                                      data=d)), \
+                mock.patch("os.path.isfile", return_value=True):
+            panel = pm.XmlOptionsPanel(dict(base))
+            panel.format_boxes["docx"].setChecked(True)
+            panel.format_boxes["html"].setChecked(True)
+            panel.lang_box.setCurrentIndex(
+                panel.lang_box.findData("zh-Hans"))
+            panel._on_save()
+            self.assertIn("docx", saved["data"]["formats"])
+            self.assertIn("html", saved["data"]["formats"])
+            self.assertEqual(saved["data"]["font_lang"], "zh-Hans")
+            self.assertTrue(saved["data"]["engine"].startswith("docx2pdf"))
+            # 回读：格式/引擎/字库恢复（不再丢回默认）
+            o = pm.options_from_presets(saved["data"])
+            self.assertIn("docx", o.formats)
+            self.assertIn("html", o.formats)
+            self.assertEqual(o.font_lang, "zh-Hans")
+            self.assertTrue(o.engine.startswith("docx2pdf"))
+
     def test_save_persists_default_page(self):
         import unittest.mock as mock
         import pycbeta.gui.panel as pm
@@ -1067,8 +1095,12 @@ class TestCssEditor(unittest.TestCase):
             dlg.close()
 
     def test_weight_three_state_cycle(self):
+        import unittest.mock as mock
         import pycbeta.gui.css_editor as ce
-        dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+        # 出厂基线启动（不受本机 run.json 默认预设影响）
+        with mock.patch.object(ce, "current_theme_value",
+                               return_value="pdf_docx.css"):
+            dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
         try:
             sel = "h1.title"
             btn = dlg._rows[sel]["weight"]
@@ -1312,29 +1344,33 @@ class TestCssEditor(unittest.TestCase):
 
     def test_load_shows_inherited_values(self):
         import shutil
+        import unittest.mock as mock
         import pycbeta.gui.css_editor as ce
         root = tempfile.mkdtemp()
         try:
             fn = os.path.join(root, "mine.css")
             with open(fn, "w", encoding="utf-8") as f:
                 f.write("/* base */\np.head { font-size: 40pt; }\n")
-            dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
-            try:
-                open30 = dlg._rows["h1.title"]["size"].text()
-                self.assertEqual(open30, "30pt")  # 打开时显示出厂有效值
-                dlg._load_preset_path(fn)
-                # 预设自有生效
-                self.assertEqual(
-                    dlg._rows["p.head"]["size"].text(), "40pt")
-                # 未覆盖的显示继承（base），不是空白
-                self.assertEqual(
-                    dlg._rows["h1.title"]["size"].text(), "30pt")
-                # touched 只记预设自有——保存不写继承值
-                self.assertNotIn(("h1.title", "font-size"), dlg._touched)
-                self.assertIn(("p.head", "font-size"), dlg._touched)
-                dlg._loaded_block = dlg._source_edit.toPlainText()
-            finally:
-                dlg.close()
+            # 出厂基线启动（不受本机 run.json 默认预设影响）
+            with mock.patch.object(ce, "current_theme_value",
+                                   return_value="pdf_docx.css"):
+                dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+                try:
+                    open30 = dlg._rows["h1.title"]["size"].text()
+                    self.assertEqual(open30, "30pt")  # 打开时显示出厂有效值
+                    dlg._load_preset_path(fn)
+                    # 预设自有生效
+                    self.assertEqual(
+                        dlg._rows["p.head"]["size"].text(), "40pt")
+                    # 未覆盖的显示继承（base），不是空白
+                    self.assertEqual(
+                        dlg._rows["h1.title"]["size"].text(), "30pt")
+                    # touched 只记预设自有——保存不写继承值
+                    self.assertNotIn(("h1.title", "font-size"), dlg._touched)
+                    self.assertIn(("p.head", "font-size"), dlg._touched)
+                    dlg._loaded_block = dlg._source_edit.toPlainText()
+                finally:
+                    dlg.close()
         finally:
             shutil.rmtree(root, ignore_errors=True)
 

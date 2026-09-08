@@ -28,7 +28,7 @@ _STYLES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__fil
                            "styles")
 # 样式表卡：默认两 CSS（路径, 说明）
 STYLE_FILES = (
-    ("pdf_docx.css", "印刷主题（pdf/docx 默认；html/epub 追加覆盖）"),
+    ("pdf_docx.css", "印刷主题（pdf/docx 专用）"),
     ("cbeta_golden.css", "电子书基底（html/epub；官方电子书样式）"),
 )
 FACTORY_NAME = os.path.join("pycbeta", "config.json")
@@ -310,10 +310,10 @@ def options_from_presets(presets):
     return XmlOptions(
         page=dflt if dflt in pages else ("a4" if "a4" in pages
                                          else next(iter(pages), "a4")),
-        font_lang="zh-Hant",
-        engine="docx2pdf",
+        font_lang=presets.get("font_lang") or "zh-Hant",
+        engine=presets.get("engine") or "docx2pdf",
         margins=None,
-        formats=["pdf"],
+        formats=list(presets.get("formats") or ["pdf"]),
         output={k: copy.deepcopy(v) for k, v in out.items()
                 if k not in ("pagination", "series_title")},
         font_scale=float(out.get("font_scale", 1.0) or 1.0),
@@ -607,7 +607,7 @@ class XmlOptionsPanel(QWidget):
             form.addRow(f"{name}\n{desc}", row)
             self.style_rows[name] = (edit, open_btn)
         self.btn_editor = QPushButton("打开 CSS 编辑器…")
-        self.btn_editor.setToolTip("DOCX 所见即所得调样式（左改参/右预览），CSS 存 user.css 自动生效")
+        self.btn_editor.setToolTip("DOCX 所见即所得调样式（左改参/右预览），存预设进 css-presets/")
         self.btn_editor.clicked.connect(self._open_style_editor)
         form.addRow("", self.btn_editor)
         return w
@@ -894,10 +894,14 @@ class XmlOptionsPanel(QWidget):
         self._changed()
 
     def _presets_merged(self, cur):
-        """当前槽为底 + 面板值合并 → 可存 presets（含所选纸张作默认纸张）。"""
+        """当前槽为底 + 面板值合并 → 可存 presets（含所选纸张作默认纸张；
+        格式/引擎/字库顶层直存，保证保存→载入 roundtrip）。"""
         data = copy.deepcopy(cur)
         opts = self.get_options()
         data["default_page"] = opts.page
+        data["formats"] = list(opts.formats or ["pdf"])
+        data["engine"] = opts.engine or "docx2pdf"
+        data["font_lang"] = opts.font_lang or "zh-Hant"
         data.setdefault("output", {}).update(copy.deepcopy(opts.output or {}))
         if opts.pagination:
             data["output"]["pagination"] = copy.deepcopy(opts.pagination)
