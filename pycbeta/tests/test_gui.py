@@ -335,6 +335,44 @@ class TestConfigBar(unittest.TestCase):
             self.assertNotIn("custom_margins",
                              saved["data"]["pages"]["a4"])
 
+    def test_uncheck_restores_custom_not_preset(self):
+        import pycbeta.gui.panel as pm
+        m25 = {"top": 25.4, "right": 25.4, "bottom": 25.4, "left": 25.4}
+        m20 = {"top": 20.0, "right": 20.0, "bottom": 20.0, "left": 20.0}
+        base = {"output": {}, "pages": {
+            "a4": {"margins": dict(m25)},
+            "a5": {"margins": dict(m25), "custom_margins": dict(m20)}}}
+        panel = pm.XmlOptionsPanel(dict(base))
+        # 载入 a5 自定义：不跟随，显示 20
+        panel.set_options(pm.XmlOptions(page="a5", margins=dict(m20)))
+        self.assertFalse(panel.margin_follow.isChecked())
+        self.assertEqual(panel.margin_spins["top"].value(), 20.0)
+        # 勾选跟随 → 显示 plain 预设 25.4
+        panel.margin_follow.setChecked(True)
+        self.assertEqual(panel.margin_spins["top"].value(), 25.4)
+        # 再取消勾选 → 回到已存自定义 20.0（不能拿预设覆盖）
+        panel.margin_follow.setChecked(False)
+        self.assertEqual(panel.margin_spins["top"].value(), 20.0)
+
+    def test_save_refreshes_presets_cache(self):
+        import unittest.mock as mock
+        import pycbeta.gui.panel as pm
+        base = {"output": {}, "pages": {"a4": {"margins": {"top": 25.4,
+                                                           "right": 25.4,
+                                                           "bottom": 25.4,
+                                                           "left": 25.4}}}}
+        with mock.patch.object(pm, "load_slot",
+                               return_value=(dict(base), "user")), \
+                mock.patch.object(pm, "save_current"), \
+                mock.patch("os.path.isfile", return_value=True):
+            panel = pm.XmlOptionsPanel(dict(base))
+            panel.margin_follow.setChecked(False)
+            panel.margin_spins["top"].setValue(22.0)
+            panel._on_save()
+            # 内存预设同步，否则取消勾选读到旧值
+            cm = panel._presets["pages"]["a4"]["custom_margins"]
+            self.assertEqual(cm["top"], 22.0)
+
     def test_typo_save_load_roundtrip(self):
         import unittest.mock as mock
         import pycbeta.gui.panel as pm

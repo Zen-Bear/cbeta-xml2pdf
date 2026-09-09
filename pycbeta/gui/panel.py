@@ -566,10 +566,16 @@ class XmlOptionsPanel(QWidget):
         return {k: float(m.get(k, 25.4))
                 for k in ("top", "right", "bottom", "left")}
 
-    def _fill_margin_spins(self):
-        """spin 显示刷新为当前纸张预设值（只显示，不写配置）。"""
+    def _fill_margin_spins(self, use_custom=False):
+        """spin 显示刷新。use_custom=False（默认）：plain 预设（跟随显示）；
+        True：已存 custom 优先、否则预设（取消勾选恢复上次自定义）。"""
         from PySide6.QtCore import QSignalBlocker
-        base = self._preset_margins()
+        if use_custom:
+            from pycbeta.theme import resolve_page
+            page = self.page_box.currentData() or self.page_box.currentText()
+            base = resolve_page(page, self._presets.get("pages"))["margins"]
+        else:
+            base = self._preset_margins()
         for k, sp in self.margin_spins.items():
             with QSignalBlocker(sp):
                 sp.setValue(float(base.get(k, 25.4)))
@@ -582,7 +588,8 @@ class XmlOptionsPanel(QWidget):
             # 看着像还在用它——上报 bug 的"点两次才刷新"就是缺这一下）
             self._fill_margin_spins()
         elif fill:
-            self._fill_margin_spins()
+            # 取消勾选：恢复已存自定义，没有才拿预设作起点（不能拿预设覆盖自定义）
+            self._fill_margin_spins(use_custom=True)
         self._changed()
 
     def _on_page_changed(self, _i):
@@ -1027,7 +1034,8 @@ class XmlOptionsPanel(QWidget):
     # ---------- 三槽 ----------
     def _on_save(self):
         cur, _actual = load_slot("user")
-        save_current(self._presets_merged(cur))
+        self._presets = self._presets_merged(cur)
+        save_current(self._presets)
         self.refresh_slot_label("（已保存）")
         self._refresh_load_button()
         self._changed()

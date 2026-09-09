@@ -129,6 +129,9 @@
     点两次才对）→ `_fill_margin_spins` 统一显示刷新；附带修同根静默 bug：跟随批量时 base 的
     僵尸 `custom_margins` 进临时快照，CLI 按它渲染而界面显示跟随——`write_temp_presets` 跟随时
     主动剥离；全量 410 OK
+  - 取消跟随恢复自定义（2026-09-09）：取消勾选一律填 plain 预设，当场覆盖框里的已存自定义，
+    再也回不去 → 取消时优先恢复已存 custom（没有才拿预设作起点）；附带保存后同步内存预设
+    （否则刚存的值取消勾选时读不到）；全量 416 OK，verify 8/0
   - 字号单源 body（2026-09-08 用户立项并定 A）：`body{font-size:12pt}` 为唯一源，`p` 删字号走继承；
     `pages.doc_size` 键删除（9 纸张），doc 默认跟 `Theme.base_pt`（p→body 绝对值，未知回 11）；
     `docx_run` 半磅 `int`→`round` + 支持 `%`，`docx_para` font_pt 同样解 em，`_tag_base_pt` 默认走
