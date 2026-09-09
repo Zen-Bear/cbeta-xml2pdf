@@ -399,7 +399,22 @@ def main(argv=None):
     vg.add_argument("--font-check", action="store_true",
                     help="豆腐字检测：逐字核对渲染字表覆盖率并打印报告（TOFU/仅补充字形/缺失字体，不中断渲染）")
 
+    dg = ap.add_argument_group("官方数据更新（缺字库/字型/目录）")
+    dg.add_argument("--update-data", action="store_true",
+                    help="从上游直链同步本地（先校验再落盘，一致跳过；URL 见 publish/mulu/REMOTE_SOURCES.md §1）")
+    dg.add_argument("--dry-run", action="store_true",
+                    help="配合 --update-data：只下载比对不写盘")
+
     args = ap.parse_args(argv)
+
+    if args.update_data:
+        from .update_data import update_all, format_report
+        for line in format_report(update_all(dry_run=args.dry_run)):
+            try:
+                print(line)
+            except UnicodeEncodeError:
+                print(line.encode("gbk", "replace").decode("gbk"))
+        return 0
 
     if args.list_fonts is not None:
         from .fonts import search_fonts
