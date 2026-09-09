@@ -179,6 +179,57 @@ class TestBasePtSingleSource(unittest.TestCase):
         self.assertEqual(DocxRenderer(theme=t).doc_size, 14.0)
         self.assertEqual(DocxRenderer(theme=t3).doc_size, 12.0)
 
+    def test_apply_page_typography(self):
+        from pycbeta.theme import Theme, apply_page_typography
+        pages = {"16开": {"body_font_size": "10.5pt", "body_line_height": 1.5},
+                 "MyPage": {"body_font_size": "11pt"},
+                 "a4": {}}
+        t = Theme.from_css("body { font-size: 12pt; line-height: 1.4; }\n")
+        apply_page_typography(t, "16开", pages)
+        self.assertEqual(t.tags["body"]["font-size"], "10.5pt")
+        self.assertEqual(t.tags["body"]["line-height"], "1.5")
+        self.assertEqual(t.base_pt(), 10.5)
+        # 大小写不敏感（拉丁名）
+        t2 = Theme.from_css("body { font-size: 12pt; line-height: 1.4; }\n")
+        apply_page_typography(t2, "MYPAGE", pages)
+        self.assertEqual(t2.tags["body"]["font-size"], "11pt")
+        self.assertEqual(t2.tags["body"]["line-height"], "1.4")  # 未写不动
+        # 无键不动
+        t3 = Theme.from_css("body { font-size: 12pt; line-height: 1.4; }\n")
+        apply_page_typography(t3, "a4", pages)
+        self.assertEqual(t3.tags["body"]["font-size"], "12pt")
+        # 非法值忽略并保留原值
+        t4 = Theme.from_css("body { font-size: 12pt; line-height: 1.4; }\n")
+        apply_page_typography(t4, "x", {"x": {"body_font_size": "abc",
+                                              "body_line_height": "??"}})
+        self.assertEqual(t4.tags["body"]["font-size"], "12pt")
+        self.assertEqual(t4.tags["body"]["line-height"], "1.4")
+
+    def test_docx_follows_page_typography(self):
+        from pycbeta.theme import Theme
+        from pycbeta.render_docx import DocxRenderer
+        t = Theme.from_css("body { font-size: 12pt; }\np { color: #000; }\n")
+        from pycbeta.theme import apply_page_typography
+        apply_page_typography(t, "16开", {"16开": {"body_font_size": "10.5pt",
+                                                  "body_line_height": 1.5}})
+        r = DocxRenderer(theme=t)
+        self.assertEqual(r.doc_size, 10.5)  # 文档默认跟纸张
+        self.assertIn('w:val="21"/>', t.docx_run("p"))  # 正文 10.5pt
+
+    def test_explicit_p_beats_page(self):
+        from pycbeta.theme import Theme, apply_page_typography
+        # p 亲笔写过字号 → 纸张只改 body，不动 p（CSS 语义：p 规则胜继承）
+        t = Theme.from_css("body { font-size: 12pt; }\n"
+                           "p { font-size: 14pt; }\n")
+        self.assertIn(("p", "font-size"), t._explicit)
+        self.assertNotIn(("p", "font-size"), Theme()._explicit)  # DEFAULT 不算
+        apply_page_typography(t, "16开", {"16开": {"body_font_size": "10.5pt",
+                                                  "body_line_height": 1.5}})
+        self.assertEqual(t.tags["body"]["font-size"], "10.5pt")
+        self.assertEqual(t.tags["p"]["font-size"], "14pt")
+        # 行距同理：没写过才跟
+        self.assertEqual(t.tags["p"].get("line-height"), "1.5")
+
     def test_name_case_insensitive(self):
         from pycbeta.theme import resolve_page
         pages = {"tablet9": {"size": [121, 194],

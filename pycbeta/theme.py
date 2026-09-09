@@ -679,6 +679,40 @@ def _lookup_ci(mapping: Dict, name: str):
     return None
 
 
+def apply_page_typography(theme, page, page_presets):
+    """纸张绑字号：pages.<page> 的 body_font_size/body_line_height 覆盖 theme body。
+
+    纸张赢 CSS（纸张是更具体的上下文；CSS 编辑器改 body 只影响没写键的纸）。
+    p 没亲笔写过字号/行距时跟 body 走（否则 DOCX 里 DEFAULT 的 p=12pt 会盖住
+    body 覆盖——OOXML 无继承，run/命名样式都取 p 自身值）。
+    无键/非法值 → 不动（并打印警告）。返回同一 theme（链式）。纯逻辑（除打印）。
+    """
+    entry = _lookup_ci(page_presets or {}, page or "")
+    if not isinstance(entry, dict):
+        return theme
+    props = theme.tags.setdefault("body", {})
+    explicit = getattr(theme, "_explicit", set())
+    fs = entry.get("body_font_size")
+    if isinstance(fs, str) and fs.strip():
+        m = re.match(r"^\s*([\d.]+)\s*pt\s*$", fs)
+        if m and float(m.group(1)) > 0:
+            props["font-size"] = f"{float(m.group(1)):g}pt"
+            if ("p", "font-size") not in explicit:
+                theme.tags.setdefault("p", {})["font-size"] = props["font-size"]
+        else:
+            print(f"pages[{page}].body_font_size 非法，已忽略：{fs!r}"
+                  "（只要绝对 pt，如 10.5pt）")
+    lh = entry.get("body_line_height")
+    if lh is not None and str(lh).strip():
+        if re.match(r"^\s*[\d.]+\s*$", str(lh)):
+            props["line-height"] = str(lh).strip()
+            if ("p", "line-height") not in explicit:
+                theme.tags.setdefault("p", {})["line-height"] = props["line-height"]
+        else:
+            print(f"pages[{page}].body_line_height 非法，已忽略：{lh!r}")
+    return theme
+
+
 def resolve_page(name: str, page_presets: Optional[Dict] = None) -> Dict:
     """把 --page 名字解析成页面配置。
 
@@ -735,6 +769,13 @@ class Theme:
                 merged.setdefault(tag, {}).update(props)
         self.tags = merged
         self.compounds = compounds
+        # 显式来源：CSS 解析出的 (tag, prop) + 构造参数（DEFAULT_THEME 不算）。
+        # 供 apply_page_typography 判定 p 是否"亲笔写过"（写过则纸张不覆盖它）。
+        explicit = {(t, k) for t, props in parsed.items() for k in props} \
+            if raw_css else set()
+        if tags:
+            explicit |= {(t, k) for t, props in tags.items() for k in props}
+        self._explicit = explicit
         # 字体变量（CSS :root 双栏，active lang 代入）：缺 font-family 的标签
         # 按变量表填充；CSS 已指定的不覆盖（与旧缺省填充同语义）。
         hant, hans = resolve_font_vars(raw_css)

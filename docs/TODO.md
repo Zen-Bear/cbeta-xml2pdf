@@ -127,6 +127,9 @@
     `docx_run` 半磅 `int`→`round` + 支持 `%`，`docx_para` font_pt 同样解 em，`_tag_base_pt` 默认走
     base；其余保持 pt（精确直观），em 只留天生相对处；编辑器字号显示回退 body 值（只显示不写回）；
     附带 0.9em 由 21 变 22（注音小字 10.5→11pt，唯一视觉变化，需目检）；全量 382 OK，verify 8/0
+  - 纸张绑字号亲笔优先（2026-09-09）：`Theme._explicit` 记录 CSS 解析来源（DEFAULT 不算）；
+    `apply_page_typography` 置 body 的同时，p 没亲笔写过才跟（否则 DOCX 里 DEFAULT p=12pt
+    盖住 body 覆盖）；用户 CSS `p:14pt` + 16开 → p 保持 14（CSS 语义）；全量 408 OK
   - 标签锚定+目录可开（2026-09-08）：当前配置恒显示运行组合链（run.json → base 文件/出厂默认），
     保存/载入/设默认/还原只换后缀不再翻转；"打开用户预设目录"无响应是 `_open_local_file` 用
     `isfile` 误杀目录，改 `exists`；全量 382 OK
