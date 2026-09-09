@@ -122,6 +122,9 @@
     载入恢复、`resolve_page` 三级、`write_temp_presets` 同步；取消跟随填预设值作基线，跟随中
     切纸张刷新显示；搭售修 `t2s` 移出 `if margins`；格式栏（formats/engine/font_lang）上轮已
     入库，本次只验证；    全量 381 OK，verify 8/0
+  - 纸张绑字号 GUI（2026-09-09）：页面栏"正文"行（字号/行距框 + 跟随 CSS 复选 + 灰字说明），
+    取消跟随填出厂 CSS 基线，切纸张/改值说明同步；保存写条目、重勾删键、临时快照同步；
+    全量 414 OK，verify 8/0
   - 跟随显示刷新（2026-09-09）：重勾"跟随"不刷显示（disabled 框留旧自定义值，看着像还在用它，
     点两次才对）→ `_fill_margin_spins` 统一显示刷新；附带修同根静默 bug：跟随批量时 base 的
     僵尸 `custom_margins` 进临时快照，CLI 按它渲染而界面显示跟随——`write_temp_presets` 跟随时

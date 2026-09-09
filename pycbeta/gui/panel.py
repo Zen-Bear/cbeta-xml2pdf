@@ -291,6 +291,7 @@ class XmlOptions:
     font_lang: str = "zh-Hant"        # 字库语言（CSS :root 双栏；t2s 自动切简体）
     engine: str = "docx2pdf"
     margins: Optional[dict] = None          # None=跟随页面预设；否则 {top,right,bottom,left} mm
+    typo: Optional[dict] = None             # None=跟随 CSS body；否则 {"font-size","line-height"}
     formats: List[str] = field(default_factory=lambda: ["pdf"])
     output: dict = field(default_factory=dict)
     font_scale: float = 1.0
@@ -310,11 +311,18 @@ def options_from_presets(presets):
     page = dflt if dflt in pages else ("a4" if "a4" in pages
                                        else next(iter(pages), "a4"))
     cm = (pages.get(page) or {}).get("custom_margins")
+    pg = pages.get(page) or {}
+    _fs = (pg.get("body_font_size") or "").strip() \
+        if isinstance(pg.get("body_font_size"), str) else ""
+    _lh = str(pg.get("body_line_height") or "").strip()
+    typo = {"font-size": _fs, "line-height": _lh}
+    typo = {k: v for k, v in typo.items() if v} or None
     return XmlOptions(
         page=page,
         font_lang=presets.get("font_lang") or "zh-Hant",
         engine=presets.get("engine") or "docx2pdf",
         margins=dict(cm) if isinstance(cm, dict) else None,
+        typo=typo,
         formats=list(presets.get("formats") or ["pdf"]),
         output={k: copy.deepcopy(v) for k, v in out.items()
                 if k not in ("pagination", "series_title")},
@@ -352,6 +360,13 @@ def write_temp_presets(base, opts, path=None):
         _pg = (data.get("pages") or {}).get(opts.page)
         if isinstance(_pg, dict):
             _pg.pop("custom_margins", None)
+    _tpg = data.setdefault("pages", {}).setdefault(opts.page, {})
+    if opts.typo:
+        _tpg["body_font_size"] = opts.typo.get("font-size", "")
+        _tpg["body_line_height"] = opts.typo.get("line-height", "")
+    else:
+        _tpg.pop("body_font_size", None)
+        _tpg.pop("body_line_height", None)
     data["output"]["t2s"] = bool(opts.t2s)
     data["output"]["vertical"] = bool(opts.vertical)
     data["output"]["font_scale"] = float(opts.font_scale or 1.0)
@@ -495,6 +510,38 @@ class XmlOptionsPanel(QWidget):
                 box.addLayout(cell)
             grid.addLayout(box, 0, col)
         form.addRow("边距", grid)
+        trow = QHBoxLayout()
+        trow.addWidget(QLabel("字号"))
+        self.typo_size_spin = QDoubleSpinBox()
+        self.typo_size_spin.setRange(6.0, 72.0)
+        self.typo_size_spin.setSingleStep(0.5)
+        self.typo_size_spin.setDecimals(1)
+        self.typo_size_spin.setSuffix(" pt")
+        self.typo_size_spin.setEnabled(False)
+        self.typo_size_spin.valueChanged.connect(
+            lambda _v: (self._refresh_typo_display(), self._changed()))
+        trow.addWidget(self.typo_size_spin)
+        trow.addWidget(QLabel("行距"))
+        self.typo_lh_spin = QDoubleSpinBox()
+        self.typo_lh_spin.setRange(0.5, 3.0)
+        self.typo_lh_spin.setSingleStep(0.05)
+        self.typo_lh_spin.setDecimals(2)
+        self.typo_lh_spin.setEnabled(False)
+        self.typo_lh_spin.valueChanged.connect(
+            lambda _v: (self._refresh_typo_display(), self._changed()))
+        trow.addWidget(self.typo_lh_spin)
+        self.typo_follow = QCheckBox("跟随 CSS body")
+        self.typo_follow.setChecked(True)
+        self.typo_follow.setToolTip("勾选则该纸张用 CSS body 字号行距；取消后可改，存入纸张条目")
+        self.typo_follow.toggled.connect(
+            lambda v: self._on_typo_follow(v, fill=True))
+        trow.addWidget(self.typo_follow)
+        trow.addStretch(1)
+        form.addRow("正文", trow)
+        self.typo_info = QLabel("")
+        self.typo_info.setStyleSheet("color: gray")
+        self.typo_info.setWordWrap(True)
+        form.addRow("", self.typo_info)
         self.grayscale_box = self._check("黑白输出")
         self.border_box = self._check("页面边框")
         form.addRow("", self.grayscale_box)
@@ -502,10 +549,22 @@ class XmlOptionsPanel(QWidget):
         return w
 
     def _preset_margins(self):
-        """当前纸张预设边距（取消跟随时填入作改 baseline；显示刷新同源）。"""
-        from pycbeta.theme import resolve_page
+        """当前纸张预设边距（plain margins，忽略 custom_margins）。
+        取消跟随填基线 / 跟随显示刷新同源；渲染侧 resolve_page 另走 custom 优先，
+        两边各取所需（显示刷新的 bug 根因：之前复用 resolve_page 拿到 custom）。"""
+        pages = self._presets.get("pages") or {}
         page = self.page_box.currentData() or self.page_box.currentText()
-        return resolve_page(page, self._presets.get("pages"))["margins"]
+        entry = pages.get(page) or {}
+        if not entry:
+            low = (page or "").lower()
+            for k, v in pages.items():
+                if isinstance(k, str) and k.lower() == low \
+                        and isinstance(v, dict):
+                    entry = v
+                    break
+        m = entry.get("margins") or {}
+        return {k: float(m.get(k, 25.4))
+                for k in ("top", "right", "bottom", "left")}
 
     def _fill_margin_spins(self):
         """spin 显示刷新为当前纸张预设值（只显示，不写配置）。"""
@@ -530,6 +589,59 @@ class XmlOptionsPanel(QWidget):
         # 跟随中切纸张：spin 显示刷新为新预设（disabled 仅展示）
         if self.margin_follow.isChecked():
             self._fill_margin_spins()
+        self._refresh_typo_display()
+        self._changed()
+
+    def _css_body_typo(self):
+        """出厂 CSS body 字号行距（取消跟随时填入基线）。"""
+        from pycbeta.gui.css_editor import (body_font_size, body_line_height,
+                                            factory_css_text)
+        try:
+            css = factory_css_text()
+        except OSError:
+            return "12pt", "1.5"
+        import re
+        m = re.match(r"^\s*([\d.]+)\s*pt\s*$", body_font_size(css) or "")
+        size = float(m.group(1)) if m else 12.0
+        lh = body_line_height(css) or "1.5"
+        try:
+            lh_v = float(lh)
+        except (TypeError, ValueError):
+            lh_v = 1.5
+        return size, lh_v
+
+    def _refresh_typo_display(self):
+        """正文行显示：跟随 CSS body，或纸张绑定的当前框值（只显示，不写配置）。"""
+        if self.typo_follow.isChecked():
+            self.typo_info.setText("跟随 CSS body")
+        else:
+            self.typo_info.setText(
+                f"纸张绑定：{self.typo_size_spin.value():g}pt／"
+                f"{self.typo_lh_spin.value():g}")
+
+    def _on_typo_follow(self, follow, fill=False):
+        self.typo_size_spin.setEnabled(not follow)
+        self.typo_lh_spin.setEnabled(not follow)
+        if not follow and fill:
+            from PySide6.QtCore import QSignalBlocker
+            # 基线：本纸已有键用键值，否则出厂 CSS body
+            pg = (self._presets.get("pages") or {}).get(
+                self.page_box.currentData() or self.page_box.currentText()) or {}
+            size, lh = self._css_body_typo()
+            import re
+            m = re.match(r"^\s*([\d.]+)\s*pt\s*$",
+                         (pg.get("body_font_size") or ""))
+            if m:
+                size = float(m.group(1))
+            try:
+                lh = float(pg.get("body_line_height", lh))
+            except (TypeError, ValueError):
+                pass
+            with QSignalBlocker(self.typo_size_spin):
+                self.typo_size_spin.setValue(size)
+            with QSignalBlocker(self.typo_lh_spin):
+                self.typo_lh_spin.setValue(lh)
+        self._refresh_typo_display()
         self._changed()
 
     def _on_t2s(self, checked):
@@ -959,6 +1071,12 @@ class XmlOptionsPanel(QWidget):
             _pg["custom_margins"] = copy.deepcopy(opts.margins)
         else:
             _pg.pop("custom_margins", None)  # 重勾跟随后真还原，不留僵尸
+        if opts.typo:
+            _pg["body_font_size"] = opts.typo.get("font-size", "")
+            _pg["body_line_height"] = opts.typo.get("line-height", "")
+        else:
+            _pg.pop("body_font_size", None)  # 重勾跟随后真还原
+            _pg.pop("body_line_height", None)
         data.setdefault("output", {}).update(copy.deepcopy(opts.output or {}))
         if opts.pagination:
             data["output"]["pagination"] = copy.deepcopy(opts.pagination)
@@ -1026,6 +1144,10 @@ class XmlOptionsPanel(QWidget):
         pipe = "docx2pdf" if self.engine_docx.isChecked() else "html2pdf"
         single = self.single_box.currentData() or ""
         engine = f"{pipe}:{single}" if single else pipe
+        typo = None
+        if not self.typo_follow.isChecked():
+            typo = {"font-size": f"{self.typo_size_spin.value():g}pt",
+                    "line-height": f"{self.typo_lh_spin.value():g}"}
         return XmlOptions(
             page=self.page_box.currentData() or self.page_box.currentText(),
             font_lang=self.lang_box.currentData() or "zh-Hant",
@@ -1053,6 +1175,7 @@ class XmlOptionsPanel(QWidget):
                           **self._series_extra},
             t2s=self.t2s_box.isChecked(),
             vertical=self.vert_box.isChecked(),
+            typo=typo,
             annotations={
                 "enabled": self.ann_on.isChecked(),
                 "scheme": self.ann_scheme.currentData(),
@@ -1086,6 +1209,20 @@ class XmlOptionsPanel(QWidget):
             self._on_margin_follow(opts.margins is None, fill=False)
             if opts.margins is None:
                 self._on_page_changed(-1)  # 跟随时显示刷新为预设值
+            self.typo_follow.setChecked(opts.typo is None)
+            if opts.typo:
+                import re as _re
+                m = _re.match(r"^\s*([\d.]+)\s*pt\s*$",
+                              opts.typo.get("font-size", ""))
+                if m:
+                    self.typo_size_spin.setValue(float(m.group(1)))
+                try:
+                    self.typo_lh_spin.setValue(
+                        float(opts.typo.get("line-height", 1.5)))
+                except (TypeError, ValueError):
+                    pass
+            self._on_typo_follow(opts.typo is None, fill=False)
+            self._refresh_typo_display()
             self.grayscale_box.setChecked(bool(opts.output.get("grayscale", False)))
             self.border_box.setChecked(bool(opts.output.get("page_border", False)))
             i = self.lang_box.findData(opts.font_lang or "zh-Hant")

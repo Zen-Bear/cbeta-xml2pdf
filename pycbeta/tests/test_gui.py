@@ -335,6 +335,84 @@ class TestConfigBar(unittest.TestCase):
             self.assertNotIn("custom_margins",
                              saved["data"]["pages"]["a4"])
 
+    def test_typo_save_load_roundtrip(self):
+        import unittest.mock as mock
+        import pycbeta.gui.panel as pm
+        base = {"output": {}, "default_page": "16开", "pages": {
+            "a4": {},
+            "16开": {"body_font_size": "10.5pt", "body_line_height": 1.5}}}
+        saved = {}
+        with mock.patch.object(pm, "load_slot",
+                               return_value=(dict(base), "user")), \
+                mock.patch.object(pm, "save_current",
+                                  side_effect=lambda d, root=None: saved.update(
+                                      data=d)), \
+                mock.patch("os.path.isfile", return_value=True):
+            panel = pm.XmlOptionsPanel(dict(base))
+            # 有键 → 不跟随，框值恢复（默认页即 16开）
+            panel.set_options(pm.options_from_presets(dict(base)))
+            self.assertFalse(panel.typo_follow.isChecked())
+            self.assertEqual(panel.typo_size_spin.value(), 10.5)
+            self.assertIn("10.5pt", panel.typo_info.text())
+            # 改值保存 → 写回条目
+            panel.typo_size_spin.setValue(11.0)
+            panel._on_save()
+            pg = saved["data"]["pages"]["16开"]
+            self.assertEqual(pg["body_font_size"], "11pt")
+            self.assertEqual(pg["body_line_height"], "1.5")
+            # 重勾跟随 → 键删除；显示回跟随
+            panel.typo_follow.setChecked(True)
+            panel._on_save()
+            self.assertNotIn("body_font_size", saved["data"]["pages"]["16开"])
+            self.assertNotIn("body_line_height",
+                             saved["data"]["pages"]["16开"])
+            self.assertIn("跟随 CSS", panel.typo_info.text())
+
+    def test_typo_follow_fills_factory_baseline(self):
+        import pycbeta.gui.panel as pm
+        base = {"output": {}, "pages": {"a4": {}}}
+        panel = pm.XmlOptionsPanel(dict(base))
+        # 出厂 CSS body 12pt/1.4 作基线
+        self.assertTrue(panel.typo_follow.isChecked())
+        self.assertIn("跟随 CSS", panel.typo_info.text())
+        panel.typo_follow.setChecked(False)
+        self.assertEqual(panel.typo_size_spin.value(), 12.0)
+        self.assertEqual(panel.typo_lh_spin.value(), 1.4)
+
+    def test_temp_presets_typo_carry(self):
+        import pycbeta.gui.panel as pm
+        base = {"output": {}, "pages": {"a4": {}}}
+        opts = pm.XmlOptions(page="a4",
+                             typo={"font-size": "10.5pt",
+                                   "line-height": "1.5"})
+        path = pm.write_temp_presets(base, opts)
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+        finally:
+            os.remove(path)
+        self.assertEqual(data["pages"]["a4"]["body_font_size"], "10.5pt")
+        self.assertEqual(data["pages"]["a4"]["body_line_height"], "1.5")
+
+    def test_follow_shows_plain_preset_ignoring_custom(self):
+        import pycbeta.gui.panel as pm
+        m25 = {"top": 25.4, "right": 25.4, "bottom": 25.4, "left": 25.4}
+        m20 = {"top": 20.0, "right": 20.0, "bottom": 20.0, "left": 20.0}
+        base = {"output": {}, "pages": {
+            "a4": {"margins": dict(m25)},
+            "a5": {"margins": dict(m25), "custom_margins": dict(m20)}}}
+        panel = pm.XmlOptionsPanel(dict(base))
+        # 载入 a5 自定义：不跟随，显示 20
+        panel.set_options(pm.XmlOptions(page="a5", margins=dict(m20)))
+        self.assertFalse(panel.margin_follow.isChecked())
+        self.assertEqual(panel.margin_spins["top"].value(), 20.0)
+        # 勾选跟随 → 显示 plain 预设 25.4（不能是 custom 20.0）
+        panel.margin_follow.setChecked(True)
+        self.assertEqual(panel.margin_spins["top"].value(), 25.4)
+        # 跟随中切 a4 → 仍是 plain 预设
+        panel.page_box.setCurrentIndex(panel.page_box.findData("a4"))
+        self.assertEqual(panel.margin_spins["top"].value(), 25.4)
+
     def test_recheck_follow_refreshes_display(self):
         import pycbeta.gui.panel as pm
         base = {"output": {}, "pages": {"a4": {"margins": {"top": 25.4,

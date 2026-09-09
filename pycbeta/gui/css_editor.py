@@ -687,6 +687,14 @@ def body_font_size(css_text):
     return found[-1].strip() if found else ""
 
 
+def body_line_height(css_text):
+    """工作 CSS 里 body{line-height} 最后一个（层叠后胜）→ 原文；无则 ""。
+    面板纸张栏取消跟随时的填入基线（与 body_font_size 配对）。"""
+    found = re.findall(r"body\s*\{[^}]*?line-height\s*:\s*([^;}]+)",
+                       css_text or "")
+    return found[-1].strip() if found else ""
+
+
 def div_note_color(css_text):
     """工作 CSS 里 div.div-note 的颜色（小写 #hex；无则 ""）。
 
