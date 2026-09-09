@@ -275,7 +275,7 @@ def _extract_txt_parts(text: str):
     全库验证结论：4 格缩进非 `[` 行零出现；行首 `[n]`（标题/署名/偈锚）全是正文，
     必须靠缩进区分；注记括号形态为纯数字/`A\\d+`/`\\d+[a-z]`/`＊N-M`；注记恒单行。
     我方 md/html/docx 生成侧注记都在文末，移位后两边同构（正文+注记）再比对。
-    仅简体统一流程调用；传统路径不动。"""
+    经 `_norm_official_txt` 繁简通用调用；无注记行为无操作。"""
     bodies, notes = [], []
     for ln in text.split("\n"):
         if _NOTE_LINE_RE.match(ln):
@@ -283,6 +283,36 @@ def _extract_txt_parts(text: str):
         else:
             bodies.append(ln)
     return "\n".join(bodies), "\n".join(notes)
+
+
+_TXT_HEAD_RE = re.compile(r"\A(#.*\n|[ \t]*\n)+")
+
+
+def _strip_txt_head(text: str) -> str:
+    """官方 txt/txt_notes 版头剥离：文件开头连续 `#` 注释行（CBETA 导出出版块，
+    经 strip_infos 后只剩 `#---/#` 残留，同样在此剥离）+ 空行。
+    生成侧无此块；文中的 `#` 行不动（`\\A` 只锚定开头块）；CBETA 正文永不以 `#` 开头。"""
+    return _TXT_HEAD_RE.sub("", text)
+
+
+def _norm_official_txt(text: str) -> str:
+    """官方 txt/txt_notes 侧对齐（繁简通用）：版头剥离 + 注记块识别挪文末，
+    与生成侧正文+注块同构；无注记行为无操作。渲染侧零触碰。
+    （注：`No.` 行不搬移——生成侧 docNumber 本就在体首，双方同序。）
+    """
+    text = _strip_txt_head(text)
+    tb, tn = _extract_txt_parts(text)
+    return tb + "\n" + tn if tn.strip() else tb
+
+
+_MD_FN_RE = re.compile(r"\[\^\d+\]: ")
+
+
+def _strip_md_marks(text: str) -> str:
+    """生成侧 md 标记剥离（md 种专用）：`## 校注` 块头 + `[^n]: ` 定义标记。
+    官方侧无此标记体系；正文 `[^n]` 引用由 normalize 通规则处理。此处只动精确字面，安全退化。"""
+    text = text.replace("\n\n## 校注\n\n", "\n\n", 1)
+    return _MD_FN_RE.sub("", text)
 
 
 _XML_INLINE_NOTE_PLACES = ("inline", "inline2", "interlinear")
@@ -654,6 +684,9 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
     if fmt == "docx":
         title = (work.metadata.get("title") or "").strip()
         ours_raw = strip_docx_head(ours_raw, title, docnumber, series)
+    if fmt == "md":
+        # md 标记官方侧没有：`## 校注` 块头 + `[^n]: ` 定义标记（引用由 normalize 通规则剥）
+        ours_raw = _strip_md_marks(ours_raw)
     if not compare_infos:
         ours_raw = strip_infos(ours_raw)
     ours = normalize(ours_raw, ruby_brackets)
@@ -828,11 +861,10 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
             if not compare_infos:
                 theirs_raw = strip_infos(theirs_raw)
             bpath_disp = bpath
-        if t2s and bkind in ("txt", "txt_notes"):
-            # 简体：text 族注记块移文末，与生成侧文末注记对齐（传统不动；
-            # true-txt 无注记行时为无操作）
-            _tb, _tn = _extract_txt_parts(theirs_raw)
-            theirs_raw = _tb + "\n" + _tn if _tn.strip() else _tb
+        if bkind in ("txt", "txt_notes"):
+            # text 族官方侧对齐（繁简通用）：版头剥离 + 注记块识别挪文末，
+            # 与生成侧正文+注块同构；无注记行为无操作
+            theirs_raw = _norm_official_txt(theirs_raw)
         if t2s:
             # 简体校验：官方基线（繁体）经同一 t2s 管线转简体后再比对；
             # 作用于剥离后的纯文本，落盘 _compare 文件与比对输入一致

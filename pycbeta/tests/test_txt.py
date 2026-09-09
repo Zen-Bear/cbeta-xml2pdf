@@ -7,7 +7,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from pycbeta.model import E, Gaiji, Note, NoteRef, Text, Work
 from pycbeta.render_txt import TxtRenderer
-from pycbeta.verify import _extract_xml_parts
+from pycbeta.verify import _extract_xml_parts, _strip_txt_head, _norm_official_txt, \
+    _strip_md_marks
 
 
 def _work(body, notes_by_n=None, title="測試經", author="譯者"):
@@ -149,12 +150,10 @@ class TestExtractXmlParts(unittest.TestCase):
 class TestAuxEntry(unittest.TestCase):
     def test_baseline_xml_rejects_other_fmt(self):
         import unittest.mock as mock
-        from pycbeta.parser import P5Parser
         from pycbeta.verify import verify_one
         sample = os.path.join(os.path.dirname(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
             "css-presets", "sample.xml")
-        work = P5Parser().parse(sample)
         d = tempfile.mkdtemp()
         gen = os.path.join(d, "s.md")
         with open(gen, "w", encoding="utf-8") as f:
@@ -162,6 +161,36 @@ class TestAuxEntry(unittest.TestCase):
         with mock.patch("pycbeta.verify.generate_formal", return_value=[gen]):
             with self.assertRaises(ValueError):
                 verify_one(sample, "md", d, d, baseline="xml")
+
+
+class TestOfficialTxtAlign(unittest.TestCase):
+    HEAD = ("#----\n#【經文資訊】大正新脩大藏經\n#【版本記錄】2024\n#----\n\n"
+            "No. 349 [No. 310(42)]\n後經\n\n西晉[15]月氏國譯\n\n聞如是\n\n"
+            "    [15] 月氏國【大】\n")
+
+    def test_strip_head(self):
+        self.assertTrue(_strip_txt_head(self.HEAD).startswith("No. 349"))
+        self.assertNotIn("經文資訊", _strip_txt_head(self.HEAD))
+        # 无版头原样；文中 # 行不动
+        self.assertEqual(_strip_txt_head("No. 1\n正文\n# 注释\n"), "No. 1\n正文\n# 注释\n")
+        self.assertEqual(_strip_txt_head("正文\n"), "正文\n")
+
+    def test_norm_moves_notes(self):
+        out = _norm_official_txt(self.HEAD)
+        # 注行挪文末：正文区无注残留，注在尾部
+        body, _ = out.split("聞如是")
+        self.assertNotIn("[15] 月氏國", body)
+        self.assertTrue(out.rstrip().endswith("月氏國【大】"))
+        # 无注记行为无操作（除版头外）
+        self.assertEqual(_norm_official_txt("No. 1\n正文\n"), "No. 1\n正文\n")
+
+    def test_strip_md_marks(self):
+        s = "# 題\n\n文[^16]字\n\n## 校注\n\n[^16]: 輩【大】\n"
+        self.assertEqual(_strip_md_marks(s), "# 題\n\n文[^16]字\n\n輩【大】\n")
+        # 正文 [^n] 引用不动（归 normalize 通规则）
+        self.assertIn("[^16]", _strip_md_marks(s))
+        # 无标记原样
+        self.assertEqual(_strip_md_marks("正文\n"), "正文\n")
 
 
 if __name__ == "__main__":

@@ -581,7 +581,7 @@ def main(argv=None):
 
     # --verify：复用 pycbeta/verify.py 模块化能力，供 GUI 调用同一入口
     if args.verify:
-        from .verify import normalize as v_norm, extract_text as v_extract, diff_stats as v_diff, find_official as v_find, strip_infos as v_strip_infos, _extract_html_parts as _v_hparts, _extract_txt_parts as _v_tparts, _ann_brackets_from as _v_rb
+        from .verify import normalize as v_norm, extract_text as v_extract, diff_stats as v_diff, find_official as v_find, strip_infos as v_strip_infos, _extract_html_parts as _v_hparts, _norm_official_txt as _v_tnorm, _ann_brackets_from as _v_rb
         import datetime, glob as _glob
         try:
             _presets_full = load_presets(args.config) if args.config else load_presets()
@@ -612,10 +612,9 @@ def main(argv=None):
             from .simplify import simplify_text as _t2s
 
         def _theirs_norm(raw, bkind=None):
-            if args.t2s and bkind in ("txt", "txt_notes"):
-                # 简体：text 族注记块移文末，与生成侧文末注记对齐（传统不动）
-                _tb, _tn = _v_tparts(raw)
-                raw = _tb + "\n" + _tn if _tn.strip() else _tb
+            if bkind in ("txt", "txt_notes"):
+                # text 族官方侧对齐（繁简通用）：版头剥离 + 注记块识别挪文末
+                raw = _v_tnorm(raw)
             return v_norm(_t2s(raw) if _t2s else raw, _rb)
         xmls_v = xmls if os.path.isdir(args.input) else [args.input]
         for xml_fn in xmls_v:
@@ -701,6 +700,9 @@ def main(argv=None):
                     title = (w.metadata.get("title") or "").strip()
                     from .verify import strip_docx_head as _sdh
                     ours_raw_all = _sdh(ours_raw_all, title, docnumber, series)
+                if fmt == "md":
+                    from .verify import _strip_md_marks as _smm
+                    ours_raw_all = _smm(ours_raw_all)
                 ours = v_norm(ours_raw_all, _rb)
                 if not v_compare_infos:
                     ours = v_norm(v_strip_infos(ours_raw_all), _rb)

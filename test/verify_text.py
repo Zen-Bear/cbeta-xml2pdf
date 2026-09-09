@@ -11,8 +11,8 @@ except Exception:
     pass
 from pycbeta.verify import (generate_formal, extract_text, normalize, diff_stats,
                             find_official, strip_infos, strip_docx_head, merge_docx,
-                            _extract_html_parts, _extract_txt_parts, t2s_baseline,
-                            _ann_brackets_from)
+                            _extract_html_parts, _norm_official_txt, _strip_md_marks,
+                            t2s_baseline, _ann_brackets_from)
 from pycbeta.simplify import simplify_work
 from pycbeta.parser import P5Parser
 from pycbeta.theme import load_presets
@@ -198,6 +198,8 @@ def main(argv=None):
             if fmt == "docx":
                 title = (work.metadata.get("title") or "").strip()
                 ours_raw = strip_docx_head(ours_raw, title, docnumber, series)
+            if fmt == "md":
+                ours_raw = _strip_md_marks(ours_raw)
             if not compare_infos:
                 ours_raw = strip_infos(ours_raw)
             ours = normalize(ours_raw, _ruby_brackets)
@@ -310,11 +312,9 @@ def main(argv=None):
                     if not compare_infos:
                         theirs_raw = strip_infos(theirs_raw)
                     bpath_disp = bpath
-                if args.t2s and bkind in ("txt", "txt_notes"):
-                    # 简体：text 族注记块移文末，与生成侧文末注记对齐（传统不动；
-                    # true-txt 无注记行时为无操作）
-                    _tb, _tn = _extract_txt_parts(theirs_raw)
-                    theirs_raw = _tb + "\n" + _tn if _tn.strip() else _tb
+                if bkind in ("txt", "txt_notes"):
+                    # text 族官方侧对齐（繁简通用）：版头剥离 + 注记块识别挪文末
+                    theirs_raw = _norm_official_txt(theirs_raw)
                 if args.t2s:
                     # 简体校验：官方基线（繁体）经同一 t2s 管线转简体后再比对；
                     # 作用于剥离后的纯文本，落盘 _compare 文件与比对输入一致
