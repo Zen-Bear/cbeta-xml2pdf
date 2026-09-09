@@ -239,11 +239,39 @@ def load_last_update(root=None):
         return {}
 
 
-def last_update_summary(root=None):
-    """sidecar 一行摘要（无记录返回空串）。纯函数，供 GUI 显示。"""
+def _git_file_date(root, relpath, timeout=10):
+    """某文件最后入库日期（YYYY-MM-DD；无 git/无记录返回 ""，不抛）。"""
+    import subprocess
+    try:
+        out = subprocess.run(
+            ["git", "log", "-1", "--format=%ad", "--date=short", "--",
+             relpath],
+            cwd=root, capture_output=True, text=True, timeout=timeout,
+            check=False)
+    except Exception:  # noqa: BLE001 —— 无 git 照常显示空
+        return ""
+    return (out.stdout or "").strip().split("\n")[0].strip()
+
+
+def last_update_summary(root=None, sources=None):
+    """sidecar 一行摘要（无记录回退 git 入库日期；都没有返回空串）。
+    纯函数（git 失败不抛），供 GUI 显示。"""
+    base = _repo_root(root)
     records = [(v.get("at", ""), k)
-               for k, v in load_last_update(root).items()
+               for k, v in load_last_update(base).items()
                if isinstance(v, dict) and v.get("at")]
+    if not records:
+        try:
+            rows = sources if sources is not None else load_sources(base)
+        except (OSError, ValueError):
+            return ""
+        for src in rows:
+            if src.get("kind") == "manual" or not src.get("dest"):
+                continue
+            day = _git_file_date(
+                base, os.path.join(*src["dest"]))
+            if day:
+                records.append((day, src["key"]))
     if not records:
         return ""
     records.sort()

@@ -58,8 +58,9 @@
     悉昙/蘭札只有下载页 https://cbeta.org/downloads 无直链，记 manual 项仅展示）；
     缺失/非法大声报错；`fetch.DEFAULT_DOWNLOADS` 保持不动（数据源窗口 URL 早已配置化）
   - 更新记录+预检+重置（2026-09-09）：成功覆盖写 `.last-update.json` sidecar 入库
-    （dry-run/未变不写），数据源窗口灰字显示；ETag/Last-Modified 探针（304 免下载，
-    失败回退全量路）；数据源窗口"重置 URL"（只填表，点确定才保存）
+    （dry-run/未变不写），数据源窗口灰字显示（无记录回退 git 入库日期）；ETag/
+    Last-Modified 探针（304 免下载，失败回退全量路）；数据源窗口"重置 URL"进按钮组
+    Reset 位（只填表，点确定才保存）
 - [x] **P7 中** 竖排 docx（2026-09-05 用户点档3）：`DocxRenderer(vertical=True)` 每节 `sectPr` 写 `<w:textDirection w:val="tbRl"/>`（上→下、右→左；schema 顺序 titlePg 后，节间/文末两路径共用 `sect_inner`）；CLI `--vertical -f docx` 透传（docx2pdf 中间件同传；pdf 管线仍强制 html2pdf）；T0672 实证 16/16 分节；单测 TestDocxVertical 2 项；全量 223 OK。局限：纵排专用 @字体未切（后续）；纵排注码保持横躺（WPS/LO 忽略 w:fitText，全角化拉长版面的弯路已实锤退役，见下；T0672 注码注文无损）；ruby/注音竖排观感待 Word 目检
   - fitText 退役实锤链（2026-09-05）：用户 WPS 盲猜"某些字转 90 度"→ 代码考古确认 `_fit_for_rpr` 用 `w:fitText` + `w:vertAlign=rotate`（原生只管 CJK 横排压缩，不支旋转）→ 真 WPS 目检三连击：注码保持横躺 ✓ / 注文无缺字 ✓ / fitText 渲染层零生效（360° 全角残留、两行一列、版面拉长）→ 全角化拉长否决（版面崩坏）→ fitText 全仓退役（render_docx 删除 `_fit_id/_fit_for_rpr` 及注码/文末区两调用点；TestVerticalMarkers 改锁"无 fitText 残留 + 注码原文完整"，防后人重加；T0672 重渲 fitText:0/tbRl:16/[1] 注码完整；全量 226 OK）
 - [x] **已完成** 注释注码字体可配+大字版字号修复（2026-09-06 用户报：注码 Times New Roman 能否配置；--font-scale 1.5 下正文注码 27pt/序 31.5pt 巨大）

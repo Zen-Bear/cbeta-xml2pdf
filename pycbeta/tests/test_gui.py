@@ -752,6 +752,9 @@ class TestSourceDialog(unittest.TestCase):
         dlg = pm.SourceDialog()
         try:
             self.assertEqual(dlg.btn_reset_urls.text(), "重置 URL")
+            # 重置按钮在对话框按钮组里（确定/取消旁边）
+            self.assertIn(dlg.btn_reset_urls,
+                          dlg._buttons_box.buttons())
             dlg.dl_table.item(0, 1).setText("http://broken/invalid")
             with mock.patch.object(pm, "save_current") as m:
                 dlg._on_reset_urls()
@@ -762,6 +765,28 @@ class TestSourceDialog(unittest.TestCase):
                     for i in range(dlg.dl_table.rowCount())}
             self.assertEqual(vals.get("xml"), factory_dl.get("xml"))
             self.assertIn("点确定保存", dlg.update_status.text())
+        finally:
+            dlg.close()
+
+    def test_accept_saves_edited_urls(self):
+        import unittest.mock as mock
+        import pycbeta.gui.panel as pm
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PySide6.QtWidgets import QApplication
+        QApplication.instance() or QApplication([])
+        dlg = pm.SourceDialog()
+        try:
+            dlg.dl_table.item(0, 1).setText("http://example/custom-xml")
+            with mock.patch.object(pm, "save_current") as m:
+                with mock.patch.object(
+                        pm, "load_slot",
+                        return_value=({"source": {}, "downloads": {}},
+                                      "user")):
+                    dlg.accept()
+                    m.assert_called_once()
+                    saved = m.call_args.args[0]
+                    self.assertEqual(
+                        saved["downloads"]["xml"], "http://example/custom-xml")
         finally:
             dlg.close()
 

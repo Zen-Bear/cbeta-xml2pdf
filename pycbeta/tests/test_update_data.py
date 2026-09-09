@@ -182,6 +182,37 @@ class TestUpdateData(unittest.TestCase):
         self.assertIn("2026-09-09", s)
         self.assertIn("gaiji", s)
 
+    def test_summary_falls_back_to_git_dates(self):
+        import unittest.mock as mock
+        import tempfile
+        import shutil
+        from pycbeta.update_data import last_update_summary
+        root = tempfile.mkdtemp()
+        try:
+            os.makedirs(os.path.join(root, "cbeta", "data"))
+            rows = [{"key": "gaiji", "kind": "json-dict", "url": "u",
+                     "dest": ("cbeta", "data", "cbeta_gaiji.json")},
+                    {"key": "siddham-fonts", "kind": "manual", "url": "u",
+                     "dest": (), "note": ""}]
+            with mock.patch("pycbeta.update_data._git_file_date",
+                            return_value="2026-09-08") as m:
+                s = last_update_summary(root, sources=rows)
+                self.assertIn("2026-09-08", s)
+                self.assertIn("gaiji", s)
+                self.assertNotIn("siddham", s)
+                called = [c.args[1] for c in m.call_args_list]
+                self.assertTrue(any("cbeta_gaiji.json" in str(c)
+                                    for c in called))
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+    def test_git_file_date_no_git(self):
+        import unittest.mock as mock
+        from pycbeta.update_data import _git_file_date
+        with mock.patch("subprocess.run",
+                        side_effect=FileNotFoundError("no git")):
+            self.assertEqual(_git_file_date("/nonexistent", "x"), "")
+
 
 class TestLoadSources(unittest.TestCase):
     def setUp(self):
