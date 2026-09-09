@@ -19,7 +19,7 @@ from .render_epub import EpubRenderer
 from .theme import Theme, PAGE_PRESETS, OUTPUT_PRESETS, ENGINE_PRESETS, load_presets, _PRESETS_PATH
 from .theme import (load_run_config, resolve_pdf_docx_css,
                     resolve_html_base_css, default_run_path, check_run_placeholders,
-                    resolve_effective_config)
+                    resolve_effective_config, apply_page_typography)
 from .filename import apply_template
 
 _ALL_FORMATS = ["html", "pdf", "docx", "md", "epub"]
@@ -375,7 +375,7 @@ def main(argv=None):
     pg.add_argument("--page", default=None,
                     help="页面方案名（缺省有效配置 default_page；config.json 的 "
                          "pages，键大小写不敏感；或内置 a4/a5/信纸/手机/平板8寸/"
-                         "平板9寸/平板11寸/32开/16开）")
+                         "平板9寸/平板11寸/32开/16开/B5）")
 
     pdfg = ap.add_argument_group("PDF 专属")
     pdfg.add_argument("--vertical", action="store_true",
@@ -527,6 +527,8 @@ def main(argv=None):
     pdf_css = resolve_pdf_docx_css(run, run_dir, std=args.pdf_docx_theme,
                                    user=args.pdf_docx_user_theme)
     theme = Theme.from_css(pdf_css, font_lang)
+    # 纸张绑字号（pages 条目 body_* 覆盖 theme body；font_scale 之前先定基准）
+    apply_page_typography(theme, args.page, args.page_presets)
     # html/epub 基底（显式开关 > run.json 槽 > 内置 golden）；html/epub 纯基底
     html_base = resolve_html_base_css(run, run_dir, std=args.html_epub_theme)
     # 西文字体随语言切换（页面方案显式 latin_font 仍优先，见 DocxRenderer）

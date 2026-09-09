@@ -9,13 +9,19 @@
   "pages": {
     // 页面方案：--page 选名字（只管几何：尺寸/边距；字体走 CSS :root 双栏变量）
     // size=[宽mm,高mm]；margins=上下左右 mm；文档兜底字号跟主题 base（body 单源）
+    // body_font_size/body_line_height（可选）：该纸张绑定的正文字号/行距，
+    //   覆盖 theme body（纸张赢 CSS；不写则跟 CSS）。窄栏 12/1.4，宽栏 10.5/1.5。
     "a4": {
       "size": [210, 297],
-      "margins": { "top": 25.4, "right": 25.4, "bottom": 25.4, "left": 25.4 }
+      "margins": { "top": 25.4, "right": 25.4, "bottom": 25.4, "left": 25.4 },
+      "body_font_size": "12pt",
+      "body_line_height": 1.5
     },
     "a5": {
       "size": [148, 210],
-      "margins": { "top": 25.4, "right": 25.4, "bottom": 25.4, "left": 25.4 }
+      "margins": { "top": 25.4, "right": 25.4, "bottom": 25.4, "left": 25.4 },
+      "body_font_size": "12pt",
+      "body_line_height": 1.4
     },
     "信纸": {  // letter 美式信纸（216×279mm）
       "size": [216, 279],
@@ -39,11 +45,21 @@
     },
     "32开": {  // 32开（130×184mm）
       "size": [130, 184],
-      "margins": { "top": 20, "right": 20, "bottom": 20, "left": 20 }
+      "margins": { "top": 20, "right": 20, "bottom": 20, "left": 20 },
+      "body_font_size": "12pt",
+      "body_line_height": 1.4
     },
     "16开": {  // 16开（185×260mm）
       "size": [185, 260],
-      "margins": { "top": 20, "right": 20, "bottom": 20, "left": 20 }
+      "margins": { "top": 20, "right": 20, "bottom": 20, "left": 20 },
+      "body_font_size": "10.5pt",
+      "body_line_height": 1.5
+    },
+    "B5": {  // B5（182×257mm，宽栏同 16开）
+      "size": [182, 257],
+      "margins": { "top": 20, "right": 20, "bottom": 20, "left": 20 },
+      "body_font_size": "10.5pt",
+      "body_line_height": 1.5
     }
   },
 

@@ -53,8 +53,12 @@ html[lang="zh-Hans"] {
   --font-def: 宋体, SimSun;
 }
 body {
-  line-height: 1.5;   /* 全局行距（1.5倍）；DOCX 由各标签 line-height 覆盖 */
-  font-size: 12pt;    /* 全局基准字号（单源）：p 及无字号元素继承它；DOCX em 换算与文档默认锚定它 */
+  /* 基准字号/行距（单源默认值）：没写 body_* 键的纸张跟这里。
+     写了键的纸张以纸张为准（纸张赢 CSS）：32开/A5=12pt/1.4（窄栏饱满），
+     16开/B5=10.5pt/1.5（宽栏防串行，书籍主力字号），A4=12pt/1.5。
+     DOCX 由各标签 line-height 覆盖；em 换算与文档默认锚定基准。 */
+  line-height: 1.4;
+  font-size: 12pt;    /* 小四字号。全局基准字号（单源）：p 及无字号元素继承它；DOCX em 换算与文档默认锚定它 */
 }
 /* body 字体栈（--font-body）：正文全局默认，唯一多段"链"——
    新細明體（Win 繁体首选）→ PMingLiU（同字体英文名）→ Songti TC（macOS 繁体）
