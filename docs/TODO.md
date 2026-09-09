@@ -25,23 +25,12 @@
   - 注意：安装前 `taskkill /F /IM soffice.bin`（`render_pdf.py:89 --headless` 常驻会锁安装目录）
   - 安装文档：`docs/安装说明.md`（2026-09-04：Python 库分组表/八引擎安装验证表/字体安装/CLI 全参数/GUI 使用/校验测试/常见问题）；README 同步（安装节指向新文档、CLI 表补齐 verify/font-check/list-fonts 等缺行）
 
-- [ ] **P12 中** 本地单卷跨目录版本 XML（2026-09-09 用户立项，只调研未动手）
-  - 现状实锤：CBReader 按**冊**分目录（`XML/<CANON>/<VOL>/`），一部跨多册时按卷碎片散落多目录
-    （如 TX0006 般若波羅蜜多心經幽贊：`TX07/TX07n0006_001~_006` + `TX08/TX08n0006_007~` +
-    `TX09/…`，seq 卷号全局连续；`TX07 - TX09` 即此）；每碎片是完整 TEI（含 teiHeader，
-    juan milestone 跨卷连续：卷1 → 卷7，2026-09-09 实测）。
-  - 缺口两处：① `test/merge_cbreader.py` 分组键是 `(canon, vol, stem)`（stem 含 vol，
-    如 `TX07n0006` vs `TX08n0006`）——只合**同目录**按卷碎片，跨册同部产出多个文件；
-    ② 管线下游（`BatchWorker._resolve` / CLI）把每个文件当一部渲染（书名/书签/分页全散）。
-    `find_local_xml` 本身返回列表，能发现碎片，不是瓶颈。
-  - 方案（推荐 A）：增强 `merge_cbreader.py` 做跨册合并——分组键改 `(canon, no)`（stem 去 vol
-    部分归一化），seq 全局排序，teiHeader 取首卷，落盘单文件；不动主链（parser/Work/书签/
-    分页/verify 全不受影响）。B（管线原生多文件感知：find 后归组、顺序 parse 拼接 Work）
-    改动面大（输出命名/书签/分页/verify 全要动），不采用。
-  - 动手前必验：各卷 teiHeader 是否一致（卷次信息有无分歧）；`nkr_note*`/`beg/end` 锚点编号
-    跨卷是否唯一（若卷内自循环，合并后 backfill 冲突，需重编号）；witness/charDecl 跨卷。
-  - 验收：TX0006 跨 TX07-TX?? 合出一部（卷数连续），书签/分页不断；与已合单文件版文本一致；
-    全量回归 + verify 8/0。
+- [x] **已完成 P12** 本地单卷跨目录版本 XML（2026-09-09 立项，2026-09-10 落地 A 方案）
+  - 预检实锤（TX0006：TX07 001-006 + TX08 007-015 + TX09 016-049，seq 全局连续；juan milestone 1-49 连续；每碎片完整 TEI 无 back）：题名仅卷范围各异（取首卷，元数据噪声）；锚点零冲突（重复 id 仅各卷根 xml:id + witness）；charDecl 仅 015 卷 1 字（CB16748，恰被同卷唯一 `<g>` 引用）；body 内 foot 注 4（渲染/抽取双双丢弃，既有语义）+ 无锚 app 8（渲染直吐 lem/rdg，抽取侧镜像漏收——本次修齐）
+  - 落点：`test/merge_cbreader.py` 分组键改 `(canon,no)`（无卷号 stem 回退旧键，长度不同永不串组；排序 `(vol,seq)`）；`merge()` 加 charDecl 按 id 跨卷并集 + 题名差异提示 + back 实质内容警告（body-only 语义不变）；跨册落首卷目录沿首卷 stem（`TX/TX07/TX07n0006.xml`，work id TX0006 不变，零管线改动）；`--only` 三形态（碎片 stem/归一 stem/佛典編號）；单测 `pycbeta/tests/test_merge.py` 7 项
+  - 抽取侧附带修正（aux-only，零渲染影响）：`_extract_xml_parts` body 内无 from/corresp 的 app 收子文本（镜像渲染泛型默认分支；有锚 app 仍丢，残留已知）；单测 `test_body_app_without_anchor_mirrors_render`
+  - 验收：TX0006 实合 49 碎片→1 部（199 body 节点）；合部 body/注块与碎片拼接逐字相等（509548 字）；辅轨 `--baseline xml` 0/0；docx 冒烟 826KB/4642 段/outline 俱全；单测 28 OK（merge/txt/verify）；全量回归按用户指示跳过（改动面：一次性合部脚本 + aux 抽取镜像，渲染/解析零触碰）
+  - 备选 B（管线原生多文件感知）改动面大未采用；旧同目录合部语义保持原样（T01n0001 路径不变，单测锁死）
 - [x] **已完成** 单元测试数据路径迁移（`CBETA` 常量 → `E:\dev\cbeta\test`；`TestRenderYP0012` → `TestRenderYP0019`；`_body` 归一化剥 `<style>`/border span/style 属性/标签空白）
 - [x] **已完成** `parser.py:221` charDecl `xml:id` 命名空间缺陷修复（`{NS_XML}id`）；并调整 `_resolve_gaiji` 优先级为 **gaiji_db → charDecl → raw**（官方 html 与 gaiji_db 一致，charDecl composition 非真实字符，仅作兜底）
 - [x] **P8 低** 官方数据更新（2026-09-09 落实：上游 cbeta_gaiji 8/12 新增 CB35027-CB35032

@@ -329,7 +329,8 @@ def _extract_xml_parts(path: str, inline_brackets: str = "fullwidth"):
     - 仅走 text/body；back 只作注池（与 parser _collect_back 对应）；
     - 文本节点空白归一（`[\\s　]+`→""，与 Text→txt 同规则；tail 同收；注释/PI 跳过节点留 tail）；
     - body 内 <note>：行内 place 才保留子文本，其余整棵丢弃（镜像 _render_inline_note）；
-    - <app>/<anchor>/<mulu> 整棵丢弃（生成侧恒空：app 无 corresp 即 ""；anchor 转 NoteRef/空 E）；
+    - <app>/<anchor>/<mulu> 整棵丢弃（生成侧恒空：back-app 无 corresp 即 ""；anchor 转 NoteRef/空 E）；
+      例外：body 内无 from/corresp 的 app 收子文本（parser 不进 _parse_app，渲染泛型分支直吐 lem/rdg）；
     - <unclear>→□；<g> 经 GaijiDb+charDecl 解析（与 _resolve_gaiji_raw 同优先级）；
     - 其余元素默认收子文本（镜像 _render_e 默认分支）；
     - 注块顺序镜像生成侧：body anchor 文档序（nkr_note_ 去重 + beg 位 app-corresp），
@@ -463,6 +464,12 @@ def _extract_xml_parts(path: str, inline_brackets: str = "fullwidth"):
                     chunks(child, out)
                     out.append(rb)
                 # 非行内注整棵丢弃（body 内注生成侧恒 ""；back 注走注池）
+            elif t == "app" and not child.get("from") and not child.get("corresp"):
+                # body 内无锚 app（lem/rdg 直挂正文，如 TX0006 碎片）：parser 不进
+                # _parse_app（仅 back 的进），渲染侧泛型默认分支直吐子文本，此处镜像
+                # 收子文本。有 from/corresp 的仍整棵丢（渲染侧行内恒空；其注池归并只走
+                # anchor 序，未覆盖——残留已知局限）。
+                chunks(child, out)
             elif t in _XML_DROP_TAGS:
                 pass
             elif t == "unclear":

@@ -142,8 +142,20 @@ class TestExtractXmlParts(unittest.TestCase):
                 "</body><back><app from=\"#beg1\"><lem>異文</lem>"
                 "<rdg wit=\"#A\">別本</rdg></app></back></text>")
         title, author, body, foots = _extract_xml_parts(_write_tei(text))
-        # 无 corresp 的 app 整棵丢弃（lem/rdg 不进正文）
+        # back 内无 corresp 的 app 整棵丢弃（lem/rdg 不进正文）
         self.assertEqual(body, "甲乙")
+        self.assertEqual(foots, [])
+
+    def test_body_app_without_anchor_mirrors_render(self):
+        # body 内无 from/corresp 的 app：渲染侧泛型默认分支直吐 lem+rdg 子文本，
+        # 抽取侧镜像收子文本（TX0006 碎片形态；有锚 app 仍整棵丢）
+        text = ("<text><body><p>室可以居<app><lem>几儿</lem>"
+                "<rdg>可以</rdg></app>儱</p>"
+                "<p>乙<app from=\"#b1\" corresp=\"k9\">异文</app>丙</p></body>"
+                "<back></back></text>")
+        title, author, body, foots = _extract_xml_parts(_write_tei(text))
+        self.assertIn("室可以居几儿可以儱", body)
+        self.assertNotIn("异文", body)
         self.assertEqual(foots, [])
 
 
