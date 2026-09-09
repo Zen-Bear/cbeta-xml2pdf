@@ -15,6 +15,7 @@ from .render_html import HtmlRenderer
 from .render_pdf import PdfRenderer, docx_to_pdf, DOCX_PDF_CHAIN
 from .render_docx import DocxRenderer
 from .render_md import MdRenderer
+from .render_txt import TxtRenderer
 from .render_epub import EpubRenderer
 from .theme import Theme, PAGE_PRESETS, OUTPUT_PRESETS, ENGINE_PRESETS, load_presets, _PRESETS_PATH
 from .theme import (load_run_config, resolve_pdf_docx_css,
@@ -22,8 +23,8 @@ from .theme import (load_run_config, resolve_pdf_docx_css,
                     resolve_effective_config, apply_page_typography)
 from .filename import apply_template
 
-_ALL_FORMATS = ["html", "pdf", "docx", "md", "epub"]
-_FORMAT_EXT = {"html": "", "pdf": ".pdf", "docx": ".docx", "md": ".md", "epub": ".epub"}
+_ALL_FORMATS = ["html", "pdf", "docx", "md", "epub", "txt"]
+_FORMAT_EXT = {"html": "", "pdf": ".pdf", "docx": ".docx", "md": ".md", "epub": ".epub", "txt": ".txt"}
 _FONT_LANGS = ("zh-Hant", "zh-Hans")
 
 
@@ -119,6 +120,13 @@ def render_one(w, fmt, out_dir, out_name, args, theme, html_base=None):
                         inline_brackets=args.inline_brackets,
                         annotations=ann).render_work(w, out_dir, filename=out_name)
         print(f"{w.id}: md({note_mode}) -> {fn}")
+
+    elif fmt == "txt":
+        fn = TxtRenderer(theme=theme, notes=note_mode,
+                         show_notes=args.show_notes,
+                         inline_brackets=args.inline_brackets,
+                         annotations=ann).render_work(w, out_dir, filename=out_name)
+        print(f"{w.id}: txt({note_mode}) -> {fn}")
 
     elif fmt == "epub":
         # epub 纯基底（章节 + style.css 同源，不再进 pdf_docx 主题）
@@ -322,7 +330,7 @@ def main(argv=None):
     shared.add_argument("-o", "--output",
                         help="output file or directory (default: same name+ext in source dir)")
     shared.add_argument("-f", "--format", required=False, default=None,
-                        help="formats: html,pdf,docx,md,epub (comma list) or all")
+                        help="formats: html,pdf,docx,md,epub,txt (comma list) or all")
     shared.add_argument("--theme", default=None,
                         help="已废弃：请用 --pdf-docx-theme/--pdf-docx-user-theme "
                              "（pdf/docx）；html/epub 默认纯官方样式")
@@ -444,7 +452,7 @@ def main(argv=None):
         formats = [f.strip() for f in args.format.split(",") if f.strip()]
         bad = [f for f in formats if f not in _ALL_FORMATS]
         if bad:
-            ap.error(f"unknown format: {', '.join(bad)} (allowed: html,pdf,docx,md,epub,all)")
+            ap.error(f"unknown format: {', '.join(bad)} (allowed: html,pdf,docx,md,epub,txt,all)")
 
     if getattr(args, "theme", None):
         ap.error("--theme 已废弃：pdf/docx 请用 --pdf-docx-theme（整套替换）/"
@@ -655,7 +663,7 @@ def main(argv=None):
                 for kind in ("html","txt","txt_notes","docx","epub","odt"):
                     found = v_find(src, stem, kind, juan=_juan if kind in ("html", "docx", "txt_notes") else None)
                     if found: official[kind] = found
-                base_kind = {"md":"txt","docx":"docx","html":"html","epub":"epub"}.get(fmt,"html")
+                base_kind = {"md":"txt","docx":"docx","html":"html","epub":"epub","txt":"txt"}.get(fmt,"html")
                 bases = []
                 if base_kind in official:
                     bases.append((base_kind, official[base_kind]))
@@ -667,7 +675,7 @@ def main(argv=None):
                 if not bases and v_auto_fetch:
                     # 基线缺失：按需调用 fetch 下载（docx/odt 非 T/X 等 404 静默跳过）
                     from .fetch import ensure_baselines
-                    need = {"md": ["txt"], "docx": ["docx", "html"],
+                    need = {"md": ["txt"], "docx": ["docx", "html"], "txt": ["txt"],
                             "html": ["html"], "epub": ["epub"]}.get(fmt, ["html"])
                     if args.t2s and "txt_notes" not in need:
                         need = ["txt_notes"] + need

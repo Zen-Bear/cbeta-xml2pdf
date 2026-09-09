@@ -41,7 +41,7 @@ PAGINATION_LABELS = {
     "juan_first": "首卷换页", "mulu_level1": "序/品 level1 换页",
     "pb": "按 pb 分页", "tei": "尾页换页",
 }
-FORMATS = ["pdf", "docx", "html", "md", "epub"]
+FORMATS = ["pdf", "docx", "html", "md", "epub", "txt"]
 DOCX_SINGLES = ["msword", "wps", "docbuilder", "libreoffice", "minipdf"]
 HTML_SINGLES = ["chromium", "prince", "weasyprint", "cbetapdf"]
 INSTALL_HINTS = {
