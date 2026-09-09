@@ -7,6 +7,7 @@ __pycache__/
 # 产物（可再生）
 out/
 test/out*/
+test/X1077/
 [Ee]gg-info/
 
 # GUI 用户槽（本机状态，不入库；出厂 pycbeta/config.json 入库）
