@@ -25,12 +25,35 @@
   - 注意：安装前 `taskkill /F /IM soffice.bin`（`render_pdf.py:89 --headless` 常驻会锁安装目录）
   - 安装文档：`docs/安装说明.md`（2026-09-04：Python 库分组表/八引擎安装验证表/字体安装/CLI 全参数/GUI 使用/校验测试/常见问题）；README 同步（安装节指向新文档、CLI 表补齐 verify/font-check/list-fonts 等缺行）
 
+- [ ] **P12 中** 本地单卷跨目录版本 XML（2026-09-09 用户立项，只调研未动手）
+  - 现状实锤：CBReader 按**冊**分目录（`XML/<CANON>/<VOL>/`），一部跨多册时按卷碎片散落多目录
+    （如 TX0006 般若波羅蜜多心經幽贊：`TX07/TX07n0006_001~_006` + `TX08/TX08n0006_007~` +
+    `TX09/…`，seq 卷号全局连续；`TX07 - TX09` 即此）；每碎片是完整 TEI（含 teiHeader，
+    juan milestone 跨卷连续：卷1 → 卷7，2026-09-09 实测）。
+  - 缺口两处：① `test/merge_cbreader.py` 分组键是 `(canon, vol, stem)`（stem 含 vol，
+    如 `TX07n0006` vs `TX08n0006`）——只合**同目录**按卷碎片，跨册同部产出多个文件；
+    ② 管线下游（`BatchWorker._resolve` / CLI）把每个文件当一部渲染（书名/书签/分页全散）。
+    `find_local_xml` 本身返回列表，能发现碎片，不是瓶颈。
+  - 方案（推荐 A）：增强 `merge_cbreader.py` 做跨册合并——分组键改 `(canon, no)`（stem 去 vol
+    部分归一化），seq 全局排序，teiHeader 取首卷，落盘单文件；不动主链（parser/Work/书签/
+    分页/verify 全不受影响）。B（管线原生多文件感知：find 后归组、顺序 parse 拼接 Work）
+    改动面大（输出命名/书签/分页/verify 全要动），不采用。
+  - 动手前必验：各卷 teiHeader 是否一致（卷次信息有无分歧）；`nkr_note*`/`beg/end` 锚点编号
+    跨卷是否唯一（若卷内自循环，合并后 backfill 冲突，需重编号）；witness/charDecl 跨卷。
+  - 验收：TX0006 跨 TX07-TX?? 合出一部（卷数连续），书签/分页不断；与已合单文件版文本一致；
+    全量回归 + verify 8/0。
 - [x] **已完成** 单元测试数据路径迁移（`CBETA` 常量 → `E:\dev\cbeta\test`；`TestRenderYP0012` → `TestRenderYP0019`；`_body` 归一化剥 `<style>`/border span/style 属性/标签空白）
 - [x] **已完成** `parser.py:221` charDecl `xml:id` 命名空间缺陷修复（`{NS_XML}id`）；并调整 `_resolve_gaiji` 优先级为 **gaiji_db → charDecl → raw**（官方 html 与 gaiji_db 一致，charDecl composition 非真实字符，仅作兜底）
 - [x] **P8 低** 官方数据更新（2026-09-09 落实：上游 cbeta_gaiji 8/12 新增 CB35027-CB35032
   ［IDS composition + PUA U+F88D3-D8，管线照 uni_char or composition 走］；cbeta_gaiji.json
   31653→31659 整体覆盖，sanskrit 一致未动；CBETASupplement.ttf 与上游同字节（10150460）
   未动；sutra_mapping.txt 与 publish 原件一致未动；全量 383 OK，verify 8/0）
+  - `--update-data` 官方数据更新入口（2026-09-09）：`pycbeta/update_data.py`（4 项直链：
+    cbeta_gaiji.json / cbeta_sanskrit.json 取 cbeta_gaiji 仓 master，
+    CBETASupplement.ttf 取 cbeta-fonts 仓 main，sutra_mapping 取 heavenchou/cbwork-bin
+    sutralist 直链——URL 来源 publish/mulu/REMOTE_SOURCES.md §1；只同步本仓 4 文件，
+    不搬 publish 的 remote_manager 整套）；下临时文件→先校验（JSON 非空对象/TTF 头+体积/
+    文本非空）再落盘，一致跳过；`--dry-run` 预演；CLI 独立分组短路；单测 7 项全离线
 - [x] **P7 中** 竖排 docx（2026-09-05 用户点档3）：`DocxRenderer(vertical=True)` 每节 `sectPr` 写 `<w:textDirection w:val="tbRl"/>`（上→下、右→左；schema 顺序 titlePg 后，节间/文末两路径共用 `sect_inner`）；CLI `--vertical -f docx` 透传（docx2pdf 中间件同传；pdf 管线仍强制 html2pdf）；T0672 实证 16/16 分节；单测 TestDocxVertical 2 项；全量 223 OK。局限：纵排专用 @字体未切（后续）；纵排注码保持横躺（WPS/LO 忽略 w:fitText，全角化拉长版面的弯路已实锤退役，见下；T0672 注码注文无损）；ruby/注音竖排观感待 Word 目检
   - fitText 退役实锤链（2026-09-05）：用户 WPS 盲猜"某些字转 90 度"→ 代码考古确认 `_fit_for_rpr` 用 `w:fitText` + `w:vertAlign=rotate`（原生只管 CJK 横排压缩，不支旋转）→ 真 WPS 目检三连击：注码保持横躺 ✓ / 注文无缺字 ✓ / fitText 渲染层零生效（360° 全角残留、两行一列、版面拉长）→ 全角化拉长否决（版面崩坏）→ fitText 全仓退役（render_docx 删除 `_fit_id/_fit_for_rpr` 及注码/文末区两调用点；TestVerticalMarkers 改锁"无 fitText 残留 + 注码原文完整"，防后人重加；T0672 重渲 fitText:0/tbRl:16/[1] 注码完整；全量 226 OK）
 - [x] **已完成** 注释注码字体可配+大字版字号修复（2026-09-06 用户报：注码 Times New Roman 能否配置；--font-scale 1.5 下正文注码 27pt/序 31.5pt 巨大）
