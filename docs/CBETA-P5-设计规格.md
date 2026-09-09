@@ -392,7 +392,7 @@ Note 与 App 的**归属版本**（witness 解析后的【大】【宋】…）�
 ```
 python -m pycbeta -i <xml|目录> -f <format> [-o <输出>] [选项]
 
-共享参数（所有格式）: -i/--input  -o/--output  -f/--format{html,pdf,docx,md,epub,all}
+ 共享参数（所有格式）: -i/--input  -o/--output  -f/--format{html,pdf,docx,md,epub,txt,all}
                      --theme  --name-template
 注释（所有格式）   : --notes{footnote,endnote,inline}
 页面（pdf/docx）   : --page{a4,a5,信纸,手机,平板8寸,平板9寸,平板11寸,32开,16开}

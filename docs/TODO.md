@@ -67,11 +67,11 @@
   - `output.notes_marker_font`（默认 "Times New Roman"，如 "宋体, SimSun"；旧键 `marker_font` 回退；`DocxRenderer(notes_marker_font)`，CLI 由 output 透传 docx/pdf 两分支；verify/run_tests/第三方旧 args 走 getattr 默认）
   - 注码默认 0.75em（12pt 正文下 9pt，与 pdf 管线现行值对齐；`pdf_docx.css` 1em→0.75em，`render_pdf.py:517` 硬覆盖删除统一走 theme）
   - 根因：`_scale_font_size` 把 em/% 也乘（相对单位随基准自动放大）+ 注码锚定所在段落 → 1.5 下 1em×18pt 双重放大出 27pt/31.5pt；现 em/% 原样返回（只放 pt），注码锚定正文 `p` 不随标题段；T0672 实证 1.0 注码 18（9pt）/1.5 注码 27（13.5pt 单比）；单测 TestMarker 7 项 + test_theme 同步；verify docx 8/0；全量待跑
-- [ ] **P3 低** 双轨校验 — XML 文本基线（异构 `lxml itertext`）作为渲染基线的辅轨
-  - 背景：`IR` 自比对（两侧同走 `pycbeta/parser.py:40 P5Parser`）会掩盖 `lb/ed`、`charDecl`、`wit` 等解析缺陷
-  - 方案：`html/txt/docx` 渲染基线保持主轨（`pycbeta/verify.py:248 verify_one` 现行）；新增 `verify --baseline xml` 辅轨：官方侧 `lxml.etree.itertext(official.xml)` 直抽，生成侧 `work_text(Work)` 线性化，两侧经 `normalize:18` 后 `diff_stats` 对比
-  - 涉及：`pycbeta/verify.py:189 find_official` 新增 `kind="xml"` 分支、`work_text` 辅助、`base_kind` 映射 `all→xml`
-  - 验收：`T15n0625`/`X60n1116`/`T12n0349` 在 `baseline_root=E:\dev\cbeta\publish\cbeta_xml` 检出时 `0/0`
+- [x] **已完成 P3** 双轨校验 — TxtRenderer 第六格式 + XML 直抽辅轨（2026-09-09）
+  - 路线变更：原文 `work_text()` helper 作废——txt render 是正式管线（可测可用），辅轨即 `verify_one(fmt="txt", baseline="xml")`；`baseline_root=cbeta_xml` 作废（该目录为空）——官方侧直接用输入 XML 本身直抽（版本零偏斜、零新配置）
+  - 落点：`pycbeta/render_txt.py`（TxtRenderer：裸文本，题署去标记、注文末集中无 `[^n]`、表 TAB 化；`notes/show_notes/inline_brackets/annotations` 与 md 对齐）；CLI `-f txt`（`_ALL_FORMATS` 六项，`all` 含 txt）+ GUI 格式栏（默认不勾）；`verify.py:generate_formal` txt 分支 + 主轨 `txt→txt` 映射（cli/verify_text/verify_one 三处）；`verify.py:_extract_xml_parts`（lxml 异构直抽：只走 text/body、back 作注池、anchor 文档序、mod>orig 单选、app/mulu 整棵丢、unclear→□、g 经 GaijiDb+charDecl、行内注括号口径与 generate_formal 同源）；`verify_one(baseline="xml")`（仅 fmt=txt，其余 ValueError；落盘 `*_compare_xml_official.txt`）；`test/verify_text.py --baseline xml`（委托 verify_one，报告 `report_xml.txt`）
+  - 验收：T15n0625/X60n1116/T12n0349 辅轨 0/0（含 t2s）；单测 `test_txt.py` 10 项；全量 429 OK；主轨 docx/html 8/0 不变
+  - 已知局限（非 bug）：主轨 txt-vs-官方txt 与 md 同类红（官方 txt 把全部注变体行内化 + 版头 boilerplate，生成侧注文末集中——语义差异，非丢字；md 同理既有）；`_extract_xml_parts` 与 parser 共享缺字数据（GaijiDb）与版头选取语义，盲区仅限缺字解析本身
 - [x] **已完成 P1 GUI 样式编辑器**（2026-09-06 用户点档：DOCX 所见即所得调 `pdf_docx.css` 字体参数）
   - `pycbeta/gui/css_editor.py`：`CssEditorDialog`（样式表卡按钮弹窗，publish 可复用）+ `python -m pycbeta.gui.css_editor --sample` 独立运行；左标签分组四件套+源码页（tinycss2 红字不覆盖）/右 QTextDocument 模拟预览（回读 `DocxRenderer` run 真值：字号/字体/颜色/加粗/上标，ruby/EQ 展小字灰，注文尾注归并；分页以 Word 为准）/底导出样张 DOCX+PDF（跟主窗口引擎链）+ `user.css` 落盘自动生效+恢复出厂；样张默认 `css-presets/sample.xml`（用户已定稿）
   - 附带修批量桥：`--font-set` 默认省略（保 `user.css` 字体不被 `apply_font_set` 踩；显式组合/t2s 照旧覆盖）；`build_render_cmd` 纯函数可测；单测 TestStyleEditor 8 项；全量待跑
