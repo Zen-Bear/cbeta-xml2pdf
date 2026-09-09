@@ -743,6 +743,42 @@ class TestSourceDialog(unittest.TestCase):
         finally:
             dlg.close()
 
+    def test_reset_urls_fills_factory_without_saving(self):
+        import unittest.mock as mock
+        import pycbeta.gui.panel as pm
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PySide6.QtWidgets import QApplication
+        QApplication.instance() or QApplication([])
+        dlg = pm.SourceDialog()
+        try:
+            self.assertEqual(dlg.btn_reset_urls.text(), "重置 URL")
+            dlg.dl_table.item(0, 1).setText("http://broken/invalid")
+            with mock.patch.object(pm, "save_current") as m:
+                dlg._on_reset_urls()
+                m.assert_not_called()  # 只填表，不保存
+            from pycbeta.theme import load_presets
+            factory_dl = load_presets().get("downloads") or {}
+            vals = {dlg.dl_table.item(i, 0).text(): dlg.dl_table.item(i, 1).text()
+                    for i in range(dlg.dl_table.rowCount())}
+            self.assertEqual(vals.get("xml"), factory_dl.get("xml"))
+            self.assertIn("点确定保存", dlg.update_status.text())
+        finally:
+            dlg.close()
+
+    def test_last_update_shown(self):
+        import unittest.mock as mock
+        import pycbeta.gui.panel as pm
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PySide6.QtWidgets import QApplication
+        QApplication.instance() or QApplication([])
+        with mock.patch("pycbeta.update_data.last_update_summary",
+                        return_value="上次更新 2026-09-09（gaiji）"):
+            dlg = pm.SourceDialog()
+            try:
+                self.assertIn("2026-09-09", dlg.update_status.text())
+            finally:
+                dlg.close()
+
 
 class TestCssEditor(unittest.TestCase):
     """样式编辑器：覆盖块 roundtrip / spec 解析 / user.css 落盘 / 接线（全 offscreen）。"""

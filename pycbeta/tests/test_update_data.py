@@ -55,6 +55,8 @@ class TestUpdateData(unittest.TestCase):
 
     def _run(self, **kw):
         kw.setdefault("sources", _sources())
+        # 默认探针失败 → 走旧全量下载路（离线；探针路径另测）
+        kw.setdefault("probe", lambda u, e, l, d: ("failed", None, None))
         return update_all(root=self.root, **kw)
 
     def test_unchanged_skips_write(self):
@@ -121,6 +123,64 @@ class TestUpdateData(unittest.TestCase):
             {"key": "x", "status": "failed", "detail": "err"}])
         self.assertEqual(len(lines), 2)
         self.assertIn("gaiji", lines[0])
+
+    def test_probe_not_modified_skips_download(self):
+        import unittest.mock as mock
+        body = json.dumps({"CB1": {"uni_char": "x"}}).encode("utf-8")
+        dest = self._seed("gaiji", body)
+        mtime = os.path.getmtime(dest)
+        dl = mock.Mock(return_value=True)
+        rep = update_all(
+            root=self.root, download=dl,
+            sources=_sources(),
+            probe=lambda u, e, l, d: ("not-modified", "E1", "LM1"))
+        self.assertEqual(rep[0]["status"], "unchanged")
+        self.assertIn("免下载", rep[0]["detail"])
+        dl.assert_not_called()
+        self.assertEqual(os.path.getmtime(dest), mtime)
+
+    def test_probe_downloaded_validates_and_writes_sidecar(self):
+        import json as _json
+        new = _json.dumps({"CB1": {"uni_char": "x"},
+                           "CB2": {"uni_char": "y"}}).encode("utf-8")
+
+        def fake_probe(url, etag, lm, dest):
+            with open(dest, "wb") as f:
+                f.write(new)
+            return ("downloaded", "E9", "LM9")
+
+        rep = update_all(root=self.root, sources=_sources(),
+                         probe=fake_probe,
+                         download=lambda u, d: self.fail("should not fallback"))
+        self.assertEqual(rep[0]["status"], "updated")
+        sidecar = _json.load(open(os.path.join(
+            self.root, "cbeta", "data", ".last-update.json"),
+            encoding="utf-8"))
+        self.assertEqual(sidecar["gaiji"]["etag"], "E9")
+        self.assertIn("at", sidecar["gaiji"])
+        # dry-run 不写 sidecar
+        import shutil
+        root2 = tempfile.mkdtemp()
+        try:
+            os.makedirs(os.path.join(root2, "cbeta", "data"))
+            update_all(root=root2, dry_run=True, sources=_sources(),
+                       probe=fake_probe, download=lambda u, d: True)
+            self.assertFalse(os.path.isfile(os.path.join(
+                root2, "cbeta", "data", ".last-update.json")))
+        finally:
+            shutil.rmtree(root2, ignore_errors=True)
+
+    def test_last_update_summary(self):
+        import json as _json
+        from pycbeta.update_data import last_update_summary
+        self.assertEqual(last_update_summary(self.root), "")
+        fn = os.path.join(self.root, "cbeta", "data", ".last-update.json")
+        with open(fn, "w", encoding="utf-8") as f:
+            _json.dump({"gaiji": {"at": "2026-09-09T10:00:00",
+                                  "detail": "x"}}, f)
+        s = last_update_summary(self.root)
+        self.assertIn("2026-09-09", s)
+        self.assertIn("gaiji", s)
 
 
 class TestLoadSources(unittest.TestCase):

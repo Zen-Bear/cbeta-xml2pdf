@@ -1203,12 +1203,17 @@ class SourceDialog(QDialog):
         self.btn_update_data.setToolTip(
             "缺字库/补充字型/目录从上游直链同步（先校验再落盘，一致跳过）")
         self.btn_update_data.clicked.connect(self._on_update_data)
+        self.btn_reset_urls = QPushButton("重置 URL")
+        self.btn_reset_urls.setToolTip("URL 模板恢复出厂值（只动本表，点确定才保存）")
+        self.btn_reset_urls.clicked.connect(self._on_reset_urls)
         self.update_status = QLabel("")
         self.update_status.setStyleSheet("color: gray")
         self.update_status.setWordWrap(True)
         urow.addWidget(self.btn_update_data)
+        urow.addWidget(self.btn_reset_urls)
         urow.addWidget(self.update_status, 1)
         layout.addLayout(urow)
+        self._refresh_last_update()
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
@@ -1216,9 +1221,32 @@ class SourceDialog(QDialog):
         self._buttons_box = buttons
         self._update_worker = None
 
+    def _refresh_last_update(self):
+        from pycbeta.update_data import last_update_summary
+        self.update_status.setText(last_update_summary())
+
+    def _on_reset_urls(self):
+        """URL 模板恢复出厂值（只填表，不保存；点确定才写入用户配置）。"""
+        from pycbeta.theme import load_presets
+        try:
+            factory_dl = load_presets().get("downloads") or {}
+        except (OSError, ValueError):
+            factory_dl = {}
+        keys = [k for k in DOWNLOAD_KEYS if k in factory_dl] + \
+            [k for k in factory_dl.keys() if k not in DOWNLOAD_KEYS]
+        self.dl_table.setRowCount(len(keys))
+        for i, k in enumerate(keys):
+            key_item = QTableWidgetItem(k)
+            key_item.setFlags(key_item.flags() & ~Qt.ItemIsEditable)
+            self.dl_table.setItem(i, 0, key_item)
+            self.dl_table.setItem(i, 1, QTableWidgetItem(
+                str(factory_dl[k])))
+        self.update_status.setText("已重置为出厂（点确定保存）")
+
     def _on_update_data(self):
-        """官方数据更新（后台线程跑；跑完弹报告；期间锁住确定/取消）。"""
+        """官方数据更新（后台线程跑；跑完弹报告；期间锁住更新/重置/确定/取消）。"""
         self.btn_update_data.setEnabled(False)
+        self.btn_reset_urls.setEnabled(False)
         self._buttons_box.setEnabled(False)
         self.update_status.setText("正在从上游同步…")
         self._update_worker = DataUpdateWorker()
@@ -1228,8 +1256,9 @@ class SourceDialog(QDialog):
 
     def _on_update_done(self):
         self.btn_update_data.setEnabled(True)
+        self.btn_reset_urls.setEnabled(True)
         self._buttons_box.setEnabled(True)
-        self.update_status.setText("")
+        self._refresh_last_update()
 
     def _on_update_finished(self, report):
         from pycbeta.update_data import format_report

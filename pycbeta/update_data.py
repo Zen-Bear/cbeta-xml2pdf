@@ -12,8 +12,10 @@ URL 表在 cbeta/data/remote_sources.json（改 URL 只改文件，不改代码�
 import json
 import os
 import tempfile
+import datetime
 
 REMOTE_SOURCES_NAME = ("cbeta", "data", "remote_sources.json")
+LAST_UPDATE_NAME = ("cbeta", "data", ".last-update.json")
 
 _TTF_MAGICS = (b"\x00\x01\x00\x00", b"OTTO", b"true", b"typ1")
 _TTF_MIN_SIZE = 1024 * 1024  # 1MB：防 404 页面冒充
@@ -120,19 +122,27 @@ def _diff_detail(kind, old_raw, new_data, new_raw):
     return f"{len(old_raw)}→{len(new_raw)} 字节"
 
 
-def update_all(root=None, dry_run=False, download=None, sources=None):
+def update_all(root=None, dry_run=False, download=None, sources=None,
+                 probe=None):
     """执行更新 → [{"key","status","detail"}]（纯逻辑，可单测）。
 
     status ∈ unchanged（一致跳过）/ updated（已覆盖）/ preview（dry-run 预告）/
     manual（手动项，仅展示）/ failed（下载失败或校验不通过，本地未动）。
     download(url, dest_tmp) -> bool 可注入（单测）；缺省走 fetch._http_download。
+    probe(url, etag, last_modified, dest_tmp) -> (status, etag, last_modified)
+    可注入；缺省真探针（304 免下载；失败回退 download 全量路）。
     sources 可注入（单测）；缺省读 remote_sources.json。
+    实际覆盖成功后写 sidecar（最后更新记录；dry-run/未变不写）。
     """
     if download is None:
         from .fetch import _http_download as download
+    if probe is None:
+        probe = _conditional_probe
     base = _repo_root(root)
     if sources is None:
         sources = load_sources(base)
+    lastupd = load_last_update(base)
+    pending = {}
     report = []
     for src in sources:
         key, kind, url = src["key"], src["kind"], src["url"]
@@ -145,14 +155,26 @@ def update_all(root=None, dry_run=False, download=None, sources=None):
         fd, tmp = tempfile.mkstemp(prefix="xml2pdf-data-")
         os.close(fd)
         try:
+            meta = lastupd.get(key) or {}
             try:
-                ok = download(url, tmp)
-            except Exception as exc:  # noqa: BLE001 —— 单项失败不断其他项
-                ok = False
-            if not ok:
-                report.append({"key": key, "status": "failed",
-                               "detail": "下载失败"})
+                pstatus, petag, plm = probe(
+                    url, meta.get("etag"), meta.get("last_modified"), tmp)
+            except Exception:  # noqa: BLE001 —— 探针异常按失败回退
+                pstatus, petag, plm = "failed", None, None
+            if pstatus == "not-modified":
+                report.append({"key": key, "status": "unchanged",
+                               "detail": "远端未变，免下载"})
                 continue
+            if pstatus == "failed":
+                try:
+                    ok = download(url, tmp)
+                except Exception:  # noqa: BLE001 —— 单项失败不断其他项
+                    ok = False
+                if not ok:
+                    report.append({"key": key, "status": "failed",
+                                   "detail": "下载失败"})
+                    continue
+                petag, plm = None, None
             with open(tmp, "rb") as f:
                 raw = f.read()
             if kind == "json-dict":
@@ -181,13 +203,82 @@ def update_all(root=None, dry_run=False, download=None, sources=None):
             os.makedirs(os.path.dirname(dest), exist_ok=True)
             os.replace(tmp, dest)
             report.append({"key": key, "status": "updated", "detail": detail})
+            pending[key] = {"at": _now_iso(), "detail": detail,
+                            "etag": petag, "last_modified": plm}
         finally:
             try:
                 if os.path.isfile(tmp):
                     os.remove(tmp)
             except OSError:
                 pass
+    if pending and not dry_run:
+        try:
+            data = load_last_update(base)
+            data.update(pending)
+            with open(os.path.join(base, *LAST_UPDATE_NAME), "w",
+                      encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+                f.write("\n")
+        except OSError:
+            pass
     return report
+
+
+def _now_iso():
+    return datetime.datetime.now().replace(microsecond=0).isoformat()
+
+
+def load_last_update(root=None):
+    """读 sidecar（无文件/非法 → {}，不抛）。"""
+    try:
+        with open(os.path.join(_repo_root(root), *LAST_UPDATE_NAME),
+                  encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def last_update_summary(root=None):
+    """sidecar 一行摘要（无记录返回空串）。纯函数，供 GUI 显示。"""
+    records = [(v.get("at", ""), k)
+               for k, v in load_last_update(root).items()
+               if isinstance(v, dict) and v.get("at")]
+    if not records:
+        return ""
+    records.sort()
+    return f"上次更新 {records[-1][0][:10]}（{'、'.join(k for _, k in records)}）"
+
+
+def _conditional_probe(url, etag, last_modified, dest_tmp, timeout=30):
+    """条件 GET 探针 → (status, etag, last_modified)。
+
+    status ∈ not-modified（304，未下载）/ downloaded（200，已存 dest_tmp）/
+    failed（网络/异常，调用方回退全量下载路）。
+    """
+    import ssl
+    import urllib.error
+    import urllib.request
+    req = urllib.request.Request(url, headers={"User-Agent": "pycbeta/1.0"})
+    if etag:
+        req.add_header("If-None-Match", etag)
+    if last_modified:
+        req.add_header("If-Modified-Since", last_modified)
+    ctx = ssl._create_unverified_context()
+    try:
+        with urllib.request.urlopen(req, timeout=timeout,
+                                     context=ctx) as r:
+            data = r.read()
+            with open(dest_tmp, "wb") as f:
+                f.write(data)
+            return ("downloaded", r.headers.get("ETag"),
+                    r.headers.get("Last-Modified"))
+    except urllib.error.HTTPError as exc:
+        if exc.code == 304:
+            return ("not-modified", etag, last_modified)
+        return ("failed", None, None)
+    except Exception:  # noqa: BLE001 —— 超时/断网等一律回退
+        return ("failed", None, None)
 
 
 def format_report(report):
