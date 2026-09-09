@@ -102,6 +102,24 @@ class TestTempPresets(unittest.TestCase):
         self.assertTrue(data["output"]["t2s"])  # 不依赖 margins 照写
         self.assertNotIn("custom_margins", data.get("pages", {}).get("a4", {}))
 
+    def test_temp_presets_strips_stale_custom_margins(self):
+        from pycbeta.gui.panel import write_temp_presets, XmlOptions
+        # base 带僵尸 custom_margins，但本次跟随 → 快照必须干净
+        base = {"output": {}, "pages": {"a4": {
+            "margins": {"top": 25.4, "right": 25.4,
+                        "bottom": 25.4, "left": 25.4},
+            "custom_margins": {"top": 9.9, "right": 9.9,
+                               "bottom": 9.9, "left": 9.9}}}}
+        opts = XmlOptions(page="a4")  # margins=None（跟随）
+        path = write_temp_presets(base, opts)
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+        finally:
+            os.remove(path)
+        self.assertNotIn("custom_margins", data["pages"]["a4"])
+        self.assertEqual(data["pages"]["a4"]["margins"]["top"], 25.4)
+
 
 class TestOptionsModel(unittest.TestCase):
     def test_defaults(self):
@@ -316,6 +334,20 @@ class TestConfigBar(unittest.TestCase):
             panel._on_save()
             self.assertNotIn("custom_margins",
                              saved["data"]["pages"]["a4"])
+
+    def test_recheck_follow_refreshes_display(self):
+        import pycbeta.gui.panel as pm
+        base = {"output": {}, "pages": {"a4": {"margins": {"top": 25.4,
+                                                           "right": 25.4,
+                                                           "bottom": 25.4,
+                                                           "left": 25.4}}}}
+        panel = pm.XmlOptionsPanel(dict(base))
+        # 取消跟随改值，再重勾：显示必须刷回预设（上报 bug：点两次才刷新）
+        panel.margin_follow.setChecked(False)
+        panel.margin_spins["top"].setValue(20.0)
+        self.assertEqual(panel.margin_spins["top"].value(), 20.0)
+        panel.margin_follow.setChecked(True)
+        self.assertEqual(panel.margin_spins["top"].value(), 25.4)
 
     def test_save_persists_default_page(self):
         import unittest.mock as mock

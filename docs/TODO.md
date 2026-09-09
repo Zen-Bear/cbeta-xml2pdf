@@ -122,6 +122,10 @@
     载入恢复、`resolve_page` 三级、`write_temp_presets` 同步；取消跟随填预设值作基线，跟随中
     切纸张刷新显示；搭售修 `t2s` 移出 `if margins`；格式栏（formats/engine/font_lang）上轮已
     入库，本次只验证；    全量 381 OK，verify 8/0
+  - 跟随显示刷新（2026-09-09）：重勾"跟随"不刷显示（disabled 框留旧自定义值，看着像还在用它，
+    点两次才对）→ `_fill_margin_spins` 统一显示刷新；附带修同根静默 bug：跟随批量时 base 的
+    僵尸 `custom_margins` 进临时快照，CLI 按它渲染而界面显示跟随——`write_temp_presets` 跟随时
+    主动剥离；全量 410 OK
   - 字号单源 body（2026-09-08 用户立项并定 A）：`body{font-size:12pt}` 为唯一源，`p` 删字号走继承；
     `pages.doc_size` 键删除（9 纸张），doc 默认跟 `Theme.base_pt`（p→body 绝对值，未知回 11）；
     `docx_run` 半磅 `int`→`round` + 支持 `%`，`docx_para` font_pt 同样解 em，`_tag_base_pt` 默认走

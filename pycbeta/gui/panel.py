@@ -346,6 +346,12 @@ def write_temp_presets(base, opts, path=None):
     if opts.margins:
         data.setdefault("pages", {}).setdefault(opts.page, {})[
             "custom_margins"] = copy.deepcopy(opts.margins)
+    else:
+        # 跟随：删 base 带来的僵尸 custom_margins，否则 CLI 按它渲染，
+        # 界面却显示"跟随"——所见非所得
+        _pg = (data.get("pages") or {}).get(opts.page)
+        if isinstance(_pg, dict):
+            _pg.pop("custom_margins", None)
     data["output"]["t2s"] = bool(opts.t2s)
     data["output"]["vertical"] = bool(opts.vertical)
     data["output"]["font_scale"] = float(opts.font_scale or 1.0)
@@ -501,25 +507,29 @@ class XmlOptionsPanel(QWidget):
         page = self.page_box.currentData() or self.page_box.currentText()
         return resolve_page(page, self._presets.get("pages"))["margins"]
 
+    def _fill_margin_spins(self):
+        """spin 显示刷新为当前纸张预设值（只显示，不写配置）。"""
+        from PySide6.QtCore import QSignalBlocker
+        base = self._preset_margins()
+        for k, sp in self.margin_spins.items():
+            with QSignalBlocker(sp):
+                sp.setValue(float(base.get(k, 25.4)))
+
     def _on_margin_follow(self, follow, fill=False):
         for spin in self.margin_spins.values():
             spin.setEnabled(not follow)
-        if not follow and fill:
-            from PySide6.QtCore import QSignalBlocker
-            base = self._preset_margins()
-            for k, sp in self.margin_spins.items():
-                with QSignalBlocker(sp):
-                    sp.setValue(float(base.get(k, 25.4)))
+        if follow:
+            # 重勾跟随：显示刷回预设（否则 disabled 框里留着旧自定义值，
+            # 看着像还在用它——上报 bug 的"点两次才刷新"就是缺这一下）
+            self._fill_margin_spins()
+        elif fill:
+            self._fill_margin_spins()
         self._changed()
 
     def _on_page_changed(self, _i):
         # 跟随中切纸张：spin 显示刷新为新预设（disabled 仅展示）
         if self.margin_follow.isChecked():
-            from PySide6.QtCore import QSignalBlocker
-            base = self._preset_margins()
-            for k, sp in self.margin_spins.items():
-                with QSignalBlocker(sp):
-                    sp.setValue(float(base.get(k, 25.4)))
+            self._fill_margin_spins()
         self._changed()
 
     def _on_t2s(self, checked):
