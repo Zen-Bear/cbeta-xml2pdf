@@ -197,6 +197,21 @@ class TestConfigBar(unittest.TestCase):
             self.assertEqual(panel.btn_save.text(), "保存用户配置")
             self.assertEqual(panel.btn_load.text(), "载入用户配置")
             self.assertEqual(panel.btn_set_default.text(), "设为默认")
+            self.assertEqual(panel.btn_update_data.text(), "更新官方数据")
+        finally:
+            panel.close() if hasattr(panel, "close") else None
+
+    def test_update_finished_shows_report(self):
+        import unittest.mock as mock
+        import pycbeta.gui.panel as pm
+        panel = self._panel()
+        try:
+            rep = [{"key": "gaiji", "status": "unchanged", "detail": "1 条"}]
+            with mock.patch.object(pm.QMessageBox, "information") as m:
+                panel._on_update_finished(rep)
+                m.assert_called_once()
+                args, _kw = m.call_args
+                self.assertIn("gaiji", args[2])
         finally:
             panel.close() if hasattr(panel, "close") else None
 

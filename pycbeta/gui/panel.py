@@ -14,12 +14,12 @@ import tempfile
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
-from PySide6.QtCore import Qt, Signal, QUrl
+from PySide6.QtCore import Qt, QThread, Signal, QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox,
     QFileDialog, QFormLayout, QGridLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit,
-    QPushButton, QSpinBox, QTableWidget, QTableWidgetItem, QTabWidget, QVBoxLayout,
+    QMessageBox, QPushButton, QSpinBox, QTableWidget, QTableWidgetItem, QTabWidget, QVBoxLayout,
     QWidget,
 )
 
@@ -357,6 +357,23 @@ def write_temp_presets(base, opts, path=None):
     return path
 
 
+class DataUpdateWorker(QThread):
+    """官方数据更新后台线程：缺字库/字型/目录直链同步（失败不抛，进报告）。"""
+    finished_report = Signal(list)
+
+    def __init__(self, dry_run=False, parent=None):
+        super().__init__(parent)
+        self._dry_run = dry_run
+
+    def run(self):
+        from pycbeta.update_data import update_all
+        try:
+            rep = update_all(dry_run=self._dry_run)
+        except Exception as exc:  # noqa: BLE001 —— 网络全挂也不崩界面
+            rep = [{"key": "all", "status": "failed", "detail": str(exc)}]
+        self.finished_report.emit(rep)
+
+
 class XmlOptionsPanel(QWidget):
     """七选项卡面板。get_options/set_options；值变更发 optionsChanged。"""
     optionsChanged = Signal(object)
@@ -389,16 +406,21 @@ class XmlOptionsPanel(QWidget):
         self.btn_set_default.setToolTip(
             "run.json 的 config-json 槽指向 config.user.json（命令行/GUI 默认用它）")
         self.btn_reset = QPushButton("还原出厂")
+        self.btn_update_data = QPushButton("更新官方数据")
+        self.btn_update_data.setToolTip(
+            "缺字库/补充字型/目录从上游直链同步（先校验再落盘，一致跳过）")
         self.btn_save.clicked.connect(self._on_save)
         self.btn_load.clicked.connect(self._on_load_user)
         self.btn_set_default.clicked.connect(self._on_set_default)
         self.btn_reset.clicked.connect(self._on_reset)
+        self.btn_update_data.clicked.connect(self._on_update_data)
         bar.addWidget(self.slot_label)
         bar.addStretch(1)
         bar.addWidget(self.btn_save)
         bar.addWidget(self.btn_load)
         bar.addWidget(self.btn_set_default)
         bar.addWidget(self.btn_reset)
+        bar.addWidget(self.btn_update_data)
         layout.addWidget(cfg)
         self.tabs = QTabWidget()
         layout.addWidget(self.tabs)
@@ -952,6 +974,21 @@ class XmlOptionsPanel(QWidget):
         self.refresh_slot_label("（已还原）")
         self._refresh_load_button()
         self._changed()
+
+    def _on_update_data(self):
+        """官方数据更新（后台线程跑，跑完弹报告；按钮禁用防重入）。"""
+        self.btn_update_data.setEnabled(False)
+        self._update_worker = DataUpdateWorker()
+        self._update_worker.finished_report.connect(self._on_update_finished)
+        self._update_worker.finished.connect(
+            lambda: self.btn_update_data.setEnabled(True))
+        self._update_worker.start()
+
+    def _on_update_finished(self, report):
+        from pycbeta.update_data import format_report
+        QMessageBox.information(
+            self, "官方数据更新",
+            "\n".join(format_report(report or [])) or "无更新项")
 
     @staticmethod
     def _open_local_file(path):
