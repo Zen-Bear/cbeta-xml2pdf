@@ -27,7 +27,10 @@
 
 - [x] **已完成** 单元测试数据路径迁移（`CBETA` 常量 → `E:\dev\cbeta\test`；`TestRenderYP0012` → `TestRenderYP0019`；`_body` 归一化剥 `<style>`/border span/style 属性/标签空白）
 - [x] **已完成** `parser.py:221` charDecl `xml:id` 命名空间缺陷修复（`{NS_XML}id`）；并调整 `_resolve_gaiji` 优先级为 **gaiji_db → charDecl → raw**（官方 html 与 gaiji_db 一致，charDecl composition 非真实字符，仅作兜底）
-- [ ] **P8 低** 官方数据更新（上游：缺字庫 https://github.com/cbeta-org/cbeta_gaiji ／ 補充字型 https://github.com/cbeta-org/cbeta-fonts，步骤见 `cbeta/data/README.md`）
+- [x] **P8 低** 官方数据更新（2026-09-09 落实：上游 cbeta_gaiji 8/12 新增 CB35027-CB35032
+  ［IDS composition + PUA U+F88D3-D8，管线照 uni_char or composition 走］；cbeta_gaiji.json
+  31653→31659 整体覆盖，sanskrit 一致未动；CBETASupplement.ttf 与上游同字节（10150460）
+  未动；sutra_mapping.txt 与 publish 原件一致未动；全量 383 OK，verify 8/0）
 - [x] **P7 中** 竖排 docx（2026-09-05 用户点档3）：`DocxRenderer(vertical=True)` 每节 `sectPr` 写 `<w:textDirection w:val="tbRl"/>`（上→下、右→左；schema 顺序 titlePg 后，节间/文末两路径共用 `sect_inner`）；CLI `--vertical -f docx` 透传（docx2pdf 中间件同传；pdf 管线仍强制 html2pdf）；T0672 实证 16/16 分节；单测 TestDocxVertical 2 项；全量 223 OK。局限：纵排专用 @字体未切（后续）；纵排注码保持横躺（WPS/LO 忽略 w:fitText，全角化拉长版面的弯路已实锤退役，见下；T0672 注码注文无损）；ruby/注音竖排观感待 Word 目检
   - fitText 退役实锤链（2026-09-05）：用户 WPS 盲猜"某些字转 90 度"→ 代码考古确认 `_fit_for_rpr` 用 `w:fitText` + `w:vertAlign=rotate`（原生只管 CJK 横排压缩，不支旋转）→ 真 WPS 目检三连击：注码保持横躺 ✓ / 注文无缺字 ✓ / fitText 渲染层零生效（360° 全角残留、两行一列、版面拉长）→ 全角化拉长否决（版面崩坏）→ fitText 全仓退役（render_docx 删除 `_fit_id/_fit_for_rpr` 及注码/文末区两调用点；TestVerticalMarkers 改锁"无 fitText 残留 + 注码原文完整"，防后人重加；T0672 重渲 fitText:0/tbRl:16/[1] 注码完整；全量 226 OK）
 - [x] **已完成** 注释注码字体可配+大字版字号修复（2026-09-06 用户报：注码 Times New Roman 能否配置；--font-scale 1.5 下正文注码 27pt/序 31.5pt 巨大）
