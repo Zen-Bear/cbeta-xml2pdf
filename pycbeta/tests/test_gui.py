@@ -1074,6 +1074,10 @@ class TestCssEditor(unittest.TestCase):
                 self.assertTrue(row["font_hans"].isEditable())
                 self.assertEqual(row["font_hant"].insertPolicy(),
                                  QComboBox.NoInsert)
+                # 框体窄（100），弹出放宽（300），互不干扰
+                self.assertEqual(row["font_hant"].minimumWidth(), 100)
+                self.assertGreaterEqual(
+                    row["font_hant"].view().minimumWidth(), 300)
             dlg._loaded_block = dlg._source_edit.toPlainText()
         finally:
             dlg._loaded_block = dlg._source_edit.toPlainText()

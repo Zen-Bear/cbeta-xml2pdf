@@ -1918,10 +1918,12 @@ class CssEditorDialog(QDialog):
             font_hant.setEditable(True)  # 可编辑可搜；本机不存在只能源码输入
             font_hant.setInsertPolicy(QComboBox.NoInsert)
             font_hant.setMinimumWidth(100)
+            font_hant.view().setMinimumWidth(300)  # 平时窄，弹出放宽（框体不变）
             font_hans = _PopupWheelCombo()
             font_hans.setEditable(True)
             font_hans.setInsertPolicy(QComboBox.NoInsert)
             font_hans.setMinimumWidth(100)
+            font_hans.view().setMinimumWidth(300)
             if suffix is None:
                 for _box in (font_hant, font_hans):
                     _box.setEnabled(False)
