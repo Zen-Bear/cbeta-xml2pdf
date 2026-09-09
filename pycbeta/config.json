@@ -25,7 +25,9 @@
     },
     "信纸": {  // letter 美式信纸（216×279mm）
       "size": [216, 279],
-      "margins": { "top": 25.4, "right": 25.4, "bottom": 25.4, "left": 25.4 }
+      "margins": { "top": 25.4, "right": 25.4, "bottom": 25.4, "left": 25.4 },
+      "body_font_size": "12pt",
+      "body_line_height": 1.4
     },
     "手机": {  // 约 8 寸 16:9（100×178mm）
       "size": [100, 178],
