@@ -231,7 +231,7 @@ a.noteAnchor.star { color: #cc0000; }
 /* .footnote/.endnote 映射到 footnote 标签：DOCX 翻译成脚注文字 rPr，
    PDF 对 class="footnote"/"endnote" 元素原样生效 */
 .footnote, .endnote {
-  font-size: 9pt;
+  font-size: 0.75em; /* 正文12pt时=9pt */
   /*color: #333333;*/
   line-height: 1;            /* 行距（1倍） */
   margin: 0.0em 0 0 0;           /* 段前/段后 */
