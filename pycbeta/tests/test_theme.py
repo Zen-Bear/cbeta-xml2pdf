@@ -4,8 +4,8 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from pycbeta.theme import Theme, _scale_font_size, resolve_font_vars, resolve_page, \
-    resolve_theme_css, _abs_pt
+from pycbeta.theme import Theme, _scale_font_size, _scale_font_dict, \
+    resolve_font_vars, resolve_page, resolve_theme_css, _abs_pt
 
 
 class TestScaleHelper(unittest.TestCase):
@@ -21,6 +21,21 @@ class TestScaleHelper(unittest.TestCase):
         self.assertIsNone(_scale_font_size("bold", 1.5))
         self.assertIsNone(_scale_font_size(None, 1.5))
         self.assertIsNone(_scale_font_size("", 2.0))
+
+
+class TestScaleFontDict(unittest.TestCase):
+    def test_pt_scaled_in_place(self):
+        d = {"font-size": "12pt", "font-family": "X"}
+        _scale_font_dict(d, 1.5)
+        self.assertEqual(d, {"font-size": "18pt", "font-family": "X"})
+
+    def test_relative_and_missing_untouched(self):
+        for fs in ("0.75em", "80%", "bold", None):
+            d = {"font-family": "X"}
+            if fs is not None:
+                d["font-size"] = fs
+            _scale_font_dict(d, 1.5)
+            self.assertEqual(d.get("font-size"), fs)
 
 
 class TestScaleFontSizes(unittest.TestCase):
@@ -63,6 +78,14 @@ class TestScaleFontSizes(unittest.TestCase):
         t.scale_font_sizes(1.5)
         self.assertEqual(t.tags["p"]["font-size"], "18pt")
         self.assertIn("SimSun", t.tags["p"]["font-family"])
+
+    def test_compounds_scaled(self):
+        # 第二循环覆盖：出厂 div.div-xu p.head 20pt → 30pt
+        t = Theme().scale_font_sizes(1.5)
+        hits = [c for c in t.compounds
+                if c[0] == "div-xu" and c[1] == "head"]
+        self.assertTrue(hits, "出厂应有 div-xu/head compound")
+        self.assertEqual(hits[0][2]["font-size"], "30pt")
 
     def test_single_source_body_pin(self):
         # 字体来自 CSS :root 变量（繁简双栏），非 font_sets

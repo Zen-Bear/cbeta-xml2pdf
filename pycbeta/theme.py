@@ -258,6 +258,13 @@ def _scale_font_size(value: object, factor: float) -> Optional[str]:
     return f"{text}{m.group(2)}"
 
 
+def _scale_font_dict(props: Dict[str, str], factor: float) -> None:
+    """单个属性字典的 font-size 原地等比缩放（绝对 pt 才乘；缺键/非数值不动）。"""
+    scaled = _scale_font_size(props.get("font-size"), factor)
+    if scaled is not None:
+        props["font-size"] = scaled
+
+
 # ---------------- CSS 字体变量（:root 双栏，font_sets 已删除） ----------------
 # var 名规则：单标签 "--font-<tag>"（如 --font-note-inline），后代组合
 # "--font-<anc>-<tgt>"（如 --font-div-xu-head）；latin 不是标签，单独取。
@@ -905,13 +912,9 @@ class Theme:
         if factor == 1.0:
             return self
         for props in self.tags.values():
-            scaled = _scale_font_size(props.get("font-size"), factor)
-            if scaled is not None:
-                props["font-size"] = scaled
+            _scale_font_dict(props, factor)
         for _anc, _tgt, cprops, _sel in self.compounds:
-            scaled = _scale_font_size(cprops.get("font-size"), factor)
-            if scaled is not None:
-                cprops["font-size"] = scaled
+            _scale_font_dict(cprops, factor)
         rules = []
         for tag, props in self.tags.items():
             sel = TAG_SELECTOR.get(tag)

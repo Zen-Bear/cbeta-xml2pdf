@@ -187,6 +187,7 @@
 - [x] **已完成 P2** 大字版（`output.font_scale` + `--font-scale`，`Theme.scale_font_sizes` 等比缩放 tags 与 raw_css，`doc_size` 跟随；字号不影响逐字校验；单测 11 + 回归 24 0 失败）
   - 落点：`pycbeta/config.json output.font_scale: 1.0`；`pycbeta/theme.py scale_font_sizes`（tags + raw_css 追加覆盖，只调一次）；`pycbeta/cli.py --font-scale`（显式优先于 config，`doc_size` 跟随，`--verify` 时回 1.0）；`output.series_title.size` 保持独立配置
   - 实测：`--font-scale 1.5` docx `w:sz` 24→36、60→90、18→27（精确 1.5 倍）；html 含覆盖规则；单测 58 OK；verify 24 0 失败
+  - 小重构（2026-09-09，语义零变更）："只缩基准"字面做会改变大字版语义（标题绝对字号不动），故走保持语义路线——抽 `_scale_font_dict` helper 消 tags/compounds 双循环重复；补单测锁此前无覆盖的 compounds 循环（div-xu/head 20pt→30pt）+ helper 直测；全量 419 OK
 
 - [x] **已完成 P5** 豆腐字检验（`--font-check` + 缺字字体链；单测 test_fonts + 全量 191 OK；verify 繁体/t2s 16/0）
   - 背景：`fonts/` 目录为空，未随包字库；BMP 缺字（㮈 U+3B88 等）PMingLiU/SimSun 覆盖 ✓，但 Ext B 缺字（𤬪 U+24B2A、𭈫 U+2D22B）仅 `simsunb.ttf` 覆盖，`pycbeta/render_docx.py:438` 对 >0xFFFF 硬编码字体 `"CBETA Supplement"` 未安装→依赖 Word 回退；楷体栈（標楷體 DFKai-SB）覆盖为 0（偈颂/书名 BMP 缺字靠回退）
