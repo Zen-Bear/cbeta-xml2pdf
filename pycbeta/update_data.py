@@ -1,8 +1,8 @@
 """官方数据更新：缺字库 + 补充字型 + sutra_mapping 从上游直链同步本地。
 
-URL 来源：publish/mulu/REMOTE_SOURCES.md §1（sutra_mapping 直链）；
-cbeta_gaiji.json / cbeta_sanskrit.json 取 cbeta_gaiji 仓 master；
-CBETASupplement.ttf 取 cbeta-fonts 仓 main（无 release，直接取文件）。
+URL 表在 cbeta/data/remote_sources.json（改 URL 只改文件，不改代码；
+缺失/非法大声报错）。另含手动项（悉曇/蘭札字型，只有下载网页无直链，
+仅记录展示、不自动下载）。
 
 用法：python -m pycbeta --update-data [--dry-run]
 流程（每项独立）：下到临时文件 → 先校验再落盘 → 与本地比对（一致跳过，
@@ -13,24 +13,7 @@ import json
 import os
 import tempfile
 
-SOURCES = (
-    {"key": "gaiji", "kind": "json-dict",
-     "url": "https://raw.githubusercontent.com/cbeta-org/cbeta_gaiji"
-            "/master/cbeta_gaiji.json",
-     "dest": ("cbeta", "data", "cbeta_gaiji.json")},
-    {"key": "sanskrit", "kind": "json-dict",
-     "url": "https://raw.githubusercontent.com/cbeta-org/cbeta_gaiji"
-            "/master/cbeta_sanskrit.json",
-     "dest": ("cbeta", "data", "cbeta_sanskrit.json")},
-    {"key": "supplement-ttf", "kind": "ttf",
-     "url": "https://raw.githubusercontent.com/cbeta-org/cbeta-fonts"
-            "/main/CBETASupplement.ttf",
-     "dest": ("cbeta", "fonts", "CBETASupplement.ttf")},
-    {"key": "sutra-mapping", "kind": "text",
-     "url": "https://raw.githubusercontent.com/heavenchou/cbwork-bin"
-            "/master/cbreader2X/sutralist/sutralist.txt",
-     "dest": ("cbeta", "data", "sutra_mapping.txt")},
-)
+REMOTE_SOURCES_NAME = ("cbeta", "data", "remote_sources.json")
 
 _TTF_MAGICS = (b"\x00\x01\x00\x00", b"OTTO", b"true", b"typ1")
 _TTF_MIN_SIZE = 1024 * 1024  # 1MB：防 404 页面冒充
@@ -39,6 +22,33 @@ _TTF_MIN_SIZE = 1024 * 1024  # 1MB：防 404 页面冒充
 def _repo_root(root=None):
     return os.path.abspath(root or os.path.dirname(
         os.path.dirname(os.path.abspath(__file__))))
+
+
+def load_sources(root=None):
+    """读 URL 表 → [(key, kind, url, dest_tuple)]（dest 为空=手动项）。
+
+    文件缺失/非法 JSON/顶层非对象 → 抛 OSError/ValueError（大声报错，不静默）。
+    """
+    from .theme import _strip_json_comments
+    path = os.path.join(_repo_root(root), *REMOTE_SOURCES_NAME)
+    with open(path, encoding="utf-8") as f:
+        data = json.loads(_strip_json_comments(f.read()))
+    if not isinstance(data, dict) or not data:
+        raise ValueError(f"remote_sources 非空对象不符：{path}")
+    out = []
+    for key, spec in data.items():
+        if not isinstance(spec, dict):
+            raise ValueError(f"remote_sources[{key}] 非对象：{path}")
+        kind = spec.get("kind", "")
+        if kind not in ("json-dict", "ttf", "text", "manual"):
+            raise ValueError(f"remote_sources[{key}].kind 未知：{kind!r}")
+        dest = spec.get("dest", "") or ""
+        parts = tuple(p for p in dest.replace("\\", "/").split("/") if p)
+        if kind != "manual" and (not spec.get("url") or not parts):
+            raise ValueError(f"remote_sources[{key}] 缺 url/dest：{path}")
+        out.append({"key": key, "kind": kind, "url": spec.get("url", ""),
+                    "dest": parts, "note": spec.get("note", "") or ""})
+    return out
 
 
 def _check_json_dict(raw):
@@ -110,19 +120,27 @@ def _diff_detail(kind, old_raw, new_data, new_raw):
     return f"{len(old_raw)}→{len(new_raw)} 字节"
 
 
-def update_all(root=None, dry_run=False, download=None):
+def update_all(root=None, dry_run=False, download=None, sources=None):
     """执行更新 → [{"key","status","detail"}]（纯逻辑，可单测）。
 
     status ∈ unchanged（一致跳过）/ updated（已覆盖）/ preview（dry-run 预告）/
-    failed（下载失败或校验不通过，本地未动）。
+    manual（手动项，仅展示）/ failed（下载失败或校验不通过，本地未动）。
     download(url, dest_tmp) -> bool 可注入（单测）；缺省走 fetch._http_download。
+    sources 可注入（单测）；缺省读 remote_sources.json。
     """
     if download is None:
         from .fetch import _http_download as download
     base = _repo_root(root)
+    if sources is None:
+        sources = load_sources(base)
     report = []
-    for src in SOURCES:
+    for src in sources:
         key, kind, url = src["key"], src["kind"], src["url"]
+        if kind == "manual":
+            report.append({"key": key, "status": "manual",
+                           "detail": (src.get("note") or "请自行下载") +
+                           f"（{url}）"})
+            continue
         dest = os.path.join(base, *src["dest"])
         fd, tmp = tempfile.mkstemp(prefix="xml2pdf-data-")
         os.close(fd)
@@ -177,7 +195,7 @@ def format_report(report):
     lines = []
     for r in report:
         mark = {"unchanged": "＝", "updated": "←", "preview": "？",
-                "failed": "✗"}.get(r["status"], "?")
+                "manual": "○", "failed": "✗"}.get(r["status"], "?")
         lines.append(f"[{mark}] {r['key']}: {r['detail']}")
     return lines
 

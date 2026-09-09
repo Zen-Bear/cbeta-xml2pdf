@@ -401,7 +401,7 @@ def main(argv=None):
 
     dg = ap.add_argument_group("官方数据更新（缺字库/字型/目录）")
     dg.add_argument("--update-data", action="store_true",
-                    help="从上游直链同步本地（先校验再落盘，一致跳过；URL 见 publish/mulu/REMOTE_SOURCES.md §1）")
+                    help="从上游直链同步本地（先校验再落盘，一致跳过；URL 见 cbeta/data/remote_sources.json）")
     dg.add_argument("--dry-run", action="store_true",
                     help="配合 --update-data：只下载比对不写盘")
 

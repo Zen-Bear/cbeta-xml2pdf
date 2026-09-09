@@ -1,0 +1,32 @@
+{
+  // 官方数据源（机器可读；改 URL 只改这里，不用改代码）。
+  // 缺失/非法 → 更新程序大声报错，不静默。
+  "gaiji": {
+    "url": "https://raw.githubusercontent.com/cbeta-org/cbeta_gaiji/master/cbeta_gaiji.json",
+    "dest": "cbeta/data/cbeta_gaiji.json",
+    "kind": "json-dict"
+  },
+  "sanskrit": {
+    "url": "https://raw.githubusercontent.com/cbeta-org/cbeta_gaiji/master/cbeta_sanskrit.json",
+    "dest": "cbeta/data/cbeta_sanskrit.json",
+    "kind": "json-dict"
+  },
+  "supplement-ttf": {
+    "url": "https://raw.githubusercontent.com/cbeta-org/cbeta-fonts/main/CBETASupplement.ttf",
+    "dest": "cbeta/fonts/CBETASupplement.ttf",
+    "kind": "ttf"
+  },
+  "sutra-mapping": {
+    "url": "https://raw.githubusercontent.com/heavenchou/cbwork-bin/master/cbreader2X/sutralist/sutralist.txt",
+    "dest": "cbeta/data/sutra_mapping.txt",
+    "kind": "text"
+  },
+  // 悉曇/蘭札字型（Ranjana/Siddam）：只有下载网页，没有直链文件，
+  // 程序不自动下载，仅记录+展示，用户自行下载放入 cbeta/fonts/。
+  "siddham-fonts": {
+    "url": "https://cbeta.org/downloads",
+    "dest": "",
+    "kind": "manual",
+    "note": "悉曇/蘭札字型请自行下载放入 cbeta/fonts/"
+  }
+}

@@ -197,21 +197,7 @@ class TestConfigBar(unittest.TestCase):
             self.assertEqual(panel.btn_save.text(), "保存用户配置")
             self.assertEqual(panel.btn_load.text(), "载入用户配置")
             self.assertEqual(panel.btn_set_default.text(), "设为默认")
-            self.assertEqual(panel.btn_update_data.text(), "更新官方数据")
-        finally:
-            panel.close() if hasattr(panel, "close") else None
-
-    def test_update_finished_shows_report(self):
-        import unittest.mock as mock
-        import pycbeta.gui.panel as pm
-        panel = self._panel()
-        try:
-            rep = [{"key": "gaiji", "status": "unchanged", "detail": "1 条"}]
-            with mock.patch.object(pm.QMessageBox, "information") as m:
-                panel._on_update_finished(rep)
-                m.assert_called_once()
-                args, _kw = m.call_args
-                self.assertIn("gaiji", args[2])
+            self.assertFalse(hasattr(panel, "btn_update_data"))  # 已搬数据源窗口
         finally:
             panel.close() if hasattr(panel, "close") else None
 
@@ -735,6 +721,25 @@ class TestSourceDialog(unittest.TestCase):
             flags = dlg.dl_table.item(0, 0).flags()
             from PySide6.QtCore import Qt
             self.assertFalse(bool(flags & Qt.ItemIsEditable))
+            self.assertEqual(dlg.btn_update_data.text(), "更新官方数据")
+        finally:
+            dlg.close()
+
+    def test_update_finished_shows_report(self):
+        import unittest.mock as mock
+        import pycbeta.gui.panel as pm
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PySide6.QtWidgets import QApplication
+        QApplication.instance() or QApplication([])
+        dlg = pm.SourceDialog()
+        try:
+            rep = [{"key": "gaiji", "status": "unchanged", "detail": "1 条"}]
+            with mock.patch.object(pm.QMessageBox, "information") as m:
+                dlg._on_update_finished(rep)
+                m.assert_called_once()
+                args, _kw = m.call_args
+                self.assertIn("gaiji", args[2])
+            self.assertTrue(dlg._buttons_box.isEnabled())
         finally:
             dlg.close()
 

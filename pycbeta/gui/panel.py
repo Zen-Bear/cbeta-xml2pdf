@@ -406,21 +406,16 @@ class XmlOptionsPanel(QWidget):
         self.btn_set_default.setToolTip(
             "run.json 的 config-json 槽指向 config.user.json（命令行/GUI 默认用它）")
         self.btn_reset = QPushButton("还原出厂")
-        self.btn_update_data = QPushButton("更新官方数据")
-        self.btn_update_data.setToolTip(
-            "缺字库/补充字型/目录从上游直链同步（先校验再落盘，一致跳过）")
         self.btn_save.clicked.connect(self._on_save)
         self.btn_load.clicked.connect(self._on_load_user)
         self.btn_set_default.clicked.connect(self._on_set_default)
         self.btn_reset.clicked.connect(self._on_reset)
-        self.btn_update_data.clicked.connect(self._on_update_data)
         bar.addWidget(self.slot_label)
         bar.addStretch(1)
         bar.addWidget(self.btn_save)
         bar.addWidget(self.btn_load)
         bar.addWidget(self.btn_set_default)
         bar.addWidget(self.btn_reset)
-        bar.addWidget(self.btn_update_data)
         layout.addWidget(cfg)
         self.tabs = QTabWidget()
         layout.addWidget(self.tabs)
@@ -975,22 +970,6 @@ class XmlOptionsPanel(QWidget):
         self._refresh_load_button()
         self._changed()
 
-    def _on_update_data(self):
-        """官方数据更新（后台线程跑，跑完弹报告；按钮禁用防重入）。"""
-        self.btn_update_data.setEnabled(False)
-        self._update_worker = DataUpdateWorker()
-        self._update_worker.finished_report.connect(self._on_update_finished)
-        self._update_worker.finished.connect(
-            lambda: self.btn_update_data.setEnabled(True))
-        self._update_worker.start()
-
-    def _on_update_finished(self, report):
-        from pycbeta.update_data import format_report
-        QMessageBox.information(
-            self, "官方数据更新",
-            "\n".join(format_report(report or [])) or "无更新项")
-
-    @staticmethod
     def _open_local_file(path):
         """用系统默认程序打开本地文件/目录（样式表/词表/预设目录）；供各卡的"打开"按钮。"""
         if path and os.path.exists(path):
@@ -1219,10 +1198,44 @@ class SourceDialog(QDialog):
             self.dl_table.setItem(i, 0, key_item)
             self.dl_table.setItem(i, 1, QTableWidgetItem(str(dl[k])))
         layout.addWidget(self.dl_table, 1)
+        urow = QHBoxLayout()
+        self.btn_update_data = QPushButton("更新官方数据")
+        self.btn_update_data.setToolTip(
+            "缺字库/补充字型/目录从上游直链同步（先校验再落盘，一致跳过）")
+        self.btn_update_data.clicked.connect(self._on_update_data)
+        self.update_status = QLabel("")
+        self.update_status.setStyleSheet("color: gray")
+        self.update_status.setWordWrap(True)
+        urow.addWidget(self.btn_update_data)
+        urow.addWidget(self.update_status, 1)
+        layout.addLayout(urow)
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+        self._buttons_box = buttons
+        self._update_worker = None
+
+    def _on_update_data(self):
+        """官方数据更新（后台线程跑；跑完弹报告；期间锁住确定/取消）。"""
+        self.btn_update_data.setEnabled(False)
+        self._buttons_box.setEnabled(False)
+        self.update_status.setText("正在从上游同步…")
+        self._update_worker = DataUpdateWorker()
+        self._update_worker.finished_report.connect(self._on_update_finished)
+        self._update_worker.finished.connect(self._on_update_done)
+        self._update_worker.start()
+
+    def _on_update_done(self):
+        self.btn_update_data.setEnabled(True)
+        self._buttons_box.setEnabled(True)
+        self.update_status.setText("")
+
+    def _on_update_finished(self, report):
+        from pycbeta.update_data import format_report
+        QMessageBox.information(
+            self, "官方数据更新",
+            "\n".join(format_report(report or [])) or "无更新项")
 
     def _browse_dir(self, edit):
         d = QFileDialog.getExistingDirectory(self, "选择目录", edit.text().strip() or "")
