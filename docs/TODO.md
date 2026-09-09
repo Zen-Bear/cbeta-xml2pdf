@@ -215,3 +215,7 @@
   - 序字体进 font_sets（2026-09-04）：`font_sets.default` 加后代组合键 `"div.div-xu p.head": [標楷體…(繁), 楷体…(简)]`，与 CSS 文件互抄；`apply_font_set` 显式切换恒覆盖，`__init__` 默认仅 CSS 未指定时填充（`_set_compound_font` 共用，非法键跳过不写 junk）；docx 走 compounds，HTML/PDF 走 raw_css 追加规则（层叠覆盖）；T0672 繁→標楷體、`:zh-Hans`→楷体实证。单测 182 OK
   - 后代选择器（2026-09-04）：T0672 序标题 `<head>` 在 div-xu 内，命中 p.head 蓝色覆盖 div 黑色（与浏览器优先级一致）；引擎新增两段 `A B` 后代支持（`_parse_css_tags` 收 compounds，`_props`/`docx_para` 凭完整标签栈匹配，`css()` 原样回写，`scale_font_sizes` 跟随；三段+/属性选择器忽略）；pdf_docx.css 加 `div.div-xu p.head` 规则（用户自改为 #408080 + 標楷體，实证 run 同时生效）；连带修 3 位简写色 `#000` 写出非法 `w:val="000"`（`_hex6` 展开，docx_run/_marker_rpr 共用）；仓内源文件颜色统一 6 位（golden `#00f`→`#0000ff`，xu/w/note 灰系展开，注释内一并统一；用户自定义 CSS 仍由 `_hex6` 兜底）。单测 177 OK
   - 验收：五格式注音均可见；单测 120 OK；verify 繁体 16/0、简体 16/0 保持
+
+- [ ] **最低优先级（最后）** `html-epub-user-theme` 接线（2026-09-09 决议：意义不大，暂不做）
+  - 现状：`EMPTY_RUN` 占位 `""`（`theme.py:418`），非空警告+忽略（564-567）；无 CLI 开关、无 GUI 控件；html/epub 默认纯 golden
+  - 将来要做时的探明设计（三步）：`resolve_html_base_css` 加 `user` 形参（显式开关 > 槽 > 纯基底，`_resolve_run_file` 缺文件警告+回退），用户文件追加到 golden 之后——`render_html._wrap` 与 epub `style.css` 同吃一份 `base_css`，渲染侧零改动；CLI 加 `--html-epub-user-theme`（与 pdf 侧对称）；单测锁追加顺序/回退/显式优先；golden 选择器与 pdf 出厂同体系（`.head`/`div.lg`/`p.form`…），增量可复用习惯；verify 走文本不受影响
