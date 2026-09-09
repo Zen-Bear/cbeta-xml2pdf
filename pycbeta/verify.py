@@ -14,6 +14,7 @@ from .render_html import HtmlRenderer
 from .render_docx import DocxRenderer
 from .render_epub import EpubRenderer
 from .render_md import MdRenderer
+from .render_txt import TxtRenderer
 from .theme import load_presets, _PRESETS_PATH
 
 def normalize(text: str, ruby_brackets=None) -> str:
@@ -284,6 +285,238 @@ def _extract_txt_parts(text: str):
     return "\n".join(bodies), "\n".join(notes)
 
 
+_XML_INLINE_NOTE_PLACES = ("inline", "inline2", "interlinear")
+_XML_NOTE_ORDER = ("mod", "orig", "add", "equivalent", "rest")
+_XML_DROP_TAGS = ("app", "anchor", "mulu")
+_WS_RE = re.compile(r"[\s　]+")
+
+
+def _extract_xml_parts(path: str, inline_brackets: str = "fullwidth"):
+    """P3 辅轨：官方 XML 直抽为 (title, author, body, foots)。
+
+    异构实现（lxml 直读，不走 P5Parser；规则镜像 parser/render_txt 的可观测行为，
+    共享的只有缺字数据 GaijiDb 与版头选取语义）：
+    - 仅走 text/body；back 只作注池（与 parser _collect_back 对应）；
+    - 文本节点空白归一（`[\\s　]+`→""，与 Text→txt 同规则；tail 同收；注释/PI 跳过节点留 tail）；
+    - body 内 <note>：行内 place 才保留子文本，其余整棵丢弃（镜像 _render_inline_note）；
+    - <app>/<anchor>/<mulu> 整棵丢弃（生成侧恒空：app 无 corresp 即 ""；anchor 转 NoteRef/空 E）；
+    - <unclear>→□；<g> 经 GaijiDb+charDecl 解析（与 _resolve_gaiji_raw 同优先级）；
+    - 其余元素默认收子文本（镜像 _render_e 默认分支）；
+    - 注块顺序镜像生成侧：body anchor 文档序（nkr_note_ 去重 + beg 位 app-corresp），
+      back 注按 n= 分组、mod>orig>add>equivalent>rest 单选（镜像 _pick_note）。
+    - 版头 title/author 选取与 _parse_header 同规则（level=m 中文优先；author 直取）。
+    """
+    from lxml import etree
+
+    def ln(e):
+        return etree.QName(e).localname if isinstance(e.tag, str) else ""
+
+    tree = etree.parse(path)
+    root = tree.getroot()
+
+    def find_first(el, name):
+        for c in el.iter():
+            if ln(c) == name:
+                return c
+        return None
+
+    header = find_first(root, "teiHeader")
+    title, author = "", ""
+    chard = {}
+    if header is not None:
+        ts = None
+        for c in header.iter():
+            if ln(c) == "titleStmt":
+                ts = c
+                break
+        if ts is not None:
+            titles = [c for c in ts if ln(c) == "title"]
+
+            def _lang(t):
+                return t.get("{http://www.w3.org/XML/1998/namespace}lang") or t.get("lang") or ""
+
+            for t in titles:
+                if t.get("level") == "m" and _lang(t).startswith("zh"):
+                    title = "".join(t.itertext()).strip()
+                    break
+            if not title:
+                for t in titles:
+                    if t.get("level") == "m":
+                        title = "".join(t.itertext()).strip()
+                        break
+            if not title and titles:
+                title = "".join(titles[0].itertext()).strip()
+            au = next((c for c in ts if ln(c) == "author"), None)
+            if au is not None:
+                author = "".join(au.itertext()).strip()
+        cd = find_first(header, "charDecl")
+        if cd is not None:
+            for ch in cd.iter():
+                if ln(ch) != "char":
+                    continue
+                cid = (ch.get("{http://www.w3.org/XML/1998/namespace}id")
+                       or ch.get("id") or "").lstrip("#")
+                if not cid:
+                    continue
+                rec = {}
+                for cp in ch.iter():
+                    if ln(cp) != "charProp":
+                        continue
+                    name_el = next((x for x in cp if ln(x) == "localName"), None)
+                    val_el = next((x for x in cp if ln(x) == "value"), None)
+                    name = (name_el.text or "") if name_el is not None else ""
+                    val = (val_el.text or "") if val_el is not None else ""
+                    if name == "composition":
+                        rec["composition"] = val
+                    elif name == "normalized form":
+                        rec["normal"] = val
+                for mp in ch.iter():
+                    if ln(mp) != "mapping":
+                        continue
+                    t = mp.get("type")
+                    if t == "unicode":
+                        rec["unicode"] = (mp.text or "").replace("U+", "")
+                    elif t == "PUA":
+                        rec["pua"] = mp.text or ""
+                chard[cid] = rec
+
+    try:
+        from .gaiji import GaijiDb
+        _gdb = GaijiDb()
+    except Exception:
+        _gdb = None
+
+    def resolve_gaiji(code, raw):
+        data = _gdb.get(code) if _gdb else None
+        if data:
+            for k in ("unicode", "norm_unicode"):
+                v = data.get(k)
+                if v:
+                    try:
+                        return chr(int(v, 16))
+                    except ValueError:
+                        pass
+            for k in ("norm_big5_char", "norm_uni_char", "uni_char", "composition"):
+                v = data.get(k)
+                if v:
+                    return v
+            m = re.match(r"U\+([0-9A-Fa-f]+)", data.get("pua") or "")
+            if m:
+                return chr(int(m.group(1), 16))
+        rec = chard.get(code) or {}
+        if rec.get("unicode"):
+            try:
+                return chr(int(rec["unicode"], 16))
+            except ValueError:
+                pass
+        if rec.get("normal"):
+            return rec["normal"]
+        if rec.get("composition"):
+            return rec["composition"]
+        return raw
+
+    def chunks(el, out):
+        """子树文本走查（镜像 _render_node 可观测行为），结果 append 到 out。"""
+        if el.text:
+            out.append(_WS_RE.sub("", el.text))
+        for child in el:
+            if not isinstance(child.tag, str):
+                # 注释/PI：跳过节点，tail 照收（与 parser _traverse 一致）
+                if child.tail:
+                    out.append(_WS_RE.sub("", child.tail))
+                continue
+            t = ln(child)
+            if t == "note":
+                if child.get("place") in _XML_INLINE_NOTE_PLACES:
+                    lb, rb = ("(", ")") if inline_brackets == "halfwidth" else ("（", "）")
+                    out.append(lb)
+                    chunks(child, out)
+                    out.append(rb)
+                # 非行内注整棵丢弃（body 内注生成侧恒 ""；back 注走注池）
+            elif t in _XML_DROP_TAGS:
+                pass
+            elif t == "unclear":
+                out.append("□")
+            elif t == "g":
+                code = (child.get("ref") or "").lstrip("#")
+                raw = _WS_RE.sub("", "".join(child.itertext())) or code
+                out.append(resolve_gaiji(code, raw))
+            else:
+                chunks(child, out)
+            if child.tail:
+                out.append(_WS_RE.sub("", child.tail))
+
+    text_el = find_first(root, "text")
+    body = back = None
+    if text_el is not None:
+        for c in text_el:
+            if not isinstance(c.tag, str):
+                continue
+            if ln(c) == "body" and body is None:
+                body = c
+            elif ln(c) == "back" and back is None:
+                back = c
+
+    # back 注池：{n: [note]}（与 _collect_back 对应）
+    pool = {}
+    if back is not None:
+        for e in back.iter():
+            if isinstance(e.tag, str) and ln(e) == "note":
+                pool.setdefault(e.get("n"), []).append(e)
+    # back app 表：{from-id: corresp-n}（与 _parse_app key 对应）
+    apps = {}
+    if back is not None:
+        for e in back.iter():
+            if isinstance(e.tag, str) and ln(e) == "app":
+                frm = (e.get("from") or "").lstrip("#")
+                if frm:
+                    apps[frm] = (e.get("corresp") or "").lstrip("#") or None
+
+    def pick(n):
+        cands = pool.get(n) or []
+        for want in _XML_NOTE_ORDER:
+            for e in cands:
+                if e.get("type") == want:
+                    return e
+        return None
+
+    def note_text(e):
+        out = []
+        chunks(e, out)
+        return "".join(out)
+
+    body_chunks, foots = [], []
+    seen_n = set()
+    if body is not None:
+        pre = []
+        chunks(body, pre)  # 占位：正文走查另行处理 anchor 顺序，见下
+        # anchor 顺序注块（镜像 NoteRef/_render_app 落子顺序）
+        for e in body.iter():
+            if not isinstance(e.tag, str):
+                continue
+            if ln(e) != "anchor":
+                continue
+            aid = (e.get("{http://www.w3.org/XML/1998/namespace}id")
+                   or e.get("id") or "")
+            if aid.startswith("nkr_note_"):
+                n = e.get("n")
+                if n and n not in seen_n:
+                    seen_n.add(n)
+                    hit = pick(n)
+                    if hit is not None:
+                        foots.append(note_text(hit))
+            elif aid.startswith("beg"):
+                cn = apps.get(aid)
+                if cn:
+                    hit = pick(cn)
+                    if hit is not None:
+                        foots.append(note_text(hit))
+        # 正文：anchor 本身无文本贡献（NoteRef 落 ""；App 无 corresp 落 ""），
+        # 故 chunks(body) 已是正文（anchor 子文本恒空，drop 与否无差）
+        body_chunks = pre
+    return title, author, "".join(body_chunks), foots
+
+
 def find_official(source: str, stem: str, kind: str, juan: Optional[set] = None) -> List[str]:
     """官方基线发现：短名回退/`_NNN` 优先/`out/` 排除/卷范围限定；统一根目录下平展优先、仓库次之。"""
     short = ""
@@ -374,7 +607,7 @@ def generate_formal(xml_fn: str, work, fmt: str, outdir: str, config_path: Optio
     theme = None
     # 主题跟随 run.json 的 pdf-docx 槽（与主程序一致；字体系与提取文本无关，
     # lang 恒繁体）；html/epub 恒纯基底，不吃主题
-    if fmt in ("docx", "md") and _run is not None:
+    if fmt in ("docx", "md", "txt") and _run is not None:
         try:
             from .theme import resolve_pdf_docx_css, Theme as _Theme
             theme = _Theme.from_css(resolve_pdf_docx_css(_run, _rdir), "zh-Hant")
@@ -390,9 +623,11 @@ def generate_formal(xml_fn: str, work, fmt: str, outdir: str, config_path: Optio
         return [os.path.join(outdir, EpubRenderer(theme=theme, notes="endnote", ignore_xml_style=bool(p("ignore_xml_style")), ignore_xml_space=bool(p("ignore_xml_space")), show_notes=p("show_notes", True), annotations=_ann).render_work(work, out_dir=outdir, filename=f"{stem}.epub"))]
     if fmt == "md":
         return [os.path.join(outdir, MdRenderer(theme=theme, notes="footnote", show_notes=p("show_notes", True), inline_brackets=p("inline_brackets", "fullwidth"), annotations=_ann).render_work(work, out_dir=outdir, filename=f"{stem}.md"))]
+    if fmt == "txt":
+        return [os.path.join(outdir, TxtRenderer(theme=theme, notes="footnote", show_notes=p("show_notes", True), inline_brackets=p("inline_brackets", "fullwidth"), annotations=_ann).render_work(work, out_dir=outdir, filename=f"{stem}.txt"))]
     raise ValueError(f"unknown format {fmt}")
 
-def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int = 10, diff_lines: int = 5, config_path: Optional[str] = None, t2s: bool = False) -> Dict:
+def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int = 10, diff_lines: int = 5, config_path: Optional[str] = None, t2s: bool = False, baseline: str = "render") -> Dict:
     work = P5Parser().parse(xml_fn)
     # 繁体剥离键：官方基线恒为繁体，官方侧 strip_docx_head 必须用繁体键
     t_title = (work.metadata.get("title") or "").strip()
@@ -424,6 +659,66 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
     ours = normalize(ours_raw, ruby_brackets)
     name = os.path.basename(xml_fn)
     stem = os.path.splitext(name)[0]
+    if baseline == "xml":
+        # P3 辅轨：IR→TXT（生成侧 TxtRenderer）vs 官方 XML→TXT（输入 XML 本身
+        # 经 _extract_xml_parts 直抽；baseline_root 方案作废——cbeta_xml 为空目录，
+        # 输入 XML 即官方下载件，直用可避版本偏斜且零新配置）。仅 fmt=txt。
+        if fmt != "txt":
+            raise ValueError("--baseline xml 仅支持 fmt=txt（IR→TXT vs 官方XML→TXT）")
+        # inline 括号口径与 generate_formal 一致（output←verify 合并；run 优先，出厂兜底）
+        try:
+            from .theme import load_run_config, default_run_path, resolve_effective_config
+            _run = load_run_config(config_path) if config_path else load_run_config()
+            _rdir = os.path.dirname(os.path.abspath(config_path)) if config_path \
+                else os.path.dirname(os.path.abspath(default_run_path()))
+            _ib_defaults = {**(resolve_effective_config(_run, _rdir).get("output") or {})}
+        except Exception:
+            try:
+                _ib_defaults = dict(load_presets(config_path).get("output")
+                                    if config_path else load_presets().get("output") or {})
+            except Exception:
+                _ib_defaults = {}
+        try:
+            _v = load_presets(config_path).get("verify") if config_path \
+                else load_presets().get("verify")
+            _ib_defaults.update(_v or {})
+        except Exception:
+            pass
+        title_x, author_x, body_x, foots_x = _extract_xml_parts(
+            xml_fn, _ib_defaults.get("inline_brackets", "fullwidth"))
+        if not title_x:
+            title_x = work.id  # 与生成侧 `md.get("title") or work.id` 对齐
+        theirs_raw = f"{title_x}\n\n{author_x}\n\n{body_x}"
+        if foots_x:
+            theirs_raw += "\n\n" + "\n\n".join(foots_x)
+        if not compare_infos:
+            theirs_raw = strip_infos(theirs_raw)
+        if t2s:
+            theirs_raw = t2s_baseline(theirs_raw)
+        theirs = normalize(theirs_raw, ruby_brackets)
+        try:
+            os.makedirs(outdir, exist_ok=True)
+            src_cmp = os.path.join(outdir, f"{stem}_compare_xml_official.txt")
+            gen_cmp = os.path.join(outdir, f"{stem}_compare_txt_generated.txt")
+            theirs_disp = re.sub(r"\[[^\]\[]{1,8}\]", "", theirs_raw)
+            ours_disp = re.sub(r"\[[^\]\[]{1,8}\]", "", ours_raw)
+            theirs_disp = re.sub(r"[A-Z]{1,2}\d{1,4}[A-Za-z]?n\d+[A-Za-z]?_p[0-9a-z]+", "", theirs_disp)
+            ours_disp = re.sub(r"[A-Z]{1,2}\d{1,4}[A-Za-z]?n\d+[A-Za-z]?_p[0-9a-z]+", "", ours_disp)
+            theirs_disp = re.sub(r"\n{3,}", "\n\n", theirs_disp).strip() + "\n"
+            ours_disp = re.sub(r"\n{3,}", "\n\n", ours_disp).strip() + "\n"
+            with open(src_cmp, "w", encoding="utf-8") as f:
+                f.write(theirs_disp)
+            with open(gen_cmp, "w", encoding="utf-8") as f:
+                f.write(ours_disp)
+        except Exception:
+            src_cmp = gen_cmp = ""
+        m, mi, ex, ctx = diff_stats(ours, theirs)
+        total = mi + ex
+        status = "ok" if total <= max_diff else "fail"
+        return {"xml": xml_fn, "fmt": fmt, "status": status, "gen": gen_path,
+                "official": xml_fn, "official_kind": "xml", "matched": m,
+                "missing": mi, "extra": ex, "total": total, "ctx": ctx,
+                "src_cmp": src_cmp, "gen_cmp": gen_cmp}
     scope_juan = bool((cfg or {}).get("scope_juan", True))
     _juan = work_juan_numbers(work) if scope_juan else None
 
@@ -436,7 +731,7 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
         return out
 
     official = _discover()
-    base_kind = {"md":"txt","docx":"docx","html":"html","epub":"epub"}.get(fmt,"html")
+    base_kind = {"md":"txt","docx":"docx","html":"html","epub":"epub","txt":"txt"}.get(fmt,"html")
     bases = []
     if base_kind in official:
         bases.append((base_kind, official[base_kind]))
@@ -451,7 +746,7 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
         # 基线缺失：按需调用 fetch 下载（docx/odt 非 T/X 等 404 静默跳过）
         from .fetch import ensure_baselines
         presets = load_presets(config_path) if config_path else load_presets()
-        need = {"md": ["txt"], "docx": ["docx", "html"],
+        need = {"md": ["txt"], "docx": ["docx", "html"], "txt": ["txt"],
                 "html": ["html"], "epub": ["epub"]}.get(fmt, ["html"])
         if t2s and "txt_notes" not in need:
             need = ["txt_notes"] + need

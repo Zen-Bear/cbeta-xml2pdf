@@ -31,6 +31,8 @@ def main(argv=None):
                     help="ID 列表文件（默认 test/mini-test.txt；每行首 token 为佛典編號，后面都是注释；缺 XML 自动下载到 source）")
     ap.add_argument("--all", action="store_true",
                     help="忽略 ID 列表，校验 source 下全部 XML（旧行为）")
+    ap.add_argument("--baseline", choices=["render", "xml"], default="render",
+                    help="render=官方渲染产物基线（默认主轨）；xml=P3 辅轨：IR→TXT vs 输入XML直抽（仅 -f txt）")
     args = ap.parse_args(argv)
     src = args.source
     out_root = args.out or os.path.join(src, "out", "verify")
@@ -93,6 +95,66 @@ def main(argv=None):
         log("  (无 verify 配置，使用默认)")
     log("")
     results = []
+    if args.baseline == "xml":
+        # P3 辅轨：IR→TXT vs 官方XML→TXT（输入 XML 本身直抽，委托 verify_one）
+        fmts = [f.strip() for f in args.formats.split(",") if f.strip()]
+        if fmts != ["txt"]:
+            print("--baseline xml 仅支持 -f txt"); return 2
+        from pycbeta.verify import verify_one
+        for xml_fn in xmls:
+            name = os.path.basename(xml_fn)
+            block = [f"=== {name}"]
+            try:
+                r = verify_one(xml_fn, "txt", src, out_root, max_diff, diff_lines,
+                               config_path=args.config, t2s=args.t2s, baseline="xml")
+            except Exception as e:
+                block.append(f"  [FAIL] txt aux: {e}")
+                results.append((True, name, block))
+                grand_fail += 1; grand_total += 1
+                continue
+            grand_total += 1
+            ok = r["status"] == "ok"
+            if not ok:
+                grand_fail += 1
+            mark = "[OK]" if ok else "[FAIL]"
+            op = "≤" if ok else ">"
+            block.append(f"  {mark} (缺{r['missing']}/多{r['extra']} {op}阈值{max_diff})")
+            block.append(f"  txt 【源】{r['official']} (XML直抽)")
+            block.append(f"  txt 【新】{(r['gen'] or [''])[0]}")
+            if r.get("src_cmp") and r.get("gen_cmp"):
+                block.append(f"  txt 【源】{r['src_cmp']}")
+                block.append(f"  txt 【新】{r['gen_cmp']}")
+            if not ok and r.get("ctx"):
+                ours = normalize(extract_text((r["gen"] or [""])[0]), _ruby_brackets) \
+                    if r.get("gen") else ""
+                theirs = normalize(extract_text(r["src_cmp"]), _ruby_brackets) \
+                    if r.get("src_cmp") else ""
+                for idx, (tag, i1, i2, j1, j2) in enumerate(r["ctx"][:diff_lines], 1):
+                    a_snip = ours[max(0, i1-10):i1+40].replace("\n", "")
+                    b_snip = theirs[max(0, j1-10):j1+40].replace("\n", "")
+                    block.append(f"      {idx}. 【源】{b_snip}\n         【新】{a_snip}")
+            results.append((not ok, name, block))
+        results.sort(key=lambda item: (0, item[1]) if item[0] else (1, item[1]))
+        done_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        summary = f"{grand_total} compared, {grand_fail} failed (baseline=xml, 阈值 max-diff={max_diff})"
+        log(f"完成时间: {done_at}")
+        log(f"源: {src}  输出: {out_root}  基线: 输入XML直抽  阈值: {max_diff}")
+        log("")
+        log(summary)
+        log("说明: P3 辅轨 IR→TXT vs 官方XML→TXT，查解析层丢字（渲染层问题归主轨）")
+        log("")
+        for _, _, block in results:
+            for line in block:
+                log(line)
+        try:
+            os.makedirs(out_root, exist_ok=True)
+            report_path = os.path.join(out_root, "report_xml.txt")
+            with open(report_path, "w", encoding="utf-8") as f:
+                f.write("\n".join(log_lines) + "\n")
+            print(f"报告已写入: {report_path}")
+        except Exception as e:
+            print(f"写入报告失败: {e}")
+        return 0 if grand_fail == 0 else 1
     for xml_fn in xmls:
         name = os.path.basename(xml_fn)
         block = [f"=== {name}"]
@@ -139,7 +201,7 @@ def main(argv=None):
             if not compare_infos:
                 ours_raw = strip_infos(ours_raw)
             ours = normalize(ours_raw, _ruby_brackets)
-            base_kind = {"md":"txt","docx":"docx","html":"html","epub":"epub"}.get(fmt,"html")
+            base_kind = {"md":"txt","docx":"docx","html":"html","epub":"epub","txt":"txt"}.get(fmt,"html")
             bases = []
             if base_kind in official:
                 bases.append((base_kind, official[base_kind]))
@@ -151,7 +213,7 @@ def main(argv=None):
             if not bases and bool(_verify_cfg.get("auto_fetch", True)):
                 # 基线缺失：按需调用 fetch 下载（docx/odt 非 T/X 等 404 静默跳过）
                 from pycbeta.fetch import ensure_baselines
-                need = {"md": ["txt"], "docx": ["docx", "html"],
+                need = {"md": ["txt"], "docx": ["docx", "html"], "txt": ["txt"],
                         "html": ["html"], "epub": ["epub"]}.get(fmt, ["html"])
                 if args.t2s and "txt_notes" not in need:
                     need = ["txt_notes"] + need
