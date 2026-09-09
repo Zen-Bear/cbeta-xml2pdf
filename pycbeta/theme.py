@@ -1007,7 +1007,7 @@ class Theme:
             out.update(top=em(vals[0]), bottom=em(vals[2]), left=em(vals[3]))
         return out
 
-    def docx_para(self, *tags: str, indent_em: float = 0) -> str:
+    def docx_para(self, *tags: str, indent_em: float = 0, no_first_line: bool = False) -> str:
         """Paragraph properties (w:pPr inner), in OOXML schema order:
         spacing -> ind -> jc. Returns ''.join when a key missing.
         合并时 div 标签（靠前）的段落属性优先于 p（靠后），
@@ -1044,7 +1044,7 @@ class Theme:
         if spacing_attrs:
             parts["spacing"] = f"<w:spacing {' '.join(spacing_attrs)}/>"
         ind_parts = []
-        ti = props.get("text-indent")
+        ti = None if no_first_line else props.get("text-indent")
         m = re.match(r"([\d.]+)em", ti or "")
         if m:
             ind_parts.append(f'w:firstLine="{self._em_to_twips(float(m.group(1)), font_pt)}"')

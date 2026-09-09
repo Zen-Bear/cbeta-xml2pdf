@@ -544,7 +544,7 @@ class DocxRenderer:
             return 18
 
     def _para(self, runs: str, *tags: str, indent: float = 0, hang=None,
-              page_break: bool = False, count: bool = True) -> str:
+              page_break: bool = False, count: bool = True, no_first_line: bool = False) -> str:
         tags = tuple(t for t in tags if t)
         # div 祖先上下文并入：多数调用点只传本标签（如 juan/table/pin），在此统一补上，
         # 否则 div 属性（如 div-xu 边距）到不了命名样式段落；已含 div 的调用去重后合并幂等
@@ -583,7 +583,7 @@ class DocxRenderer:
             ppr += div_extra
             p = f"<w:p><w:pPr>{ppr}</w:pPr>{runs}</w:p>"
             return self._with_bookmark(p)
-        ppr = self.theme.docx_para(*tags, indent_em=indent)
+        ppr = self.theme.docx_para(*tags, indent_em=indent, no_first_line=no_first_line)
         # 内联路径也挂命名样式（直接属性照旧覆盖样式，视觉不变；
         # Word 样式窗格/预览标签可识别，如 def>p 的“释义”）
         sty = f'<w:pStyle w:val="{para}"/>' if para in _STYLED_PARAS else ""
@@ -913,7 +913,8 @@ class DocxRenderer:
                 self._in_pre = True
                 runs = self._render_children(e, "p")
                 self._in_pre = prev
-                return self._para(runs, "p")
+                # 预排不缩进（CSS pre/text-indent:0；只掐首行，段间距/行距跟 p 不变）
+                return self._para(runs, "p", "pre", no_first_line=True)
             # p/@type 映射到主题标签（dharani 等），对齐 HTML 的 class="dharani"
             ptag = ptype if ptype in self.theme.tags else None
             style = a.get("style") or ""
@@ -930,7 +931,7 @@ class DocxRenderer:
             self._in_pre = True
             runs = self._render_children(e, "p", "pre")
             self._in_pre = prev
-            return self._para(runs, "p", "pre")
+            return self._para(runs, "p", "pre", no_first_line=True)
         if tag == "head":
             # 仅 jhead 去重，head 保留书名；若有 pending mulu（紧随的 cb:mulu），则以 mulu 的 level/text 作隐形书签（段内避免空白页）
             nodes = e.children

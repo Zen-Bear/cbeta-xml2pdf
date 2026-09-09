@@ -245,6 +245,34 @@ class TestDivXuSpacing(unittest.TestCase):
         self.assertIn('w:after="480"', out)
 
 
+class TestPreNoFirstLine(unittest.TestCase):
+    """预排不缩进（CSS pre/text-indent:0）：只掐 w:firstLine，段间距/行距跟 p 不变；
+    真 <pre> 与 <p cb:type=pre> 同口径（X60n1116 实证）。"""
+
+    def _para_of(self, e):
+        r = DocxRenderer(bookmarks=False)
+        out = r._render_e(e)
+        return out[out.find("<w:pPr>"):out.find("</w:pPr>")]
+
+    def test_cb_type_pre_no_first_line(self):
+        ppr = self._para_of(E(tag="p", attrs={"cb:type": "pre"},
+                                children=[Text(text="序文")]))
+        self.assertNotIn("firstLine", ppr)
+        self.assertIn('w:before="120"', ppr)  # 段间距跟 p 不变
+        self.assertIn('w:line="360"', ppr)
+
+    def test_true_pre_same(self):
+        ppr = self._para_of(E(tag="pre", attrs={},
+                                children=[Text(text="序文")]))
+        self.assertNotIn("firstLine", ppr)
+        self.assertIn('w:before="120"', ppr)
+
+    def test_plain_p_uses_named_style(self):
+        r = DocxRenderer(bookmarks=False)
+        out = r._render_e(E(tag="p", attrs={}, children=[Text(text="序文")]))
+        self.assertIn('w:val="p"', out)  # 正文走 p 命名样式（缩进在 styles.xml）
+
+
 class TestDocxOptions(unittest.TestCase):
     """presets.json output 段的 grayscale / page_border 参数。"""
 
