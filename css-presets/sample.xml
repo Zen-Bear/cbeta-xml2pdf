@@ -1,0 +1,2064 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-model href="https://raw.githubusercontent.com/cbeta-org/xml-p5/master/schema/cbeta-p5.rnc" type="application/relax-ng-compact-syntax"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" xmlns:cb="http://www.cbeta.org/ns/1.0" xml:id="X59n1077">
+<teiHeader>
+  <fileDesc>
+    <titleStmt>
+      <title level="s">Manji Shinsan Dainihon Zokuzōkyō</title>
+      <title level="s" xml:lang="zh-Hant">卍新纂大日本續藏經</title>
+      <title level="m" xml:lang="zh-Hant">準提淨業</title>
+      <title>Manji Shinsan Dainihon Zokuzōkyō, Electronic version, No. 1077 準提淨業</title>
+      <title xml:lang="zh-Hant">卍新纂大日本續藏經數位版, No. 1077 準提淨業</title>
+      <author>明 謝于教著</author>
+      <respStmt>
+        <resp>Electronic Version by</resp>
+        <name>CBETA</name>
+      </respStmt>
+    </titleStmt>
+    <editionStmt>
+      <edition>XML TEI P5</edition>
+      <respStmt xml:id="resp1"><resp>corrections</resp><name>AI</name></respStmt>
+      <respStmt xml:id="resp2"><resp>corrections</resp><name>CBETA</name></respStmt>
+      <respStmt xml:id="resp3"><resp>corrections</resp><name>CBETA.maha</name></respStmt>
+      <respStmt xml:id="resp4"><resp>corrections</resp><name>Xuzangjing</name></respStmt>
+      <respStmt xml:id="resp5"><resp>corrections</resp><name>CBETA.say</name></respStmt>
+      <respStmt xml:id="resp6"><resp>corrections</resp><name>CBETA.ting</name></respStmt>
+    </editionStmt>
+    <extent>3卷</extent>
+    <publicationStmt>
+      <idno type="CBETA">
+        <idno type="canon">X</idno>.<idno type="vol">59</idno>.<idno type="no">1077</idno>
+      </idno>
+      <distributor>
+        <name>財團法人佛教電子佛典基金會 (CBETA)</name>
+        <address>
+          <addrLine><email>service@cbeta.org</email></addrLine>
+        </address>
+      </distributor>
+      <availability>
+        <p>Available for non-commercial use when distributed with this header intact.</p>
+      </availability>
+      <date>2025-09-01 13:14:49 +0800</date>
+    </publicationStmt>
+    <sourceDesc>
+      <bibl>卍新纂大日本續藏經</bibl>
+    </sourceDesc>
+  </fileDesc>
+  <encodingDesc>
+    <projectDesc>
+      <p xml:lang="en" cb:type="ly">Input by CBETA, OCR by CBETA, Punctuated draft text as provided by GJ.cool AI punctuation engine</p>
+      <p xml:lang="zh-Hant" cb:type="ly">CBETA 人工輸入，CBETA 掃瞄辨識，古籍酷 AI 自動標點引擎提供新式標點初稿</p>
+    </projectDesc>
+    <editorialDecl>
+      <punctuation resp="#resp1"><p>AI 標點</p></punctuation>
+    </editorialDecl>
+    <tagsDecl>
+      <namespace name="http://www.tei-c.org/ns/1.0">
+        <tagUsage gi="rdg">
+          <listWit>
+            <witness xml:id="wit.cbeta">【CB】</witness>
+            <witness xml:id="wit.orig">【卍續】</witness>
+          </listWit>
+        </tagUsage>
+      </namespace>
+    </tagsDecl>
+    <charDecl>
+      <char xml:id="CB00088">
+        <charName>CBETA CHARACTER CB00088</charName>
+        <charProp>
+          <localName>composition</localName>
+          <value>[口*咢]</value>
+        </charProp>
+        <charProp>
+          <localName>normalized form</localName>
+          <value>齶</value>
+        </charProp>
+        <mapping type="unicode">U+35C1</mapping>
+        <mapping cb:dec="983128" type="PUA">U+F0058</mapping>
+      </char>
+      <char xml:id="CB00170">
+        <charName>CBETA CHARACTER CB00170</charName>
+        <charProp>
+          <localName>composition</localName>
+          <value>[月*坒]</value>
+        </charProp>
+        <charProp>
+          <localName>normalized form</localName>
+          <value>髀</value>
+        </charProp>
+        <mapping type="unicode">U+43F6</mapping>
+        <mapping cb:dec="983210" type="PUA">U+F00AA</mapping>
+      </char>
+      <char xml:id="CB00501">
+        <charName>CBETA CHARACTER CB00501</charName>
+        <charProp>
+          <localName>composition</localName>
+          <value>[馬*犬]</value>
+        </charProp>
+        <charProp>
+          <localName>normalized form</localName>
+          <value>馱</value>
+        </charProp>
+        <mapping type="unicode">U+4B7E</mapping>
+        <mapping cb:dec="983541" type="PUA">U+F01F5</mapping>
+      </char>
+      <char xml:id="CB00548">
+        <charName>CBETA CHARACTER CB00548</charName>
+        <charProp>
+          <localName>composition</localName>
+          <value>[番*去]</value>
+        </charProp>
+        <mapping type="unicode">U+24CD6</mapping>
+        <mapping cb:dec="983588" type="PUA">U+F0224</mapping>
+      </char>
+      <char xml:id="CB00576">
+        <charName>CBETA CHARACTER CB00576</charName>
+        <charProp>
+          <localName>composition</localName>
+          <value>[寧*頁]</value>
+        </charProp>
+        <mapping type="unicode">U+29573</mapping>
+        <mapping cb:dec="983616" type="PUA">U+F0240</mapping>
+      </char>
+      <char xml:id="CB00618">
+        <charName>CBETA CHARACTER CB00618</charName>
+        <charProp>
+          <localName>composition</localName>
+          <value>[隸-木+土]</value>
+        </charProp>
+        <charProp>
+          <localName>normalized form</localName>
+          <value>隸</value>
+        </charProp>
+        <mapping type="normal_unicode">U+96B7</mapping>
+        <mapping cb:dec="983658" type="PUA">U+F026A</mapping>
+      </char>
+      <char xml:id="CB00771">
+        <charName>CBETA CHARACTER CB00771</charName>
+        <charProp>
+          <localName>composition</localName>
+          <value>[口*藍]</value>
+        </charProp>
+        <mapping type="unicode">U+3615</mapping>
+        <mapping cb:dec="983811" type="PUA">U+F0303</mapping>
+      </char>
+      <char xml:id="CB01236">
+        <charName>CBETA CHARACTER CB01236</charName>
+        <charProp>
+          <localName>composition</localName>
+          <value>[口*臨]</value>
+        </charProp>
+        <mapping type="unicode">U+21126</mapping>
+        <mapping cb:dec="984276" type="PUA">U+F04D4</mapping>
+      </char>
+      <char xml:id="CB01265">
+        <charName>CBETA CHARACTER CB01265</charName>
+        <charProp>
+          <localName>composition</localName>
+          <value>[月*夆]</value>
+        </charProp>
+        <mapping type="unicode">U+43FA</mapping>
+        <mapping cb:dec="984305" type="PUA">U+F04F1</mapping>
+      </char>
+      <char xml:id="CB05151">
+        <charName>CBETA CHARACTER CB05151</charName>
+        <charProp>
+          <localName>composition</localName>
+          <value>[○@卍]</value>
+        </charProp>
+        <mapping cb:dec="988191" type="PUA">U+F141F</mapping>
+      </char>
+      <char xml:id="CB05473">
+        <charName>CBETA CHARACTER CB05473</charName>
+        <charProp>
+          <localName>composition</localName>
+          <value>[月*氏]</value>
+        </charProp>
+        <mapping type="unicode">U+26646</mapping>
+        <mapping cb:dec="988513" type="PUA">U+F1561</mapping>
+      </char>
+      <char xml:id="CB06078">
+        <charName>CBETA CHARACTER CB06078</charName>
+        <charProp>
+          <localName>composition</localName>
+          <value>[打-丁+嶲]</value>
+        </charProp>
+        <charProp>
+          <localName>normalized form</localName>
+          <value>攜</value>
+        </charProp>
+        <mapping type="unicode">U+22E42</mapping>
+        <mapping cb:dec="989118" type="PUA">U+F17BE</mapping>
+      </char>
+      <char xml:id="CB12528">
+        <charName>CBETA CHARACTER CB12528</charName>
+        <charProp>
+          <localName>composition</localName>
+          <value>[隸-木+匕]</value>
+        </charProp>
+        <charProp>
+          <localName>normalized form</localName>
+          <value>隸</value>
+        </charProp>
+        <mapping type="unicode">U+28F7B</mapping>
+        <mapping cb:dec="995568" type="PUA">U+F30F0</mapping>
+      </char>
+      <char xml:id="CB15035">
+        <charName>CBETA CHARACTER CB15035</charName>
+        <charProp>
+          <localName>composition</localName>
+          <value>[穴/逐]</value>
+        </charProp>
+        <charProp>
+          <localName>normalized form</localName>
+          <value>邃</value>
+        </charProp>
+        <mapping type="unicode">U+41B3</mapping>
+        <mapping cb:dec="998075" type="PUA">U+F3ABB</mapping>
+      </char>
+      <char xml:id="CB15081">
+        <charName>CBETA CHARACTER CB15081</charName>
+        <charProp>
+          <localName>composition</localName>
+          <value>[竺-二+束]</value>
+        </charProp>
+        <charProp>
+          <localName>normalized form</localName>
+          <value>策</value>
+        </charProp>
+        <mapping type="unicode">U+41FF</mapping>
+        <mapping cb:dec="998121" type="PUA">U+F3AE9</mapping>
+      </char>
+      <char xml:id="CB15287">
+        <charName>CBETA CHARACTER CB15287</charName>
+        <charProp>
+          <localName>composition</localName>
+          <value>[口*(危-(夗-夕)+矢)]</value>
+        </charProp>
+        <charProp>
+          <localName>normalized form</localName>
+          <value>喉</value>
+        </charProp>
+        <mapping type="unicode">U+35CB</mapping>
+        <mapping cb:dec="998327" type="PUA">U+F3BB7</mapping>
+      </char>
+      <char xml:id="CB15408">
+        <charName>CBETA CHARACTER CB15408</charName>
+        <charProp>
+          <localName>composition</localName>
+          <value>[浦/女]</value>
+        </charProp>
+        <charProp>
+          <localName>normalized form</localName>
+          <value>婆</value>
+        </charProp>
+        <mapping type="unicode">U+3711</mapping>
+        <mapping cb:dec="998448" type="PUA">U+F3C30</mapping>
+      </char>
+      <char xml:id="CB17267">
+        <charName>CBETA CHARACTER CB17267</charName>
+        <charProp>
+          <localName>composition</localName>
+          <value>[嚂-皿+見]</value>
+        </charProp>
+        <mapping type="unicode">U+2BB20</mapping>
+        <mapping cb:dec="1000307" type="PUA">U+F4373</mapping>
+      </char>
+      <char xml:id="RJ-C943">
+        <charName>CBETA CHARACTER RJ-C943</charName>
+        <charProp>
+          <localName>Romanized form in CBETA transcription</localName>
+          <value>a</value>
+        </charProp>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>匚</value>
+        </charProp>
+        <charProp>
+          <localName>Romanized form in Unicode transcription</localName>
+          <value>a</value>
+        </charProp>
+        <mapping cb:dec="1100099" type="PUA">U+10C943</mapping>
+      </char>
+      <char xml:id="RJ-C949">
+        <charName>CBETA CHARACTER RJ-C949</charName>
+        <charProp>
+          <localName>Romanized form in CBETA transcription</localName>
+          <value>a.m</value>
+        </charProp>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>囗</value>
+        </charProp>
+        <charProp>
+          <localName>Romanized form in Unicode transcription</localName>
+          <value>aṃ</value>
+        </charProp>
+        <mapping cb:dec="1100105" type="PUA">U+10C949</mapping>
+      </char>
+      <char xml:id="RJ-C94B">
+        <charName>CBETA CHARACTER RJ-C94B</charName>
+        <charProp>
+          <localName>Romanized form in CBETA transcription</localName>
+          <value>ba</value>
+        </charProp>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>屮</value>
+        </charProp>
+        <charProp>
+          <localName>Romanized form in Unicode transcription</localName>
+          <value>ba</value>
+        </charProp>
+        <mapping cb:dec="1100107" type="PUA">U+10C94B</mapping>
+      </char>
+      <char xml:id="RJ-C963">
+        <charName>CBETA CHARACTER RJ-C963</charName>
+        <charProp>
+          <localName>Romanized form in CBETA transcription</localName>
+          <value>bhruu.m</value>
+        </charProp>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>丱</value>
+        </charProp>
+        <charProp>
+          <localName>Romanized form in Unicode transcription</localName>
+          <value>bhrūṃ</value>
+        </charProp>
+        <mapping cb:dec="1100131" type="PUA">U+10C963</mapping>
+      </char>
+      <char xml:id="RJ-C973">
+        <charName>CBETA CHARACTER RJ-C973</charName>
+        <charProp>
+          <localName>Romanized form in CBETA transcription</localName>
+          <value>bu</value>
+        </charProp>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>宄</value>
+        </charProp>
+        <charProp>
+          <localName>Romanized form in Unicode transcription</localName>
+          <value>bu</value>
+        </charProp>
+        <mapping cb:dec="1100147" type="PUA">U+10C973</mapping>
+      </char>
+      <char xml:id="RJ-C977">
+        <charName>CBETA CHARACTER RJ-C977</charName>
+        <charProp>
+          <localName>Romanized form in CBETA transcription</localName>
+          <value>ca</value>
+        </charProp>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>屳</value>
+        </charProp>
+        <charProp>
+          <localName>Romanized form in Unicode transcription</localName>
+          <value>ca</value>
+        </charProp>
+        <mapping cb:dec="1100151" type="PUA">U+10C977</mapping>
+      </char>
+      <char xml:id="RJ-C9BD">
+        <charName>CBETA CHARACTER RJ-C9BD</charName>
+        <charProp>
+          <localName>Romanized form in CBETA transcription</localName>
+          <value>cu</value>
+        </charProp>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>刓</value>
+        </charProp>
+        <charProp>
+          <localName>Romanized form in Unicode transcription</localName>
+          <value>cu</value>
+        </charProp>
+        <mapping cb:dec="1100221" type="PUA">U+10C9BD</mapping>
+      </char>
+      <char xml:id="RJ-C9BF">
+        <charName>CBETA CHARACTER RJ-C9BF</charName>
+        <charProp>
+          <localName>Romanized form in CBETA transcription</localName>
+          <value>cu.m</value>
+        </charProp>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>刐</value>
+        </charProp>
+        <charProp>
+          <localName>Romanized form in Unicode transcription</localName>
+          <value>cuṃ</value>
+        </charProp>
+        <mapping cb:dec="1100223" type="PUA">U+10C9BF</mapping>
+      </char>
+      <char xml:id="RJ-C9D3">
+        <charName>CBETA CHARACTER RJ-C9D3</charName>
+        <charProp>
+          <localName>Romanized form in CBETA transcription</localName>
+          <value>ddhaa</value>
+        </charProp>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>孖</value>
+        </charProp>
+        <charProp>
+          <localName>Romanized form in Unicode transcription</localName>
+          <value>ddhā</value>
+        </charProp>
+        <mapping cb:dec="1100243" type="PUA">U+10C9D3</mapping>
+      </char>
+      <char xml:id="RJ-C9D5">
+        <charName>CBETA CHARACTER RJ-C9D5</charName>
+        <charProp>
+          <localName>Romanized form in CBETA transcription</localName>
+          <value>de</value>
+        </charProp>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>尥</value>
+        </charProp>
+        <charProp>
+          <localName>Romanized form in Unicode transcription</localName>
+          <value>de</value>
+        </charProp>
+        <mapping cb:dec="1100245" type="PUA">U+10C9D5</mapping>
+      </char>
+      <char xml:id="RJ-CA4C">
+        <charName>CBETA CHARACTER RJ-CA4C</charName>
+        <charProp>
+          <localName>Romanized form in CBETA transcription</localName>
+          <value>dme</value>
+        </charProp>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>芀</value>
+        </charProp>
+        <charProp>
+          <localName>Romanized form in Unicode transcription</localName>
+          <value>dme</value>
+        </charProp>
+        <mapping cb:dec="1100364" type="PUA">U+10CA4C</mapping>
+      </char>
+      <char xml:id="RJ-CA5F">
+        <charName>CBETA CHARACTER RJ-CA5F</charName>
+        <charProp>
+          <localName>Romanized form in CBETA transcription</localName>
+          <value>dya</value>
+        </charProp>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>佤</value>
+        </charProp>
+        <charProp>
+          <localName>Romanized form in Unicode transcription</localName>
+          <value>dya</value>
+        </charProp>
+        <mapping cb:dec="1100383" type="PUA">U+10CA5F</mapping>
+      </char>
+      <char xml:id="RJ-CAB0">
+        <charName>CBETA CHARACTER RJ-CAB0</charName>
+        <charProp>
+          <localName>Romanized form in CBETA transcription</localName>
+          <value>haa</value>
+        </charProp>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>夆</value>
+        </charProp>
+        <charProp>
+          <localName>Romanized form in Unicode transcription</localName>
+          <value>hā</value>
+        </charProp>
+        <mapping cb:dec="1100464" type="PUA">U+10CAB0</mapping>
+      </char>
+      <char xml:id="RJ-CACB">
+        <charName>CBETA CHARACTER RJ-CACB</charName>
+        <charProp>
+          <localName>Romanized form in CBETA transcription</localName>
+          <value>huu.m</value>
+        </charProp>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>帊</value>
+        </charProp>
+        <charProp>
+          <localName>Romanized form in Unicode transcription</localName>
+          <value>hūṃ</value>
+        </charProp>
+        <mapping cb:dec="1100491" type="PUA">U+10CACB</mapping>
+      </char>
+      <char xml:id="RJ-CB77">
+        <charName>CBETA CHARACTER RJ-CB77</charName>
+        <charProp>
+          <localName>Romanized form in CBETA transcription</localName>
+          <value>ko</value>
+        </charProp>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>肒</value>
+        </charProp>
+        <charProp>
+          <localName>Romanized form in Unicode transcription</localName>
+          <value>ko</value>
+        </charProp>
+        <mapping cb:dec="1100663" type="PUA">U+10CB77</mapping>
+      </char>
+      <char xml:id="RJ-CBA2">
+        <charName>CBETA CHARACTER RJ-CBA2</charName>
+        <charProp>
+          <localName>Romanized form in CBETA transcription</localName>
+          <value>ksa.m</value>
+        </charProp>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>芃</value>
+        </charProp>
+        <charProp>
+          <localName>Romanized form in Unicode transcription</localName>
+          <value>ksaṃ</value>
+        </charProp>
+        <mapping cb:dec="1100706" type="PUA">U+10CBA2</mapping>
+      </char>
+      <char xml:id="RJ-CBC2">
+        <charName>CBETA CHARACTER RJ-CBC2</charName>
+        <charProp>
+          <localName>Romanized form in CBETA transcription</localName>
+          <value>le</value>
+        </charProp>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>侁</value>
+        </charProp>
+        <charProp>
+          <localName>Romanized form in Unicode transcription</localName>
+          <value>le</value>
+        </charProp>
+        <mapping cb:dec="1100738" type="PUA">U+10CBC2</mapping>
+      </char>
+      <char xml:id="RJ-CBD3">
+        <charName>CBETA CHARACTER RJ-CBD3</charName>
+        <charProp>
+          <localName>Romanized form in CBETA transcription</localName>
+          <value>ma</value>
+        </charProp>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>剆</value>
+        </charProp>
+        <charProp>
+          <localName>Romanized form in Unicode transcription</localName>
+          <value>ma</value>
+        </charProp>
+        <mapping cb:dec="1100755" type="PUA">U+10CBD3</mapping>
+      </char>
+      <char xml:id="RJ-CBE2">
+        <charName>CBETA CHARACTER RJ-CBE2</charName>
+        <charProp>
+          <localName>Romanized form in CBETA transcription</localName>
+          <value>mo</value>
+        </charProp>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>呺</value>
+        </charProp>
+        <charProp>
+          <localName>Romanized form in Unicode transcription</localName>
+          <value>mo</value>
+        </charProp>
+        <mapping cb:dec="1100770" type="PUA">U+10CBE2</mapping>
+      </char>
+      <char xml:id="RJ-CBEB">
+        <charName>CBETA CHARACTER RJ-CBEB</charName>
+        <charProp>
+          <localName>Romanized form in CBETA transcription</localName>
+          <value>mya</value>
+        </charProp>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>呠</value>
+        </charProp>
+        <charProp>
+          <localName>Romanized form in Unicode transcription</localName>
+          <value>mya</value>
+        </charProp>
+        <mapping cb:dec="1100779" type="PUA">U+10CBEB</mapping>
+      </char>
+      <char xml:id="RJ-CBED">
+        <charName>CBETA CHARACTER RJ-CBED</charName>
+        <charProp>
+          <localName>Romanized form in CBETA transcription</localName>
+          <value>na</value>
+        </charProp>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>呣</value>
+        </charProp>
+        <charProp>
+          <localName>Romanized form in Unicode transcription</localName>
+          <value>na</value>
+        </charProp>
+        <mapping cb:dec="1100781" type="PUA">U+10CBED</mapping>
+      </char>
+      <char xml:id="RJ-CBFE">
+        <charName>CBETA CHARACTER RJ-CBFE</charName>
+        <charProp>
+          <localName>Romanized form in CBETA transcription</localName>
+          <value>naa.m</value>
+        </charProp>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>坢</value>
+        </charProp>
+        <charProp>
+          <localName>Romanized form in Unicode transcription</localName>
+          <value>nāṃ</value>
+        </charProp>
+        <mapping cb:dec="1100798" type="PUA">U+10CBFE</mapping>
+      </char>
+      <char xml:id="RJ-CC5A">
+        <charName>CBETA CHARACTER RJ-CC5A</charName>
+        <charProp>
+          <localName>Romanized form in CBETA transcription</localName>
+          <value>.ni</value>
+        </charProp>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>屇</value>
+        </charProp>
+        <charProp>
+          <localName>Romanized form in Unicode transcription</localName>
+          <value>ṇi</value>
+        </charProp>
+        <mapping cb:dec="1100890" type="PUA">U+10CC5A</mapping>
+      </char>
+      <char xml:id="RJ-CCBA">
+        <charName>CBETA CHARACTER RJ-CCBA</charName>
+        <charProp>
+          <localName>Romanized form in CBETA transcription</localName>
+          <value>o.m</value>
+        </charProp>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>抮</value>
+        </charProp>
+        <charProp>
+          <localName>Romanized form in Unicode transcription</localName>
+          <value>oṃ</value>
+        </charProp>
+        <mapping cb:dec="1100986" type="PUA">U+10CCBA</mapping>
+      </char>
+      <char xml:id="RJ-CCBB">
+        <charName>CBETA CHARACTER RJ-CCBB</charName>
+        <charProp>
+          <localName>Romanized form in CBETA transcription</localName>
+          <value>pa</value>
+        </charProp>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>抳</value>
+        </charProp>
+        <charProp>
+          <localName>Romanized form in Unicode transcription</localName>
+          <value>pa</value>
+        </charProp>
+        <mapping cb:dec="1100987" type="PUA">U+10CCBB</mapping>
+      </char>
+      <char xml:id="RJ-CCDF">
+        <charName>CBETA CHARACTER RJ-CCDF</charName>
+        <charProp>
+          <localName>Romanized form in CBETA transcription</localName>
+          <value>pta</value>
+        </charProp>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>杺</value>
+        </charProp>
+        <charProp>
+          <localName>Romanized form in Unicode transcription</localName>
+          <value>pta</value>
+        </charProp>
+        <mapping cb:dec="1101023" type="PUA">U+10CCDF</mapping>
+      </char>
+      <char xml:id="RJ-CCE7">
+        <charName>CBETA CHARACTER RJ-CCE7</charName>
+        <charProp>
+          <localName>Romanized form in CBETA transcription</localName>
+          <value>ra</value>
+        </charProp>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>杹</value>
+        </charProp>
+        <charProp>
+          <localName>Romanized form in Unicode transcription</localName>
+          <value>ra</value>
+        </charProp>
+        <mapping cb:dec="1101031" type="PUA">U+10CCE7</mapping>
+      </char>
+      <char xml:id="RJ-CCEB">
+        <charName>CBETA CHARACTER RJ-CCEB</charName>
+        <charProp>
+          <localName>Romanized form in CBETA transcription</localName>
+          <value>ra.m</value>
+        </charProp>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>歾</value>
+        </charProp>
+        <charProp>
+          <localName>Romanized form in Unicode transcription</localName>
+          <value>raṃ</value>
+        </charProp>
+        <mapping cb:dec="1101035" type="PUA">U+10CCEB</mapping>
+      </char>
+      <char xml:id="RJ-CD64">
+        <charName>CBETA CHARACTER RJ-CD64</charName>
+        <charProp>
+          <localName>Romanized form in CBETA transcription</localName>
+          <value>sa</value>
+        </charProp>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>狌</value>
+        </charProp>
+        <charProp>
+          <localName>Romanized form in Unicode transcription</localName>
+          <value>sa</value>
+        </charProp>
+        <mapping cb:dec="1101156" type="PUA">U+10CD64</mapping>
+      </char>
+      <char xml:id="RJ-CD68">
+        <charName>CBETA CHARACTER RJ-CD68</charName>
+        <charProp>
+          <localName>Romanized form in CBETA transcription</localName>
+          <value>.sa</value>
+        </charProp>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>玭</value>
+        </charProp>
+        <charProp>
+          <localName>Romanized form in Unicode transcription</localName>
+          <value>ṣa</value>
+        </charProp>
+        <mapping cb:dec="1101160" type="PUA">U+10CD68</mapping>
+      </char>
+      <char xml:id="RJ-CDCC">
+        <charName>CBETA CHARACTER RJ-CDCC</charName>
+        <charProp>
+          <localName>Romanized form in CBETA transcription</localName>
+          <value>svaa</value>
+        </charProp>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>迒</value>
+        </charProp>
+        <charProp>
+          <localName>Romanized form in Unicode transcription</localName>
+          <value>svā</value>
+        </charProp>
+        <mapping cb:dec="1101260" type="PUA">U+10CDCC</mapping>
+      </char>
+      <char xml:id="RJ-CDD4">
+        <charName>CBETA CHARACTER RJ-CDD4</charName>
+        <charProp>
+          <localName>Romanized form in CBETA transcription</localName>
+          <value>ta</value>
+        </charProp>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>邴</value>
+        </charProp>
+        <charProp>
+          <localName>Romanized form in Unicode transcription</localName>
+          <value>ta</value>
+        </charProp>
+        <mapping cb:dec="1101268" type="PUA">U+10CDD4</mapping>
+      </char>
+      <char xml:id="RJ-CDE3">
+        <charName>CBETA CHARACTER RJ-CDE3</charName>
+        <charProp>
+          <localName>Romanized form in CBETA transcription</localName>
+          <value>thaa</value>
+        </charProp>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>俁</value>
+        </charProp>
+        <charProp>
+          <localName>Romanized form in Unicode transcription</localName>
+          <value>thā</value>
+        </charProp>
+        <mapping cb:dec="1101283" type="PUA">U+10CDE3</mapping>
+      </char>
+      <char xml:id="RJ-CE52">
+        <charName>CBETA CHARACTER RJ-CE52</charName>
+        <charProp>
+          <localName>Romanized form in CBETA transcription</localName>
+          <value>.tii</value>
+        </charProp>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>垟</value>
+        </charProp>
+        <charProp>
+          <localName>Romanized form in Unicode transcription</localName>
+          <value>ṭī</value>
+        </charProp>
+        <mapping cb:dec="1101394" type="PUA">U+10CE52</mapping>
+      </char>
+      <char xml:id="RJ-CEA6">
+        <charName>CBETA CHARACTER RJ-CEA6</charName>
+        <charProp>
+          <localName>Romanized form in CBETA transcription</localName>
+          <value>va</value>
+        </charProp>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>峖</value>
+        </charProp>
+        <charProp>
+          <localName>Romanized form in Unicode transcription</localName>
+          <value>va</value>
+        </charProp>
+        <mapping cb:dec="1101478" type="PUA">U+10CEA6</mapping>
+      </char>
+      <char xml:id="RJ-CED0">
+        <charName>CBETA CHARACTER RJ-CED0</charName>
+        <charProp>
+          <localName>Romanized form in CBETA transcription</localName>
+          <value>cchrii.m</value>
+        </charProp>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>恦</value>
+        </charProp>
+        <charProp>
+          <localName>Romanized form in Unicode transcription</localName>
+          <value>cchrīṃ</value>
+        </charProp>
+        <mapping cb:dec="1101520" type="PUA">U+10CED0</mapping>
+      </char>
+      <char xml:id="RJ-E046">
+        <charName>CBETA CHARACTER RJ-E046</charName>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>誆</value>
+        </charProp>
+        <mapping cb:dec="1105990" type="PUA">U+10E046</mapping>
+      </char>
+      <char xml:id="RJ-E047">
+        <charName>CBETA CHARACTER RJ-E047</charName>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>詿</value>
+        </charProp>
+        <mapping cb:dec="1105991" type="PUA">U+10E047</mapping>
+      </char>
+      <char xml:id="RJ-E048">
+        <charName>CBETA CHARACTER RJ-E048</charName>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>詡</value>
+        </charProp>
+        <mapping cb:dec="1105992" type="PUA">U+10E048</mapping>
+      </char>
+      <char xml:id="RJ-E049">
+        <charName>CBETA CHARACTER RJ-E049</charName>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>訿</value>
+        </charProp>
+        <mapping cb:dec="1105993" type="PUA">U+10E049</mapping>
+      </char>
+      <char xml:id="RJ-E04A">
+        <charName>CBETA CHARACTER RJ-E04A</charName>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>詷</value>
+        </charProp>
+        <mapping cb:dec="1105994" type="PUA">U+10E04A</mapping>
+      </char>
+      <char xml:id="RJ-E04B">
+        <charName>CBETA CHARACTER RJ-E04B</charName>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>誂</value>
+        </charProp>
+        <mapping cb:dec="1105995" type="PUA">U+10E04B</mapping>
+      </char>
+      <char xml:id="RJ-E04C">
+        <charName>CBETA CHARACTER RJ-E04C</charName>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>誄</value>
+        </charProp>
+        <mapping cb:dec="1105996" type="PUA">U+10E04C</mapping>
+      </char>
+      <char xml:id="RJ-E04D">
+        <charName>CBETA CHARACTER RJ-E04D</charName>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>詵</value>
+        </charProp>
+        <mapping cb:dec="1105997" type="PUA">U+10E04D</mapping>
+      </char>
+      <char xml:id="RJ-E04E">
+        <charName>CBETA CHARACTER RJ-E04E</charName>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>誃</value>
+        </charProp>
+        <mapping cb:dec="1105998" type="PUA">U+10E04E</mapping>
+      </char>
+      <char xml:id="RJ-E04F">
+        <charName>CBETA CHARACTER RJ-E04F</charName>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>誁</value>
+        </charProp>
+        <mapping cb:dec="1105999" type="PUA">U+10E04F</mapping>
+      </char>
+      <char xml:id="RJ-E050">
+        <charName>CBETA CHARACTER RJ-E050</charName>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>詴</value>
+        </charProp>
+        <mapping cb:dec="1106000" type="PUA">U+10E050</mapping>
+      </char>
+      <char xml:id="RJ-E051">
+        <charName>CBETA CHARACTER RJ-E051</charName>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>詺</value>
+        </charProp>
+        <mapping cb:dec="1106001" type="PUA">U+10E051</mapping>
+      </char>
+      <char xml:id="RJ-E052">
+        <charName>CBETA CHARACTER RJ-E052</charName>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>谼</value>
+        </charProp>
+        <mapping cb:dec="1106002" type="PUA">U+10E052</mapping>
+      </char>
+      <char xml:id="RJ-E053">
+        <charName>CBETA CHARACTER RJ-E053</charName>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>豋</value>
+        </charProp>
+        <mapping cb:dec="1106003" type="PUA">U+10E053</mapping>
+      </char>
+      <char xml:id="RJ-E054">
+        <charName>CBETA CHARACTER RJ-E054</charName>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>豊</value>
+        </charProp>
+        <mapping cb:dec="1106004" type="PUA">U+10E054</mapping>
+      </char>
+      <char xml:id="RJ-E055">
+        <charName>CBETA CHARACTER RJ-E055</charName>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>豥</value>
+        </charProp>
+        <mapping cb:dec="1106005" type="PUA">U+10E055</mapping>
+      </char>
+      <char xml:id="RJ-E056">
+        <charName>CBETA CHARACTER RJ-E056</charName>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>豤</value>
+        </charProp>
+        <mapping cb:dec="1106006" type="PUA">U+10E056</mapping>
+      </char>
+      <char xml:id="RJ-E057">
+        <charName>CBETA CHARACTER RJ-E057</charName>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>豦</value>
+        </charProp>
+        <mapping cb:dec="1106007" type="PUA">U+10E057</mapping>
+      </char>
+      <char xml:id="RJ-E058">
+        <charName>CBETA CHARACTER RJ-E058</charName>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>貆</value>
+        </charProp>
+        <mapping cb:dec="1106008" type="PUA">U+10E058</mapping>
+      </char>
+      <char xml:id="RJ-E059">
+        <charName>CBETA CHARACTER RJ-E059</charName>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>貄</value>
+        </charProp>
+        <mapping cb:dec="1106009" type="PUA">U+10E059</mapping>
+      </char>
+      <char xml:id="RJ-E05B">
+        <charName>CBETA CHARACTER RJ-E05B</charName>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>賌</value>
+        </charProp>
+        <mapping cb:dec="1106011" type="PUA">U+10E05B</mapping>
+      </char>
+      <char xml:id="RJ-E060">
+        <charName>CBETA CHARACTER RJ-E060</charName>
+        <charProp>
+          <localName>rjchar</localName>
+          <value>趎</value>
+        </charProp>
+        <mapping cb:dec="1106016" type="PUA">U+10E060</mapping>
+      </char>
+    </charDecl>
+  </encodingDesc>
+  <profileDesc>
+    <langUsage>
+      <language ident="sa-x-rj">Sanskrit-Ranjana</language>
+      <language ident="en">English</language>
+      <language ident="zh-Hant">Chinese (Traditional)</language>
+    </langUsage>
+  </profileDesc>
+  <revisionDesc>
+    <change when="2013-05-20">
+      <name>CW</name><name>Ray Chou 周邦信</name>P4 to P5 conversion by p4top5a.py, intended for publication
+    </change>
+    <change when="2005-06-13T08:44:29">
+      Zhou Bang-Xin (ed.) Created initial TEI XML version with BASICX.BAT
+    </change>
+  </revisionDesc>
+</teiHeader>
+<text><body>
+<milestone unit="juan" n="1"/>
+<pb ed="X" xml:id="X59.1077.0221c" n="0221c"/>
+<lb ed="X" n="0221c01"/>
+<lb ed="X" n="0221c02"/>
+<lb ed="X" n="0221c03"/>
+<lb ed="X" n="0221c04"/>
+<lb ed="X" n="0221c05"/><cb:div type="xu"><cb:mulu type="序" level="1">No. 1077-A 重刻准提淨業序</cb:mulu><head>No. 1077-A
+<lb ed="X" n="0221c06"/><lb ed="R104" n="0731a01"/> 重刻准提淨業序</head>
+<lb ed="X" n="0221c07"/>
+<lb ed="X" n="0221c08"/><lb ed="R104" n="0731a02"/><p xml:id="pX59p0221c0801">甞聞之：有物先天地，無形本寂寥。能為萬象主，不逐
+<lb ed="X" n="0221c09"/><lb ed="R104" n="0731a03"/>四時凋。蓋無形萬形之元性，宗之秘奧，三教聖人所
+<lb ed="X" n="0221c10"/><lb ed="R104" n="0731a04"/>不能外者。後趙文肅公畫一圓相，○目之為混元圖，
+<lb ed="X" n="0221c11"/><lb ed="R104" n="0731a05"/>又加卍字其中，<g ref="#CB05151">󱐟</g>目之為萬字輪相圖。余甞三復於
+<lb ed="X" n="0221c12"/><lb ed="R104" n="0731a06"/>斯，竊謂真空也，妙有也，一為無量，無量為一者也，何
+<lb ed="X" n="0221c13"/><lb ed="R104" n="0731a07"/>獨於准提淨業而疑之？歲戊午之至日，余夢近溪羅
+<lb ed="X" n="0221c14"/><lb ed="R104" n="0731a08"/>先生示余圓圖曰：子眼清利，常觀此則入道速疾。<anchor xml:id="nkr_note_add_0221c1401" n="0221c1401"/><anchor xml:id="beg0221c1401" n="0221c1401"/>已<anchor xml:id="end0221c1401"/>
+<lb ed="X" n="0221c15"/><lb ed="R104" n="0731a09"/>又語一僧持二籤授余，余目籤有南字，恍然曰：吾師
+<lb ed="X" n="0221c16"/><lb ed="R104" n="0731a10"/>也。即泣下霑襟，覺而惕然不識所謂。俄有僧德庵持
+<lb ed="X" n="0221c17"/><lb ed="R104" n="0731a11"/>疏募造千手千眼大悲觀音像，余解曰：籤千聲相近，
+<lb ed="X" n="0221c18"/><lb ed="R104" n="0731a12"/>非即大悲千手千眼之謂耶？<anchor xml:id="nkr_note_add_0221c1801" n="0221c1801"/><anchor xml:id="beg0221c1801" n="0221c1801"/>已<anchor xml:id="end0221c1801"/>而扣之，則善梵呪也，
+<lb ed="X" n="0221c19"/><lb ed="R104" n="0731a13"/>且能作准提梵字，曰：是西域高僧所傳，對梵藏本相
+<lb ed="X" n="0221c20"/><lb ed="R104" n="0731a14"/>合的，真可信者也。因作月輪圓相，安九聖梵字，布畫
+<lb ed="X" n="0221c21"/><lb ed="R104" n="0731a15"/>皆精妙可喜。余憶疇昔之夜，夢近溪先生示我圓圖，
+<lb ed="X" n="0221c22"/><lb ed="R104" n="0731a16"/>雖無文字，而文字曷甞不在其中？今僧人授我梵書，
+<lb ed="X" n="0221c23"/><lb ed="R104" n="0731a17"/>雖立文字，而亦無文字相可得，盖先師塘南先生命
+<lb ed="X" n="0221c24"/><lb ed="R104" n="0731a18"/>教也久矣。先是塘師訪近翁，論及准提功德，歸而語
+<pb ed="X" xml:id="X59.1077.0222a" n="0222a"/>
+<lb ed="X" n="0222a01"/><lb ed="R104" n="0731b01"/>給諫賀少龍公，給諫受持久之，夢童子送九華衣，遂
+<lb ed="X" n="0222a02"/><lb ed="R104" n="0731b02"/>得生天。後見夢以相謝，教時舉而詢之，先師曰：然，顧
+<lb ed="X" n="0222a03"/><lb ed="R104" n="0731b03"/>此福報耳。乃出普賢行願品曰：汝以此經與准提同
+<lb ed="X" n="0222a04"/><lb ed="R104" n="0731b04"/>觀，即得圓宗之意。教於是服膺不忘，而第疑梵字無
+<lb ed="X" n="0222a05"/><lb ed="R104" n="0731b05"/>據，難以入觀，不意乃今若神告之也。夫普賢願王導
+<lb ed="X" n="0222a06"/><lb ed="R104" n="0731b06"/>歸極樂，固與淨業相為表裏者，而或者見捨穢取淨，
+<lb ed="X" n="0222a07"/><lb ed="R104" n="0731b07"/>疑與圓宗有隔，不知混元一圖固無量妙義，百千三
+<lb ed="X" n="0222a08"/><lb ed="R104" n="0731b08"/>昧之所從出也。九聖梵字即體是毗盧法界，六八願
+<lb ed="X" n="0222a09"/><lb ed="R104" n="0731b09"/>門即體是普賢行海，變娑婆為極樂，即極樂為華藏，
+<lb ed="X" n="0222a10"/><lb ed="R104" n="0731b10"/>皆即大悲之手眼也。夫大悲余何敢知，而此准提淨
+<lb ed="X" n="0222a11"/><lb ed="R104" n="0731b11"/>業顯密觀門，儻亦所謂無量之一耶？若圓觀圓修而
+<lb ed="X" n="0222a12"/><lb ed="R104" n="0731b12"/>超出乎文字之外，則俟乎觀象得意之君子。</p>
+<lb ed="X" n="0222a13"/><lb ed="R104" n="0731b13"/><p xml:id="pX59p0222a1301" style="margin-left:2em;text-indent:-2em">天啟癸亥中元之吉
+<lb ed="X" n="0222a14" type="honorific"/><lb ed="R104" n="0731b14"/>古虔青蓮居士　謝于教　沐手焚香書</p></cb:div>
+<lb ed="X" n="0222a15"/>
+<lb ed="X" n="0222a16"/><cb:div type="xu"><cb:mulu type="序" level="1">No. 1077-B 准提淨業引</cb:mulu><head>No. 1077-B
+<lb ed="X" n="0222a17"/><lb ed="R104" n="0732a01"/> 准提淨業引</head>
+<lb ed="X" n="0222a18"/>
+<lb ed="X" n="0222a19"/><lb ed="R104" n="0732a02"/><p xml:id="pX59p0222a1901">是編即顯密圓通之旨也。而以准提淨業名，又首及
+<lb ed="X" n="0222a20"/><lb ed="R104" n="0732a03"/>准提布字法者，何也？曰：重觀行也。然則曷不專言觀
+<lb ed="X" n="0222a21"/><lb ed="R104" n="0732a04"/>行，而先之持誦？曰：觀行難入，故以持誦先之。又多字
+<lb ed="X" n="0222a22"/><lb ed="R104" n="0732a05"/>難觀，且以一字收之。蓋曲為初機耳。實則深淺獲益，
+<lb ed="X" n="0222a23"/><lb ed="R104" n="0732a06"/>一多無礙也。夫既一多無礙，則以一字淨法界，應得
+<lb ed="X" n="0222a24"/><lb ed="R104" n="0732a07"/>徧淨，曷為更增之以淨業？曰：法界無殊，究竟有異。或
+<pb ed="X" xml:id="X59.1077.0222b" n="0222b"/>
+<lb ed="X" n="0222b01"/><lb ed="R104" n="0732a08"/>以愛重而戀娑婆，或以念一而趨極樂，則菩提之願，
+<lb ed="X" n="0222b02"/><lb ed="R104" n="0732a09"/>有發有不發者也。准提圓宗，隨眾希求，指入菩提。眾
+<lb ed="X" n="0222b03"/><lb ed="R104" n="0732a10"/>得所求，遂忘正指。余故以淨業合之。淨業者，以普賢
+<lb ed="X" n="0222b04"/><lb ed="R104" n="0732a11"/>之行願為究竟者也。果以是願而入於觀行，則帝網
+<lb ed="X" n="0222b05"/><lb ed="R104" n="0732a12"/>無盡之妙觀，顯密雙融；即毗盧遍處之阿彌，法報齊
+<lb ed="X" n="0222b06"/><lb ed="R104" n="0732a13"/>現。准提淨業，尚無有一，寧復有二耶？余讀顯密心要，
+<lb ed="X" n="0222b07"/><lb ed="R104" n="0732a14"/>未甞不歎其淵深浩博，盡盡善美。而此割裂附會，非
+<lb ed="X" n="0222b08"/><lb ed="R104" n="0732a15"/>敢掩前人之長，聊以見取精之意云爾。</p>
+<lb ed="X" n="0222b09"/><lb ed="R104" n="0732a16"/><p xml:id="pX59p0222b0901">天啟癸亥孟秋古虔青蓮居士謝于教沐手焚香書</p></cb:div>
+<lb ed="X" n="0222b10"/>
+<lb ed="X" n="0222b11"/>
+<lb ed="X" n="0222b12"/>
+<lb ed="X" n="0222b13"/><lb ed="R104" n="0732b01"/><cb:div type="other"><cb:mulu type="其他" level="1">准提淨業目</cb:mulu><head>准提淨業目</head>
+<lb ed="X" n="0222b14"/>
+<lb ed="X" n="0222b15"/><lb ed="R104" n="0732b03"/><list rend="no-marker"><item xml:id="itemX59p0222b1501">一卷
+<lb ed="X" n="0222b16"/><lb ed="R104" n="0732b04"/><list rend="no-marker"><item xml:id="itemX59p0222b1601">准提陀羅尼經</item><item xml:id="itemX59p0222b1607">陀羅尼布字法</item>
+<lb ed="X" n="0222b17"/><lb ed="R104" n="0732b05"/><item xml:id="itemX59p0222b1701">持誦便覧</item><item xml:id="itemX59p0222b1705">持誦儀軌</item></list></item>
+<lb ed="X" n="0222b18"/><lb ed="R104" n="0732b06"/><item xml:id="itemX59p0222b1801">二卷
+<lb ed="X" n="0222b19"/><lb ed="R104" n="0732b07"/><list rend="no-marker"><item xml:id="itemX59p0222b1901">觀行儀軌</item></list></item>
+<lb ed="X" n="0222b20"/><lb ed="R104" n="0732b08"/><item xml:id="itemX59p0222b2001">三卷
+<lb ed="X" n="0222b21"/><lb ed="R104" n="0732b09"/><list rend="no-marker"><item xml:id="itemX59p0222b2101">顯密雙修觀行說<note place="inline">五首</note></item><item xml:id="itemX59p0222b2110">淨業圓修說<note place="inline">六首</note></item>
+<lb ed="X" n="0222b22"/><lb ed="R104" n="0732b10"/><item xml:id="itemX59p0222b2201"><note place="inline">附</note>供佛利生儀</item></list></item></list></cb:div>
+<lb ed="X" n="0222b23"/>
+<lb ed="X" n="0222b24"/>
+<pb ed="X" xml:id="X59.1077.0222c" n="0222c"/>
+<lb ed="X" n="0222c01"/>
+<lb ed="X" n="0222c02"/>
+<lb ed="X" n="0222c03"/><cb:docNumber>No. 1077</cb:docNumber>
+<lb ed="X" n="0222c04"/><lb ed="R104" n="0733a01"/><cb:juan fun="open" n="1"><cb:mulu type="卷" n="1"></cb:mulu><cb:jhead>准提淨業卷之一</cb:jhead></cb:juan>
+<lb ed="X" n="0222c05"/>
+<lb ed="X" n="0222c06"/><lb ed="R104" n="0733a03"/><cb:div type="other"><cb:mulu type="其他" level="1">七俱<g ref="#CB05473">𦙆</g>佛母心大准提陀羅尼經</cb:mulu><head>佛說七俱<g ref="#CB05473">𦙆</g>佛母心大准提陀羅尼經</head>
+<lb ed="X" n="0222c07"/><lb ed="R104" n="0733a04"/><byline cb:type="translator">唐武周沙門　地婆訶羅　譯</byline>
+<lb ed="X" n="0222c08"/><lb ed="R104" n="0733a05"/><p xml:id="pX59p0222c0801">爾時佛在舍衛國祇樹給孤獨園。是時世尊思惟觀
+<lb ed="X" n="0222c09"/><lb ed="R104" n="0733a06"/>察，愍念未來諸眾生故，說是七俱<g ref="#CB05473">𦙆</g><anchor xml:id="nkr_note_orig_0222001" n="0222001"/>母佛心准提陀
+<lb ed="X" n="0222c10"/><lb ed="R104" n="0733a07"/>羅尼法，即說呪曰：</p>
+<lb ed="X" n="0222c11"/><lb ed="R104" n="0733a08"/><p cb:type="dharani" xml:id="pX59p0222c1101">南無颯哆南<note place="inline">一</note>，三藐三勃陀俱<g ref="#CB05473">𦙆</g>南<note place="inline">二</note>，怛姪他<note place="inline">長引</note><note place="inline">三</note>，
+<lb ed="X" n="0222c12"/><lb ed="R104" n="0733a09"/>唵折戾<note place="inline">四</note>，主戾<note place="inline">五</note>，准提<note place="inline">六</note>，娑婆訶<note place="inline">七</note></p>
+<lb ed="X" n="0222c13"/><lb ed="R104" n="0733a10"/><p xml:id="pX59p0222c1301">若有比丘、比丘尼、優婆塞、優婆夷，受持讀誦此陀羅
+<lb ed="X" n="0222c14"/><lb ed="R104" n="0733a11"/>尼滿八十萬遍，無量劫來所造五無間等一切諸罪
+<lb ed="X" n="0222c15"/><lb ed="R104" n="0733a12"/>悉滅無餘，所在生處皆得值遇諸佛菩薩，所有資具
+<lb ed="X" n="0222c16"/><lb ed="R104" n="0733a13"/>隨意充足，生生常得出家，具持菩薩律儀淨戒，恒生
+<lb ed="X" n="0222c17"/><lb ed="R104" n="0733a14"/>人天不墮惡趣，常為諸天之所守護。若有在家善男
+<lb ed="X" n="0222c18"/><lb ed="R104" n="0733a15"/>女等誦持之者，其家無有災橫病苦之所惱害，諸有
+<lb ed="X" n="0222c19"/><lb ed="R104" n="0733a16"/>所作無不諧偶，所出言教人皆信受。若有誦此陀羅
+<lb ed="X" n="0222c20"/><lb ed="R104" n="0733a17"/>尼呪滿十萬遍，夢中得見諸佛、菩薩、聲聞、緣覺，自見
+<lb ed="X" n="0222c21"/><lb ed="R104" n="0733a18"/>口中吐出黑飯。若有重罪誦滿二十萬遍，夢中亦見
+<lb ed="X" n="0222c22"/><lb ed="R104" n="0733b01"/>諸佛菩薩，亦自見口中吐出黑飯。若有五逆罪者，不
+<lb ed="X" n="0222c23"/><lb ed="R104" n="0733b02"/>得如是善夢現時，應當更誦滿七十萬遍，是時還得
+<lb ed="X" n="0222c24"/><lb ed="R104" n="0733b03"/>如前之相，乃至夢見吐出白色秔米酪飯，當知此人
+<lb ed="X" n="0223a01"/><lb ed="R104" n="0733b04"/>即是罪滅清淨之相。</p>
+
+
+<lb ed="X" n="0223b23"/><lb ed="R104" n="0734b14"/><p xml:id="pX59p0223b2301">
+<lb ed="X" n="0223c03"/><lb ed="R104" n="0734b18"/>若有誦此陀羅尼者，乃至未坐道場一切菩
+<lb ed="X" n="0223c04"/><lb ed="R104" n="0735a01"/>薩為其勝友。又此准提大陀羅尼大明呪法，過去一
+<lb ed="X" n="0223c05"/><lb ed="R104" n="0735a02"/>切諸佛<anchor xml:id="nkr_note_add_0223c0501" n="0223c0501"/><anchor xml:id="beg0223c0501" n="0223c0501"/>已<anchor xml:id="end0223c0501"/>說、現在一切諸佛今說、未來一切諸佛當
+<lb ed="X" n="0223c06"/><lb ed="R104" n="0735a03"/>說，我今亦如是說，為利一切眾生故、得無上菩提故。
+<lb ed="X" n="0223c07"/><lb ed="R104" n="0735a04"/>若有薄福眾生，無有少善根者、無有根器之者、無有
+<lb ed="X" n="0223c08"/><lb ed="R104" n="0735a05"/>菩提分者，若得聞此大准提陀羅尼法，速疾證得阿
+<lb ed="X" n="0223c09"/><lb ed="R104" n="0735a06"/>耨多羅三藐三菩提。若有人憶持誦念常不懈廢此
+<lb ed="X" n="0223c10"/><lb ed="R104" n="0735a07"/>佛母心大准提陀羅尼者，無量善根皆得成就。佛說
+<lb ed="X" n="0223c11"/><lb ed="R104" n="0735a08"/>此大准提陀羅尼法時，無量眾生遠塵離垢，得大准
+<lb ed="X" n="0223c12"/><lb ed="R104" n="0735a09"/>提陀羅尼大明呪功德，得見十方諸佛菩薩諸聖眾
+<lb ed="X" n="0223c13"/><lb ed="R104" n="0735a10"/>等，作禮而去。</p>
+<lb ed="X" n="0223c14"/><lb ed="R104" n="0735a11"/><p xml:id="pX59p0223c1401">佛說七俱胝佛母心大准提陀羅尼經<note place="inline">竟</note>。</p></cb:div>
+
+<lb ed="X" n="0223c15"/><lb ed="R104" n="0735a12"/>
+<lb ed="X" n="0223c16"/><lb ed="R104" n="0735a13"/><cb:div type="other"><cb:mulu type="其他" level="1">陀羅尼布字法</cb:mulu><head>佛說七俱胝佛母准提大明陀羅尼經<note place="inline">呪文節略</note></head>
+<lb ed="X" n="0223c17"/><lb ed="R104" n="0735a14"/><byline cb:type="translator">唐天竺三藏　金剛智　譯</byline>
+<lb ed="X" n="0223c18"/><lb ed="R104" n="0735a15"/><cb:div type="other"><cb:mulu type="其他" level="2">念誦觀行</cb:mulu><p xml:id="pX59p0223c1801">依經梵本有十萬偈，我今略說：念誦觀行，　說陀羅
+<lb ed="X" n="0223c19"/><lb ed="R104" n="0735a16"/>尼字，想布於身法<note place="inline">後觀行中布字，即用此法</note>。</p>
+<lb ed="X" n="0223c20"/><lb ed="R104" n="0735a17"/><lg xml:id="lgX59p0223c2001"><l>唵想安頭上，<caesura/>其色白如月，<caesura/>放於無量光。</l>
+<lb ed="X" n="0223c21"/><lb ed="R104" n="0735a18"/><l>除滅一切障，<caesura/>即同佛菩薩，<caesura/>摩是人頂上。</l>
+<lb ed="X" n="0223c22"/><lb ed="R104" n="0735b01"/><l>折字安兩目，<caesura/>其色如日月，<caesura/>為照諸愚暗。</l>
+<lb ed="X" n="0223c23"/><lb ed="R104" n="0735b02"/><l>能發深慧明。<caesura/><g ref="#CB12528">𨽻</g>字安項上，<caesura/>色如紺瑠璃，</l>
+<lb ed="X" n="0223c24"/><lb ed="R104" n="0735b03"/><l>能顯諸色相，<caesura/>漸具如來智。<caesura/>主字想安心，</l>
+<pb ed="X" xml:id="X59.1077.0224a" n="0224a"/>
+<lb ed="X" n="0224a01"/><lb ed="R104" n="0735b04"/><l>其色如皎素，<caesura/>由心清淨故，<caesura/>速達菩提路。</l>
+<lb ed="X" n="0224a02"/><lb ed="R104" n="0735b05"/><l><g ref="#CB12528">𨽻</g>字安兩肩，<caesura/>色黃如金色，<caesura/>由觀是色相，</l>
+<lb ed="X" n="0224a03"/><lb ed="R104" n="0735b06"/><l>能披精進甲，<caesura/>准字想臍中，<caesura/>其色妙黃白，</l>
+<lb ed="X" n="0224a04"/><lb ed="R104" n="0735b07"/><l>速登妙道場，<caesura/>不退菩薩故。<caesura/>提字安兩<g ref="#CB00170">䏶</g>。</l>
+<lb ed="X" n="0224a05"/><lb ed="R104" n="0735b08"/><l>其色如淺黃，<caesura/>速證菩提道，<caesura/>得坐金剛座。</l>
+<lb ed="X" n="0224a06"/><lb ed="R104" n="0735b09"/><l>莎嚩字安兩脛，其狀作赤色，<caesura/>常能想是字。</l>
+<lb ed="X" n="0224a07"/><lb ed="R104" n="0735b10"/><l>速得轉法輪。<caesura/>訶字置兩足，<caesura/>其色猶如月，</l>
+<lb ed="X" n="0224a08"/><lb ed="R104" n="0735b11"/><l>行者作是想，<caesura/>速得達圓寂。</l></lg>
+<lb ed="X" n="0224a09"/><lb ed="R104" n="0735b12"/><lg type="regular" xml:id="lgX59p0224a0901"><l>如是布字想念<anchor xml:id="nkr_note_add_0224a0901" n="0224a0901"/><anchor xml:id="beg0224a0901" n="0224a0901"/>已<anchor xml:id="end0224a0901"/>，<caesura/>便成准提勝法門。</l>
+<lb ed="X" n="0224a10"/><lb ed="R104" n="0735b13"/><l>亦如本尊真實相，<caesura/>能滅諸罪得吉祥。</l>
+<lb ed="X" n="0224a11"/><lb ed="R104" n="0735b14"/><l>猶如金剛堅固聚，<caesura/>是名准提勝上法。</l>
+<lb ed="X" n="0224a12"/><lb ed="R104" n="0735b15"/><l>若常如是修行者，<caesura/>當知是人速悉地<note place="inline">布身字竟</note>。</l></lg>
+<lb ed="X" n="0224a13"/><lb ed="R104" n="0735b16"/><p xml:id="pX59p0224a1301">又以自心想七俱胝佛母，口中出七俱胝陀羅尼文
+<lb ed="X" n="0224a14"/><lb ed="R104" n="0735b17"/>字，字字放五色光入行者口裏，安自心月中右旋布
+<lb ed="X" n="0224a15"/><lb ed="R104" n="0735b18"/>置，即作三摩地瑜伽觀行及諦觀，一一字義與心相
+<lb ed="X" n="0224a16"/><lb ed="R104" n="0736a01"/>應，此名三摩地念誦。</p></cb:div>
+<lb ed="X" n="0224a17"/><lb ed="R104" n="0736a02"/><cb:div type="other"><cb:mulu type="其他" level="2">心月梵字觀門</cb:mulu><head>心月梵字觀門</head>
+<lb ed="X" n="0224a18"/><lb ed="R104" n="0736a03"/><p xml:id="pX59p0224a1801"><figure><graphic url="../figures/X/X59p0224_01.gif"></graphic></figure></p>
+<lb ed="X" n="0224a19"/><lb ed="R104" n="0736a03"/><p xml:id="pX59p0224a1901" style="margin-left:1em">此即上圖
+<lb ed="X" n="0224a20"/><lb ed="R104" n="0736a04"/>中梵字直
+<lb ed="X" n="0224a21"/><lb ed="R104" n="0736a05"/>音也。但觀
+<lb ed="X" n="0224a22"/><lb ed="R104" n="0736a06"/>真言字，惟
+<lb ed="X" n="0224a23"/><lb ed="R104" n="0736a07"/>用梵書，有
+<lb ed="X" n="0224a24"/><lb ed="R104" n="0736a08"/>大神力，不
+<lb ed="X" n="0224a25"/><lb ed="R104" n="0736a09"/>是此方文
+<lb ed="X" n="0224a26"/><lb ed="R104" n="0736a10"/>字。</p>
+<pb ed="X" xml:id="X59.1077.0224b" n="0224b"/>
+<lb ed="X" n="0224b01"/><lb ed="R104" n="0736a11"/><p xml:id="pX59p0224b0101" style="margin-left:1em">陀羅尼布字法竟。</p>
+
+
+<lb ed="X" n="0224b02"/><lb ed="R104" n="0736a12"/><p xml:id="pX59p0224b0201" style="margin-left:2em">按准提大明經念誦儀軌，前後真言手印有三
+<lb ed="X" n="0224b03"/><lb ed="R104" n="0736a13"/>十餘種，今俱不載，但取純一觀行以為三摩地
+<lb ed="X" n="0224b04"/><lb ed="R104" n="0736a14"/>念誦。</p></cb:div>
+<lb ed="X" n="0224b05"/><lb ed="R104" n="0736a15"/><cb:div type="other"><cb:mulu type="其他" level="2">字義</cb:mulu><head>字義</head>
+<lb ed="X" n="0224b06"/><lb ed="R104" n="0736a16"/><cb:div type="note"><entry style="margin-left:1em"><form>唵者</form><cb:def><p xml:id="pX59p0224b0603" style="margin-left:1em" cb:place="inline">流注不生滅義，復於一切法為最勝義</p></cb:def></entry><entry cb:place="inline" style="margin-left:1em"><form>折者。</form>
+<lb ed="X" n="0224b07"/><lb ed="R104" n="0736a17"/><cb:def><p xml:id="pX59p0224b0701" style="margin-left:1em">一切法無行義</p></cb:def></entry><entry cb:place="inline" style="margin-left:1em"><form><g ref="#CB12528">𨽻</g>者</form><cb:def><p xml:id="pX59p0224b0709" style="margin-left:1em" cb:place="inline">一切法無相義</p></cb:def></entry><entry cb:place="inline" style="margin-left:1em"><form>主者</form><cb:def><p xml:id="pX59p0224b0717" style="margin-left:1em" cb:place="inline">一切法
+<lb ed="X" n="0224b08"/><lb ed="R104" n="0736a18"/>無起住義</p></cb:def></entry><entry cb:place="inline" style="margin-left:1em"><form><g ref="#CB12528">𨽻</g>者</form><cb:def><p xml:id="pX59p0224b0807" style="margin-left:1em" cb:place="inline">一切法無垢義</p></cb:def></entry><entry cb:place="inline" style="margin-left:1em"><form>准者</form><cb:def><p xml:id="pX59p0224b0815" style="margin-left:1em" cb:place="inline">一切法無等
+<lb ed="X" n="0224b09"/><lb ed="R104" n="0736b01"/>覺義</p></cb:def></entry><entry cb:place="inline" style="margin-left:1em"><form>提者</form><cb:def><p xml:id="pX59p0224b0905" style="margin-left:1em" cb:place="inline">一切法無取，舍義</p></cb:def></entry><entry cb:place="inline" style="margin-left:1em"><form>娑婆者</form><cb:def><p xml:id="pX59p0224b0915" style="margin-left:1em" cb:place="inline">一切法平等，
+<lb ed="X" n="0224b10"/><lb ed="R104" n="0736b02"/>無言說義</p></cb:def></entry><entry cb:place="inline" style="margin-left:1em"><form>訶者</form><cb:def><p xml:id="pX59p0224b1007" style="margin-left:1em" cb:place="inline">一切法無因、寂靜、無住、涅槃義。</p></cb:def></entry></cb:div></cb:div><p xml:id="pX59p0224b1019" style="margin-left:1em" cb:place="inline">又
+<lb ed="X" n="0224b11"/><lb ed="R104" n="0736b03"/>觀此字義，無斷無絕周而復始，由流注不生滅。最
+<lb ed="X" n="0224b12"/><lb ed="R104" n="0736b04"/>勝義！是故無行，由無行義是故無相，由無相義是
+<lb ed="X" n="0224b13"/><lb ed="R104" n="0736b05"/>故無起住，由無起住義是故無垢，由無垢義是故
+<lb ed="X" n="0224b14"/><lb ed="R104" n="0736b06"/>無等覺，由無等覺義是故不取舍，由無取舍義是
+<lb ed="X" n="0224b15"/><lb ed="R104" n="0736b07"/>故平等無言說，由平等無言說義是故無因寂靜
+<lb ed="X" n="0224b16"/><lb ed="R104" n="0736b08"/>無住涅槃，由寂靜無住涅槃義是故不生滅。最勝！
+<lb ed="X" n="0224b17"/><lb ed="R104" n="0736b09"/>如是妙義雖立文字，亦無文字相可得。</p>
+<lb ed="X" n="0224b18"/><lb ed="R104" n="0736b10"/><p xml:id="pX59p0224b1801" style="margin-left:2em">按真言密教，不通解脫，而此云云者，但取諦觀
+<lb ed="X" n="0224b19"/><lb ed="R104" n="0736b11"/>字義，與心相應耳，非意識分別也。</p></cb:div>
+<lb ed="X" n="0224b20"/><lb ed="R104" n="0736b12"/><cb:div type="other"><cb:mulu type="其他" level="1">准提真言持誦便覽</cb:mulu><head>准提真言持誦便覽</head>
+<lb ed="X" n="0224b21"/><lb ed="R104" n="0736b13"/><lg type="regular" xml:id="lgX59p0224b2101"><l><note place="inline">讚云</note>准提功德聚，<caesura/>寂靜心常誦，<caesura/>一切諸大難，</l>
+<lb ed="X" n="0224b22"/><lb ed="R104" n="0736b14"/><l>無能侵是人，<caesura/>天上及人間，<caesura/>受福如佛等。</l>
+<lb ed="X" n="0224b23"/><lb ed="R104" n="0736b15"/><l>遇此如意珠，<caesura/>定獲無等等。</l></lg>
+<lb ed="X" n="0224b24"/><lb ed="R104" n="0736b16"/><p xml:id="pX59p0224b2401">南無七俱胝佛母大准提菩薩<note place="inline">三稱</note>。</p>
+<pb ed="X" xml:id="X59.1077.0224c" n="0224c"/>
+<lb ed="X" n="0224c01"/><lb ed="R104" n="0736b17"/><p cb:type="dharani" xml:id="pX59p0224c0101">唵<g ref="#CB00771">㘕</g><note place="inline">音<g ref="#CB17267">𫬠</g></note><note place="inline">此淨法界真言誦二十一遍或百八遍</note>唵嚙<g ref="#CB01236">𡄦</g><note place="inline">二合</note><note place="inline">此獲身真言誦
+<lb ed="X" n="0224c02"/><lb ed="R104" n="0736b18"/>二十一遍或百八遍</note>唵麼尼鉢訥銘<note place="inline">二合</note>吽<note place="inline">此六字大明真言要誦滿一百八遍</note>
+<lb ed="X" n="0224c03"/><lb ed="R104" n="0737a01"/>南無颯哆喃三藐三菩<g ref="#CB00501">䭾</g>俱胝喃怛你也<note place="inline">二合</note>他
+<lb ed="X" n="0224c04"/><lb ed="R104" n="0737a02"/>　唵折<g ref="#CB12528">𨽻</g>主<g ref="#CB12528">𨽻</g>准提娑婆<note place="inline">二合</note>訶　部林<note place="inline">二合</note><note place="inline">此准提真言與大輪
+<lb ed="X" n="0224c05"/><lb ed="R104" n="0737a03"/>一字呪同誦，要滿一百八遍或五百遍以至千遍。持呪畢，至心迴向云：</note></p>
+<lb ed="X" n="0224c06"/><lb ed="R104" n="0737a04"/><lg type="regular" xml:id="lgX59p0224c0601"><l>我今持誦大准提，<caesura/>即發菩提廣大願。</l>
+<lb ed="X" n="0224c07"/><lb ed="R104" n="0737a05"/><l>願我定慧速圓明，<caesura/>願我功德皆成就，</l>
+<lb ed="X" n="0224c08"/><lb ed="R104" n="0737a06"/><l>願我勝福徧莊嚴，<caesura/>願共眾生成佛道。</l>
+<lb ed="X" n="0224c09"/><lb ed="R104" n="0737a07"/><l>我昔所造諸惡業，<caesura/>皆由無始貪嗔癡，</l>
+<lb ed="X" n="0224c10"/><lb ed="R104" n="0737a08"/><l>從身語意之所生，<caesura/>一切我今皆懺悔。</l>
+<lb ed="X" n="0224c11"/><lb ed="R104" n="0737a09"/><l>願我臨欲命終時，<caesura/>盡除一切諸障礙。</l>
+<lb ed="X" n="0224c12"/><lb ed="R104" n="0737a10"/><l>面見彼佛阿彌陀，<caesura/>即得往生安樂剎。</l></lg>
+<lb ed="X" n="0224c13"/><lb ed="R104" n="0737a11"/><p xml:id="pX59p0224c1301" style="margin-left:1em"><note place="inline">如欲成就世法及諸善事，隨意稱之。</note></p></cb:div>
+<lb ed="X" n="0224c14"/><lb ed="R104" n="0737a12"/><cb:div type="other"><cb:mulu type="其他" level="1">持誦儀軌</cb:mulu><head>持誦儀軌</head>
+<lb ed="X" n="0224c15"/><lb ed="R104" n="0737a13"/><p xml:id="pX59p0224c1501" style="margin-left:1em"><note place="inline">依顯密心要，從頭淨法界護身等呪，皆是持誦准提之次第。</note></p>
+<lb ed="X" n="0224c16"/><lb ed="R104" n="0737a14"/><cb:div type="other"><cb:mulu type="其他" level="2">淨法界觀門</cb:mulu><head>淨法界觀門</head>
+<lb ed="X" n="0224c17"/><lb ed="R104" n="0737a14"/><p xml:id="pX59p0224c1701"><figure><graphic url="../figures/X/X59p0224_02.gif"></graphic></figure></p>
+<lb ed="X" n="0224c18"/><lb ed="R104" n="0737a14"/><p xml:id="pX59p0224c1801" style="margin-left:1em">前九聖梵字安心月中，即
+<lb ed="X" n="0224c19"/><lb ed="R104" n="0737a15"/>作三摩地瑜伽觀行，恐初
+<lb ed="X" n="0224c20"/><lb ed="R104" n="0737a16"/>機難以入手，今但用淨法
+<lb ed="X" n="0224c21"/><lb ed="R104" n="0737a17"/>界<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><anchor xml:id="nkr_note_add_0224c2101" n="0224c2101"/><anchor xml:id="beg0224c2101" n="0224c2101"/><g ref="#RJ-CCEB">􌳫</g><anchor xml:id="end0224c2101"/></cb:t><cb:t xml:lang="zh-Hant"><g ref="#CB00771">㘕</g></cb:t></cb:tt>字作觀，一心持誦，
+<lb ed="X" n="0224c22"/><lb ed="R104" n="0737a18"/>自然得入淨法界三昧，一
+<lb ed="X" n="0224c23"/><lb ed="R104" n="0737b01"/>多無礙也。</p>
+<lb ed="X" n="0224c24"/><lb ed="R104" n="0737b02"/><p xml:id="pX59p0224c2401" style="margin-left:1em">真言。行者依法持誦，先須金剛正坐<note place="inline">以右脚壓左脚脛上，或隨
+<lb ed="X" n="0224c25"/><lb ed="R104" n="0737b03"/>意坐亦得</note>，手結大三昧印<note place="inline">二手仰掌展舒，以右手在左手上，二大拇指甲相著，安臍
+<lb ed="X" n="0224c26"/><lb ed="R104" n="0737b04"/>輪下。此印能滅一切狂亂、妄念、雜染、思惟</note>，澄定身心，方入淨法界三昧。
+<pb ed="X" xml:id="X59.1077.0225a" n="0225a"/>
+<lb ed="X" n="0225a01"/><lb ed="R104" n="0737b05"/>謂想自身頂上有一梵書<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><anchor xml:id="nkr_note_add_0225a0101" n="0225a0101"/><anchor xml:id="beg0225a0101" n="0225a0101"/><g ref="#RJ-CCEB">􌳫</g><anchor xml:id="end0225a0101"/></cb:t><cb:t xml:lang="zh-Hant"><g ref="#CB00771">㘕</g></cb:t></cb:tt>字，此字徧有光明，
+<lb ed="X" n="0225a02"/><lb ed="R104" n="0737b06"/>猶如明珠，或如滿月。想此字<anchor xml:id="nkr_note_add_0225a0201" n="0225a0201"/><anchor xml:id="beg0225a0201" n="0225a0201"/>已<anchor xml:id="end0225a0201"/>，復以左手結金剛
+<lb ed="X" n="0225a03"/><lb ed="R104" n="0737b07"/>拳印<note place="inline">以大拇指<anchor xml:id="nkr_note_add_0225a0301" n="0225a0301"/><anchor xml:id="beg0225a0301" n="0225a0301"/>掐<anchor xml:id="end0225a0301"/>無名指根第一節，餘四指握大拇指作拳。此印能除內外障染，成就一切功
+<lb ed="X" n="0225a04"/><lb ed="R104" n="0737b08"/>德</note>，右手持數珠，口誦淨法界真言二十一遍。</p></cb:div>
+<lb ed="X" n="0225a05"/><lb ed="R104" n="0737b09"/><cb:div type="other"><cb:mulu type="其他" level="2">淨法界真言</cb:mulu><head>淨法界真言<note place="inline">各真言中只誦正呪，餘文不誦。</note></head>
+<lb ed="X" n="0225a06"/><lb ed="R104" n="0737b10"/><p cb:type="dharani" xml:id="pX59p0225a0601"><cb:tt place="inline"><cb:t xml:lang="zh-Hant">唵<cb:yin><cb:zi><g ref="#CB00771">㘕</g></cb:zi><cb:sg>音<g ref="#CB17267">𫬠</g></cb:sg></cb:yin></cb:t><cb:t xml:lang="sa-x-rj"><g ref="#RJ-CCBA">􌲺</g><anchor xml:id="nkr_note_add_0225a0601" n="0225a0601"/><anchor xml:id="beg0225a0601" n="0225a0601"/><g ref="#RJ-CCEB">􌳫</g><anchor xml:id="end0225a0601"/></cb:t></cb:tt><note place="inline">此是梵書唵<g ref="#CB00771">㘕</g>字</note>。</p>
+<lb ed="X" n="0225a07"/><lb ed="R104" n="0737b11"/><p xml:id="pX59p0225a0701" style="margin-left:1em">此淨法界<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><anchor xml:id="nkr_note_add_0225a0701" n="0225a0701"/><anchor xml:id="beg0225a0701" n="0225a0701"/><g ref="#RJ-CCEB">􌳫</g><anchor xml:id="end0225a0701"/></cb:t><cb:t xml:lang="zh-Hant"><g ref="#CB00771">㘕</g></cb:t></cb:tt>字，若想若誦能令三業清淨，一切
+<lb ed="X" n="0225a08"/><lb ed="R104" n="0737b12"/>罪障悉皆消除，又能成辦一切勝事，隨所住處悉
+<lb ed="X" n="0225a09"/><lb ed="R104" n="0737b13"/>得清淨。衣服不淨便成淨衣，身不澡浴便當澡浴，
+<lb ed="X" n="0225a10"/><lb ed="R104" n="0737b14"/>若用水洗淨不名真淨。若用此法界心<g ref="#CB00771">㘕</g>字淨之，
+<lb ed="X" n="0225a11"/><lb ed="R104" n="0737b15"/>即名畢竟清淨瓶，如靈丹一粒點鐵成金，真言一
+<lb ed="X" n="0225a12"/><lb ed="R104" n="0737b16"/>字變染令淨。偈云：<term xml:lang="sa-x-rj"><anchor xml:id="nkr_note_add_0225a1201" n="0225a1201"/><anchor xml:id="beg0225a1201" n="0225a1201"/><g ref="#RJ-CCE7">􌳧</g><anchor xml:id="end0225a1201"/></term><note place="inline">音囉</note>字色鮮白，空點以嚴之<note place="inline">梵書
+<lb ed="X" n="0225a13"/><lb ed="R104" n="0737b17"/><cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><anchor xml:id="nkr_note_add_0225a1301" n="0225a1301"/><anchor xml:id="beg0225a1301" n="0225a1301"/><g ref="#RJ-CCE7">􌳧</g><anchor xml:id="end0225a1301"/></cb:t><cb:t xml:lang="zh-Hant">囉</cb:t></cb:tt>字上安空點，即成<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><anchor xml:id="nkr_note_add_0225a1302" n="0225a1302"/><anchor xml:id="beg0225a1302" n="0225a1302"/><g ref="#RJ-CCEB">􌳫</g><anchor xml:id="end0225a1302"/></cb:t><cb:t xml:lang="zh-Hant"><g ref="#CB00771">㘕</g></cb:t></cb:tt>字也</note>，如彼髻明珠，置之於頂上。真言
+<lb ed="X" n="0225a14"/><lb ed="R104" n="0737b18"/>同法界，無量眾罪除，一切觸穢處，當加此字門<note place="inline">若實
+<lb ed="X" n="0225a15"/><lb ed="R104" n="0738a01"/>外緣不具，無水洗浴闕新淨衣，但用此<g ref="#CB00771">㘕</g>字淨之。若外緣具者，先用水了著新淨衣，更用此<g ref="#CB00771">㘕</g>字淨之，即
+<lb ed="X" n="0225a16"/><lb ed="R104" n="0738a02"/>內外俱清淨也</note>。次誦護身真言二十一遍。</p></cb:div>
+<lb ed="X" n="0225a17"/><lb ed="R104" n="0738a03"/><cb:div type="other"><cb:mulu type="其他" level="2">護身真言</cb:mulu><head>護身真言</head>
+<lb ed="X" n="0225a18"/><lb ed="R104" n="0738a04"/><p cb:type="dharani" xml:id="pX59p0225a1801"><cb:tt place="inline"><cb:t xml:lang="zh-Hant">庵<cb:yin><cb:zi>嚙<g ref="#CB01236">𡄦</g></cb:zi><cb:sg>二合</cb:sg></cb:yin><note place="inline"><g ref="#CB01236">𡄦</g>字去聲</note></cb:t><cb:t xml:lang="sa-x-rj"><g ref="#RJ-CCBA">􌲺</g><anchor xml:id="nkr_note_add_0225a1801" n="0225a1801"/><anchor xml:id="beg0225a1801" n="0225a1801"/><g ref="#RJ-CED0">􌻐</g><anchor xml:id="end0225a1801"/></cb:t></cb:tt><note place="inline">此是梵書唵嚙<g ref="#CB01236">𡄦</g>字</note>。</p>
+<lb ed="X" n="0225a19"/><lb ed="R104" n="0738a05"/><p xml:id="pX59p0225a1901" style="margin-left:1em">此呪能滅五逆十惡一切罪業，能除一切種種病
+<lb ed="X" n="0225a20"/><lb ed="R104" n="0738a06"/>苦、災障惡夢、邪魅鬼神諸不祥事，而能成辦一切
+<lb ed="X" n="0225a21"/><lb ed="R104" n="0738a07"/>勝事，令一切所願皆得圓滿。此呪是諸佛心，若人
+<lb ed="X" n="0225a22"/><lb ed="R104" n="0738a08"/>專誦一遍，能守護自身，一切鬼神天魔不敢侵近；
+<lb ed="X" n="0225a23"/><lb ed="R104" n="0738a09"/>誦兩遍，能守護同伴；誦三遍，能守護一宅中人；誦
+<lb ed="X" n="0225a24"/><lb ed="R104" n="0738a10"/>四遍，能守護一城中人；乃至七遍，能守護四天下
+<pb ed="X" xml:id="X59.1077.0225b" n="0225b"/>
+<lb ed="X" n="0225b01"/><lb ed="R104" n="0738a11"/>人<note place="inline">上二呪各持百八遍亦得</note>。</p><p xml:id="pX59p0225b0112" style="margin-left:1em" cb:place="inline">次誦六字大明真言一百<note place="inline">八遍</note>。</p></cb:div>
+<lb ed="X" n="0225b02"/><lb ed="R104" n="0738a12"/><cb:div type="other"><cb:mulu type="其他" level="2">六字大明真言</cb:mulu><head>六字大明真言</head>
+<lb ed="X" n="0225b03"/><lb ed="R104" n="0738a13"/><p cb:type="dharani" xml:id="pX59p0225b0301"><cb:tt place="inline"><cb:t xml:lang="zh-Hant">唵麼尼鉢<cb:yin><cb:zi>訥銘</cb:zi><cb:sg>二合</cb:sg></cb:yin>吽</cb:t><cb:t xml:lang="sa-x-rj" style="margin-left:1em"><g ref="#RJ-CCBA">􌲺</g><anchor xml:id="nkr_note_add_0225b0301" n="0225b0301"/><anchor xml:id="beg0225b0301" n="0225b0301"/><g ref="#RJ-CBD3">􌯓</g><anchor xml:id="end0225b0301"/><anchor xml:id="nkr_note_add_0225b0302" n="0225b0302"/><anchor xml:id="beg0225b0302" n="0225b0302"/><g ref="#RJ-CC5A">􌱚</g><anchor xml:id="end0225b0302"/><g ref="#RJ-CCBB">􌲻</g><anchor xml:id="nkr_note_add_0225b0303" n="0225b0303"/><anchor xml:id="beg0225b0303" n="0225b0303"/><g ref="#RJ-CA4C">􌩌</g><anchor xml:id="end0225b0303"/><anchor xml:id="nkr_note_add_0225b0304" n="0225b0304"/><anchor xml:id="beg0225b0304" n="0225b0304"/><g ref="#RJ-CACB">􌫋</g><anchor xml:id="end0225b0304"/></cb:t></cb:tt><note place="inline">此是梵書六字</note>。</p>
+<lb ed="X" n="0225b04"/><lb ed="R104" n="0738a14"/><p xml:id="pX59p0225b0401" style="margin-left:1em">若誦此呪，隨所住處有無量諸佛菩薩天龍八部
+<lb ed="X" n="0225b05"/><lb ed="R104" n="0738a15"/>集會，又具無量三昧法門，誦持之人七代種族皆
+<lb ed="X" n="0225b06"/><lb ed="R104" n="0738a16"/>得解脫，腹中諸蟲當得菩薩之位。是人日日得具
+<lb ed="X" n="0225b07"/><lb ed="R104" n="0738a17"/>六波羅蜜圓滿功德，得無量辨才清淨智聚，口中
+<lb ed="X" n="0225b08"/><lb ed="R104" n="0738a18"/>所出之氣觸他人身，蒙所觸者離諸嗔毒，當得菩
+<lb ed="X" n="0225b09"/><lb ed="R104" n="0738b01"/>薩之位。假若四天下人皆得七地菩薩之位，彼諸
+<lb ed="X" n="0225b10"/><lb ed="R104" n="0738b02"/>菩薩所有功德，與誦六字呪一遍功德等無有異。
+<lb ed="X" n="0225b11"/><lb ed="R104" n="0738b03"/>此呪是觀世音菩薩微妙本心，若人書寫此六字
+<lb ed="X" n="0225b12"/><lb ed="R104" n="0738b04"/>大明，則同書寫八萬四千法藏，所獲功德等無有
+<lb ed="X" n="0225b13"/><lb ed="R104" n="0738b05"/>異。若以金寶造如來像數如微塵，不如書寫此六
+<lb ed="X" n="0225b14"/><lb ed="R104" n="0738b06"/>字中一字功德。若人得此六字大明，是人貪嗔癡
+<lb ed="X" n="0225b15"/><lb ed="R104" n="0738b07"/>不能染著。若戴持此呪在身者，亦不染著貪嗔癡
+<lb ed="X" n="0225b16"/><lb ed="R104" n="0738b08"/>病。此戴持人身手所觸眼目所覩，一切有情速得
+<lb ed="X" n="0225b17"/><lb ed="R104" n="0738b09"/>菩薩之位，永不復受生老病死等苦。說此六字大
+<lb ed="X" n="0225b18"/><lb ed="R104" n="0738b10"/>明竟，有七十七俱胝佛一時現前，同聲說准提呪，
+<lb ed="X" n="0225b19"/><lb ed="R104" n="0738b11"/>即知此六字大明與准提真言次第相須也。然後
+<lb ed="X" n="0225b20"/><lb ed="R104" n="0738b12"/>結准提印，當於心上以准提真言與一字大輪呪
+<lb ed="X" n="0225b21"/><lb ed="R104" n="0738b13"/>同誦一百八遍，於頂上散其手印<note place="inline">或有不樂大論呪者，只持准提
+<lb ed="X" n="0225b22"/><lb ed="R104" n="0738b14"/>真言亦得。准提印法，以二手無名指并小指相义，於內二中指直竪相柱，二頭指屈附二中指第一節，二
+<lb ed="X" n="0225b23"/><lb ed="R104" n="0738b15"/>大拇指捻右手無名指中節。若有請召，二頭指來去正結印。誦呪欲記數時，於自身分手指上記、或准提
+<lb ed="X" n="0225b24"/><lb ed="R104" n="0738b16"/>菩薩手臂上記、或於觀心上記皆得。或結印誦得一千八十遍更好，或一百八遍外，但以左手作金剛拳
+<pb ed="X" xml:id="X59.1077.0225c" n="0225c"/>
+<lb ed="X" n="0225c01"/><lb ed="R104" n="0738b17"/>印，右手掐數珠持亦得。若務忙者，只散持之</note>。</p></cb:div>
+<lb ed="X" n="0225c02"/><lb ed="R104" n="0738b18"/><cb:div type="other"><cb:mulu type="其他" level="2">七俱胝佛母心大准提陀羅尼</cb:mulu><head>七俱胝佛母心大准提陀羅尼<note place="inline">一字大輪呪，附後同誦。</note></head>
+<lb ed="X" n="0225c03"/><lb ed="R104" n="0739a01"/><p cb:type="dharani" xml:id="pX59p0225c0301"><cb:tt><cb:t xml:lang="zh-Hant" style="margin-left:0em">南</cb:t><cb:t xml:lang="sa-x-rj" style="margin-left:0em"><anchor xml:id="nkr_note_add_0225c0301" n="0225c0301"/><anchor xml:id="beg0225c0301" n="0225c0301"/><g ref="#RJ-CBED">􌯭</g><anchor xml:id="end0225c0301"/></cb:t></cb:tt><cb:tt><cb:t xml:lang="zh-Hant" style="margin-left:0em">無</cb:t><cb:t xml:lang="sa-x-rj" style="margin-left:0em"><anchor xml:id="nkr_note_add_0225c0302" n="0225c0302"/><anchor xml:id="beg0225c0302" n="0225c0302"/><g ref="#RJ-CBE2">􌯢</g><anchor xml:id="end0225c0302"/></cb:t></cb:tt><cb:tt><cb:t xml:lang="zh-Hant" style="margin-left:0em">颯</cb:t><cb:t xml:lang="sa-x-rj" style="margin-left:0em"><anchor xml:id="nkr_note_add_0225c0303" n="0225c0303"/><anchor xml:id="beg0225c0303" n="0225c0303"/><g ref="#RJ-CD64">􌵤</g><anchor xml:id="end0225c0303"/></cb:t></cb:tt><cb:tt><cb:t xml:lang="zh-Hant" style="margin-left:0em">哆</cb:t><cb:t xml:lang="sa-x-rj" style="margin-left:0em"><g ref="#RJ-CCDF">􌳟</g></cb:t></cb:tt><cb:tt><cb:t xml:lang="zh-Hant" style="margin-left:0em">喃</cb:t><cb:t xml:lang="sa-x-rj" style="margin-left:0em"><anchor xml:id="nkr_note_add_0225c0304" n="0225c0304"/><anchor xml:id="beg0225c0304" n="0225c0304"/><g ref="#RJ-CBFE">􌯾</g><anchor xml:id="end0225c0304"/></cb:t></cb:tt><cb:tt><cb:t xml:lang="zh-Hant" style="margin-left:0em">三</cb:t><cb:t xml:lang="sa-x-rj" style="margin-left:0em"><g ref="#RJ-CD64">􌵤</g></cb:t></cb:tt><cb:tt><cb:t xml:lang="zh-Hant" style="margin-left:0em">藐</cb:t><cb:t xml:lang="sa-x-rj" style="margin-left:0em"><anchor xml:id="nkr_note_add_0225c0305" n="0225c0305"/><anchor xml:id="beg0225c0305" n="0225c0305"/><g ref="#RJ-CBEB">􌯫</g><anchor xml:id="end0225c0305"/></cb:t></cb:tt><cb:tt><cb:t xml:lang="zh-Hant" style="margin-left:0em">三</cb:t><cb:t xml:lang="sa-x-rj" style="margin-left:0em"><anchor xml:id="nkr_note_add_0225c0306" n="0225c0306"/><anchor xml:id="beg0225c0306" n="0225c0306"/><g ref="#RJ-CBA2">􌮢</g><anchor xml:id="end0225c0306"/></cb:t></cb:tt><cb:tt><cb:t xml:lang="zh-Hant" style="margin-left:0em">菩</cb:t><cb:t xml:lang="sa-x-rj" style="margin-left:0em"><anchor xml:id="nkr_note_add_0225c0307" n="0225c0307"/><anchor xml:id="beg0225c0307" n="0225c0307"/><g ref="#RJ-C973">􌥳</g><anchor xml:id="end0225c0307"/></cb:t></cb:tt><cb:tt><cb:t xml:lang="zh-Hant" style="margin-left:0em"><g ref="#CB00501">䭾</g></cb:t><cb:t xml:lang="sa-x-rj" style="margin-left:0em"><g ref="#RJ-C9D3">􌧓</g></cb:t></cb:tt><cb:tt><cb:t xml:lang="zh-Hant" style="margin-left:0em">俱</cb:t><cb:t xml:lang="sa-x-rj" style="margin-left:0em"><g ref="#RJ-CB77">􌭷</g></cb:t></cb:tt><cb:tt><cb:t xml:lang="zh-Hant" style="margin-left:0em">胝</cb:t><cb:t xml:lang="sa-x-rj" style="margin-left:0em"><anchor xml:id="nkr_note_add_0225c0308" n="0225c0308"/><anchor xml:id="beg0225c0308" n="0225c0308"/><g ref="#RJ-CE52">􌹒</g><anchor xml:id="end0225c0308"/></cb:t></cb:tt><cb:tt><cb:t xml:lang="zh-Hant" style="margin-left:0em">喃</cb:t><cb:t xml:lang="sa-x-rj" style="margin-left:0em"><anchor xml:id="nkr_note_add_0225c0309" n="0225c0309"/><anchor xml:id="beg0225c0309" n="0225c0309"/><g ref="#RJ-CBFE">􌯾</g><anchor xml:id="end0225c0309"/></cb:t></cb:tt><cb:tt><cb:t xml:lang="zh-Hant" style="margin-left:0em">怛</cb:t><cb:t xml:lang="sa-x-rj" style="margin-left:0em"><anchor xml:id="nkr_note_add_0225c0310" n="0225c0310"/><anchor xml:id="beg0225c0310" n="0225c0310"/><g ref="#RJ-CDD4">􌷔</g><anchor xml:id="end0225c0310"/></cb:t></cb:tt><cb:tt><cb:t xml:lang="zh-Hant" style="margin-left:0em"><cb:yin><cb:zi>你也</cb:zi><cb:sg>二合</cb:sg></cb:yin></cb:t><cb:t xml:lang="sa-x-rj" style="margin-left:0em"><anchor xml:id="nkr_note_add_0225c0311" n="0225c0311"/><anchor xml:id="beg0225c0311" n="0225c0311"/><g ref="#RJ-CA5F">􌩟</g><anchor xml:id="end0225c0311"/></cb:t></cb:tt><cb:tt><cb:t xml:lang="zh-Hant" style="margin-left:0em">他</cb:t><cb:t xml:lang="sa-x-rj" style="margin-left:0em"><anchor xml:id="nkr_note_add_0225c0312" n="0225c0312"/><anchor xml:id="beg0225c0312" n="0225c0312"/><g ref="#RJ-CDE3">􌷣</g><anchor xml:id="end0225c0312"/></cb:t></cb:tt>
+<lb ed="X" n="0225c04"/><lb ed="R104" n="0739a02"/>
+<lb ed="X" n="0225c05"/><lb ed="R104" n="0739a03"/><cb:tt><cb:t xml:lang="zh-Hant" style="margin-left:0em">唵</cb:t><cb:t xml:lang="sa-x-rj" style="margin-left:0em"><g ref="#RJ-CCBA">􌲺</g></cb:t></cb:tt><cb:tt><cb:t xml:lang="zh-Hant" style="margin-left:0em">折</cb:t><cb:t xml:lang="sa-x-rj" style="margin-left:0em"><anchor xml:id="nkr_note_add_0225c0501" n="0225c0501"/><anchor xml:id="beg0225c0501" n="0225c0501"/><g ref="#RJ-C977">􌥷</g><anchor xml:id="end0225c0501"/></cb:t></cb:tt><cb:tt><cb:t xml:lang="zh-Hant" style="margin-left:0em"><g ref="#CB12528">𨽻</g></cb:t><cb:t xml:lang="sa-x-rj" style="margin-left:0em"><g ref="#RJ-CBC2">􌯂</g></cb:t></cb:tt><cb:tt><cb:t xml:lang="zh-Hant" style="margin-left:0em">主</cb:t><cb:t xml:lang="sa-x-rj" style="margin-left:0em"><anchor xml:id="nkr_note_add_0225c0502" n="0225c0502"/><anchor xml:id="beg0225c0502" n="0225c0502"/><g ref="#RJ-C9BD">􌦽</g><anchor xml:id="end0225c0502"/></cb:t></cb:tt><cb:tt><cb:t xml:lang="zh-Hant" style="margin-left:0em"><g ref="#CB12528">𨽻</g></cb:t><cb:t xml:lang="sa-x-rj" style="margin-left:0em"><g ref="#RJ-CBC2">􌯂</g></cb:t></cb:tt><cb:tt><cb:t xml:lang="zh-Hant" style="margin-left:0em">准</cb:t><cb:t xml:lang="sa-x-rj" style="margin-left:0em"><anchor xml:id="nkr_note_add_0225c0503" n="0225c0503"/><anchor xml:id="beg0225c0503" n="0225c0503"/><g ref="#RJ-C9BF">􌦿</g><anchor xml:id="end0225c0503"/></cb:t></cb:tt><cb:tt><cb:t xml:lang="zh-Hant" style="margin-left:0em">提</cb:t><cb:t xml:lang="sa-x-rj" style="margin-left:0em"><anchor xml:id="nkr_note_add_0225c0504" n="0225c0504"/><anchor xml:id="beg0225c0504" n="0225c0504"/><g ref="#RJ-C9D5">􌧕</g><anchor xml:id="end0225c0504"/></cb:t></cb:tt><cb:tt><cb:t xml:lang="zh-Hant" style="margin-left:0em"><cb:yin><cb:zi>娑婆</cb:zi><cb:sg>二合</cb:sg></cb:yin></cb:t><cb:t xml:lang="sa-x-rj" style="margin-left:0em"><g ref="#RJ-CDCC">􌷌</g></cb:t></cb:tt><cb:tt><cb:t xml:lang="zh-Hant" style="margin-left:0em">訶</cb:t><cb:t xml:lang="sa-x-rj" style="margin-left:0em"><anchor xml:id="nkr_note_add_0225c0505" n="0225c0505"/><anchor xml:id="beg0225c0505" n="0225c0505"/><g ref="#RJ-CAB0">􌪰</g><anchor xml:id="end0225c0505"/></cb:t></cb:tt><cb:tt><cb:t xml:lang="zh-Hant" style="margin-left:1em"><cb:yin><cb:zi>部林</cb:zi><cb:sg>二合</cb:sg></cb:yin></cb:t><cb:t xml:lang="sa-x-rj" style="margin-left:1em"><anchor xml:id="nkr_note_add_0225c0506" n="0225c0506"/><anchor xml:id="beg0225c0506" n="0225c0506"/><g ref="#RJ-C963">􌥣</g><anchor xml:id="end0225c0506"/></cb:t></cb:tt>
+<lb ed="X" n="0225c06"/><lb ed="R104" n="0739a04"/><note place="inline">此是梵書准提二呪</note>。</p>
+<lb ed="X" n="0225c07"/><lb ed="R104" n="0739a05"/><p xml:id="pX59p0225c0701" style="margin-left:1em">佛言：此呪能滅十惡五逆一切罪障，成就一切白
+<lb ed="X" n="0225c08"/><lb ed="R104" n="0739a06"/>法功德。持此呪者，不問在家出家、飲酒食肉、有妻
+<lb ed="X" n="0225c09"/><lb ed="R104" n="0739a07"/>子，不揀淨穢，但志心持誦，能使短命眾生增壽無
+<lb ed="X" n="0225c10"/><lb ed="R104" n="0739a08"/>量，迦摩羅疾尚得除差，何況餘病。若不消滅，無有
+<lb ed="X" n="0225c11"/><lb ed="R104" n="0739a09"/>是處。若誦滿四十九日，准提菩薩令二聖者，常隨
+<lb ed="X" n="0225c12"/><lb ed="R104" n="0739a10"/>其人所有善惡心之所念，皆於耳邊一一具報。若
+<lb ed="X" n="0225c13"/><lb ed="R104" n="0739a11"/>有無福無相、求官不遂、貧苦所逼者，常誦此呪，能
+<lb ed="X" n="0225c14"/><lb ed="R104" n="0739a12"/>令現世得輪王福，所求官位必得稱遂<note place="inline">禪宗傳燈錄中引古
+<lb ed="X" n="0225c15"/><lb ed="R104" n="0739a13"/>人云：俱胝只念三行呪，便得名超一切人是也</note>。若求智慧得大智慧，求男
+<lb ed="X" n="0225c16"/><lb ed="R104" n="0739a14"/>女者便得男女，凡有所求無不稱遂，似如意珠一
+<lb ed="X" n="0225c17"/><lb ed="R104" n="0739a15"/>切隨心。又誦此呪，能令國王大臣及諸四眾，生愛
+<lb ed="X" n="0225c18"/><lb ed="R104" n="0739a16"/>敬心見即歡喜。誦此呪人，水不能溺、火不能燒，毒
+<lb ed="X" n="0225c19"/><lb ed="R104" n="0739a17"/>藥怨家、軍陣強賊及惡龍獸、諸鬼魅等皆不能害。
+<lb ed="X" n="0225c20"/><lb ed="R104" n="0739a18"/>若欲請梵王、帝釋、四天王、閻羅天子等，<anchor xml:id="nkr_note_add_0225c2001" n="0225c2001"/><anchor xml:id="beg0225c2001" n="0225c2001"/>但<anchor xml:id="end0225c2001"/>誦此呪，
+<lb ed="X" n="0225c21"/><lb ed="R104" n="0739b01"/>隨請必至不敢前次，所有驅使隨心皆得。此呪於
+<lb ed="X" n="0225c22"/><lb ed="R104" n="0739b02"/>南贍部洲有大勢力，移須彌山竭大海水，呪乾枯
+<lb ed="X" n="0225c23"/><lb ed="R104" n="0739b03"/>木能生花果，何況更能依法持誦，不轉肉身得大
+<lb ed="X" n="0225c24"/><lb ed="R104" n="0739b04"/>神足往兜率天。若求長生及諸仙藥，但依法誦呪，
+<pb ed="X" xml:id="X59.1077.0226a" n="0226a"/>
+<lb ed="X" n="0226a01"/><lb ed="R104" n="0739b05"/>即得見觀世音菩薩或金剛手菩薩，授與神仙妙
+<lb ed="X" n="0226a02"/><lb ed="R104" n="0739b06"/>藥，隨取食之即成仙道，得延壽命齊於日月證菩
+<lb ed="X" n="0226a03"/><lb ed="R104" n="0739b07"/>薩位。若依法誦滿一百萬遍，便得往詣十方淨土，
+<lb ed="X" n="0226a04"/><lb ed="R104" n="0739b08"/>歷事諸佛普聞妙法得證菩提。</p>
+<lb ed="X" n="0226a05"/><lb ed="R104" n="0739b09"/><p xml:id="pX59p0226a0501" style="margin-left:1em">大輪一字呪，即部林<note place="inline">二合</note>是也，亦名末法中一字心
+<lb ed="X" n="0226a06"/><lb ed="R104" n="0739b10"/>呪。此呪於末法時，法欲滅時有大勢力，能於世間
+<lb ed="X" n="0226a07"/><lb ed="R104" n="0739b11"/>作大利益，能護如來一切法藏，能降伏一切八部
+<lb ed="X" n="0226a08"/><lb ed="R104" n="0739b12"/>之眾，能摧世間一切惡。呪是一切諸佛之頂，是文
+<lb ed="X" n="0226a09"/><lb ed="R104" n="0739b13"/>殊菩薩之心，能施一切眾生無畏，能與一切眾生
+<lb ed="X" n="0226a10"/><lb ed="R104" n="0739b14"/>快樂。凡有修持隨意得果，同如意珠能滿一切之
+<lb ed="X" n="0226a11"/><lb ed="R104" n="0739b15"/>願。若誦此呪，於四方面五百驛內，諸惡鬼神皆自
+<lb ed="X" n="0226a12"/><lb ed="R104" n="0739b16"/>馳散，諸惡星曜及諸天魔不敢侵近。若持誦餘一
+<lb ed="X" n="0226a13"/><lb ed="R104" n="0739b17"/>切真言恐不成就，即用此呪共餘真言一處同誦
+<lb ed="X" n="0226a14"/><lb ed="R104" n="0739b18"/>持之，決定成就。若不成就及無現驗，其呪神等即
+<lb ed="X" n="0226a15"/><lb ed="R104" n="0740a01"/>當頭破七分。是知此呪能助一切真言，疾得成就
+<lb ed="X" n="0226a16"/><lb ed="R104" n="0740a02"/><note place="inline">或別持此呪亦得</note>。上來次第持誦至准提呪，若不能結得
+<lb ed="X" n="0226a17"/><lb ed="R104" n="0740a03"/>准提印者，但以左手作金剛拳印，右手持珠誦之。
+<lb ed="X" n="0226a18"/><lb ed="R104" n="0740a04"/>或不能從前淨法界真言等次第持誦者，只持准
+<lb ed="X" n="0226a19"/><lb ed="R104" n="0740a05"/>提神呪。更或根鈍不能具受此准提者，只唵字<anchor xml:id="nkr_note_add_0226a1901" n="0226a1901"/><anchor xml:id="beg0226a1901" n="0226a1901"/>已<anchor xml:id="end0226a1901"/>
+<lb ed="X" n="0226a20"/><lb ed="R104" n="0740a06"/>下持之。唵字<anchor xml:id="nkr_note_add_0226a2001" n="0226a2001"/><anchor xml:id="beg0226a2001" n="0226a2001"/>已<anchor xml:id="end0226a2001"/>上是歸敬詞，唵字等是正呪也。每
+<lb ed="X" n="0226a21"/><lb ed="R104" n="0740a07"/>持誦了，却用右手作金剛拳印，口誦吽字真言而
+<lb ed="X" n="0226a22"/><lb ed="R104" n="0740a08"/>印五處。先印額上，次印左右肩，次印心上，從印<g ref="#CB15287">㗋</g>
+<lb ed="X" n="0226a23"/><lb ed="R104" n="0740a09"/>上印竟頂上散之。能除一切魔障，成就一切勝事，
+<lb ed="X" n="0226a24"/><lb ed="R104" n="0740a10"/>迴向發願如前隨意稱之。</p></cb:div>
+<pb ed="X" xml:id="X59.1077.0226b" n="0226b"/>
+<lb ed="X" n="0226b01"/><lb ed="R104" n="0740a11"/><cb:div type="other"><cb:mulu type="其他" level="2">淨業續課</cb:mulu><head>淨業續課</head>
+<lb ed="X" n="0226b02"/><lb ed="R104" n="0740a12"/><p xml:id="pX59p0226b0201" style="margin-left:1em"><note place="inline">按准提經云：誦真言迴向竟，隨意經行，轉讀大乘經典、華嚴、大般若等經。故今續課。</note></p>
+<lb ed="X" n="0226b03"/><lb ed="R104" n="0740a13"/><cb:div type="other"><cb:mulu type="其他" level="3">般若波羅蜜多心經</cb:mulu><head>般若波羅蜜多心經</head>
+<lb ed="X" n="0226b04"/><lb ed="R104" n="0740a14"/><p xml:id="pX59p0226b0401">觀自在！菩薩行深般若波羅蜜多時，照見五蘊皆空，
+<lb ed="X" n="0226b05"/><lb ed="R104" n="0740a15"/>度一切苦厄。舍利子！色不異空、空不異色，色即是空、
+<lb ed="X" n="0226b06"/><lb ed="R104" n="0740a16"/>空即是色，受想行識亦復如是。舍利子！是諸法空相，
+<lb ed="X" n="0226b07"/><lb ed="R104" n="0740a17"/>不生不滅、不垢不淨、不增不減，是故空中無色、無受
+<lb ed="X" n="0226b08"/><lb ed="R104" n="0740a18"/>想行識、無眼耳鼻舌身意、無色聲香味觸法、無眼界
+<lb ed="X" n="0226b09"/><lb ed="R104" n="0740b01"/>乃至無意識界、無無明亦無無明盡、乃至無老死亦
+<lb ed="X" n="0226b10"/><lb ed="R104" n="0740b02"/>無老死盡、無苦集滅道、無智亦無得。以無所得故，菩
+<lb ed="X" n="0226b11"/><lb ed="R104" n="0740b03"/>提薩埵依般若波羅蜜多故，心無罣礙。無罣礙故，無
+<lb ed="X" n="0226b12"/><lb ed="R104" n="0740b04"/>有恐怖，遠離顛倒夢想，究竟涅槃。三世諸佛依般若
+<lb ed="X" n="0226b13"/><lb ed="R104" n="0740b05"/>波羅蜜多故，得阿耨多羅三藐三菩提。故知般若波
+<lb ed="X" n="0226b14"/><lb ed="R104" n="0740b06"/>羅蜜多是大神呪、是大明呪、是無上呪、是無等等呪，
+<lb ed="X" n="0226b15"/><lb ed="R104" n="0740b07"/>能除一切苦，真實不虗，故說般若波羅蜜多呪。即說
+<lb ed="X" n="0226b16"/><lb ed="R104" n="0740b08"/>呪曰：揭諦，揭諦，波羅揭諦，波羅僧揭諦，菩提薩婆<note place="inline">二合</note>
+<lb ed="X" n="0226b17"/><lb ed="R104" n="0740b09"/>訶。</p></cb:div>
+<lb ed="X" n="0226b18"/><lb ed="R104" n="0740b10"/><cb:div type="other"><cb:mulu type="其他" level="3">大方廣佛華嚴經入不思議解脫境界普賢行願品</cb:mulu><head>大方廣佛華嚴經入不思議解脫境界普賢行願品</head>
+<lb ed="X" n="0226b19"/><lb ed="R104" n="0740b11"/><p xml:id="pX59p0226b1901">一者、禮敬諸佛；二者、稱讚如來；三者、廣修供養；四者、
+<lb ed="X" n="0226b20"/><lb ed="R104" n="0740b12"/>懺悔業障；五者、隨喜功德；六者、請轉法輪；七者、請佛
+<lb ed="X" n="0226b21"/><lb ed="R104" n="0740b13"/>住世；八者、常隨佛學；九者、恒順眾生；十者、普皆迴向。</p>
+<lb ed="X" n="0226b22"/><lb ed="R104" n="0740b14"/><lg type="regular" xml:id="lgX59p0226b2201"><l>所有禮讚供養福，<caesura/>請佛住世轉法輪。</l>
+<lb ed="X" n="0226b23"/><lb ed="R104" n="0740b15"/><l>隨喜懺悔諸善根，<caesura/>迴向眾生及佛道。</l>
+<lb ed="X" n="0226b24"/><lb ed="R104" n="0740b16"/><l>願我臨欲命終時，<caesura/>盡除一切諸障礙。</l>
+<pb ed="X" xml:id="X59.1077.0226c" n="0226c"/>
+<lb ed="X" n="0226c01"/><lb ed="R104" n="0740b17"/><l>面見彼佛阿彌陀，<caesura/>即得往生安樂剎。</l>
+<lb ed="X" n="0226c02"/><lb ed="R104" n="0740b18"/><l>我既往生彼國<anchor xml:id="nkr_note_add_0226c0201" n="0226c0201"/><anchor xml:id="beg0226c0201" n="0226c0201"/>已<anchor xml:id="end0226c0201"/>，<caesura/>現前成就此大願，</l>
+<lb ed="X" n="0226c03"/><lb ed="R104" n="0741a01"/><l>一切圓滿盡無餘，<caesura/>利樂一切眾生界。</l>
+<lb ed="X" n="0226c04"/><lb ed="R104" n="0741a02"/><l>彼佛眾會咸清淨，<caesura/>我時於勝蓮華生，</l>
+<lb ed="X" n="0226c05"/><lb ed="R104" n="0741a03"/><l>親覩如來無量光，<caesura/>現前授我菩提記。</l>
+<lb ed="X" n="0226c06"/><lb ed="R104" n="0741a04"/><l>蒙彼如來授記<anchor xml:id="nkr_note_add_0226c0601" n="0226c0601"/><anchor xml:id="beg0226c0601" n="0226c0601"/>已<anchor xml:id="end0226c0601"/>，<caesura/>化身無數百俱胝，</l>
+<lb ed="X" n="0226c07"/><lb ed="R104" n="0741a05"/><l>智力廣大徧十方，<caesura/>普利一切眾生界，</l>
+<lb ed="X" n="0226c08"/><lb ed="R104" n="0741a06"/><l>乃至虗空世界盡，<caesura/>眾生及業煩惱盡，</l>
+<lb ed="X" n="0226c09"/><lb ed="R104" n="0741a07"/><l>如是一切無盡時，<caesura/>我願究竟恒無盡。</l>
+<lb ed="X" n="0226c10"/><lb ed="R104" n="0741a08"/><l>我此普賢殊勝行，<caesura/>無邊勝福皆迴向，</l>
+<lb ed="X" n="0226c11"/><lb ed="R104" n="0741a09"/><l>普願沉溺諸眾生，<caesura/>速往無量光佛剎。</l></lg></cb:div>
+<lb ed="X" n="0226c12"/><lb ed="R104" n="0741a10"/><cb:div type="other"><cb:mulu type="其他" level="3">觀無量壽佛經上品上生章</cb:mulu><head>觀無量壽佛經上品上生章</head>
+<lb ed="X" n="0226c13"/><lb ed="R104" n="0741a11"/><p xml:id="pX59p0226c1301">佛告阿難及韋提希：上品上生者，若有眾生願生彼
+<lb ed="X" n="0226c14"/><lb ed="R104" n="0741a12"/>國者，發三種心，即便往生。何等為三？一者、至誠心；二
+<lb ed="X" n="0226c15"/><lb ed="R104" n="0741a13"/>者、深心；三者、迴向發願心。具三心者，必生彼國。復有
+<lb ed="X" n="0226c16"/><lb ed="R104" n="0741a14"/>三種眾生，當得往生。何等為三？一者、慈心不殺，具諸
+<lb ed="X" n="0226c17"/><lb ed="R104" n="0741a15"/>戒行；二者、讀誦大乘方等經典；三者、修行六念，迴向
+<lb ed="X" n="0226c18"/><lb ed="R104" n="0741a16"/>發願，願生彼國。具此功德，一日乃至七日，即得往生。
+<lb ed="X" n="0226c19"/><lb ed="R104" n="0741a17"/>生彼國時，此人精進勇猛故，阿彌陀如來與觀世音、
+<lb ed="X" n="0226c20"/><lb ed="R104" n="0741a18"/>大勢至、無數化佛、百千比丘、聲聞大眾、無量諸天，七
+<lb ed="X" n="0226c21"/><lb ed="R104" n="0741b01"/>寶宮殿，觀世音菩薩執金剛臺，與大勢至菩薩至行
+<lb ed="X" n="0226c22"/><lb ed="R104" n="0741b02"/>者前。阿彌陀佛放大光明，照行者身，與諸菩薩授手
+<lb ed="X" n="0226c23"/><lb ed="R104" n="0741b03"/>迎接。觀世音、大勢至與無數菩薩，讚歎行者，勸進其
+<lb ed="X" n="0226c24"/><lb ed="R104" n="0741b04"/>心。行者見<anchor xml:id="nkr_note_add_0226c2401" n="0226c2401"/><anchor xml:id="beg0226c2401" n="0226c2401"/>已<anchor xml:id="end0226c2401"/>，歡喜踊躍，自見其身乘金剛臺，隨從佛
+<pb ed="X" xml:id="X59.1077.0227a" n="0227a"/>
+<lb ed="X" n="0227a01"/><lb ed="R104" n="0741b05"/>後，如彈指頃，往生彼國。生彼國<anchor xml:id="nkr_note_add_0227a0101" n="0227a0101"/><anchor xml:id="beg0227a0101" n="0227a0101"/>已<anchor xml:id="end0227a0101"/>，見佛色身眾相具
+<lb ed="X" n="0227a02"/><lb ed="R104" n="0741b06"/>足，見諸菩薩色相具足，光明寶林演說妙法。聞<anchor xml:id="nkr_note_add_0227a0201" n="0227a0201"/><anchor xml:id="beg0227a0201" n="0227a0201"/>已<anchor xml:id="end0227a0201"/>，即
+<lb ed="X" n="0227a03"/><lb ed="R104" n="0741b07"/>悟無生法忍，經須臾間，歷事諸佛，徧十方界，於諸佛
+<lb ed="X" n="0227a04"/><lb ed="R104" n="0741b08"/>前，次第受記，還至本國，得無量百千陀羅尼門。是名
+<lb ed="X" n="0227a05"/><lb ed="R104" n="0741b09"/>上品上生者。</p></cb:div>
+<lb ed="X" n="0227a06"/><lb ed="R104" n="0741b10"/><cb:div type="other"><cb:mulu type="其他" level="3">拔一切業障根本往生淨土神呪</cb:mulu><head>拔一切業障根本往生淨土神呪</head>
+<lb ed="X" n="0227a07"/><lb ed="R104" n="0741b11"/><p cb:type="dharani" xml:id="pX59p0227a0701">曩謨阿彌哆婆夜哆他伽哆夜哆地夜他阿彌唎都
+<lb ed="X" n="0227a08"/><lb ed="R104" n="0741b12"/>婆毗阿彌唎哆悉躭婆毗阿彌唎哆毗迦蘭帝阿彌
+<lb ed="X" n="0227a09"/><lb ed="R104" n="0741b13"/>唎哆毗迦蘭哆伽彌膩伽伽那枳多迦<g ref="#CB12528">𨽻</g>娑婆訶<note place="inline">哆，去
+<lb ed="X" n="0227a10"/><lb ed="R104" n="0741b14"/>聲，讀如掇，又如帶，隨便皆得</note>。</p>
+<lb ed="X" n="0227a11"/><lb ed="R104" n="0741b15"/><lg type="regular" xml:id="lgX59p0227a1101"><l>阿彌陀佛身金色，<caesura/>相好光明無等倫，</l>
+<lb ed="X" n="0227a12"/><lb ed="R104" n="0741b16"/><l>白毫宛轉五須彌，<caesura/>紺目澄清四大海。</l>
+<lb ed="X" n="0227a13"/><lb ed="R104" n="0741b17"/><l>光中化佛無數億，<caesura/>化菩薩眾亦無邊，</l>
+<lb ed="X" n="0227a14"/><lb ed="R104" n="0741b18"/><l>四十八願度眾生，<caesura/>九品咸令登彼岸。</l></lg>
+<lb ed="X" n="0227a15"/><lb ed="R104" n="0742a01"/><list rend="no-marker"><item xml:id="itemX59p0227a1501">南無西方極樂世界大慈大悲阿彌陀佛</item>
+<lb ed="X" n="0227a16"/><lb ed="R104" n="0742a02"/><item xml:id="itemX59p0227a1601">南無阿彌陀佛<note place="inline">或千聲，或三五百聲，或十念</note></item>
+<lb ed="X" n="0227a17"/><lb ed="R104" n="0742a03"/><item xml:id="itemX59p0227a1701">南無觀世音菩薩<note place="inline">十聲</note></item>
+<lb ed="X" n="0227a18"/><lb ed="R104" n="0742a04"/><item xml:id="itemX59p0227a1801">南無大勢至菩薩<note place="inline">十聲</note></item>
+<lb ed="X" n="0227a19"/><lb ed="R104" n="0742a05"/><item xml:id="itemX59p0227a1901">南無清淨大海眾菩薩<note place="inline">十聲</note></item></list></cb:div>
+</cb:div>
+
+
+<lb ed="X" n="0227c10"/><lb ed="R104" n="0743a08"/><cb:div type="other"><cb:mulu type="其他" level="2">十念法門</cb:mulu><head>十念法門</head>
+<lb ed="X" n="0227c11"/><lb ed="R104" n="0743a09"/><p xml:id="pX59p0227c1101" style="margin-left:1em">世有冗忙之極，頃刻無間者，每日晨朝，必須十念。
+<lb ed="X" n="0227c12"/><lb ed="R104" n="0743a10"/>十念者，清晨面西，正立合掌，連聲稱阿彌陀佛。盡
+<lb ed="X" n="0227c13"/><lb ed="R104" n="0743a11"/>一氣為一念，如是十氣，名為十念。但隨氣長短，不
+<lb ed="X" n="0227c14"/><lb ed="R104" n="0743a12"/>限佛數多少，唯長唯久，氣極為度。其佛聲不高不
+<lb ed="X" n="0227c15"/><lb ed="R104" n="0743a13"/>低，不緩不急，調停得中。如是十氣，連屬不斷，意在
+<lb ed="X" n="0227c16"/><lb ed="R104" n="0743a14"/>令心不散，專精為功。故名此為十念者，顯是藉氣
+<lb ed="X" n="0227c17"/><lb ed="R104" n="0743a15"/>束心也。盡此一生，不得一日暫廢。十念畢，迴向發
+<lb ed="X" n="0227c18"/><lb ed="R104" n="0743a16"/>願云：</p>
+<lb ed="X" n="0227c19"/><lb ed="R104" n="0743a17"/><p xml:id="pX59p0227c1901" style="margin-left:1em">弟子<note place="inline">某</note>一心皈命極樂世界阿彌陀佛，願以淨光
+<lb ed="X" n="0227c20"/><lb ed="R104" n="0743a18"/>照我，慈誓攝我。我今正念，稱如來名，為菩提道，求
+<lb ed="X" n="0227c21"/><lb ed="R104" n="0743b01"/>生淨土。佛昔本誓：若有眾生，欲生我國，志心信樂，
+<lb ed="X" n="0227c22"/><lb ed="R104" n="0743b02"/>稱我名號，乃至十念。若不生者，不取正覺。以此念
+<lb ed="X" n="0227c23"/><lb ed="R104" n="0743b03"/>佛因緣，得入如來大誓海中。承佛慈力，眾罪消滅，
+<lb ed="X" n="0227c24"/><lb ed="R104" n="0743b04"/>淨因增長。若臨命終，自知時至，身無病苦，心不貪
+<pb ed="X" xml:id="X59.1077.0228a" n="0228a"/>
+<lb ed="X" n="0228a01"/><lb ed="R104" n="0743b05"/>戀，亦不顛倒，如入禪定。佛及聖眾，手執金臺，來迎
+<lb ed="X" n="0228a02"/><lb ed="R104" n="0743b06"/>接我。於一念頃，生極樂國。華開見佛，即聞佛乘。頓
+<lb ed="X" n="0228a03"/><lb ed="R104" n="0743b07"/>開佛慧，廣度眾生，滿菩提願。</p></cb:div></cb:div>
+<lb ed="X" n="0228a04"/><lb ed="R104" n="0743b08"/>
+<lb ed="X" n="0228a05"/><lb ed="R104" n="0743b09"/><cb:juan fun="close" n="1"><cb:jhead>淮提淨業卷之一</cb:jhead></cb:juan>
+<milestone unit="juan" n="2"/>
+<lb ed="X" n="0228a06"/>
+<lb ed="X" n="0228a07"/>
+<lb ed="X" n="0228a08"/><lb ed="R104" n="0743b11"/><cb:juan fun="open" n="2"><cb:mulu type="卷" n="2"></cb:mulu><cb:jhead>准提淨業卷之二</cb:jhead></cb:juan>
+<lb ed="X" n="0228a09"/>
+<lb ed="X" n="0228a10"/><lb ed="R104" n="0743b12"/><cb:div type="other"><cb:mulu type="其他" level="1">觀行儀軌</cb:mulu><head>觀行儀軌<note place="inline">依顯密心要，准提大明諸經，特標觀行，即顯密雙修觀法也。</note></head>
+<lb ed="X" n="0228a11"/><lb ed="R104" n="0743b13"/><cb:div type="other"><cb:mulu type="其他" level="2">觀行次第</cb:mulu><cb:div type="other"><cb:mulu type="其他" level="3">前文</cb:mulu><p xml:id="pX59p0228a1101" style="margin-left:1em"><note place="inline">前專持誦而略觀行，便於流通。此專觀行而兼持誦，切於修證。或公務忙迫，不能全依觀行次第，於中隨
+<lb ed="X" n="0228a12"/><lb ed="R104" n="0743b14"/>人節取用之亦可。</note></p>
+<lb ed="X" n="0228a13"/><lb ed="R104" n="0743b15"/><p xml:id="pX59p0228a1301">准提大明經云：若有在家出家菩薩，發菩提心，行菩
+<lb ed="X" n="0228a14"/><lb ed="R104" n="0743b16"/>提行，求速出離生死者，先須入三摩耶灌頂道場，受
+<lb ed="X" n="0228a15"/><lb ed="R104" n="0743b17"/>持禁戒，堅固不退，愛樂大乘菩薩戒行，於四威儀，修
+<lb ed="X" n="0228a16"/><lb ed="R104" n="0743b18"/>四無量，發四弘願，一切事業，心不散亂，方可入此秘
+<lb ed="X" n="0228a17"/><lb ed="R104" n="0744a01"/>密法門。初入道場，復須禮敬懺悔，自誓受戒，隨喜發
+<lb ed="X" n="0228a18"/><lb ed="R104" n="0744a02"/>願，然後持誦。<note place="inline">以後觀行次第，依此建立。</note></p></cb:div>
+<lb ed="X" n="0228a19"/><lb ed="R104" n="0744a03"/><cb:div type="other"><cb:mulu type="其他" level="3">壇法</cb:mulu><head>壇法</head><p xml:id="pX59p0228a1903" cb:place="inline"><note place="inline">真言：行者於佛像前齋戒設供燒香及淨水，隨月十五夜向東朝月，以一新鏡未曾用者安置
+<lb ed="X" n="0228a20"/><lb ed="R104" n="0744a04"/>座前，對鏡結印在於心上，誦呪一千八十遍，即以囊盛此鏡佩帶在身。以後每日限定二時三時對鏡禮誦，即
+<lb ed="X" n="0228a21"/><lb ed="R104" n="0744a05"/>是淨壇。或十齋日對鏡，餘不對鏡亦得。諸經多說想成壇法持誦為上，但須淨心合法</note>。行者金
+<lb ed="X" n="0228a22"/><lb ed="R104" n="0744a06"/>剛正坐手結大三昧印<note place="inline">坐法印法俱見前</note>，誦讚云：准提功德
+<lb ed="X" n="0228a23"/><lb ed="R104" n="0744a07"/>聚，寂靜心常誦，一切諸大難，無能侵是人。天上及人
+<lb ed="X" n="0228a24"/><lb ed="R104" n="0744a08"/>間，受福如佛等，遇此如意珠，定獲無等等。　南無七
+<pb ed="X" xml:id="X59.1077.0228b" n="0228b"/>
+<lb ed="X" n="0228b01"/><lb ed="R104" n="0744a09"/>俱胝佛母大准提菩薩。<note place="inline">三稱</note>　觀准提菩薩像<note place="inline">其像作黃白色，
+<lb ed="X" n="0228b02"/><lb ed="R104" n="0744a10"/>面有三目，寶冠纓絡莊嚴，腰下著白衣，衣〡有花，上身著輕羅綽袖天衣，以綬帶繫腰，珠霞絡身。其手腕以白
+<lb ed="X" n="0228b03"/><lb ed="R104" n="0744a11"/>螺為釧，其臂上釧七寶莊嚴，一一手上著指環有十八，臂上二手作說法相。右第二手施無畏，第三手把劒，第
+<lb ed="X" n="0228b04"/><lb ed="R104" n="0744a12"/>四手把數珠，第五手把俱緣果，第六手把鉞斧，第七手把鉤，第八手把金剛杵，第九手把寶鬘。左第二手把如
+<lb ed="X" n="0228b05"/><lb ed="R104" n="0744a13"/>意寶幢，第三手把蓮華，第四手把澡罐，第五手把索，第六手把輪，第七手把螺，第八手把賢瓶，第九手把般若
+<lb ed="X" n="0228b06"/><lb ed="R104" n="0744a14"/>波羅密經卷。菩薩下作水池，池中安蓮華，難陀龍王、塢波難陀龍王共扶蓮華莖，於蓮華上安准提菩薩，其像
+<lb ed="X" n="0228b07"/><lb ed="R104" n="0744a15"/>周圓安明光焰。准提佛母矜憐行人，慈眼下視云</note>。　歌訣<note place="inline">佛母大准提，莊嚴極妙麗，寶冠纓絡埀，天
+<lb ed="X" n="0228b08"/><lb ed="R104" n="0744a16"/>衣羅帶繫，黃金滿月相，三目十八臂，說法無畏施，寶幢得如意，把劒持珠握，俱緣蓮華，澡罐索皆備，鉞鈎金剛
+<lb ed="X" n="0228b09"/><lb ed="R104" n="0744a17"/>杵，輪螺賢瓶器，寶鬘都來色即空，般若總持第一義。此歌便記從無畏手以下皆先右後左，如無像，但觀鏡亦
+<lb ed="X" n="0228b10"/><lb ed="R104" n="0744a18"/>得</note>：　想准提菩薩面前有一鏡壇，湛然清淨，想自心
+<lb ed="X" n="0228b11"/><lb ed="R104" n="0744b01"/>如一輪明月，光明相映。　次想准提菩薩口中吐出
+<lb ed="X" n="0228b12"/><lb ed="R104" n="0744b02"/>九聖梵書，字字相續如貫珠，有五色光從自口入，右
+<lb ed="X" n="0228b13"/><lb ed="R104" n="0744b03"/>旋安布心月輪中，即從中第一<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><g ref="#RJ-CCBA">􌲺</g></cb:t><cb:t xml:lang="zh-Hant">唵</cb:t></cb:tt>字觀起，次<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><anchor xml:id="nkr_note_add_0228b1301" n="0228b1301"/><anchor xml:id="beg0228b1301" n="0228b1301"/><g ref="#RJ-C977">􌥷</g><anchor xml:id="end0228b1301"/></cb:t><cb:t xml:lang="zh-Hant">折</cb:t></cb:tt>
+<lb ed="X" n="0228b14"/><lb ed="R104" n="0744b04"/>字、<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><g ref="#RJ-CBC2">􌯂</g></cb:t><cb:t xml:lang="zh-Hant"><g ref="#CB12528">𨽻</g></cb:t></cb:tt>字，至第九<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><anchor xml:id="nkr_note_add_0228b1401" n="0228b1401"/><anchor xml:id="beg0228b1401" n="0228b1401"/><g ref="#RJ-CAB0">􌪰</g><anchor xml:id="end0228b1401"/></cb:t><cb:t xml:lang="zh-Hant">阿</cb:t></cb:tt>字，復觀第一<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><g ref="#RJ-CCBA">􌲺</g></cb:t><cb:t xml:lang="zh-Hant">唵</cb:t></cb:tt>字，如是周
+<lb ed="X" n="0228b15"/><lb ed="R104" n="0744b05"/>而復始，字字分明，內外交徹，圓滿清淨，以應鏡壇<note place="inline">月輪
+<lb ed="X" n="0228b16"/><lb ed="R104" n="0744b06"/>梵字圖見前，<anchor xml:id="nkr_note_add_0228b1601" n="0228b1601"/><anchor xml:id="beg0228b1601" n="0228b1601"/>已<anchor xml:id="end0228b1601"/>上入壇觀</note>。</p>
+<lb ed="X" n="0228b17"/><lb ed="R104" n="0744b07"/><p xml:id="pX59p0228b1701">觀<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><anchor xml:id="nkr_note_add_0228b1701" n="0228b1701"/><anchor xml:id="beg0228b1701" n="0228b1701"/><g ref="#RJ-CCEB">􌳫</g><anchor xml:id="end0228b1701"/></cb:t><cb:t xml:lang="zh-Hant"><g ref="#CB00771">㘕</g></cb:t></cb:tt>字，入淨法界三昧。想自身頂上有一梵書<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><anchor xml:id="nkr_note_add_0228b1702" n="0228b1702"/><anchor xml:id="beg0228b1702" n="0228b1702"/><g ref="#RJ-CCEB">􌳫</g><anchor xml:id="end0228b1702"/></cb:t>
+<lb ed="X" n="0228b18"/><lb ed="R104" n="0744b08"/><cb:t xml:lang="zh-Hant"><g ref="#CB00771">㘕</g></cb:t></cb:tt>字，此字徧有光明，猶如明珠，或如滿月，普照十方。
+<lb ed="X" n="0228b19"/><lb ed="R104" n="0744b09"/>即誦淨法界真言　唵<g ref="#CB00771">㘕</g>二十一徧。　次想<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><anchor xml:id="nkr_note_add_0228b1901" n="0228b1901"/><anchor xml:id="beg0228b1901" n="0228b1901"/><g ref="#RJ-CCEB">􌳫</g><anchor xml:id="end0228b1901"/></cb:t><cb:t xml:lang="zh-Hant"><g ref="#CB00771">㘕</g></cb:t></cb:tt>字
+<lb ed="X" n="0228b20"/><lb ed="R104" n="0744b10"/>變成三角火輪，燃盡自<anchor xml:id="nkr_note_add_0228b2001" n="0228b2001"/><anchor xml:id="beg0228b2001" n="0228b2001"/>己<anchor xml:id="end0228b2001"/>有漏之身<note place="inline">從頭眼耳鼻舌身一一燒盡，縱
+<lb ed="X" n="0228b21"/><lb ed="R104" n="0744b11"/>有五無間罪，用此字燒身，亦皆除滅無遺</note>，徧大地盡，燃成淨法界<note place="inline">如同劫火燒盡
+<lb ed="X" n="0228b22"/><lb ed="R104" n="0744b12"/>有為世界，但成空寂</note>。念云：願我永離三界五欲男女臭穢不淨
+<lb ed="X" n="0228b23"/><lb ed="R104" n="0744b13"/>等身，願得淨土法性生身<note place="inline"><anchor xml:id="nkr_note_add_0228b2301" n="0228b2301"/><anchor xml:id="beg0228b2301" n="0228b2301"/>已<anchor xml:id="end0228b2301"/>上淨法界觀</note>。次觀<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><anchor xml:id="nkr_note_add_0228b2302" n="0228b2302"/><anchor xml:id="beg0228b2302" n="0228b2302"/><g ref="#RJ-C943">􌥃</g><anchor xml:id="end0228b2302"/></cb:t><cb:t xml:lang="zh-Hant">阿</cb:t></cb:tt>字，生成
+<lb ed="X" n="0228b24"/><lb ed="R104" n="0744b14"/>無漏智身。想八葉大蓮華上<note place="inline">八葉蓮華表白淨八識心王</note>有一<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><anchor xml:id="nkr_note_add_0228b2401" n="0228b2401"/><anchor xml:id="beg0228b2401" n="0228b2401"/><g ref="#RJ-C943">􌥃</g><anchor xml:id="end0228b2401"/></cb:t><cb:t xml:lang="zh-Hant">
+<pb ed="X" xml:id="X59.1077.0228c" n="0228c"/>
+<lb ed="X" n="0228c01"/><lb ed="R104" n="0744b15"/>阿</cb:t></cb:tt>字，此字即是無相法界，我身從無相中受生。　次
+<lb ed="X" n="0228c02"/><lb ed="R104" n="0744b16"/>觀<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><g ref="#RJ-C949">􌥉</g></cb:t><cb:t xml:lang="zh-Hant">暗</cb:t></cb:tt>字，在自<anchor xml:id="nkr_note_add_0228c0201" n="0228c0201"/><anchor xml:id="beg0228c0201" n="0228c0201"/>己<anchor xml:id="end0228c0201"/>頂門十字縫中<note place="inline">此字即體，是十方諸佛光明法水，即
+<lb ed="X" n="0228c03"/><lb ed="R104" n="0744b17"/>如來秘密灌頂法門</note>，想十方諸佛同時以光明法水為我灌頂。</p></cb:div>
+<lb ed="X" n="0228c04"/><lb ed="R104" n="0744b18"/><cb:div type="other"><cb:mulu type="其他" level="3">次結布字印</cb:mulu><head>次結布字印<note place="inline">以二中指、無名指向內相义，二大拇指、二頭指、二小指竝直竪，頭相著。</note></head>
+<lb ed="X" n="0228c05"/><lb ed="R104" n="0745a01"/><p xml:id="pX59p0228c0501">用觸九處布九聖梵字，想<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><g ref="#RJ-CCBA">􌲺</g></cb:t><cb:t xml:lang="zh-Hant">唵</cb:t></cb:tt>字安頭上，<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><anchor xml:id="nkr_note_add_0228c0501" n="0228c0501"/><anchor xml:id="beg0228c0501" n="0228c0501"/><g ref="#RJ-C977">􌥷</g><anchor xml:id="end0228c0501"/></cb:t><cb:t xml:lang="zh-Hant">折</cb:t></cb:tt>字安
+<lb ed="X" n="0228c06"/><lb ed="R104" n="0745a02"/>兩目，<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><g ref="#RJ-CBC2">􌯂</g></cb:t><cb:t xml:lang="zh-Hant"><g ref="#CB12528">𨽻</g></cb:t></cb:tt>字安頸項，<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><anchor xml:id="nkr_note_add_0228c0601" n="0228c0601"/><anchor xml:id="beg0228c0601" n="0228c0601"/><g ref="#RJ-C9BD">􌦽</g><anchor xml:id="end0228c0601"/></cb:t><cb:t xml:lang="zh-Hant">主</cb:t></cb:tt>字安於心，<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><g ref="#RJ-CBC2">􌯂</g></cb:t><cb:t xml:lang="zh-Hant"><g ref="#CB12528">𨽻</g></cb:t></cb:tt>字安兩肩，
+<lb ed="X" n="0228c07"/><lb ed="R104" n="0745a03"/><cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><anchor xml:id="nkr_note_add_0228c0701" n="0228c0701"/><anchor xml:id="beg0228c0701" n="0228c0701"/><g ref="#RJ-C9BF">􌦿</g><anchor xml:id="end0228c0701"/></cb:t><cb:t xml:lang="zh-Hant">准</cb:t></cb:tt>字安臍中，<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><anchor xml:id="nkr_note_add_0228c0702" n="0228c0702"/><anchor xml:id="beg0228c0702" n="0228c0702"/><g ref="#RJ-C9D5">􌧕</g><anchor xml:id="end0228c0702"/></cb:t><cb:t xml:lang="zh-Hant">提</cb:t></cb:tt>字安兩<g ref="#CB00170">䏶</g>，<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><g ref="#RJ-CDCC">􌷌</g></cb:t><cb:t xml:lang="zh-Hant">娑婆</cb:t></cb:tt>字安兩脛，<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><anchor xml:id="nkr_note_add_0228c0703" n="0228c0703"/><anchor xml:id="beg0228c0703" n="0228c0703"/><g ref="#RJ-CAB0">􌪰</g><anchor xml:id="end0228c0703"/></cb:t>
+<lb ed="X" n="0228c08"/><lb ed="R104" n="0745a04"/><cb:t xml:lang="zh-Hant">訶</cb:t></cb:tt>字安兩足<note place="inline">俱用手印隨觀隨觸九處布之，准字<anchor xml:id="nkr_note_add_0228c0801" n="0228c0801"/><anchor xml:id="beg0228c0801" n="0228c0801"/>已<anchor xml:id="end0228c0801"/>上用大指觸，提字<anchor xml:id="nkr_note_add_0228c0802" n="0228c0802"/><anchor xml:id="beg0228c0802" n="0228c0802"/>已<anchor xml:id="end0228c0802"/>下用小指觸。依前
+<lb ed="X" n="0228c09"/><lb ed="R104" n="0745a05"/>經中布字，於身法念誦作觀尤妙</note>。諦觀從頂至足，一一真言字體皆
+<lb ed="X" n="0228c10"/><lb ed="R104" n="0745a06"/>有無量光明，我身即同准提佛母身，具足相好光明
+<lb ed="X" n="0228c11"/><lb ed="R104" n="0745a07"/><note place="inline">念云</note>。如是本尊真實相，能滅諸罪得吉祥，猶如金剛堅
+<lb ed="X" n="0228c12"/><lb ed="R104" n="0745a08"/>固聚，是名准提勝上法<note place="inline">由想布九聖字結印加持故，令我身即同本尊諸相具足，
+<lb ed="X" n="0228c13"/><lb ed="R104" n="0745a09"/>滅除一切業障，積集無量福德吉祥，即得金剛不壞之體</note>。然後誦護身真言，與一
+<lb ed="X" n="0228c14"/><lb ed="R104" n="0745a10"/>字大輪呪同誦，結金剛界</p><p cb:type="dharani" xml:id="pX59p0228c1411" cb:place="inline">奄嚙<g ref="#CB01236">𡄦</g><note place="inline">二合</note>○唵部林<note place="inline">二合</note></p>
+<lb ed="X" n="0228c15"/><lb ed="R104" n="0745a11"/><p xml:id="pX59p0228c1501"><note place="inline">同持二十一遍，作是思惟：我於四方面五百驛內結金剛界，所有障者諸惡鬼神遠走而去，所來聖眾不越本
+<lb ed="X" n="0228c16"/><lb ed="R104" n="0745a12"/>三摩耶大悲而住，願垂加護。　<anchor xml:id="nkr_note_add_0228c1601" n="0228c1601"/><anchor xml:id="beg0228c1601" n="0228c1601"/>已<anchor xml:id="end0228c1601"/>上護身觀。</note></p>
+<lb ed="X" n="0228c17"/><lb ed="R104" n="0745a13"/><p xml:id="pX59p0228c1701">觀<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><anchor xml:id="nkr_note_add_0228c1701" n="0228c1701"/><anchor xml:id="beg0228c1701" n="0228c1701"/><g ref="#RJ-C943">􌥃</g><anchor xml:id="end0228c1701"/></cb:t><cb:t xml:lang="zh-Hant">阿</cb:t></cb:tt>字入禮敬觀，此字即是毗盧法身，觀在目前
+<lb ed="X" n="0228c18"/><lb ed="R104" n="0745a14"/>即作帝網無盡禮敬觀。想盡虗空遍法界，塵塵剎剎
+<lb ed="X" n="0228c19"/><lb ed="R104" n="0745a15"/>帝網無盡三寶前，各有帝網無盡自身，一一自身遍
+<lb ed="X" n="0228c20"/><lb ed="R104" n="0745a16"/>禮帝網無盡三寶，一一三寶各受帝網無盡身禮敬，
+<lb ed="X" n="0228c21"/><lb ed="R104" n="0745a17"/>窮未來際相續不斷，身語意業無有疲厭。　次念普
+<lb ed="X" n="0228c22"/><lb ed="R104" n="0745a18"/>禮真言：</p><p cb:type="dharani" xml:id="pX59p0228c2204" cb:place="inline">唵，嚩<anchor xml:id="nkr_note_add_0228c2201" n="0228c2201"/><anchor xml:id="beg0228c2201" n="0228c2201"/>日<anchor xml:id="end0228c2201"/>囉<note place="inline">二合</note>。</p><p xml:id="pX59p0228c2210" cb:place="inline">勿七，遍就定中作觀禮。<note place="inline">念云：</note>所
+<lb ed="X" n="0228c23"/><lb ed="R104" n="0745b01"/>有十方世界中，三世一切人師子，我以清淨身語意，
+<lb ed="X" n="0228c24"/><lb ed="R104" n="0745b02"/>一切遍禮盡無餘。<note place="inline">觀禮一拜。</note>普賢行願威神力，普現一切
+<pb ed="X" xml:id="X59.1077.0229a" n="0229a"/>
+<lb ed="X" n="0229a01"/><lb ed="R104" n="0745b03"/>如來前，一身復現剎塵身，一一遍禮剎塵佛。<note place="inline">觀禮一拜。</note>於
+<lb ed="X" n="0229a02"/><lb ed="R104" n="0745b04"/>一塵中塵數佛，各處菩薩眾會中，無盡法界塵亦然，
+<lb ed="X" n="0229a03"/><lb ed="R104" n="0745b05"/>深信諸佛皆充滿。<note place="inline">觀禮一拜。<anchor xml:id="nkr_note_add_0229a0301" n="0229a0301"/><anchor xml:id="beg0229a0301" n="0229a0301"/>已<anchor xml:id="end0229a0301"/>上禮敬觀。</note></p>
+<lb ed="X" n="0229a04"/><lb ed="R104" n="0745b06"/><p xml:id="pX59p0229a0401">觀<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><g ref="#RJ-CCBA">􌲺</g></cb:t><cb:t xml:lang="zh-Hant">唵</cb:t></cb:tt>字入供養觀，想盡虗空遍法界，塵塵剎剎帝
+<lb ed="X" n="0229a05"/><lb ed="R104" n="0745b07"/>網無盡三寶前，各有帝網無盡自身，一一自身燒香
+<lb ed="X" n="0229a06"/><lb ed="R104" n="0745b08"/>散花燃燈，出無盡供具，供養帝網無盡三寶，一一三
+<lb ed="X" n="0229a07"/><lb ed="R104" n="0745b09"/>寶各受帝網無盡身供養，窮未來際相續不斷，身語
+<lb ed="X" n="0229a08"/><lb ed="R104" n="0745b10"/>意業無有疲厭。　次想自身在諸佛前燃香普薰<note place="inline">念云</note>：
+<lb ed="X" n="0229a09"/><lb ed="R104" n="0745b11"/>弟子<note place="inline">某</note>謹燃五分真香：戒香、定香、慧香、解脫香、解脫
+<lb ed="X" n="0229a10"/><lb ed="R104" n="0745b12"/>知見香，運此法香充滿法界，供養三寶，普薰眾生，咸
+<lb ed="X" n="0229a11"/><lb ed="R104" n="0745b13"/>生淨土。次結出生供養印<note place="inline">二手當心合掌，以指上節右壓左頭相交，復安在頂
+<lb ed="X" n="0229a12"/><lb ed="R104" n="0745b14"/>上散之</note>，誦出生供養真言　<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><g ref="#RJ-CCBA">􌲺</g></cb:t><cb:t xml:lang="zh-Hant">唵</cb:t></cb:tt>二十一遍<note place="inline">若無飲食香花，但佛
+<lb ed="X" n="0229a13"/><lb ed="R104" n="0745b15"/>像前手結此印，口誦此加持真言，亦自然有無盡供養，普遍法界也</note>，念云：以我功德力，
+<lb ed="X" n="0229a14"/><lb ed="R104" n="0745b16"/>如來加持力，及以法界力，普供養而住。即誦大虗空
+<lb ed="X" n="0229a15"/><lb ed="R104" n="0745b17"/>藏菩薩真言：</p><p cb:type="dharani" xml:id="pX59p0229a1506" cb:place="inline">唵，誐誐曩，三婆嚩，嚩目羅<note place="inline">二合</note>斛，三遍
+<lb ed="X" n="0229a16"/><lb ed="R104" n="0745b18"/><note place="inline"><anchor xml:id="nkr_note_add_0229a1601" n="0229a1601"/><anchor xml:id="beg0229a1601" n="0229a1601"/>已<anchor xml:id="end0229a1601"/>上供養觀</note>。</p>
+<lb ed="X" n="0229a17"/><lb ed="R104" n="0746a01"/><p xml:id="pX59p0229a1701">觀<term xml:lang="sa-x-rj"><anchor xml:id="nkr_note_add_0229a1701" n="0229a1701"/><anchor xml:id="beg0229a1701" n="0229a1701"/><g ref="#RJ-CACB">􌫋</g><anchor xml:id="end0229a1701"/></term><note place="inline">音吽</note>字，入懺悔發願觀。此字即是金剛部主解脫
+<lb ed="X" n="0229a18"/><lb ed="R104" n="0746a02"/>法門。觀此字時，想盡虗空徧法界，塵塵剎剎帝網無
+<lb ed="X" n="0229a19"/><lb ed="R104" n="0746a03"/>盡。三寶前各有帝網無盡自身，一一自身盡皆至誠
+<lb ed="X" n="0229a20"/><lb ed="R104" n="0746a04"/>懺悔帝網無盡罪障，一一罪障有帝網無盡身懺悔，
+<lb ed="X" n="0229a21"/><lb ed="R104" n="0746a05"/>一一自身發起帝網無盡清淨行願，一一淨願有帝
+<lb ed="X" n="0229a22"/><lb ed="R104" n="0746a06"/>網無盡身成就，窮未來際相續不斷，身語意業無有
+<lb ed="X" n="0229a23"/><lb ed="R104" n="0746a07"/>疲厭。　次懺云：弟子<note place="inline">某</note>至心懺悔，我及眾生無始以
+<lb ed="X" n="0229a24"/><lb ed="R104" n="0746a08"/>來迷本淨心、染穢三業，身有殺、盜、婬，口有妄言、綺語、
+<pb ed="X" xml:id="X59.1077.0229b" n="0229b"/>
+<lb ed="X" n="0229b01"/><lb ed="R104" n="0746a09"/>兩舌、惡口，意有貪、嗔、癡煩惱所知一切罪障。我今悉
+<lb ed="X" n="0229b02"/><lb ed="R104" n="0746a10"/>以清淨三業，恭對諸佛菩薩前誠心懺悔，誓不復造
+<lb ed="X" n="0229b03"/><lb ed="R104" n="0746a11"/>恒住淨戒一切功德。</p></cb:div>
+<lb ed="X" n="0229b04"/><lb ed="R104" n="0746a12"/><cb:div type="other"><cb:mulu type="其他" level="3">次誦戒讚</cb:mulu><head>次誦戒讚</head><p xml:id="pX59p0229b0405" cb:place="inline">云：眾生受佛戒，即入諸佛位，位同大覺<anchor xml:id="nkr_note_add_0229b0401" n="0229b0401"/><anchor xml:id="beg0229b0401" n="0229b0401"/>已<anchor xml:id="end0229b0401"/>，
+<lb ed="X" n="0229b05"/><lb ed="R104" n="0746a13"/>真是諸佛子。<note place="inline">居士、沙彌、大僧，戒相隨舉。增進菩薩戒云</note>弟子<note place="inline">某</note>一心歸命
+<lb ed="X" n="0229b06"/><lb ed="R104" n="0746a14"/>三寶，受菩薩心地戒，有十重波羅提木叉，今當受持。
+<lb ed="X" n="0229b07"/><lb ed="R104" n="0746a15"/>第一、殺戒，第二、盜戒，第三、婬戒，第四、妄語戒，第五、酤
+<lb ed="X" n="0229b08"/><lb ed="R104" n="0746a16"/>酒戒，第六、說四眾過戒，第七、自讚毀他戒，第八、慳惜
+<lb ed="X" n="0229b09"/><lb ed="R104" n="0746a17"/>加毀戒，第九、嗔心不受悔戒，第十、謗三寶戒。如是十
+<lb ed="X" n="0229b10"/><lb ed="R104" n="0746a18"/>戒，誓願受持，永不墮波羅夷罪。摩訶般若波羅蜜多
+<lb ed="X" n="0229b11"/><lb ed="R104" n="0746b01"/><note place="inline">三稱</note>即今自誓受菩提心戒，離一切我執，遠離蘊、處、界，
+<lb ed="X" n="0229b12"/><lb ed="R104" n="0746b02"/>及離能取、所取，於法平等，自心本不生，自性空故。如
+<lb ed="X" n="0229b13"/><lb ed="R104" n="0746b03"/>過去一切佛菩薩發菩提心，我亦如是。眾生無邊誓
+<lb ed="X" n="0229b14"/><lb ed="R104" n="0746b04"/>願度，煩惱無盡誓願斷，法門無量誓願學，佛道無上
+<lb ed="X" n="0229b15"/><lb ed="R104" n="0746b05"/>誓願成。虗空有盡，我願無窮；虗空有盡，我願無窮。<note place="inline"><anchor xml:id="nkr_note_add_0229b1501" n="0229b1501"/><anchor xml:id="beg0229b1501" n="0229b1501"/>已<anchor xml:id="end0229b1501"/>上
+<lb ed="X" n="0229b16"/><lb ed="R104" n="0746b06"/>懺悔發願觀</note></p></cb:div>
+<lb ed="X" n="0229b17"/><lb ed="R104" n="0746b07"/><cb:div type="other"><cb:mulu type="其他" level="3">次入持誦觀</cb:mulu><head>次入持誦觀</head><p xml:id="pX59p0229b1706" cb:place="inline">想盡虗空遍法界，塵塵剎剎帝網無盡，
+<lb ed="X" n="0229b18"/><lb ed="R104" n="0746b08"/>三寶前各有帝網無盡自身，一一自身受持帝網無
+<lb ed="X" n="0229b19"/><lb ed="R104" n="0746b09"/>盡真言教法諸佛菩薩名號，一一真言名號有帝網
+<lb ed="X" n="0229b20"/><lb ed="R104" n="0746b10"/>無盡身受持，窮未來際相續不斷，身語意業無有疲
+<lb ed="X" n="0229b21"/><lb ed="R104" n="0746b11"/>厭。　次想五輪指端有一<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><anchor xml:id="nkr_note_add_0229b2101" n="0229b2101"/><anchor xml:id="beg0229b2101" n="0229b2101"/><g ref="#RJ-CACB">􌫋</g><anchor xml:id="end0229b2101"/></cb:t><cb:t xml:lang="zh-Hant">吽</cb:t></cb:tt>字，變成白淨五金剛
+<lb ed="X" n="0229b22"/><lb ed="R104" n="0746b12"/>杵。又想舌端有一<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><anchor xml:id="nkr_note_add_0229b2201" n="0229b2201"/><anchor xml:id="beg0229b2201" n="0229b2201"/><g ref="#RJ-CACB">􌫋</g><anchor xml:id="end0229b2201"/></cb:t><cb:t xml:lang="zh-Hant">吽</cb:t></cb:tt>字，變成金剛不壞舌。然後結
+<lb ed="X" n="0229b23"/><lb ed="R104" n="0746b13"/>金剛拳印<note place="inline">兩手俱結印，印法同前</note>，仍誦淨法界真言：</p><p cb:type="dharani" xml:id="pX59p0229b2321" cb:place="inline">○唵<g ref="#CB00771">㘕</g><note place="inline">二十
+<lb ed="X" n="0229b24"/><lb ed="R104" n="0746b14"/>一遍</note></p><p xml:id="pX59p0229b2403" cb:place="inline">誦護身真言○</p><p cb:type="dharani" xml:id="pX59p0229b2409" cb:place="inline">唵嚙<g ref="#CB01236">𡄦</g><note place="inline">二合</note><note place="inline">二十一遍，用梵書唵字七畫記數，寫三遍
+<pb ed="X" xml:id="X59.1077.0229c" n="0229c"/>
+<lb ed="X" n="0229c01"/><lb ed="R104" n="0746b15"/>即合數</note>誦大明六字真言。</p><p cb:type="dharani" xml:id="pX59p0229c0111" cb:place="inline">唵嘛尼八訥銘<note place="inline">二合</note>吽<note place="inline">一百八遍</note>
+<lb ed="X" n="0229c02"/><lb ed="R104" n="0746b16"/>　仍觀准提聖像，及心月輪中九聖梵字，結准提印
+<lb ed="X" n="0229c03"/><lb ed="R104" n="0746b17"/><note place="inline">印法同前</note>。誦准提呪，與一字大輪呪同，誦一百八遍。</p><p cb:type="dharani" xml:id="pX59p0229c0321" cb:place="inline">南
+<lb ed="X" n="0229c04"/><lb ed="R104" n="0746b18"/>無颯哆喃，三藐三菩<g ref="#CB00501">䭾</g>，俱胝喃，怛你也<note place="inline">二合</note>他，唵，折<g ref="#CB12528">𨽻</g>
+<lb ed="X" n="0229c05"/><lb ed="R104" n="0747a01"/>主<g ref="#CB12528">𨽻</g>，准提娑婆<note place="inline">二合</note>訶部林<note place="inline">二合</note>。</p><p xml:id="pX59p0229c0514" cb:place="inline"><note place="inline">正結印誦呪欲記數時，將九聖梵字畫數
+<lb ed="X" n="0229c06"/><lb ed="R104" n="0747a02"/>記之。初觀<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><g ref="#RJ-CCBA">􌲺</g></cb:t><cb:t xml:lang="zh-Hant">唵</cb:t></cb:tt>字意中填寫，每持一遍填寫一畫，至第九<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><anchor xml:id="nkr_note_add_0229c0601" n="0229c0601"/><anchor xml:id="beg0229c0601" n="0229c0601"/><g ref="#RJ-CAB0">􌪰</g><anchor xml:id="end0229c0601"/></cb:t><cb:t xml:lang="zh-Hant">訶</cb:t></cb:tt>字再寫第一<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><g ref="#RJ-CCBA">􌲺</g></cb:t><cb:t xml:lang="zh-Hant">唵</cb:t></cb:tt>字竟，則為一週。但圖轉者通
+<lb ed="X" n="0229c07"/><lb ed="R104" n="0747a03"/>作一畫，折轉者每折作一畫，如是二迴即合一百八遍之數，加多隨人。</note>即以右手作金
+<lb ed="X" n="0229c08"/><lb ed="R104" n="0747a04"/>剛拳印，<note place="inline">拳印同前。</note>口誦<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><anchor xml:id="nkr_note_add_0229c0801" n="0229c0801"/><anchor xml:id="beg0229c0801" n="0229c0801"/><g ref="#RJ-CACB">􌫋</g><anchor xml:id="end0229c0801"/></cb:t><cb:t xml:lang="zh-Hant">吽</cb:t></cb:tt>字真言而印五處。<note place="inline">先印額上，次左右肩，
+<lb ed="X" n="0229c09"/><lb ed="R104" n="0747a05"/>次心上喉上，印竟於頂上散之。</note>　復結三昧印，端身閉目澄心靜意，
+<lb ed="X" n="0229c10"/><lb ed="R104" n="0747a06"/>仍觀月論梵字及身所布字，一時齊現炳然圓明，起
+<lb ed="X" n="0229c11"/><lb ed="R104" n="0747a07"/>大精進決定取證無有懈怠，必當得見本源清淨之
+<lb ed="X" n="0229c12"/><lb ed="R104" n="0747a08"/>心，然後迴向。</p></cb:div>
+<lb ed="X" n="0229c13"/><lb ed="R104" n="0747a09"/><cb:div type="other"><cb:mulu type="其他" level="3">迴向</cb:mulu><lg type="regular" xml:id="lgX59p0229c1301"><l>我今持誦大准提，<caesura/>即發菩提廣大願。</l>
+<lb ed="X" n="0229c14"/><lb ed="R104" n="0747a10"/><l>願我定慧速圓明，<caesura/>願我功德皆成就，</l>
+<lb ed="X" n="0229c15"/><lb ed="R104" n="0747a11"/><l>願我勝福徧莊嚴，<caesura/>願共眾生成佛道。</l>
+<lb ed="X" n="0229c16"/><lb ed="R104" n="0747a12"/><l>我昔所造諸惡業，<caesura/>皆由無始貪嗔癡，</l>
+<lb ed="X" n="0229c17"/><lb ed="R104" n="0747a13"/><l>從身語意之所生，<caesura/>一切我今皆懺悔。</l>
+<lb ed="X" n="0229c18"/><lb ed="R104" n="0747a14"/><l>願我臨欲命終時，<caesura/>盡除一切諸障礙。</l>
+<lb ed="X" n="0229c19"/><lb ed="R104" n="0747a15"/><l>面見彼佛阿彌陀，<caesura/>即得往生安樂剎。</l></lg>
+<lb ed="X" n="0229c20"/><lb ed="R104" n="0747a16"/><p xml:id="pX59p0229c2001">弟子<note place="inline">某</note>不為自求人天福報，聲聞、緣覺乃至權乘諸
+<lb ed="X" n="0229c21"/><lb ed="R104" n="0747a17"/>位菩薩，唯依最上乘發菩提心，願與現生父母及多
+<lb ed="X" n="0229c22"/><lb ed="R104" n="0747a18"/>生父母、法界眾生、一切冤親同生淨土，皆得不退轉
+<lb ed="X" n="0229c23"/><lb ed="R104" n="0747b01"/>於阿耨多羅三藐三菩提<note place="inline">准提觀行竟</note>。</p>
+<lb ed="X" n="0229c24"/><lb ed="R104" n="0747b02"/><p xml:id="pX59p0229c2401"><note place="inline">凡設准提聖像，須以帛覆像。念誦時，去覆帛。念誦畢，仍以帛覆之。結印，用衣覆手，勿令人見，須當秘密。<anchor xml:id="nkr_note_add_0229c2401" n="0229c2401"/><anchor xml:id="beg0229c2401" n="0229c2401"/>已<anchor xml:id="end0229c2401"/>上觀
+<pb ed="X" xml:id="X59.1077.0230a" n="0230a"/>
+<lb ed="X" n="0230a01"/><lb ed="R104" n="0747b03"/>行，但早課行之。至二時三時，只觀現成身所布字，及月輪中字，即便持誦真言，不必復用諸觀也。</note></p></cb:div>
+<lb ed="X" n="0230a02"/><lb ed="R104" n="0747b04"/><cb:div type="other"><cb:mulu type="其他" level="3">淨業續課諸經如前</cb:mulu><head>淨業續課諸經如前</head></cb:div>
+<lb ed="X" n="0230a03"/><lb ed="R104" n="0747b05"/><cb:div type="other"><cb:mulu type="其他" level="3">念佛觀門</cb:mulu><head>念佛觀門</head>
+<lb ed="X" n="0230a04"/><lb ed="R104" n="0747b05"/><p xml:id="pX59p0230a0401"><figure><graphic url="../figures/X/X59p0230_01.gif"></graphic></figure></p>
+<lb ed="X" n="0230a05"/><lb ed="R104" n="0747b06"/><p xml:id="pX59p0230a0501">一心稱念南無阿彌陀佛。觀
+<lb ed="X" n="0230a06"/><lb ed="R104" n="0747b07"/>此<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><g ref="#RJ-C943">􌥃</g></cb:t><cb:t xml:lang="zh-Hant">阿</cb:t></cb:tt>字，即體是毗盧遮那
+<lb ed="X" n="0230a07"/><lb ed="R104" n="0747b08"/>法身，念佛即念毗盧法身佛。
+<lb ed="X" n="0230a08"/><lb ed="R104" n="0747b09"/>十六妙觀甚深法門，以此一
+<lb ed="X" n="0230a09"/><lb ed="R104" n="0747b10"/>字收之，義無不盡。又觀佛有
+<lb ed="X" n="0230a10"/><lb ed="R104" n="0747b11"/>八萬四千相好光明，境細心粗，初機難入。念佛持名，
+<lb ed="X" n="0230a11"/><lb ed="R104" n="0747b12"/>又恐散動，難得一心。今觀字簡易，以心緣字，又不散
+<lb ed="X" n="0230a12"/><lb ed="R104" n="0747b13"/>亂，入手尤便也。</p></cb:div>
+<lb ed="X" n="0230a13"/><lb ed="R104" n="0747b14"/><cb:div type="other"><cb:mulu type="其他" level="3">真言之母</cb:mulu><head>真言之母</head>
+<lb ed="X" n="0230a14"/><lb ed="R104" n="0747b14"/><p xml:id="pX59p0230a1401"><figure><graphic url="../figures/X/X59p0230_02.gif"></graphic></figure></p>
+<lb ed="X" n="0230a15"/><lb ed="R104" n="0747b15"/><p xml:id="pX59p0230a1501" style="margin-left:1em">此字具含無量法門，釋迦如
+<lb ed="X" n="0230a16"/><lb ed="R104" n="0747b16"/>來及過去如來，皆因觀想此
+<lb ed="X" n="0230a17"/><lb ed="R104" n="0747b17"/>字而得成佛。如觀九聖字，先
+<lb ed="X" n="0230a18"/><lb ed="R104" n="0747b18"/>觀此字分明，餘皆現前。凡持
+<lb ed="X" n="0230a19"/><lb ed="R104" n="0748a01"/>誦及四威儀中，但觀此字，即得總持法門。按華嚴
+<lb ed="X" n="0230a20"/><lb ed="R104" n="0748a02"/>字母四十二字，以阿字為首。疏云：阿者，是無生義。
+<lb ed="X" n="0230a21"/><lb ed="R104" n="0748a03"/>以無生之理，統該萬法。故宗門教人提無字公案，
+<lb ed="X" n="0230a22"/><lb ed="R104" n="0748a04"/>與此相似。要之，心觀法門，不落分別，諦理幽<g ref="#CB15035">䆳</g>，顯
+<lb ed="X" n="0230a23"/><lb ed="R104" n="0748a05"/>密圓融。今<anchor xml:id="nkr_note_add_0230a2301" n="0230a2301"/><anchor xml:id="beg0230a2301" n="0230a2301"/>但<anchor xml:id="end0230a2301"/>常觀此<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><g ref="#RJ-C943">􌥃</g></cb:t><cb:t xml:lang="zh-Hant">阿</cb:t></cb:tt>字，作個本參話頭，得失
+<lb ed="X" n="0230a24"/><lb ed="R104" n="0748a06"/>是非，一時放却可也。又天台止觀，教人昏沉時觀
+<lb ed="X" n="0230a25"/><lb ed="R104" n="0748a07"/>鼻端，掉舉時觀臍輪。禪門口訣，但令人觀臍中白，
+<lb ed="X" n="0230a26"/><lb ed="R104" n="0748a08"/>即入禪定。今謂臍中觀一月輪，於月輪中，有一梵
+<pb ed="X" xml:id="X59.1077.0230b" n="0230b"/>
+<lb ed="X" n="0230b01"/><lb ed="R104" n="0748a09"/>書<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><g ref="#RJ-C943">􌥃</g></cb:t><cb:t xml:lang="zh-Hant">阿</cb:t></cb:tt>字，或<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><g ref="#RJ-CCBA">􌲺</g></cb:t><cb:t xml:lang="zh-Hant">唵</cb:t></cb:tt>字，以意觀寫，默念此呪，即得三
+<lb ed="X" n="0230b02"/><lb ed="R104" n="0748a10"/>密相應，亦與出入息持相符。較所稱玄關一竅，不
+<lb ed="X" n="0230b03"/><lb ed="R104" n="0748a11"/>啻浮漚之與大海也。彼之所守，止於色身；此之所
+<lb ed="X" n="0230b04"/><lb ed="R104" n="0748a12"/>觀，等於法界也。</p></cb:div></cb:div>
+<lb ed="X" n="0230b05"/><lb ed="R104" n="0748a13"/><cb:div type="other"><cb:mulu type="其他" level="2">修習儀軌</cb:mulu><p xml:id="pX59p0230b0501">觀行次第，具詳前文。於中尚有修習儀軌，一往未悉，
+<lb ed="X" n="0230b06"/><lb ed="R104" n="0748a14"/>方便多門，故當備述。又隨所住處，欲辟除鬼神，結金
+<lb ed="X" n="0230b07"/><lb ed="R104" n="0748a15"/>剛界，但誦准提真言呪，香水二十一遍，八方上下灑
+<lb ed="X" n="0230b08"/><lb ed="R104" n="0748a16"/>之，即成辟除結界。又正持誦時，准俱胝陀羅尼經、金
+<lb ed="X" n="0230b09"/><lb ed="R104" n="0748a17"/>剛頂經及諸經教中說，隨根所樂，亦有多種：一、瑜伽
+<lb ed="X" n="0230b10"/><lb ed="R104" n="0748a18"/>持，但想心月中布字，謂想自心如一月輪，湛然清淨，
+<lb ed="X" n="0230b11"/><lb ed="R104" n="0748b01"/>內外分明，以梵書唵字，安心月中，以折<g ref="#CB12528">𨽻</g>主<g ref="#CB12528">𨽻</g>准提
+<lb ed="X" n="0230b12"/><lb ed="R104" n="0748b02"/>娑婆訶字，從前右旋，次第周布輪緣<note place="inline">去聲呼之</note>，終而復始
+<lb ed="X" n="0230b13"/><lb ed="R104" n="0748b03"/><note place="inline">詳如觀行中前後所說</note>。二、出入息持，謂出入息中，想有真言梵字，
+<lb ed="X" n="0230b14"/><lb ed="R104" n="0748b04"/>息出字出，息入字入，字字朗然，如貫明珠，不得間斷
+<lb ed="X" n="0230b15"/><lb ed="R104" n="0748b05"/><note place="inline">或息出時，想自心月輪中九聖梵字，字字連環，皆有五色光明，從自口中出，流入准提菩薩口中，右旋安布准
+<lb ed="X" n="0230b16"/><lb ed="R104" n="0748b06"/>提菩薩心月輪內。若息入時，想准提菩薩心月輪中字，亦字字連環，皆有五色光明，從准提菩薩口出，流入自
+<lb ed="X" n="0230b17"/><lb ed="R104" n="0748b07"/>口中，右旋安布心月輪內。如是終而復始，想之甚妙。</note>三、金剛持，唇齒不動，舌不
+<lb ed="X" n="0230b18"/><lb ed="R104" n="0748b08"/>至<g ref="#CB00088">㗁</g>，但口中微動。<note place="inline">微動者，舌微動也，口不作聲。</note>四、微聲持，<anchor xml:id="nkr_note_add_0230b1801" n="0230b1801"/><anchor xml:id="beg0230b1801" n="0230b1801"/>但<anchor xml:id="end0230b1801"/>令自
+<lb ed="X" n="0230b19"/><lb ed="R104" n="0748b09"/>耳聞之，不緩不急，字字須得分明稱之。<note place="inline">准提大明經云：誦呪時不
+<lb ed="X" n="0230b20"/><lb ed="R104" n="0748b10"/>急不緩，不得高聲，須分明稱字而令自聞。所觀本尊及上布字念誦記數，於一念中竝須一時觀見，不得有缺，
+<lb ed="X" n="0230b21"/><lb ed="R104" n="0748b11"/>使心散亂。如觀念疲勞，隨力念誦，或一千二千乃至三千四千五千遍，常取一數為定。如有緣事，亦不得減數
+<lb ed="X" n="0230b22"/><lb ed="R104" n="0748b12"/>至一百八遍<anchor xml:id="nkr_note_add_0230b2201" n="0230b2201"/><anchor xml:id="beg0230b2201" n="0230b2201"/>已<anchor xml:id="end0230b2201"/>下。</note>五、高聲持，令他聞之滅罪。復有二種持誦：
+<lb ed="X" n="0230b23"/><lb ed="R104" n="0748b13"/>一、無數持誦，謂不持珠定數，常無間斷持之。二、有數
+<lb ed="X" n="0230b24"/><lb ed="R104" n="0748b14"/>持誦，謂掐數珠，每日須得限定其數，不得闕少。<note place="inline">數珠功德，
+<pb ed="X" xml:id="X59.1077.0230c" n="0230c"/>
+<lb ed="X" n="0230c01"/><lb ed="R104" n="0748b15"/>諸經廣讚。又金剛頂念珠經偈云：若安頂髻淨無間，由戴頸項滅四重。手持臂上除眾罪，能令行人速清淨。又
+<lb ed="X" n="0230c02"/><lb ed="R104" n="0748b16"/>一字頂輪儀說：先用<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><anchor xml:id="nkr_note_add_0230c0201" n="0230c0201"/><anchor xml:id="beg0230c0201" n="0230c0201"/><g ref="#RJ-CCEB">􌳫</g><anchor xml:id="end0230c0201"/></cb:t><cb:t xml:lang="zh-Hant"><g ref="#CB00771">㘕</g></cb:t></cb:tt>字真言加持數珠七遍，然後掐數珠課誦，至母珠却回，不得越過母珠。</note></p>
+<lb ed="X" n="0230c03"/><lb ed="R104" n="0748b17"/><p xml:id="pX59p0230c0301" style="margin-left:1em">按准提真言之妙，在於觀行。經云：坐中澄心定意，
+<lb ed="X" n="0230c04"/><lb ed="R104" n="0748b18"/>須見心月輪中梵字分明。既不散動得定，即與般
+<lb ed="X" n="0230c05"/><lb ed="R104" n="0749a01"/>若波羅蜜相應，必當得見本源清淨之心。又云：若
+<lb ed="X" n="0230c06"/><lb ed="R104" n="0749a02"/>求解脫，速出離生死，作三摩地瑜伽觀行者，即想
+<lb ed="X" n="0230c07"/><lb ed="R104" n="0749a03"/>心月輪中梵字，及諦觀一一字義，與心相應，不得
+<lb ed="X" n="0230c08"/><lb ed="R104" n="0749a04"/>差互，此名三摩地念誦。則持誦之法，無若瑜伽矣。
+<lb ed="X" n="0230c09"/><lb ed="R104" n="0749a05"/>又有一法，將前瑜伽持、金剛持合而為一，但觀想
+<lb ed="X" n="0230c10"/><lb ed="R104" n="0749a06"/>心月輪中九聖梵字，即將全呪用金剛持念誦。雖
+<lb ed="X" n="0230c11"/><lb ed="R104" n="0749a07"/>然念誦意重觀行，且觀字時，即便可以記數。初觀
+<lb ed="X" n="0230c12"/><lb ed="R104" n="0749a08"/><cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><g ref="#RJ-CCBA">􌲺</g></cb:t><cb:t xml:lang="zh-Hant">唵</cb:t></cb:tt>字，意中填寫，至第九<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><anchor xml:id="nkr_note_add_0230c1201" n="0230c1201"/><anchor xml:id="beg0230c1201" n="0230c1201"/><g ref="#RJ-CAB0">􌪰</g><anchor xml:id="end0230c1201"/></cb:t><cb:t xml:lang="zh-Hant">訶</cb:t></cb:tt>字，再寫第一<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><g ref="#RJ-CCBA">􌲺</g></cb:t><cb:t xml:lang="zh-Hant">唵</cb:t></cb:tt>
+<lb ed="X" n="0230c13"/><lb ed="R104" n="0749a09"/>字竟，則為一週<note place="inline">記數法詳前</note>。又將身上布字作母數，以
+<lb ed="X" n="0230c14"/><lb ed="R104" n="0749a10"/>統記之，雖多遍而不亂<note place="inline">如寫月輪字一週，然後寫頂上<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><g ref="#RJ-CCBA">􌲺</g></cb:t><cb:t xml:lang="zh-Hant">唵</cb:t></cb:tt>字，作一母數。又
+<lb ed="X" n="0230c15"/><lb ed="R104" n="0749a11"/>寫月輪字一週，然後寫右目<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><anchor xml:id="nkr_note_add_0230c1501" n="0230c1501"/><anchor xml:id="beg0230c1501" n="0230c1501"/><g ref="#RJ-C977">􌥷</g><anchor xml:id="end0230c1501"/></cb:t><cb:t xml:lang="zh-Hant">折</cb:t></cb:tt>字，又作一母數。次左目<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><anchor xml:id="nkr_note_add_0230c1502" n="0230c1502"/><anchor xml:id="beg0230c1502" n="0230c1502"/><g ref="#RJ-C977">􌥷</g><anchor xml:id="end0230c1502"/></cb:t><cb:t xml:lang="zh-Hant">折</cb:t></cb:tt>字，次項頸<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><g ref="#RJ-CBC2">􌯂</g></cb:t><cb:t xml:lang="zh-Hant"><g ref="#CB00618">󰉪</g></cb:t></cb:tt>字。計週身布字竟，通算共
+<lb ed="X" n="0230c16"/><lb ed="R104" n="0749a12"/>有八百二十八遍之數。如是加多至一千二千，隨人方便</note>。或用此法，只持九字
+<lb ed="X" n="0230c17"/><lb ed="R104" n="0749a13"/>亦得。總要稱字，觀字分明，即文即義，即畫即心，自
+<lb ed="X" n="0230c18"/><lb ed="R104" n="0749a14"/>然得入三昧。故知心觀法門，惟貴修鍊。鍊之有味，
+<lb ed="X" n="0230c19"/><lb ed="R104" n="0749a15"/>說之言淡也。</p>
+<lb ed="X" n="0230c20"/><lb ed="R104" n="0749a16"/><p xml:id="pX59p0230c2001">每日依法持誦時，須限定其時分。若一時持謂早晨，
+<lb ed="X" n="0230c21"/><lb ed="R104" n="0749a17"/>若二時持并黃昏，若三時持加正午<note place="inline">若忙務者不拘時分，但有暇時
+<lb ed="X" n="0230c22"/><lb ed="R104" n="0749a18"/>持之</note>。若上根持誦，須得三密相應：一、身密結印；二、語密
+<lb ed="X" n="0230c23"/><lb ed="R104" n="0749b01"/>誦呪；三、意密觀想。或想真言梵字，或緣持誦之聲，或
+<lb ed="X" n="0230c24"/><lb ed="R104" n="0749b02"/>想准提菩薩，或想菩薩手中所執杵瓶花果等物。故
+<pb ed="X" xml:id="X59.1077.0231a" n="0231a"/>
+<lb ed="X" n="0231a01"/><lb ed="R104" n="0749b03"/>神變經疏云：若用三密為門，不須經歷劫數具修諸
+<lb ed="X" n="0231a02"/><lb ed="R104" n="0749b04"/>行，只於此生滿足諸波羅蜜。　又正持誦未滿一百
+<lb ed="X" n="0231a03"/><lb ed="R104" n="0749b05"/>八遍，不得共人語話。若欲語話時，於自舌上想一梵
+<lb ed="X" n="0231a04"/><lb ed="R104" n="0749b06"/>書<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><anchor xml:id="nkr_note_add_0231a0401" n="0231a0401"/><anchor xml:id="beg0231a0401" n="0231a0401"/><g ref="#RJ-CCEB">􌳫</g><anchor xml:id="end0231a0401"/></cb:t><cb:t xml:lang="zh-Hant"><g ref="#CB00771">㘕</g></cb:t></cb:tt>字，縱語話不成間斷。　問曰：為當只持一道
+<lb ed="X" n="0231a05"/><lb ed="R104" n="0749b07"/>真言功德成就？為復廣持多本真言功德成就？答：有
+<lb ed="X" n="0231a06"/><lb ed="R104" n="0749b08"/>二門：一者、隨根所樂門。謂根有多種好樂不同，或有
+<lb ed="X" n="0231a07"/><lb ed="R104" n="0749b09"/>樂持三道、五道、十道乃至百道等，中間隨根所樂不
+<lb ed="X" n="0231a08"/><lb ed="R104" n="0749b10"/>同，皆得持誦。二者、疾得成就門。謂欲求一切功德即
+<lb ed="X" n="0231a09"/><lb ed="R104" n="0749b11"/>得成就，宜專持誦一道真言，成時一切真言功德皆
+<lb ed="X" n="0231a10"/><lb ed="R104" n="0749b12"/>悉成就。故文殊儀軌經說：若欲一切功德成就，不得
+<lb ed="X" n="0231a11"/><lb ed="R104" n="0749b13"/>於別真言而起思想是也。如上雖有數道真言，皆是
+<lb ed="X" n="0231a12"/><lb ed="R104" n="0749b14"/>持誦准提真言之次第。問曰：既專誦一呪疾得成就，
+<lb ed="X" n="0231a13"/><lb ed="R104" n="0749b15"/>何以獨示准提真言令人持誦？答云：一、為准提總含
+<lb ed="X" n="0231a14"/><lb ed="R104" n="0749b16"/>一切諸真言故，准提能含諸呪、諸呪不含准提，如大
+<lb ed="X" n="0231a15"/><lb ed="R104" n="0749b17"/>海能攝百川、百川不攝大海。二、為准提壇法人易成
+<lb ed="X" n="0231a16"/><lb ed="R104" n="0749b18"/>辦故，但以一新鏡未曾用者便是壇法<note place="inline">准提經云：鏡壇總設二十
+<lb ed="X" n="0231a17"/><lb ed="R104" n="0750a01"/>五部大曼荼羅，梵語曼荼羅，此云壇也。是知鏡壇最尊最上，能滅一切魔障、能生一切功德，眼見身戴皆獲利
+<lb ed="X" n="0231a18"/><lb ed="R104" n="0750a02"/>樂。故昔人云：壇者生也，出生無盡功德故；壇者集也，無邊聖賢集會之處</note>。不同餘呪建辦
+<lb ed="X" n="0231a19"/><lb ed="R104" n="0750a03"/>壇法，須得揀選淨處、香埿塗地、廣造佛像、多用供具
+<lb ed="X" n="0231a20"/><lb ed="R104" n="0750a04"/>方能成就<note place="inline">有財物者廣造佛像、多辦供具，於佛像前安置鏡壇，對之持誦更妙</note>。三、為准
+<lb ed="X" n="0231a21"/><lb ed="R104" n="0750a05"/>提不揀染淨得持誦故，不問在家出家、飲酒食肉、有
+<lb ed="X" n="0231a22"/><lb ed="R104" n="0750a06"/>妻子等皆得持誦。不同餘呪須要持戒方得誦習，所
+<lb ed="X" n="0231a23"/><lb ed="R104" n="0750a07"/>以多示准提真言令人持誦。若有樂持餘真言者，隨
+<lb ed="X" n="0231a24"/><lb ed="R104" n="0750a08"/>心皆得，勿要定執一途耳。</p>
+<pb ed="X" xml:id="X59.1077.0231b" n="0231b"/>
+<lb ed="X" n="0231b01"/><lb ed="R104" n="0750a09"/><p xml:id="pX59p0231b0101">又真言行者每日對鏡初欲持誦時，或只如前想一
+<lb ed="X" n="0231b02"/><lb ed="R104" n="0750a10"/><cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><anchor xml:id="nkr_note_add_0231b0201" n="0231b0201"/><anchor xml:id="beg0231b0201" n="0231b0201"/><g ref="#RJ-CCEB">􌳫</g><anchor xml:id="end0231b0201"/></cb:t><cb:t xml:lang="zh-Hant"><g ref="#CB00771">㘕</g></cb:t></cb:tt>字，或想布准提九聖梵字，然後持誦<note place="inline">持明藏儀軌經云：若
+<lb ed="X" n="0231b03"/><lb ed="R104" n="0750a11"/>於准提菩薩法中求成就者，先觀准提菩薩根本微妙字輪安自身分，一一分明是人先身所造一切罪業悉
+<lb ed="X" n="0231b04"/><lb ed="R104" n="0750a12"/>得除滅，凡有所求決定成就。布字法見前</note>。或想自心如一月輪圓滿清淨，
+<lb ed="X" n="0231b05"/><lb ed="R104" n="0750a13"/>於月輪中有一梵書<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><g ref="#RJ-CCBA">􌲺</g></cb:t><cb:t xml:lang="zh-Hant">唵</cb:t></cb:tt>字<note place="inline">此字具含無量法門，是一切真言之母。如來因
+<lb ed="X" n="0231b06"/><lb ed="R104" n="0750a14"/>位多年修行不得菩提，後習此觀，於初夜分便成正覺。過去如來皆因觀想此字而得成佛</note>。或心
+<lb ed="X" n="0231b07"/><lb ed="R104" n="0750a15"/>月輪中想一<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><g ref="#RJ-C943">􌥃</g></cb:t><cb:t xml:lang="zh-Hant">阿</cb:t></cb:tt>字<note place="inline">謂阿字是毗盧佛身，亦是法界，亦是菩提心。若人想念，能生無
+<lb ed="X" n="0231b08"/><lb ed="R104" n="0750a16"/>量功德</note>。或心月輪中想一<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><anchor xml:id="nkr_note_add_0231b0801" n="0231b0801"/><anchor xml:id="beg0231b0801" n="0231b0801"/><g ref="#RJ-CACB">􌫋</g><anchor xml:id="end0231b0801"/></cb:t><cb:t xml:lang="zh-Hant">吽</cb:t></cb:tt>字<note place="inline">謂吽字總攝金剛部一切真言，是金剛部
+<lb ed="X" n="0231b09"/><lb ed="R104" n="0750a17"/>主身，亦是三解脫門。若常想念，能除一切罪障，成就一切功德</note>。或舌上想一<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><anchor xml:id="nkr_note_add_0231b0901" n="0231b0901"/><anchor xml:id="beg0231b0901" n="0231b0901"/><g ref="#RJ-CCEB">􌳫</g><anchor xml:id="end0231b0901"/></cb:t><cb:t xml:lang="zh-Hant"><g ref="#CB00771">㘕</g></cb:t></cb:tt>字，
+<lb ed="X" n="0231b10"/><lb ed="R104" n="0750a18"/>或<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><anchor xml:id="nkr_note_add_0231b1001" n="0231b1001"/><anchor xml:id="beg0231b1001" n="0231b1001"/><g ref="#RJ-CACB">􌫋</g><anchor xml:id="end0231b1001"/></cb:t><cb:t xml:lang="zh-Hant">吽</cb:t></cb:tt>字，想竟然後持誦。或想自身頸上有大蓮華，
+<lb ed="X" n="0231b11"/><lb ed="R104" n="0750b01"/>於蓮華上現出<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><g ref="#RJ-C943">􌥃</g></cb:t><cb:t xml:lang="zh-Hant">阿</cb:t></cb:tt>字，復想阿字變成月輪，又想月
+<lb ed="X" n="0231b12"/><lb ed="R104" n="0750b02"/>輪變成<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><anchor xml:id="nkr_note_add_0231b1201" n="0231b1201"/><anchor xml:id="beg0231b1201" n="0231b1201"/><g ref="#RJ-CACB">􌫋</g><anchor xml:id="end0231b1201"/></cb:t><cb:t xml:lang="zh-Hant">吽</cb:t></cb:tt>字，吽字變成五股金剛杵，又想此杵移
+<lb ed="X" n="0231b13"/><lb ed="R104" n="0750b03"/>於舌上，方得名為金剛舌，然後持誦<note place="inline">次於一一手中亦想<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><g ref="#RJ-C943">􌥃</g></cb:t><cb:t xml:lang="zh-Hant">阿</cb:t></cb:tt>字，阿
+<lb ed="X" n="0231b14"/><lb ed="R104" n="0750b04"/>字變成月輪，月輪變成<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><anchor xml:id="nkr_note_add_0231b1401" n="0231b1401"/><anchor xml:id="beg0231b1401" n="0231b1401"/><g ref="#RJ-CACB">􌫋</g><anchor xml:id="end0231b1401"/></cb:t><cb:t xml:lang="zh-Hant">吽</cb:t></cb:tt>字，吽字變為白色五股金剛杵，方得名為金剛手，然後結一切印</note>。觀想
+<lb ed="X" n="0231b15"/><lb ed="R104" n="0750b05"/>梵字所有功德，廣如諸陀羅尼經中說之<note place="inline">此梵字觀門，若四威
+<lb ed="X" n="0231b16"/><lb ed="R104" n="0750b06"/>儀中常思之更妙。凡諸經中說想真言字者，皆是梵字，非是此方文。故一字頂輪王儀軌云：所言觀諸字，惟瞻
+<lb ed="X" n="0231b17"/><lb ed="R104" n="0750b07"/>於梵字，非是隨方文，有大神用力</note>。或有不能想得梵字者，但只專心
+<lb ed="X" n="0231b18"/><lb ed="R104" n="0750b08"/>持誦，亦具一切三昧。故大悲心經云：陀羅尼是禪定
+<lb ed="X" n="0231b19"/><lb ed="R104" n="0750b09"/>藏，百千三昧常現前故。若人緊切持誦時，或逢種種
+<lb ed="X" n="0231b20"/><lb ed="R104" n="0750b10"/>魔障、或忽然怕怖、或舌難持誦、或身心不安、或多嗔
+<lb ed="X" n="0231b21"/><lb ed="R104" n="0750b11"/>多睡、或見諸異相、或於呪反生疑心不欲持誦等。若
+<lb ed="X" n="0231b22"/><lb ed="R104" n="0750b12"/>對治者，應觀梵書<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><anchor xml:id="nkr_note_add_0231b2201" n="0231b2201"/><anchor xml:id="beg0231b2201" n="0231b2201"/><g ref="#RJ-CCE7">􌳧</g><anchor xml:id="end0231b2201"/></cb:t><cb:t xml:lang="zh-Hant">囉</cb:t></cb:tt>字、或觀<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><anchor xml:id="nkr_note_add_0231b2202" n="0231b2202"/><anchor xml:id="beg0231b2202" n="0231b2202"/><g ref="#RJ-CCEB">􌳫</g><anchor xml:id="end0231b2202"/></cb:t><cb:t xml:lang="zh-Hant"><g ref="#CB00771">㘕</g></cb:t></cb:tt>字、或觀<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><g ref="#RJ-C943">􌥃</g></cb:t><cb:t xml:lang="zh-Hant">阿</cb:t></cb:tt>字
+<lb ed="X" n="0231b23"/><lb ed="R104" n="0750b13"/>等，但隨觀一字，彼境界自然消滅<note place="inline">此上且約一途而說，若實言之，隨一
+<lb ed="X" n="0231b24"/><lb ed="R104" n="0750b14"/>字一切處皆得用之，謂一字實具一切字一切功用也</note>。問曰：何以梵字皆有如
+<pb ed="X" xml:id="X59.1077.0231c" n="0231c"/>
+<lb ed="X" n="0231c01"/><lb ed="R104" n="0750b15"/>是不思議神用？答：謂每一一字即體是諸佛菩薩身
+<lb ed="X" n="0231c02"/><lb ed="R104" n="0750b16"/>心故，又即體是離相法界故，又即體是教理行果故，
+<lb ed="X" n="0231c03"/><lb ed="R104" n="0750b17"/>所以有不思議神用<note place="inline">西天梵字法爾本有，世界初成時，梵王傳說便有此字，不同此
+<lb ed="X" n="0231c04"/><lb ed="R104" n="0750b18"/>方字是蒼頡等創製</note>。問曰：或有眾生欲除種種災障、或欲增長
+<lb ed="X" n="0231c05"/><lb ed="R104" n="0751a01"/>福慧、或欲祈證聖果等，為當只依前儀軌持誦耶？為
+<lb ed="X" n="0231c06"/><lb ed="R104" n="0751a02"/>復更別有方法耶？答曰：但只依前儀軌持誦，凡有所
+<lb ed="X" n="0231c07"/><lb ed="R104" n="0751a03"/>求決定成就。或有樂隨所求之事各別作法者，隨意
+<lb ed="X" n="0231c08"/><lb ed="R104" n="0751a04"/>皆得<note place="inline">准諸真言儀軌等說，有五種壇法，所謂息災法、增益法、敬愛法、降伏法、出世間法。息災四種另
+<lb ed="X" n="0231c09"/><lb ed="R104" n="0751a05"/>有作法</note>。若作出世間法者<note place="inline">為欲速滿福德智慧二種資糧，及頓圓十波羅蜜，超越三
+<lb ed="X" n="0231c10"/><lb ed="R104" n="0751a06"/>無數劫，今世祈尅聖果現前</note>，行者在於山間深谷殊勝巖窟清淨
+<lb ed="X" n="0231c11"/><lb ed="R104" n="0751a07"/>伽藍，運大悲心常樂利樂無邊有情，同准提王菩薩
+<lb ed="X" n="0231c12"/><lb ed="R104" n="0751a08"/>仗託無盡諸佛菩薩大悲願力助護，限一期之內阻
+<lb ed="X" n="0231c13"/><lb ed="R104" n="0751a09"/>絕人客默斷語言，三密相應心無間斷。行者面向東、
+<lb ed="X" n="0231c14"/><lb ed="R104" n="0751a10"/>像面向西，於准提像前安置鏡壇，一心諦想准提菩
+<lb ed="X" n="0231c15"/><lb ed="R104" n="0751a11"/>薩具無盡相好光明，於菩薩心月輪中想有九聖字
+<lb ed="X" n="0231c16"/><lb ed="R104" n="0751a12"/>壇，行者想自心月輪中亦有九聖字壇，并自身分中
+<lb ed="X" n="0231c17"/><lb ed="R104" n="0751a13"/>想布九聖之字，依前次第軌儀持誦。至准提真言，從
+<lb ed="X" n="0231c18"/><lb ed="R104" n="0751a14"/>頭無記無數專精念誦，勤<g ref="#CB15081">䇿</g>身心不令懈怠，欲近成
+<lb ed="X" n="0231c19"/><lb ed="R104" n="0751a15"/>就時必有種種障起，應如前觀字對治之法。</p>
+<lb ed="X" n="0231c20"/><lb ed="R104" n="0751a16"/><p xml:id="pX59p0231c2001">又行者不須苦節勞形，恐心神散亂，於行住坐臥四
+<lb ed="X" n="0231c21"/><lb ed="R104" n="0751a17"/>威儀中，皆得三密修習，於見聞覺知，惟觀<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><g ref="#RJ-C943">􌥃</g></cb:t><cb:t xml:lang="zh-Hant">阿</cb:t></cb:tt>字<note place="inline">於一
+<lb ed="X" n="0231c22"/><lb ed="R104" n="0751a18"/>真清淨法界，亦常作觀行，即有障起，自當消滅</note>，專精持誦，但令一念相應，隨
+<lb ed="X" n="0231c23"/><lb ed="R104" n="0751b01"/>行者根性差別，於其中間，必獲三昧現前，即於定中，
+<lb ed="X" n="0231c24"/><lb ed="R104" n="0751b02"/>見無數佛會，聞妙法音，證得十地菩薩之位<note place="inline">此一種法，唯求
+<pb ed="X" xml:id="X59.1077.0232a" n="0232a"/>
+<lb ed="X" n="0232a01"/><lb ed="R104" n="0751b03"/>出世間，若欲於此法中求成就者，須得預前持誦准提真言五百萬遍，或七百萬遍，或千萬遍，而為先行，方作
+<lb ed="X" n="0232a02"/><lb ed="R104" n="0751b04"/>此法，定有靈驗</note>。</p>
+<lb ed="X" n="0232a03"/><lb ed="R104" n="0751b05"/><p xml:id="pX59p0232a0301">又驗成行相，行者用功持誦，或夢見諸佛菩薩聖僧
+<lb ed="X" n="0232a04"/><lb ed="R104" n="0751b06"/>天女、或夢見自身騰空自在、或正持誦時見諸<g ref="#CB00548">𤳖</g>光
+<lb ed="X" n="0232a05"/><lb ed="R104" n="0751b07"/>明<note place="inline">異相多端不能具述</note>。若逢如上之事，但是福慧增長近成就
+<lb ed="X" n="0232a06"/><lb ed="R104" n="0751b08"/>相，莫生疑惑之心、勿起取捨之念，應觀所逢境界皆
+<lb ed="X" n="0232a07"/><lb ed="R104" n="0751b09"/>是<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><g ref="#RJ-C943">􌥃</g></cb:t><cb:t xml:lang="zh-Hant">阿</cb:t></cb:tt>字或<cb:tt place="inline"><cb:t xml:lang="sa-x-rj"><anchor xml:id="nkr_note_add_0232a0701" n="0232a0701"/><anchor xml:id="beg0232a0701" n="0232a0701"/><g ref="#RJ-CCEB">􌳫</g><anchor xml:id="end0232a0701"/></cb:t><cb:t xml:lang="zh-Hant"><g ref="#CB00771">㘕</g></cb:t></cb:tt>字等<note place="inline">或想皆如夢幻、或想皆如法界一心</note>。若得如是
+<lb ed="X" n="0232a08"/><lb ed="R104" n="0751b10"/>應驗，更須<g ref="#CB15081">䇿</g>發三業加功持誦，不得宣說呪中境界
+<lb ed="X" n="0232a09"/><lb ed="R104" n="0751b11"/>衒賣與人，唯同道者不為名利敬讚方得說之。　問
+<lb ed="X" n="0232a10"/><lb ed="R104" n="0751b12"/>曰：上說對壇結印誦呪等，豈不是有相耶？答曰：圓宗
+<lb ed="X" n="0232a11"/><lb ed="R104" n="0751b13"/>無障礙法界體上本具無盡法門，禪宗無相法門但
+<lb ed="X" n="0232a12"/><lb ed="R104" n="0751b14"/>是無盡門中之一門耳。今密宗壇法手印真言，即體
+<lb ed="X" n="0232a13"/><lb ed="R104" n="0751b15"/>便是無障礙法界也。　問曰：上引古來諸師皆云：呪
+<lb ed="X" n="0232a14"/><lb ed="R104" n="0751b16"/>是諸佛秘密之法，非因位所解。何却如前解說阿字
+<lb ed="X" n="0232a15"/><lb ed="R104" n="0751b17"/>是毗盧佛身，吽字是三解脫門等耶？答云：准賢首般
+<lb ed="X" n="0232a16"/><lb ed="R104" n="0751b18"/>若心經疏及神變疏，并密藏諸陀羅尼經意，而有二
+<lb ed="X" n="0232a17"/><lb ed="R104" n="0752a01"/>門：一、不可說門，謂呪是諸佛密法，佛佛相傳，不通他
+<lb ed="X" n="0232a18"/><lb ed="R104" n="0752a02"/>解，但當持誦，不須強釋。二、強說門，謂真言中隨舉一
+<lb ed="X" n="0232a19"/><lb ed="R104" n="0752a03"/>字，或作人，或作法，橫竪該羅，自在解說。舉要而言，無
+<lb ed="X" n="0232a20"/><lb ed="R104" n="0752a04"/>盡法門於一字中總解說盡，方是陀羅尼字義。就此
+<lb ed="X" n="0232a21"/><lb ed="R104" n="0752a05"/>言之，假使十方諸佛經恒沙劫共說真言，一字中義
+<lb ed="X" n="0232a22"/><lb ed="R104" n="0752a06"/>亦不能盡，何況餘人？說者尚難，豈況受者？所以且於
+<lb ed="X" n="0232a23"/><lb ed="R104" n="0752a07"/>一字中少分，或作人，或作法，而解說之。前說阿字是
+<lb ed="X" n="0232a24"/><lb ed="R104" n="0752a08"/>毗盧佛身，吽字是三解脫門等，即是強說中少分一
+<pb ed="X" xml:id="X59.1077.0232b" n="0232b"/>
+<lb ed="X" n="0232b01"/><lb ed="R104" n="0752a09"/>途之義。餘處有文解釋真言字義、句義，皆是此強說
+<lb ed="X" n="0232b02"/><lb ed="R104" n="0752a10"/>門中少分一途義耳。</p>
+<lb ed="X" n="0232b03"/><lb ed="R104" n="0752a11"/><p xml:id="pX59p0232b0301" style="margin-left:1em">按禪宗提無義味話頭，不通解說，欲其思盡還源
+<lb ed="X" n="0232b04"/><lb ed="R104" n="0752a12"/>耳。持真言者亦復如是，不通解說，且理圓解偏，解
+<lb ed="X" n="0232b05"/><lb ed="R104" n="0752a13"/>興理喪，所以不解。准提大明經云：若求無分別者，
+<lb ed="X" n="0232b06"/><lb ed="R104" n="0752a14"/>當觀無分別、無記念；若求無色相，當觀文字、無文
+<lb ed="X" n="0232b07"/><lb ed="R104" n="0752a15"/>字念。又云：如上觀念，當入一切如來三摩地門、甚
+<lb ed="X" n="0232b08"/><lb ed="R104" n="0752a16"/>深方廣不思議地，是正念處，是正真如、正解脫。是
+<lb ed="X" n="0232b09"/><lb ed="R104" n="0752a17"/>知不可說門，方稱密宗甚深法要。</p></cb:div></cb:div>
+<lb ed="X" n="0232b10"/>
+<lb ed="X" n="0232b11"/><lb ed="R104" n="0752a18"/><cb:juan fun="close" n="2"><cb:jhead>准提淨業卷二</cb:jhead></cb:juan>
+
+</body>
+<back>
+<cb:div type="apparatus">
+<head>校注</head>
+<p>
+<app from="#beg0221c1401" to="#end0221c1401"><lem wit="#wit.cbeta" resp="#resp3">已</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0221c1801" to="#end0221c1801"><lem wit="#wit.cbeta" resp="#resp3">已</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0223a0501" to="#end0223a0501"><lem wit="#wit.cbeta" resp="#resp3">已</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0223c0501" to="#end0223c0501"><lem wit="#wit.cbeta" resp="#resp3">已</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0224a0901" to="#end0224a0901"><lem wit="#wit.cbeta" resp="#resp3">已</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0224c2101" to="#end0224c2101"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-CCEB">􌳫</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E046">􎁆</g></rdg></app>
+<app from="#beg0225a0101" to="#end0225a0101"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-CCEB">􌳫</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E046">􎁆</g></rdg></app>
+<app from="#beg0225a0201" to="#end0225a0201"><lem wit="#wit.cbeta" resp="#resp3">已</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0225a0301" to="#end0225a0301"><lem wit="#wit.cbeta" resp="#resp3">掐<note type="cf1">X60n1120_p0388b05</note></lem><rdg wit="#wit.orig">搯</rdg></app>
+<app from="#beg0225a0601" to="#end0225a0601"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-CCEB">􌳫</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E046">􎁆</g></rdg></app>
+<app from="#beg0225a0701" to="#end0225a0701"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-CCEB">􌳫</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E046">􎁆</g></rdg></app>
+<app from="#beg0225a1201" to="#end0225a1201"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-CCE7">􌳧</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E047">􎁇</g></rdg></app>
+<app from="#beg0225a1301" to="#end0225a1301"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-CCE7">􌳧</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E047">􎁇</g></rdg></app>
+<app from="#beg0225a1302" to="#end0225a1302"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-CCEB">􌳫</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E046">􎁆</g></rdg></app>
+<app from="#beg0225a1801" to="#end0225a1801"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-CED0">􌻐</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E048">􎁈</g></rdg></app>
+<app from="#beg0225b0301" to="#end0225b0301"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-CBD3">􌯓</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E049">􎁉</g></rdg></app>
+<app from="#beg0225b0302" to="#end0225b0302"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-CC5A">􌱚</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E04A">􎁊</g></rdg></app>
+<app from="#beg0225b0303" to="#end0225b0303"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-CA4C">􌩌</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E04B">􎁋</g></rdg></app>
+<app from="#beg0225b0304" to="#end0225b0304"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-CACB">􌫋</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E04C">􎁌</g></rdg></app>
+<app from="#beg0225c0301" to="#end0225c0301"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-CBED">􌯭</g></lem><rdg wit="#wit.orig"><g ref="#RJ-C94B">􌥋</g></rdg></app>
+<app from="#beg0225c0302" to="#end0225c0302"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-CBE2">􌯢</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E04D">􎁍</g></rdg></app>
+<app from="#beg0225c0303" to="#end0225c0303"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-CD64">􌵤</g></lem><rdg wit="#wit.orig"><g ref="#RJ-CD68">􌵨</g></rdg></app>
+<app from="#beg0225c0304" to="#end0225c0304"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-CBFE">􌯾</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E04E">􎁎</g></rdg></app>
+<app from="#beg0225c0305" to="#end0225c0305"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-CBEB">􌯫</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E04F">􎁏</g></rdg></app>
+<app from="#beg0225c0306" to="#end0225c0306"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-CBA2">􌮢</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E050">􎁐</g></rdg></app>
+<app from="#beg0225c0307" to="#end0225c0307"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-C973">􌥳</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E051">􎁑</g></rdg></app>
+<app from="#beg0225c0308" to="#end0225c0308"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-CE52">􌹒</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E052">􎁒</g></rdg></app>
+<app from="#beg0225c0309" to="#end0225c0309"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-CBFE">􌯾</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E053">􎁓</g></rdg></app>
+<app from="#beg0225c0310" to="#end0225c0310"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-CDD4">􌷔</g></lem><rdg wit="#wit.orig"><g ref="#RJ-C94B">􌥋</g></rdg></app>
+<app from="#beg0225c0311" to="#end0225c0311"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-CA5F">􌩟</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E054">􎁔</g></rdg></app>
+<app from="#beg0225c0312" to="#end0225c0312"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-CDE3">􌷣</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E055">􎁕</g></rdg></app>
+<app from="#beg0225c0501" to="#end0225c0501"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-C977">􌥷</g></lem><rdg wit="#wit.orig"><g ref="#RJ-C94B">􌥋</g></rdg></app>
+<app from="#beg0225c0502" to="#end0225c0502"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-C9BD">􌦽</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E056">􎁖</g></rdg></app>
+<app from="#beg0225c0503" to="#end0225c0503"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-C9BF">􌦿</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E057">􎁗</g></rdg></app>
+<app from="#beg0225c0504" to="#end0225c0504"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-C9D5">􌧕</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E058">􎁘</g></rdg></app>
+<app from="#beg0225c0505" to="#end0225c0505"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-CAB0">􌪰</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E059">􎁙</g></rdg></app>
+<app from="#beg0225c0506" to="#end0225c0506"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-C963">􌥣</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E060">􎁠</g></rdg></app>
+<app from="#beg0225c2001" to="#end0225c2001"><lem wit="#wit.cbeta" resp="#resp3">但</lem><rdg wit="#wit.orig">伹</rdg></app>
+<app from="#beg0226a1901" to="#end0226a1901"><lem wit="#wit.cbeta" resp="#resp3">已</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0226a2001" to="#end0226a2001"><lem wit="#wit.cbeta" resp="#resp3">已</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0226c0201" to="#end0226c0201"><lem wit="#wit.cbeta" resp="#resp3">已</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0226c0601" to="#end0226c0601"><lem wit="#wit.cbeta" resp="#resp3">已</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0226c2401" to="#end0226c2401"><lem wit="#wit.cbeta" resp="#resp3">已</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0227a0101" to="#end0227a0101"><lem wit="#wit.cbeta" resp="#resp3">已</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0227a0201" to="#end0227a0201"><lem wit="#wit.cbeta" resp="#resp3">已</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0227b2001" to="#end0227b2001"><lem wit="#wit.cbeta" resp="#resp3">已</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0227c0801" to="#end0227c0801"><lem wit="#wit.cbeta" resp="#resp3">已</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0228b1301" to="#end0228b1301"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-C977">􌥷</g></lem><rdg wit="#wit.orig"><g ref="#RJ-CDD4">􌷔</g></rdg></app>
+<app from="#beg0228b1401" to="#end0228b1401"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-CAB0">􌪰</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E059">􎁙</g></rdg></app>
+<app from="#beg0228b1601" to="#end0228b1601"><lem wit="#wit.cbeta" resp="#resp3">已</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0228b1701" to="#end0228b1701"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-CCEB">􌳫</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E046">􎁆</g></rdg></app>
+<app from="#beg0228b1702" to="#end0228b1702"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-CCEB">􌳫</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E046">􎁆</g></rdg></app>
+<app from="#beg0228b1901" to="#end0228b1901"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-CCEB">􌳫</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E046">􎁆</g></rdg></app>
+<app from="#beg0228b2001" to="#end0228b2001"><lem wit="#wit.cbeta" resp="#resp3">己</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0228b2301" to="#end0228b2301"><lem wit="#wit.cbeta" resp="#resp3">已</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0228b2302" to="#end0228b2302"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-C943">􌥃</g></lem><rdg wit="#wit.orig"><g ref="#RJ-C949">􌥉</g></rdg></app>
+<app from="#beg0228b2401" to="#end0228b2401"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-C943">􌥃</g></lem><rdg wit="#wit.orig"><g ref="#RJ-C949">􌥉</g></rdg></app>
+<app from="#beg0228c0201" to="#end0228c0201"><lem wit="#wit.cbeta" resp="#resp3">己</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0228c0501" to="#end0228c0501"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-C977">􌥷</g></lem><rdg wit="#wit.orig"><g ref="#RJ-CDD4">􌷔</g></rdg></app>
+<app from="#beg0228c0601" to="#end0228c0601"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-C9BD">􌦽</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E056">􎁖</g></rdg></app>
+<app from="#beg0228c0701" to="#end0228c0701"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-C9BF">􌦿</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E057">􎁗</g></rdg></app>
+<app from="#beg0228c0702" to="#end0228c0702"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-C9D5">􌧕</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E058">􎁘</g></rdg></app>
+<app from="#beg0228c0703" to="#end0228c0703"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-CAB0">􌪰</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E059">􎁙</g></rdg></app>
+<app from="#beg0228c0801" to="#end0228c0801"><lem wit="#wit.cbeta" resp="#resp3">已</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0228c0802" to="#end0228c0802"><lem wit="#wit.cbeta" resp="#resp3">已</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0228c1601" to="#end0228c1601"><lem wit="#wit.cbeta" resp="#resp3">已</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0228c1701" to="#end0228c1701"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-C943">􌥃</g></lem><rdg wit="#wit.orig"><g ref="#RJ-C949">􌥉</g></rdg></app>
+<app from="#beg0228c2201" to="#end0228c2201"><lem wit="#wit.cbeta" resp="#resp3">日</lem><rdg wit="#wit.orig">曰</rdg></app>
+<app from="#beg0229a0301" to="#end0229a0301"><lem wit="#wit.cbeta" resp="#resp3">已</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0229a1601" to="#end0229a1601"><lem wit="#wit.cbeta" resp="#resp3">已</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0229a1701" to="#end0229a1701"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-CACB">􌫋</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E05B">􎁛</g></rdg></app>
+<app from="#beg0229b0401" to="#end0229b0401"><lem wit="#wit.cbeta" resp="#resp3">已</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0229b1501" to="#end0229b1501"><lem wit="#wit.cbeta" resp="#resp3">已</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0229b2101" to="#end0229b2101"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-CACB">􌫋</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E05B">􎁛</g></rdg></app>
+<app from="#beg0229b2201" to="#end0229b2201"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-CACB">􌫋</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E05B">􎁛</g></rdg></app>
+<app from="#beg0229c0601" to="#end0229c0601"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-CAB0">􌪰</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E059">􎁙</g></rdg></app>
+<app from="#beg0229c0801" to="#end0229c0801"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-CACB">􌫋</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E05B">􎁛</g></rdg></app>
+<app from="#beg0229c2401" to="#end0229c2401"><lem wit="#wit.cbeta" resp="#resp3">已</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0230a2301" to="#end0230a2301"><lem wit="#wit.cbeta" resp="#resp3">但</lem><rdg wit="#wit.orig">伹</rdg></app>
+<app from="#beg0230b1801" to="#end0230b1801"><lem wit="#wit.cbeta" resp="#resp3">但</lem><rdg wit="#wit.orig">伹</rdg></app>
+<app from="#beg0230b2201" to="#end0230b2201"><lem wit="#wit.cbeta" resp="#resp3">已</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0230c0201" to="#end0230c0201"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-CCEB">􌳫</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E046">􎁆</g></rdg></app>
+<app from="#beg0230c1201" to="#end0230c1201"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-CAB0">􌪰</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E059">􎁙</g></rdg></app>
+<app from="#beg0230c1501" to="#end0230c1501"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-C977">􌥷</g></lem><rdg wit="#wit.orig"><g ref="#RJ-CEA6">􌺦</g></rdg></app>
+<app from="#beg0230c1502" to="#end0230c1502"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-C977">􌥷</g></lem><rdg wit="#wit.orig"><g ref="#RJ-CEA6">􌺦</g></rdg></app>
+<app from="#beg0231a0401" to="#end0231a0401"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-CCEB">􌳫</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E046">􎁆</g></rdg></app>
+<app from="#beg0231b0201" to="#end0231b0201"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-CCEB">􌳫</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E046">􎁆</g></rdg></app>
+<app from="#beg0231b0801" to="#end0231b0801"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-CACB">􌫋</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E05B">􎁛</g></rdg></app>
+<app from="#beg0231b0901" to="#end0231b0901"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-CCEB">􌳫</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E046">􎁆</g></rdg></app>
+<app from="#beg0231b1001" to="#end0231b1001"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-CACB">􌫋</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E05B">􎁛</g></rdg></app>
+<app from="#beg0231b1201" to="#end0231b1201"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-CACB">􌫋</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E05B">􎁛</g></rdg></app>
+<app from="#beg0231b1401" to="#end0231b1401"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-CACB">􌫋</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E05B">􎁛</g></rdg></app>
+<app from="#beg0231b2201" to="#end0231b2201"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-CCE7">􌳧</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E047">􎁇</g></rdg></app>
+<app from="#beg0231b2202" to="#end0231b2202"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-CCEB">􌳫</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E046">􎁆</g></rdg></app>
+<app from="#beg0232a0701" to="#end0232a0701"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-CCEB">􌳫</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E046">􎁆</g></rdg></app>
+<app from="#beg0232c0301" to="#end0232c0301"><lem wit="#wit.cbeta" resp="#resp3">已</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0233a0401" to="#end0233a0401"><lem wit="#wit.cbeta" resp="#resp3">但</lem><rdg wit="#wit.orig">伹</rdg></app>
+<app from="#beg0233a0402" to="#end0233a0402"><lem wit="#wit.cbeta" resp="#resp3">己</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0233c1101" to="#end0233c1101"><lem wit="#wit.cbeta" resp="#resp3">已</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0235b0301" to="#end0235b0301"><lem wit="#wit.cbeta" resp="#resp3">已</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0235b1401" to="#end0235b1401"><lem wit="#wit.cbeta" resp="#resp3">已</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0235c0801" to="#end0235c0801"><lem wit="#wit.cbeta" resp="#resp3">已</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0236a0401" to="#end0236a0401"><lem wit="#wit.cbeta" resp="#resp3">但</lem><rdg wit="#wit.orig">伹</rdg></app>
+<app from="#beg0236b1501" to="#end0236b1501"><lem wit="#wit.cbeta" resp="#resp3">但</lem><rdg wit="#wit.orig">伹</rdg></app>
+<app from="#beg0237b0101" to="#end0237b0101"><lem wit="#wit.cbeta" resp="#resp3">已</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0237b1201" to="#end0237b1201"><lem wit="#wit.cbeta" resp="#resp3" cb:provider="觀世心 (2019-09-18)">骨<note type="cf1">T47n1999_p0959a06</note></lem><rdg wit="#wit.orig">髮</rdg></app>
+<app from="#beg0237b1501" to="#end0237b1501"><lem wit="#wit.cbeta" resp="#resp3">揚</lem><rdg wit="#wit.orig">掦</rdg></app>
+<app from="#beg0237c1001" to="#end0237c1001"><lem wit="#wit.cbeta" resp="#resp3">人</lem><rdg wit="#wit.orig">入</rdg></app>
+<app from="#beg0237c1601" to="#end0237c1601"><lem wit="#wit.cbeta" resp="#resp3">已</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0238c1301" to="#end0238c1301"><lem wit="#wit.cbeta" resp="#resp3">己</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0239b0301" to="#end0239b0301"><lem wit="#wit.cbeta" resp="#resp6">諂</lem><rdg wit="#wit.orig">謟</rdg></app>
+<app from="#beg0240a1401" to="#end0240a1401"><lem wit="#wit.cbeta" resp="#resp3">己</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0240a1601" to="#end0240a1601"><lem wit="#wit.cbeta" resp="#resp3">已</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0240a1901" to="#end0240a1901"><lem wit="#wit.cbeta" resp="#resp3">但</lem><rdg wit="#wit.orig">伹</rdg></app>
+<app from="#beg0240a2301" to="#end0240a2301"><lem wit="#wit.cbeta" resp="#resp3">己</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0240b0301" to="#end0240b0301"><lem wit="#wit.cbeta" resp="#resp3">己</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0240b1001" to="#end0240b1001"><lem wit="#wit.cbeta" resp="#resp3">已</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0240c0801" to="#end0240c0801"><lem wit="#wit.cbeta" resp="#resp3">已</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0240c1401" to="#end0240c1401"><lem wit="#wit.cbeta" resp="#resp3">但</lem><rdg wit="#wit.orig">伹</rdg></app>
+<app from="#beg0241b1201" to="#end0241b1201"><lem wit="#wit.cbeta" resp="#resp3">已</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0241b1401" to="#end0241b1401"><lem wit="#wit.cbeta" resp="#resp3">已</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0241c0501" to="#end0241c0501"><lem wit="#wit.cbeta" resp="#resp3">已</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0241c1001" to="#end0241c1001"><lem wit="#wit.cbeta" resp="#resp3">已</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0241c1801" to="#end0241c1801"><lem wit="#wit.cbeta" resp="#resp3">已</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0241c2401" to="#end0241c2401"><lem wit="#wit.cbeta" resp="#resp3">已</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0242a0901" to="#end0242a0901"><lem wit="#wit.cbeta" resp="#resp3">日</lem><rdg wit="#wit.orig">曰</rdg></app>
+<app from="#beg0242a1401" to="#end0242a1401"><lem wit="#wit.cbeta" resp="#resp5"><g ref="#RJ-CCEB">􌳫</g></lem><rdg wit="#wit.orig"><g ref="#RJ-E046">􎁆</g></rdg></app>
+<app from="#beg0242b1101" to="#end0242b1101"><lem wit="#wit.cbeta" resp="#resp3">已</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0242b1401" to="#end0242b1401"><lem wit="#wit.cbeta" resp="#resp3">已</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0242b1501" to="#end0242b1501"><lem wit="#wit.cbeta" resp="#resp3">已</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0242b1701" to="#end0242b1701"><lem wit="#wit.cbeta" resp="#resp3">已</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0242b2001" to="#end0242b2001"><lem wit="#wit.cbeta" resp="#resp6" cb:provider="來函：心念不空过 (2024-04-03)">叉<note type="cf1">T46n1955_p1005a18</note></lem><rdg wit="#wit.orig">义</rdg></app>
+<app from="#beg0242c1501" to="#end0242c1501"><lem wit="#wit.cbeta" resp="#resp3">已</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0242c1502" to="#end0242c1502"><lem wit="#wit.cbeta" resp="#resp3">已</lem><rdg wit="#wit.orig">巳</rdg></app>
+<app from="#beg0242c1701" to="#end0242c1701"><lem wit="#wit.cbeta" resp="#resp3">已</lem><rdg wit="#wit.orig">巳</rdg></app>
+</p>
+</cb:div>
+<cb:div type="xuzang-notes">
+<head>卍續藏 校注</head>
+<p>
+<note n="0222001" resp="#resp4" place="foot text" type="orig" target="#nkr_note_orig_0222001">母佛疑倒</note>
+</p>
+</cb:div>
+<cb:div type="add-notes">
+<head>新增校注</head>
+<p>
+<note n="0221c1401" resp="#resp2" type="add" target="#nkr_note_add_0221c1401">已【CB】，巳【卍續】</note>
+<note n="0221c1801" resp="#resp2" type="add" target="#nkr_note_add_0221c1801">已【CB】，巳【卍續】</note>
+<note n="0223a0501" resp="#resp2" type="add" target="#nkr_note_add_0223a0501">已【CB】，巳【卍續】</note>
+<note n="0223c0501" resp="#resp2" type="add" target="#nkr_note_add_0223c0501">已【CB】，巳【卍續】</note>
+<note n="0224a0901" resp="#resp2" type="add" target="#nkr_note_add_0224a0901">已【CB】，巳【卍續】</note>
+<note n="0224c2101" resp="#resp2" type="add" target="#nkr_note_add_0224c2101"><g ref="#RJ-CCEB">􌳫</g>【CB】，<g ref="#RJ-E046">􎁆</g>【卍續】</note>
+<note n="0225a0101" resp="#resp2" type="add" target="#nkr_note_add_0225a0101"><g ref="#RJ-CCEB">􌳫</g>【CB】，<g ref="#RJ-E046">􎁆</g>【卍續】</note>
+<note n="0225a0201" resp="#resp2" type="add" target="#nkr_note_add_0225a0201">已【CB】，巳【卍續】</note>
+<note n="0225a0301" resp="#resp2" type="add" cb:note_key="X59.0225a03.07" target="#nkr_note_add_0225a0301">掐【CB】，搯【卍續】</note>
+<note n="0225a0601" resp="#resp2" type="add" target="#nkr_note_add_0225a0601"><g ref="#RJ-CCEB">􌳫</g>【CB】，<g ref="#RJ-E046">􎁆</g>【卍續】</note>
+<note n="0225a0701" resp="#resp2" type="add" target="#nkr_note_add_0225a0701"><g ref="#RJ-CCEB">􌳫</g>【CB】，<g ref="#RJ-E046">􎁆</g>【卍續】</note>
+<note n="0225a1201" resp="#resp2" type="add" target="#nkr_note_add_0225a1201"><g ref="#RJ-CCE7">􌳧</g>【CB】，<g ref="#RJ-E047">􎁇</g>【卍續】</note>
+<note n="0225a1301" resp="#resp2" type="add" target="#nkr_note_add_0225a1301"><g ref="#RJ-CCE7">􌳧</g>【CB】，<g ref="#RJ-E047">􎁇</g>【卍續】</note>
+<note n="0225a1302" resp="#resp2" type="add" target="#nkr_note_add_0225a1302"><g ref="#RJ-CCEB">􌳫</g>【CB】，<g ref="#RJ-E046">􎁆</g>【卍續】</note>
+<note n="0225a1801" resp="#resp2" type="add" target="#nkr_note_add_0225a1801"><g ref="#RJ-CED0">􌻐</g>【CB】，<g ref="#RJ-E048">􎁈</g>【卍續】</note>
+<note n="0225b0301" resp="#resp2" type="add" target="#nkr_note_add_0225b0301"><g ref="#RJ-CBD3">􌯓</g>【CB】，<g ref="#RJ-E049">􎁉</g>【卍續】</note>
+<note n="0225b0302" resp="#resp2" type="add" target="#nkr_note_add_0225b0302"><g ref="#RJ-CC5A">􌱚</g>【CB】，<g ref="#RJ-E04A">􎁊</g>【卍續】</note>
+<note n="0225b0303" resp="#resp2" type="add" target="#nkr_note_add_0225b0303"><g ref="#RJ-CA4C">􌩌</g>【CB】，<g ref="#RJ-E04B">􎁋</g>【卍續】</note>
+<note n="0225b0304" resp="#resp2" type="add" target="#nkr_note_add_0225b0304"><g ref="#RJ-CACB">􌫋</g>【CB】，<g ref="#RJ-E04C">􎁌</g>【卍續】</note>
+<note n="0225c0301" resp="#resp2" type="add" target="#nkr_note_add_0225c0301"><g ref="#RJ-CBED">􌯭</g>【CB】<g ref="#RJ-C94B">􌥋</g>【卍續】</note>
+<note n="0225c0302" resp="#resp2" type="add" target="#nkr_note_add_0225c0302"><g ref="#RJ-CBE2">􌯢</g>【CB】<g ref="#RJ-E04D">􎁍</g>【卍續】</note>
+<note n="0225c0303" resp="#resp2" type="add" target="#nkr_note_add_0225c0303"><g ref="#RJ-CD64">􌵤</g>【CB】<g ref="#RJ-CD68">􌵨</g>【卍續】</note>
+<note n="0225c0304" resp="#resp2" type="add" target="#nkr_note_add_0225c0304"><g ref="#RJ-CBFE">􌯾</g>【CB】<g ref="#RJ-E04E">􎁎</g>【卍續】</note>
+<note n="0225c0305" resp="#resp2" type="add" target="#nkr_note_add_0225c0305"><g ref="#RJ-CBEB">􌯫</g>【CB】<g ref="#RJ-E04F">􎁏</g>【卍續】</note>
+<note n="0225c0306" resp="#resp2" type="add" target="#nkr_note_add_0225c0306"><g ref="#RJ-CBA2">􌮢</g>【CB】<g ref="#RJ-E050">􎁐</g>【卍續】</note>
+<note n="0225c0307" resp="#resp2" type="add" target="#nkr_note_add_0225c0307"><g ref="#RJ-C973">􌥳</g>【CB】<g ref="#RJ-E051">􎁑</g>【卍續】</note>
+<note n="0225c0308" resp="#resp2" type="add" target="#nkr_note_add_0225c0308"><g ref="#RJ-CE52">􌹒</g>【CB】<g ref="#RJ-E052">􎁒</g>【卍續】</note>
+<note n="0225c0309" resp="#resp2" type="add" target="#nkr_note_add_0225c0309"><g ref="#RJ-CBFE">􌯾</g>【CB】<g ref="#RJ-E053">􎁓</g>【卍續】</note>
+<note n="0225c0310" resp="#resp2" type="add" target="#nkr_note_add_0225c0310"><g ref="#RJ-CDD4">􌷔</g>【CB】<g ref="#RJ-C94B">􌥋</g>【卍續】</note>
+<note n="0225c0311" resp="#resp2" type="add" target="#nkr_note_add_0225c0311"><g ref="#RJ-CA5F">􌩟</g>【CB】<g ref="#RJ-E054">􎁔</g>【卍續】</note>
+<note n="0225c0312" resp="#resp2" type="add" target="#nkr_note_add_0225c0312"><g ref="#RJ-CDE3">􌷣</g>【CB】<g ref="#RJ-E055">􎁕</g>【卍續】</note>
+<note n="0225c0501" resp="#resp2" type="add" target="#nkr_note_add_0225c0501"><g ref="#RJ-C977">􌥷</g>【CB】<g ref="#RJ-C94B">􌥋</g>【卍續】</note>
+<note n="0225c0502" resp="#resp2" type="add" target="#nkr_note_add_0225c0502"><g ref="#RJ-C9BD">􌦽</g>【CB】<g ref="#RJ-E056">􎁖</g>【卍續】</note>
+<note n="0225c0503" resp="#resp2" type="add" target="#nkr_note_add_0225c0503"><g ref="#RJ-C9BF">􌦿</g>【CB】<g ref="#RJ-E057">􎁗</g>【卍續】</note>
+<note n="0225c0504" resp="#resp2" type="add" target="#nkr_note_add_0225c0504"><g ref="#RJ-C9D5">􌧕</g>【CB】<g ref="#RJ-E058">􎁘</g>【卍續】</note>
+<note n="0225c0505" resp="#resp2" type="add" target="#nkr_note_add_0225c0505"><g ref="#RJ-CAB0">􌪰</g>【CB】<g ref="#RJ-E059">􎁙</g>【卍續】</note>
+<note n="0225c0506" resp="#resp2" type="add" target="#nkr_note_add_0225c0506"><g ref="#RJ-C963">􌥣</g>【CB】<g ref="#RJ-E060">􎁠</g>【卍續】</note>
+<note n="0225c2001" resp="#resp2" type="add" target="#nkr_note_add_0225c2001">但【CB】，伹【卍續】</note>
+<note n="0226a1901" resp="#resp2" type="add" target="#nkr_note_add_0226a1901">已【CB】，巳【卍續】</note>
+<note n="0226a2001" resp="#resp2" type="add" target="#nkr_note_add_0226a2001">已【CB】，巳【卍續】</note>
+<note n="0226c0201" resp="#resp2" type="add" target="#nkr_note_add_0226c0201">已【CB】，巳【卍續】</note>
+<note n="0226c0601" resp="#resp2" type="add" target="#nkr_note_add_0226c0601">已【CB】，巳【卍續】</note>
+<note n="0226c2401" resp="#resp2" type="add" target="#nkr_note_add_0226c2401">已【CB】，巳【卍續】</note>
+<note n="0227a0101" resp="#resp2" type="add" target="#nkr_note_add_0227a0101">已【CB】，巳【卍續】</note>
+<note n="0227a0201" resp="#resp2" type="add" target="#nkr_note_add_0227a0201">已【CB】，巳【卍續】</note>
+<note n="0227b2001" resp="#resp2" type="add" target="#nkr_note_add_0227b2001">已【CB】，巳【卍續】</note>
+<note n="0227c0801" resp="#resp2" type="add" target="#nkr_note_add_0227c0801">已【CB】，巳【卍續】</note>
+<note n="0228b1301" resp="#resp2" type="add" target="#nkr_note_add_0228b1301"><g ref="#RJ-C977">􌥷</g>【CB】，<g ref="#RJ-CDD4">􌷔</g>【卍續】</note>
+<note n="0228b1401" resp="#resp2" type="add" target="#nkr_note_add_0228b1401"><g ref="#RJ-CAB0">􌪰</g>【CB】，<g ref="#RJ-E059">􎁙</g>【卍續】</note>
+<note n="0228b1601" resp="#resp2" type="add" target="#nkr_note_add_0228b1601">已【CB】，巳【卍續】</note>
+<note n="0228b1701" resp="#resp2" type="add" target="#nkr_note_add_0228b1701"><g ref="#RJ-CCEB">􌳫</g>【CB】，<g ref="#RJ-E046">􎁆</g>【卍續】</note>
+<note n="0228b1702" resp="#resp2" type="add" target="#nkr_note_add_0228b1702"><g ref="#RJ-CCEB">􌳫</g>【CB】，<g ref="#RJ-E046">􎁆</g>【卍續】</note>
+<note n="0228b1901" resp="#resp2" type="add" target="#nkr_note_add_0228b1901"><g ref="#RJ-CCEB">􌳫</g>【CB】，<g ref="#RJ-E046">􎁆</g>【卍續】</note>
+<note n="0228b2001" resp="#resp2" type="add" target="#nkr_note_add_0228b2001">己【CB】，巳【卍續】</note>
+<note n="0228b2301" resp="#resp2" type="add" target="#nkr_note_add_0228b2301">已【CB】，巳【卍續】</note>
+<note n="0228b2302" resp="#resp2" type="add" target="#nkr_note_add_0228b2302"><g ref="#RJ-C943">􌥃</g>【CB】，<g ref="#RJ-C949">􌥉</g>【卍續】</note>
+<note n="0228b2401" resp="#resp2" type="add" target="#nkr_note_add_0228b2401"><g ref="#RJ-C943">􌥃</g>【CB】，<g ref="#RJ-C949">􌥉</g>【卍續】</note>
+<note n="0228c0201" resp="#resp2" type="add" target="#nkr_note_add_0228c0201">己【CB】，巳【卍續】</note>
+<note n="0228c0501" resp="#resp2" type="add" target="#nkr_note_add_0228c0501"><g ref="#RJ-C977">􌥷</g>【CB】，<g ref="#RJ-CDD4">􌷔</g>【卍續】</note>
+<note n="0228c0601" resp="#resp2" type="add" target="#nkr_note_add_0228c0601"><g ref="#RJ-C9BD">􌦽</g>【CB】，<g ref="#RJ-E056">􎁖</g>【卍續】</note>
+<note n="0228c0701" resp="#resp2" type="add" target="#nkr_note_add_0228c0701"><g ref="#RJ-C9BF">􌦿</g>【CB】，<g ref="#RJ-E057">􎁗</g>【卍續】</note>
+<note n="0228c0702" resp="#resp2" type="add" target="#nkr_note_add_0228c0702"><g ref="#RJ-C9D5">􌧕</g>【CB】，<g ref="#RJ-E058">􎁘</g>【卍續】</note>
+<note n="0228c0703" resp="#resp2" type="add" target="#nkr_note_add_0228c0703"><g ref="#RJ-CAB0">􌪰</g>【CB】，<g ref="#RJ-E059">􎁙</g>【卍續】</note>
+<note n="0228c0801" resp="#resp2" type="add" target="#nkr_note_add_0228c0801">已【CB】，巳【卍續】</note>
+<note n="0228c0802" resp="#resp2" type="add" target="#nkr_note_add_0228c0802">已【CB】，巳【卍續】</note>
+<note n="0228c1601" resp="#resp2" type="add" target="#nkr_note_add_0228c1601">已【CB】，巳【卍續】</note>
+<note n="0228c1701" resp="#resp2" type="add" target="#nkr_note_add_0228c1701"><g ref="#RJ-C943">􌥃</g>【CB】，<g ref="#RJ-C949">􌥉</g>【卍續】</note>
+<note n="0228c2201" resp="#resp2" type="add" target="#nkr_note_add_0228c2201">日【CB】，曰【卍續】</note>
+<note n="0229a0301" resp="#resp2" type="add" target="#nkr_note_add_0229a0301">已【CB】，巳【卍續】</note>
+<note n="0229a1601" resp="#resp2" type="add" target="#nkr_note_add_0229a1601">已【CB】，巳【卍續】</note>
+<note n="0229a1701" resp="#resp2" type="add" target="#nkr_note_add_0229a1701"><g ref="#RJ-CACB">􌫋</g>【CB】，<g ref="#RJ-E05B">􎁛</g>【卍續】</note>
+<note n="0229b0401" resp="#resp2" type="add" target="#nkr_note_add_0229b0401">已【CB】，巳【卍續】</note>
+<note n="0229b1501" resp="#resp2" type="add" target="#nkr_note_add_0229b1501">已【CB】，巳【卍續】</note>
+<note n="0229b2101" resp="#resp2" type="add" target="#nkr_note_add_0229b2101"><g ref="#RJ-CACB">􌫋</g>【CB】，<g ref="#RJ-E05B">􎁛</g>【卍續】</note>
+<note n="0229b2201" resp="#resp2" type="add" target="#nkr_note_add_0229b2201"><g ref="#RJ-CACB">􌫋</g>【CB】，<g ref="#RJ-E05B">􎁛</g>【卍續】</note>
+<note n="0229c0601" resp="#resp2" type="add" target="#nkr_note_add_0229c0601"><g ref="#RJ-CAB0">􌪰</g>【CB】，<g ref="#RJ-E059">􎁙</g>【卍續】</note>
+<note n="0229c0801" resp="#resp2" type="add" target="#nkr_note_add_0229c0801"><g ref="#RJ-CACB">􌫋</g>【CB】，<g ref="#RJ-E05B">􎁛</g>【卍續】</note>
+<note n="0229c2401" resp="#resp2" type="add" target="#nkr_note_add_0229c2401">已【CB】，巳【卍續】</note>
+<note n="0230a2301" resp="#resp2" type="add" target="#nkr_note_add_0230a2301">但【CB】，伹【卍續】</note>
+<note n="0230b1801" resp="#resp2" type="add" target="#nkr_note_add_0230b1801">但【CB】，伹【卍續】</note>
+<note n="0230b2201" resp="#resp2" type="add" target="#nkr_note_add_0230b2201">已【CB】，巳【卍續】</note>
+<note n="0230c0201" resp="#resp2" type="add" target="#nkr_note_add_0230c0201"><g ref="#RJ-CCEB">􌳫</g>【CB】，<g ref="#RJ-E046">􎁆</g>【卍續】</note>
+<note n="0230c1201" resp="#resp2" type="add" target="#nkr_note_add_0230c1201"><g ref="#RJ-CAB0">􌪰</g>【CB】，<g ref="#RJ-E059">􎁙</g>【卍續】</note>
+<note n="0230c1501" resp="#resp2" type="add" target="#nkr_note_add_0230c1501"><g ref="#RJ-C977">􌥷</g>【CB】，<g ref="#RJ-CEA6">􌺦</g>【卍續】</note>
+<note n="0230c1502" resp="#resp2" type="add" target="#nkr_note_add_0230c1502"><g ref="#RJ-C977">􌥷</g>【CB】，<g ref="#RJ-CEA6">􌺦</g>【卍續】</note>
+<note n="0231a0401" resp="#resp2" type="add" target="#nkr_note_add_0231a0401"><g ref="#RJ-CCEB">􌳫</g>【CB】，<g ref="#RJ-E046">􎁆</g>【卍續】</note>
+<note n="0231b0201" resp="#resp2" type="add" target="#nkr_note_add_0231b0201"><g ref="#RJ-CCEB">􌳫</g>【CB】，<g ref="#RJ-E046">􎁆</g>【卍續】</note>
+<note n="0231b0801" resp="#resp2" type="add" target="#nkr_note_add_0231b0801"><g ref="#RJ-CACB">􌫋</g>【CB】，<g ref="#RJ-E05B">􎁛</g>【卍續】</note>
+<note n="0231b0901" resp="#resp2" type="add" target="#nkr_note_add_0231b0901"><g ref="#RJ-CCEB">􌳫</g>【CB】，<g ref="#RJ-E046">􎁆</g>【卍續】</note>
+<note n="0231b1001" resp="#resp2" type="add" target="#nkr_note_add_0231b1001"><g ref="#RJ-CACB">􌫋</g>【CB】，<g ref="#RJ-E05B">􎁛</g>【卍續】</note>
+<note n="0231b1201" resp="#resp2" type="add" target="#nkr_note_add_0231b1201"><g ref="#RJ-CACB">􌫋</g>【CB】，<g ref="#RJ-E05B">􎁛</g>【卍續】</note>
+<note n="0231b1401" resp="#resp2" type="add" target="#nkr_note_add_0231b1401"><g ref="#RJ-CACB">􌫋</g>【CB】，<g ref="#RJ-E05B">􎁛</g>【卍續】</note>
+<note n="0231b2201" resp="#resp2" type="add" target="#nkr_note_add_0231b2201"><g ref="#RJ-CCE7">􌳧</g>【CB】，<g ref="#RJ-E047">􎁇</g>【卍續】</note>
+<note n="0231b2202" resp="#resp2" type="add" target="#nkr_note_add_0231b2202"><g ref="#RJ-CCEB">􌳫</g>【CB】，<g ref="#RJ-E046">􎁆</g>【卍續】</note>
+<note n="0232a0701" resp="#resp2" type="add" target="#nkr_note_add_0232a0701"><g ref="#RJ-CCEB">􌳫</g>【CB】，<g ref="#RJ-E046">􎁆</g>【卍續】</note>
+<note n="0232c0301" resp="#resp2" type="add" target="#nkr_note_add_0232c0301">已【CB】，巳【卍續】</note>
+<note n="0233a0401" resp="#resp2" type="add" target="#nkr_note_add_0233a0401">但【CB】，伹【卍續】</note>
+<note n="0233a0402" resp="#resp2" type="add" target="#nkr_note_add_0233a0402">己【CB】，巳【卍續】</note>
+<note n="0233c1101" resp="#resp2" type="add" target="#nkr_note_add_0233c1101">已【CB】，巳【卍續】</note>
+<note n="0235b0301" resp="#resp2" type="add" target="#nkr_note_add_0235b0301">已【CB】，巳【卍續】</note>
+<note n="0235b1401" resp="#resp2" type="add" target="#nkr_note_add_0235b1401">已【CB】，巳【卍續】</note>
+<note n="0235c0801" resp="#resp2" type="add" target="#nkr_note_add_0235c0801">已【CB】，巳【卍續】</note>
+<note n="0236a0401" resp="#resp2" type="add" target="#nkr_note_add_0236a0401">但【CB】，伹【卍續】</note>
+<note n="0236b1501" resp="#resp2" type="add" target="#nkr_note_add_0236b1501">但【CB】，伹【卍續】</note>
+<note n="0237b0101" resp="#resp2" type="add" target="#nkr_note_add_0237b0101">已【CB】，巳【卍續】</note>
+<note n="0237b1201" resp="#resp2" type="add" cb:note_key="X59.0237b12.16" target="#nkr_note_add_0237b1201">骨【CB】，髮【卍續】</note>
+<note n="0237b1501" resp="#resp2" type="add" target="#nkr_note_add_0237b1501">揚【CB】，掦【卍續】</note>
+<note n="0237c1001" resp="#resp2" type="add" target="#nkr_note_add_0237c1001">人【CB】，入【卍續】</note>
+<note n="0237c1601" resp="#resp2" type="add" target="#nkr_note_add_0237c1601">已【CB】，巳【卍續】</note>
+<note n="0238c1301" resp="#resp2" type="add" target="#nkr_note_add_0238c1301">己【CB】，巳【卍續】</note>
+<note n="0239b0301" resp="#resp2" type="add" cb:note_key="X59.0239b03.20" target="#nkr_note_add_0239b0301">諂【CB】，謟【卍續】</note>
+<note n="0240a1401" resp="#resp2" type="add" target="#nkr_note_add_0240a1401">己【CB】，巳【卍續】</note>
+<note n="0240a1601" resp="#resp2" type="add" target="#nkr_note_add_0240a1601">已【CB】，巳【卍續】</note>
+<note n="0240a1901" resp="#resp2" type="add" target="#nkr_note_add_0240a1901">但【CB】，伹【卍續】</note>
+<note n="0240a2301" resp="#resp2" type="add" target="#nkr_note_add_0240a2301">己【CB】，巳【卍續】</note>
+<note n="0240b0301" resp="#resp2" type="add" target="#nkr_note_add_0240b0301">己【CB】，巳【卍續】</note>
+<note n="0240b1001" resp="#resp2" type="add" target="#nkr_note_add_0240b1001">已【CB】，巳【卍續】</note>
+<note n="0240c0801" resp="#resp2" type="add" target="#nkr_note_add_0240c0801">已【CB】，巳【卍續】</note>
+<note n="0240c1401" resp="#resp2" type="add" target="#nkr_note_add_0240c1401">但【CB】，伹【卍續】</note>
+<note n="0241b1201" resp="#resp2" type="add" target="#nkr_note_add_0241b1201">已【CB】，巳【卍續】</note>
+<note n="0241b1401" resp="#resp2" type="add" target="#nkr_note_add_0241b1401">已【CB】，巳【卍續】</note>
+<note n="0241c0501" resp="#resp2" type="add" target="#nkr_note_add_0241c0501">已【CB】，巳【卍續】</note>
+<note n="0241c1001" resp="#resp2" type="add" target="#nkr_note_add_0241c1001">已【CB】，巳【卍續】</note>
+<note n="0241c1801" resp="#resp2" type="add" target="#nkr_note_add_0241c1801">已【CB】，巳【卍續】</note>
+<note n="0241c2401" resp="#resp2" type="add" target="#nkr_note_add_0241c2401">已【CB】，巳【卍續】</note>
+<note n="0242a0901" resp="#resp2" type="add" target="#nkr_note_add_0242a0901">日【CB】，曰【卍續】</note>
+<note n="0242a1401" resp="#resp2" type="add" target="#nkr_note_add_0242a1401"><g ref="#RJ-CCEB">􌳫</g>【CB】，<g ref="#RJ-E046">􎁆</g>【卍續】</note>
+<note n="0242b1101" resp="#resp2" type="add" target="#nkr_note_add_0242b1101">已【CB】，巳【卍續】</note>
+<note n="0242b1401" resp="#resp2" type="add" target="#nkr_note_add_0242b1401">已【CB】，巳【卍續】</note>
+<note n="0242b1501" resp="#resp2" type="add" target="#nkr_note_add_0242b1501">已【CB】，巳【卍續】</note>
+<note n="0242b1701" resp="#resp2" type="add" target="#nkr_note_add_0242b1701">已【CB】，巳【卍續】</note>
+<note n="0242b2001" resp="#resp2" type="add" cb:note_key="X59.0242b20.04" target="#nkr_note_add_0242b2001">叉【CB】，义【卍續】</note>
+<note n="0242c1501" resp="#resp2" type="add" target="#nkr_note_add_0242c1501">已【CB】，巳【卍續】</note>
+<note n="0242c1502" resp="#resp2" type="add" target="#nkr_note_add_0242c1502">已【CB】，巳【卍續】</note>
+<note n="0242c1701" resp="#resp2" type="add" target="#nkr_note_add_0242c1701">已【CB】，巳【卍續】</note>
+</p>
+</cb:div>
+</back></text></TEI>

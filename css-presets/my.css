@@ -1,0 +1,7 @@
+/* 我的样式：用户定制。覆盖块（出厂+本块层叠，本块胜出）。 */
+:root {
+  --font-title: 朝华标题B, ZhaohuaMinB;
+}
+html[lang="zh-Hans"] {
+  --font-title: 朝华标题B, ZhaohuaMinB;
+}
