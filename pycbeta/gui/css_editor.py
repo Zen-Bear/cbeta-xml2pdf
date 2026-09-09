@@ -104,14 +104,15 @@ def _row_cb_tip(selector):
     tag = _SELECTOR_TAGS.get(selector or "")
     return f"cb 标签：{cb_name(tag)}" if tag else ""
 
-# 字体下拉分组：中文按关键字 buckets（首中即停；宋体在明体前吞掉 PMingLiU 类）
+# 字体下拉分组：中文按关键字 buckets（首中即停；专形优先排前——
+# 仿宋/明体须在宋体之前，否则 FangSong 被 song、PMingLiU/新細明體被 mingliu 吞掉）
 _CJK_BUCKETS = (
     ("黑体", ("黑", "雅黑", "苹方", "pingfang", "gothic", "hei")),
-    ("宋体", ("宋", "sun", "明流", "mingliu", "pmingliu", "細明", "细明",
-              "songti", "simsun", "nsimsun", "song")),
-    ("楷体", ("楷", "kai")),
     ("仿宋", ("仿宋", "fangsong")),
-    ("明体", ("明朝", "mincho", "ming")),
+    ("明体", ("明朝", "mincho", "mingliu", "pmingliu", "細明", "细明",
+              "明體", "明体")),
+    ("宋体", ("宋", "sun", "songti", "simsun", "nsimsun", "song")),
+    ("楷体", ("楷", "kai")),
     ("隶书", ("隶", "lisu")),
     ("圆体", ("圆", "yuan")),
     ("魏碑", ("魏", "wei")),

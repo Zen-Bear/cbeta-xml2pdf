@@ -1006,8 +1006,11 @@ class TestCssEditor(unittest.TestCase):
                               "KaiTi", "楷体", "FangSong", "LiSu", "隸書",
                               "ZhaohuaMinB", "朝華標題B", "Times New Roman",
                               "Calibri", "Aptos", "Courier New"])
-        self.assertIn("PMingLiU", g["宋体"])  # 明流陷阱：PMingLiU 属宋体不属明体
-        self.assertIn("新細明體", g["宋体"])
+        self.assertIn("SimSun", g["宋体"])
+        self.assertIn("宋体", g["宋体"])
+        self.assertIn("PMingLiU", g["明体"])  # 明体自立：PMingLiU/新細明體不再被宋体吞
+        self.assertIn("新細明體", g["明体"])
+        self.assertIn("FangSong", g["仿宋"])  # 仿宋排宋体前，免被 song 吞掉
         self.assertIn("KaiTi", g["楷体"])
         self.assertIn("LiSu", g["隶书"])
         self.assertIn("ZhaohuaMinB", g["标题"])
