@@ -1106,7 +1106,7 @@ class XmlOptionsPanel(QWidget):
         self._refresh_load_button()
         self._changed()
 
-    def _open_local_file(path):
+    def _open_local_file(self, path):
         """用系统默认程序打开本地文件/目录（样式表/词表/预设目录）；供各卡的"打开"按钮。"""
         if path and os.path.exists(path):
             QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.abspath(path)))

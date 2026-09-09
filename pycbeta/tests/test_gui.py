@@ -747,11 +747,11 @@ class TestLayoutRegroup(unittest.TestCase):
         from PySide6.QtGui import QDesktopServices
         from pycbeta.gui.panel import XmlOptionsPanel
         with mock.patch.object(QDesktopServices, "openUrl") as m:
-            XmlOptionsPanel._open_local_file(tempfile.gettempdir())
+            XmlOptionsPanel._open_local_file(None, tempfile.gettempdir())
             m.assert_called_once()  # 目录也能打开（之前 isfile 误杀）
         with mock.patch.object(QDesktopServices, "openUrl") as m2:
             XmlOptionsPanel._open_local_file(
-                os.path.join(tempfile.gettempdir(), "no-such-xyz"))
+                None, os.path.join(tempfile.gettempdir(), "no-such-xyz"))
             m2.assert_not_called()
 
 

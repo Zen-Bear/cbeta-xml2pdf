@@ -1372,7 +1372,7 @@ class DocxRenderer:
                 st = self.theme.tags.get("series-title") or {}
                 ff = (st.get("font-family") or "").split(",")[0].strip().strip('"').strip("'")
                 if not ff:
-                    ff = self.series_title.get("font") or "隸書, LiSu"
+                    ff = self.series_title.get("font") or "宋体, SimSun"
                     ff = [n.strip().strip('"').strip("'") for n in ff.split(",")][0]
                 size = self._series_size_pt(st)
                 _srpr = (
