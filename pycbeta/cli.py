@@ -666,8 +666,9 @@ def main(argv=None):
                 bases = []
                 if base_kind in official:
                     bases.append((base_kind, official[base_kind]))
-                fb = official.get("html")
-                if fb and all(p != fb for _,p in bases): bases.append(("html", fb))
+                if fmt != "txt":
+                    fb = official.get("html")
+                    if fb and all(p != fb for _,p in bases): bases.append(("html", fb))
                 if args.t2s and "txt_notes" in official and all(p != official["txt_notes"] for _, p in bases):
                     # 简体统一：txt_notes 优先（传统不动；缺失时落回现有顺序）
                     bases.insert(0, ("txt_notes", official["txt_notes"]))
@@ -686,8 +687,9 @@ def main(argv=None):
                     bases = []
                     if base_kind in official:
                         bases.append((base_kind, official[base_kind]))
-                    fb = official.get("html")
-                    if fb and all(p != fb for _,p in bases): bases.append(("html", fb))
+                    if fmt != "txt":
+                        fb = official.get("html")
+                        if fb and all(p != fb for _,p in bases): bases.append(("html", fb))
                     if args.t2s and "txt_notes" in official and all(p != official["txt_notes"] for _, p in bases):
                         bases.insert(0, ("txt_notes", official["txt_notes"]))
                 if not bases:

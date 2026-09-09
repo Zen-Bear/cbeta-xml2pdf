@@ -768,10 +768,11 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
     bases = []
     if base_kind in official:
         bases.append((base_kind, official[base_kind]))
-    # docx 无官方时回退 html 比较（用户要求）
-    fb = official.get("html")
-    if fb and all(p != fb for _,p in bases):
-        bases.append(("html", fb))
+    # docx 无官方时回退 html 比较（用户要求）；txt 不回退——无官方 txt 直接 no_baseline
+    if fmt != "txt":
+        fb = official.get("html")
+        if fb and all(p != fb for _,p in bases):
+            bases.append(("html", fb))
     if t2s and "txt_notes" in official and all(p != official["txt_notes"] for _, p in bases):
         # 简体统一：txt_notes 优先（传统不动；缺失时落回现有顺序）
         bases.insert(0, ("txt_notes", official["txt_notes"]))
@@ -788,9 +789,10 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
         bases = []
         if base_kind in official:
             bases.append((base_kind, official[base_kind]))
-        fb = official.get("html")
-        if fb and all(p != fb for _,p in bases):
-            bases.append(("html", fb))
+        if fmt != "txt":
+            fb = official.get("html")
+            if fb and all(p != fb for _,p in bases):
+                bases.append(("html", fb))
         if t2s and "txt_notes" in official and all(p != official["txt_notes"] for _, p in bases):
             bases.insert(0, ("txt_notes", official["txt_notes"]))
     if not bases:

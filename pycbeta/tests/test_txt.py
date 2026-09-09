@@ -162,6 +162,29 @@ class TestAuxEntry(unittest.TestCase):
             with self.assertRaises(ValueError):
                 verify_one(sample, "md", d, d, baseline="xml")
 
+    def test_no_txt_no_html_fallback(self):
+        # txt 不回退：官方只有 html 时直接 no_baseline（不拿 html 凑数）
+        import unittest.mock as mock
+        from pycbeta.verify import verify_one
+        sample = os.path.join(os.path.dirname(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+            "css-presets", "sample.xml")
+        d = tempfile.mkdtemp()
+        gen = os.path.join(d, "s.txt")
+        with open(gen, "w", encoding="utf-8") as f:
+            f.write("x")
+        fake_html = os.path.join(d, "SAMPLE_001.html")
+        with open(fake_html, "w", encoding="utf-8") as f:
+            f.write("<p>x</p>")
+        def _find(source, stem, kind, juan=None):
+            return [fake_html] if kind == "html" else []
+        with mock.patch("pycbeta.verify.generate_formal", return_value=[gen]), \
+                mock.patch("pycbeta.verify.find_official", side_effect=_find), \
+                mock.patch("pycbeta.fetch.ensure_baselines", return_value={}):
+            r = verify_one(sample, "txt", d, d, t2s=False)
+            self.assertEqual(r["status"], "no_baseline")
+            self.assertIsNone(r["official"])
+
 
 class TestOfficialTxtAlign(unittest.TestCase):
     HEAD = ("#----\n#【經文資訊】大正新脩大藏經\n#【版本記錄】2024\n#----\n\n"
