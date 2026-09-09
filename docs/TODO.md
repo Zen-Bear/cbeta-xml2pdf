@@ -215,6 +215,7 @@
   - test XML 19 文件 body 普查：左栏缺失但可见 = `l`（13/4819）/`caesura`（11/4747）/`cb:t/tt`（T01/X59n1077）/`list/item`（3 文件）/正文内 `title`（6/126）/`hi/seg[border]/note[hide]`/`space`（4/430）/`yin/zi/sg+entry/term`（X59/X60）/`figure/graphic`（3/74）/`g`（12/947）+`app/lem/rdg`/`div@type=orig/commentary/jing/pin/fen/w/other`（other 1808，左栏仅 xu/note）；`rend` 四行 19 文件零命中无样张；结构性无需调 = lb(70125)/pb/milestone/cb:juan/jhead/docNumber/mulu(2087)/anchor(9837)
   - schema（cbeta-p5.rnc）对照：唯一值得加的是 `table/row/cell`（走 bip-table，左栏无行）——本次不加；`list` 低优先级；其余透传/功能性不值得单列；header 无行系正确忽略
 - [ ] **字体扫描（2026-09-10，决议：只记录不动链）**
-  - 真非系统：`cbetarc`（golden 网络字体，离线失效）/`CBETA Supplement`（随仓，缺则回退失效）/`Ranjana`/`Siddam`（随仓）/`Songti TC`（macOS）/`朝华标题B/ZhaohuaMinB`（my.css 用户预设，商业字）；回退链已有覆盖
+  - 真非系统：`cbetarc`（golden 网络字体，离线失效）/`CBETA Supplement`（随仓，缺则回退失效）/`Ranjana`/`Siddam`（随仓）/`Songti TC`（macOS）/`朝华标题B/ZhaohuaMinB`（my.css 用户预设，**免费商用**（用户提供知乎链接，本机随 WPS 已装），非系统自带，他机需自装）；回退链已有覆盖
   - 本机缺但属系统字（本机简体 Win 环境问题）：`新細明體/PMingLiU`/`標楷體/DFKaiShu`/`隸書/LiSu`——繁体首选链本机悬空，靠 Word 自身回退；根治须手动装字（语言包/繁体机拷贝），不动 CSS（铁律）
   - 系统自带已装：Calibri/Times/Arial/宋体/SimSun/黑体/楷体/仿宋/微軟正黑體/YaHei/ExtB/ExtG（简体链全绿）
+  - 落盘（2026-09-10）：`docs/安装说明.md` §3 后追加 §3.1 清单 + §3.2 三档指引（纯文档，零代码）
