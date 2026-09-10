@@ -211,6 +211,10 @@
   - 现状：`EMPTY_RUN` 占位 `""`（`theme.py:418`），非空警告+忽略（564-567）；无 CLI 开关、无 GUI 控件；html/epub 默认纯 golden
   - 将来要做时的探明设计（三步）：`resolve_html_base_css` 加 `user` 形参（显式开关 > 槽 > 纯基底，`_resolve_run_file` 缺文件警告+回退），用户文件追加到 golden 之后——`render_html._wrap` 与 epub `style.css` 同吃一份 `base_css`，渲染侧零改动；CLI 加 `--html-epub-user-theme`（与 pdf 侧对称）；单测锁追加顺序/回退/显式优先；golden 选择器与 pdf 出厂同体系（`.head`/`div.lg`/`p.form`…），增量可复用习惯；verify 走文本不受影响
 
+- [x] **strip_head_no 去标题行首 No. 令牌**（2026-09-10 用户立项：X60n1116 `<head>No. 1116-B…序`）
+  - 落点：`theme.strip_head_no` helper（非变异，跳空节点，余部 lstrip 吃版式空格，正文 No. 不动）+ 六渲染器（docx/html/md/txt 直改，epub/pdf 继承 html；docx jhead 先 strip 再 dedup）+ `config output.strip_head_no=false` + CLI `--strip-head-no` + GUI 排版卡复选（默认不勾）+ verify 三入口联动（生成透传 + 官方行首精确令牌表对等剥离；`--config` 双形态收敛 `_strip_no_from`，旧静默回出厂坑已填）
+  - 验收：X60n1116 `-f txt` 开剥离 0/496（missing=0 四令牌 A/B/C/D 全对齐；残留 = 题署行版式差 + body-app 双变体展开，属已知局限类，非 strip 问题）；默认关全量 454/458（4 失败系用户未提交 CSS 改动 `h1.title 30→26pt`，非本件；stash 干净树对照通过）
+  - 附带：`docNumber` 独立元素（如 `No. 1116`）两边保留不动；书签/目录文本不同步
 - [ ] **元素覆盖扫描（2026-09-10 三项并查，决议：都不加行，只记录）**
   - test XML 19 文件 body 普查：左栏缺失但可见 = `l`（13/4819）/`caesura`（11/4747）/`cb:t/tt`（T01/X59n1077）/`list/item`（3 文件）/正文内 `title`（6/126）/`hi/seg[border]/note[hide]`/`space`（4/430）/`yin/zi/sg+entry/term`（X59/X60）/`figure/graphic`（3/74）/`g`（12/947）+`app/lem/rdg`/`div@type=orig/commentary/jing/pin/fen/w/other`（other 1808，左栏仅 xu/note）；`rend` 四行 19 文件零命中无样张；结构性无需调 = lb(70125)/pb/milestone/cb:juan/jhead/docNumber/mulu(2087)/anchor(9837)
   - schema（cbeta-p5.rnc）对照：唯一值得加的是 `table/row/cell`（走 bip-table，左栏无行）——本次不加；`list` 低优先级；其余透传/功能性不值得单列；header 无行系正确忽略
