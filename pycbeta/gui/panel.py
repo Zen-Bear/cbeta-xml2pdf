@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QMessageBox, QPushButton, QSpinBox, QTableWidget, QTableWidgetItem, QTabWidget, QVBoxLayout,
     QWidget,
 )
+from . import dark as _dark
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _STYLES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -410,6 +411,7 @@ class XmlOptionsPanel(QWidget):
         finally:
             self._emitting = False
         self._refresh_load_button()
+        _dark.apply_mode(_dark.get_mode())  # 用户槽外观：跟随/浅色/深色
         if presets:
             self.set_options(options_from_presets(presets))
 
@@ -437,6 +439,15 @@ class XmlOptionsPanel(QWidget):
         bar.addWidget(self.btn_load)
         bar.addWidget(self.btn_set_default)
         bar.addWidget(self.btn_reset)
+        bar.addWidget(QLabel("外观"))
+        self.appear_box = QComboBox()
+        for label, value in _dark.theme_combo_items():
+            self.appear_box.addItem(label, value)
+        self.appear_box.setToolTip("跟随系统/浅色/深色（存用户槽 gui_theme；提示红灰自动适配）")
+        self.appear_box.setCurrentIndex(
+            max(0, self.appear_box.findData(_dark.get_mode())))
+        self.appear_box.currentIndexChanged.connect(self._on_theme_mode)
+        bar.addWidget(self.appear_box)
         layout.addWidget(cfg)
         self.tabs = QTabWidget()
         layout.addWidget(self.tabs)
@@ -539,7 +550,7 @@ class XmlOptionsPanel(QWidget):
         trow.addStretch(1)
         form.addRow("正文", trow)
         self.typo_info = QLabel("")
-        self.typo_info.setStyleSheet("color: gray")
+        self.typo_info.setStyleSheet(_dark.hint_style())
         self.typo_info.setWordWrap(True)
         form.addRow("", self.typo_info)
         self.grayscale_box = self._check("黑白输出")
@@ -756,7 +767,7 @@ class XmlOptionsPanel(QWidget):
         form.addRow("默认样式", trow)
         self.theme_status = QLabel()
         self.theme_status.setWordWrap(True)
-        self.theme_status.setStyleSheet("color: gray")
+        self.theme_status.setStyleSheet(_dark.hint_style())
         form.addRow("", self.theme_status)
         self._refresh_theme_box()
         self.style_rows = {}
@@ -771,7 +782,7 @@ class XmlOptionsPanel(QWidget):
                     lambda _v, p=path: self._open_local_file(p))
             else:
                 open_btn.setEnabled(False)
-                edit.setStyleSheet("color: red")
+                edit.setStyleSheet(_dark.error_style())
                 edit.setText(f"{path}（文件不存在）")
             row.addWidget(edit, 1)
             row.addWidget(open_btn)
@@ -800,9 +811,9 @@ class XmlOptionsPanel(QWidget):
             shown = shown[:25] + "…" + shown[-30:]
         self.theme_status.setText(f"当前默认：{label}（{shown}）")
         if "缺失" in label or "不存在" in label:
-            self.theme_status.setStyleSheet("color: red")
+            self.theme_status.setStyleSheet(_dark.error_style())
         else:
-            self.theme_status.setStyleSheet("color: gray")
+            self.theme_status.setStyleSheet(_dark.hint_style())
 
     def _on_theme_default(self):
         from pycbeta.gui.css_editor import set_user_theme
@@ -811,7 +822,7 @@ class XmlOptionsPanel(QWidget):
             set_user_theme(value)
         except OSError as exc:
             self.theme_status.setText(f"写入失败：{exc}")
-            self.theme_status.setStyleSheet("color: red")
+            self.theme_status.setStyleSheet(_dark.error_style())
             return
         self._refresh_theme_box(keep_value=value)
         self._changed()
@@ -848,15 +859,15 @@ class XmlOptionsPanel(QWidget):
         single = self.single_box.currentData() or ""
         auto_tip = "自动=按链顺序首个成功者；单引擎=只用该引擎，失败即报错"
         if not single:
-            self.engine_hint.setStyleSheet("color: gray")
+            self.engine_hint.setStyleSheet(_dark.hint_style())
             self.engine_hint.setText("自动：按链顺序尝试")
             self.engine_hint.setToolTip(auto_tip)
         elif self._status.get(single, False):
-            self.engine_hint.setStyleSheet("color: gray")
+            self.engine_hint.setStyleSheet(_dark.hint_style())
             self.engine_hint.setText(f"单引擎 {single} 已就绪")
             self.engine_hint.setToolTip(auto_tip)
         else:
-            self.engine_hint.setStyleSheet("color: red")
+            self.engine_hint.setStyleSheet(_dark.error_style())
             self.engine_hint.setText(f"单引擎 {single} 未安装")
             self.engine_hint.setToolTip(f"单引擎 {single} 未安装："
                                         f"{INSTALL_HINTS.get(single, '')}")
@@ -875,7 +886,7 @@ class XmlOptionsPanel(QWidget):
 
     def _hint(self, text):
         label = QLabel(text)
-        label.setStyleSheet("color: gray")
+        label.setStyleSheet(_dark.hint_style())
         label.setWordWrap(True)
         return label
 
@@ -979,7 +990,7 @@ class XmlOptionsPanel(QWidget):
         orow = QHBoxLayout()
         self.ann_hint = QLabel()
         self.ann_hint.setWordWrap(True)
-        self.ann_hint.setStyleSheet("color: gray")
+        self.ann_hint.setStyleSheet(_dark.hint_style())
         self.ann_open = QPushButton("打开")
         self.ann_open.clicked.connect(self._on_open_ann_table)
         orow.addWidget(self.ann_hint, 1)
@@ -997,11 +1008,11 @@ class XmlOptionsPanel(QWidget):
     def _refresh_ann_hint(self):
         path = self._ann_table_path()
         if path:
-            self.ann_hint.setStyleSheet("color: gray")
+            self.ann_hint.setStyleSheet(_dark.hint_style())
             self.ann_hint.setText(f"实际使用：{path}")
             self.ann_open.setEnabled(True)
         else:
-            self.ann_hint.setStyleSheet("color: red")
+            self.ann_hint.setStyleSheet(_dark.error_style())
             self.ann_hint.setText("词表文件不存在，将静默关闭注音")
             self.ann_open.setEnabled(False)
 
@@ -1035,6 +1046,12 @@ class XmlOptionsPanel(QWidget):
         return w
 
     # ---------- 三槽 ----------
+    def _on_theme_mode(self, _index=0):
+        """外观三态切换：写用户槽 + 即时生效（应用级，不记入 presets 脏）。"""
+        mode = self.appear_box.currentData() or "follow"
+        _dark.set_mode(mode)
+        _dark.apply_mode(mode)
+
     def _on_save(self):
         cur, _actual = load_slot("user")
         self._presets = self._presets_merged(cur)
@@ -1364,7 +1381,7 @@ class SourceDialog(QDialog):
             "缺字库/补充字型/目录从上游直链同步（先校验再落盘，一致跳过）")
         self.btn_update_data.clicked.connect(self._on_update_data)
         self.update_status = QLabel("")
-        self.update_status.setStyleSheet("color: gray")
+        self.update_status.setStyleSheet(_dark.hint_style())
         self.update_status.setWordWrap(True)
         urow.addWidget(self.btn_update_data)
         urow.addWidget(self.update_status, 1)
