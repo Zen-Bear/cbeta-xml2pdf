@@ -104,6 +104,10 @@ class BatchWorker(QThread):
         from pycbeta.verify import verify_one
         presets, out_dir = self.paths["presets"], self.paths["out"]
         run, snapshot, tmpcfg = self.paths.get("run") or {}, None, None
+        import tempfile as _tf
+        import shutil as _sh
+        merge_tmp = _tf.mkdtemp(prefix="xml2pdf-merge-")
+        self._merge_tmp = merge_tmp
         try:
             snapshot = write_temp_presets(presets, self.opts)
             tmpcfg = write_temp_run(run, snapshot)
@@ -140,22 +144,44 @@ class BatchWorker(QThread):
                         os.remove(p)
                     except Exception:
                         pass
+            try:
+                _sh.rmtree(merge_tmp, ignore_errors=True)
+            except Exception:
+                pass
             self.finished_all.emit()
 
     def _resolve(self, job, idx, fetch, presets):
-        src = (presets.get("source") or {})
-        xml_dir = src.get("xml_dir") or r"E:\dev\cbeta\test"
-        dl_dir = src.get("download_dir") or xml_dir
+        try:
+            xml_dir, dl_dir = fetch.resolve_source(presets)
+        except ValueError as e:
+            self.row_status.emit(idx, f"未配置: {e}")
+            return []
         if job["kind"] == "file":
             return [job["xml"]] if os.path.isfile(job["xml"]) else []
+        if job["kind"] == "merged":
+            # 目录模式碎片组：worker 内合成（tmpdir 随批量清），一行一部一册
+            from pycbeta.merge import merge_groups_to_tmpdir
+            key, files = job["group"]
+            try:
+                paths = merge_groups_to_tmpdir(
+                    {key: files}, getattr(self, "_merge_tmp", None), quiet=True)
+            except Exception as e:
+                self.row_status.emit(idx, f"合册失败: {e}")
+                return []
+            if paths:
+                self.row_source.emit(idx, "合册合成")
+            return paths
         wid = job["id"]
         if not fetch.is_work_id(wid):
             self.row_status.emit(idx, "非法編號")
             return []
         canon, no = fetch.parse_work_id(wid)
-        found = fetch.find_local_xml(xml_dir, canon, no)
+        from pycbeta.merge import resolve_work_files
+        found, merged = resolve_work_files(xml_dir, canon, no,
+                                           getattr(self, "_merge_tmp", None),
+                                           quiet=True)
         if found:
-            self.row_source.emit(idx, "本地XML")
+            self.row_source.emit(idx, "合册合成" if merged else "本地XML")
             return found
         if self.flags.get("auto_xml"):
             self.row_status.emit(idx, "下载XML…")
@@ -335,10 +361,19 @@ class MainWindow(QMainWindow):
             if os.path.isfile(src) and src.lower().endswith(".xml"):
                 jobs.append({"kind": "file", "id": os.path.basename(src), "xml": src})
             elif os.path.isdir(src):
+                from pycbeta.merge import split_paths
+                walked = []
                 for fn in sorted(glob.glob(os.path.join(src, "**", "*.xml"), recursive=True)):
                     if os.sep + "out" + os.sep in fn:
                         continue
+                    walked.append(fn)
+                whole, groups = split_paths(walked)
+                for fn in whole:
                     jobs.append({"kind": "file", "id": os.path.basename(fn), "xml": fn})
+                for (canon, vol, no) in sorted(groups):
+                    jobs.append({"kind": "merged",
+                                 "id": f"{canon}{no}（{vol}合册）",
+                                 "group": ((canon, vol, no), groups[(canon, vol, no)])})
         return jobs
 
     def _start(self):

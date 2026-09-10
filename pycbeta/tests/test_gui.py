@@ -850,6 +850,90 @@ class TestMainWindowUx(unittest.TestCase):
             w.close()
 
 
+class TestBatchMergeResolve(unittest.TestCase):
+    """BatchWorker._resolve 合册分支：碎片 ID → 按册合成路径 + 行标签。"""
+
+    @classmethod
+    def setUpClass(cls):
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PySide6.QtWidgets import QApplication
+        cls.app = QApplication.instance() or QApplication([])
+
+    def _bookcase(self):
+        import tempfile
+        d = tempfile.mkdtemp()
+        frag = ('<?xml version="1.0" encoding="utf-8"?>\n'
+                '<TEI xmlns="http://www.tei-c.org/ns/1.0" xml:id="{stem}">'
+                '<teiHeader><fileDesc><titleStmt>'
+                '<title level="m" xml:lang="zh-Hant">題{rng}</title>'
+                '</titleStmt></fileDesc></teiHeader>'
+                '<text><body><p>{text}</p></body></text></TEI>')
+        for vol, seq, text in (("TX07", "001", "甲"), ("TX07", "002", "乙"),
+                               ("TX08", "003", "丙")):
+            vd = os.path.join(d, "TX", vol)
+            os.makedirs(vd, exist_ok=True)
+            with open(os.path.join(vd, f"TX07n0006_{seq}.xml"
+                                    if vol == "TX07" else f"TX08n0006_{seq}.xml"),
+                      "w", encoding="utf-8") as f:
+                f.write(frag.format(stem=f"TX07n0006" if vol == "TX07" else "TX08n0006",
+                                    rng=vol, text=text))
+        return d
+
+    def test_id_job_merges_per_vol(self):
+        import shutil
+        import tempfile
+        from pycbeta import fetch
+        from pycbeta.gui.__main__ import BatchWorker
+        book = self._bookcase()
+        tmp = tempfile.mkdtemp()
+        try:
+            w = BatchWorker([], None, {}, {})
+            w._merge_tmp = tmp
+            labels = []
+            w.row_source.connect(lambda i, t: labels.append(t))
+            presets = {"source": {"xml_dir": book, "download_dir": book}}
+            paths = w._resolve({"kind": "id", "id": "TX0006"}, 0, fetch,
+                               presets)
+            self.assertEqual(labels, ["合册合成"])
+            self.assertEqual(len(paths), 2)
+            self.assertTrue(paths[0].endswith("TX07n0006.xml"))
+            self.assertTrue(paths[1].endswith("TX08n0006.xml"))
+            from lxml import etree
+            t0 = "".join(etree.parse(paths[0]).getroot().itertext())
+            self.assertIn("甲", t0)
+            self.assertIn("乙", t0)
+            self.assertNotIn("丙", t0)
+        finally:
+            shutil.rmtree(book, ignore_errors=True)
+            shutil.rmtree(tmp, ignore_errors=True)
+            w.close() if hasattr(w, "close") else None
+
+    def test_merged_dir_job(self):
+        import shutil
+        import tempfile
+        from pycbeta import fetch
+        from pycbeta.gui.__main__ import BatchWorker
+        book = self._bookcase()
+        tmp = tempfile.mkdtemp()
+        try:
+            w = BatchWorker([], None, {}, {})
+            w._merge_tmp = tmp
+            from pycbeta.merge import collect_work_frags
+            groups = collect_work_frags(book, "TX", "0006")
+            key = ("TX", "TX07", "0006")
+            labels = []
+            w.row_source.connect(lambda i, t: labels.append(t))
+            paths = w._resolve({"kind": "merged", "id": "X",
+                                "group": (key, groups[key])}, 0, fetch,
+                               {"source": {"xml_dir": book,
+                                           "download_dir": book}})
+            self.assertEqual(labels, ["合册合成"])
+            self.assertEqual(len(paths), 1)
+        finally:
+            shutil.rmtree(book, ignore_errors=True)
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
 class TestSourceDialog(unittest.TestCase):
     def test_apply_merge(self):
         base = {"source": {"xml_dir": "A", "download_dir": "B", "catalog": "C"},

@@ -164,7 +164,8 @@ class XmlOptions:
 对列表内每个 ID：
 1. `fetch.is_work_id(id)` 校验；`parse_work_id` → `(canon, no)`
 2. **本地查找**：`fetch.find_local_xml(source.xml_dir, canon, no)`（统一根目录两档：平展优先、仓库次之，排除 `out/`）
-   - 未找到且勾选「自动下载缺失 XML」→ `fetch.fetch_work(id, ["xml"], presets, download_dir)` 下载到 `source.download_dir`，再查找
+   - 未找到 → 碎片按组合册（`pycbeta/merge.py:resolve_work_files`，tmpdir 随批量清，行来源标「合册合成」；xml_dir 可直指 CBReader 书库）
+   - 仍未找到且勾选「自动下载缺失 XML」→ `fetch.fetch_work(id, ["xml"], presets, download_dir)` 下载到 `source.download_dir`，再查找
    - 未找到且未勾选 → 行状态标「缺 XML」跳过
 3. **（可选）官方基线**：勾选「同时下载官方基线」→ `fetch.ensure_baselines(id, ["html","docx","txt"], presets, download_dir)`（校验用；docx/odt 非 T/X 静默失败）
 4. **转换**：`cli.render_one` 或子进程 `[sys.executable, "-m", "pycbeta", "-i", xml, "-f", fmt, "--page", opts.page, "-o", out_dir]`（`t2s=True` 时追加 `--t2s`）

@@ -235,7 +235,11 @@ def render_one(w, fmt, out_dir, out_name, args, theme, html_base=None):
                 emit(target, getattr(r, "last_engine", pipeline))
 
 
-def resolve_output(xml_fn, fmt, args, work):
+def resolve_output(xml_fn, fmt, args, work, _used=None):
+    """输出目录与文件名。默认 `{work.id}{ext}`（单文件行为逐字节不变）；
+    _used 为本轮已用 {(目录, 文件名)} 集合时：同目录同名且输入基名不同
+    （多源同部，如按册三文件）→ 回退输入基名，仍撞则 _2 后缀。防覆盖，
+    不改变任何单文件行为。"""
     ext = _FORMAT_EXT[fmt]
     src_dir = os.path.dirname(os.path.abspath(xml_fn))
     base = os.path.splitext(os.path.basename(xml_fn))[0]
@@ -244,14 +248,33 @@ def resolve_output(xml_fn, fmt, args, work):
         if fmt != "html" and out.lower().endswith(ext) and not os.path.isdir(out):
             return os.path.dirname(os.path.abspath(out)), os.path.basename(out)
         out_name = apply_template(args.name_template, work) + ext if args.name_template else f"{work.id}{ext}"
-        return out, (None if fmt == "html" else out_name)
-    if fmt == "html":
+        out_dir = out
+    elif fmt == "html":
         return os.path.join(src_dir, base + "_html"), None
-    out_name = apply_template(args.name_template, work) + ext if args.name_template else f"{work.id}{ext}"
+    else:
+        out_dir = src_dir
+        out_name = apply_template(args.name_template, work) + ext if args.name_template else f"{work.id}{ext}"
+    if _used is not None:
+        key = (os.path.normcase(os.path.abspath(out_dir)),
+               out_name.lower())
+        if key in _used and base != os.path.splitext(out_name)[0]:
+            cand = base + ext
+            key2 = (os.path.normcase(os.path.abspath(out_dir)), cand.lower())
+            if key2 in _used:
+                i = 2
+                while (os.path.normcase(os.path.abspath(out_dir)),
+                       f"{base}_{i}{ext}".lower()) in _used:
+                    i += 1
+                cand = f"{base}_{i}{ext}"
+            out_name = cand
+            key = (os.path.normcase(os.path.abspath(out_dir)), out_name.lower())
+        _used.add(key)
+    if args.output:
+        return out, (None if fmt == "html" else out_name)
     return src_dir, out_name
 
 
-def process_file(xml_fn, formats, args, theme, html_base=None):
+def process_file(xml_fn, formats, args, theme, html_base=None, _used=None):
     w = P5Parser().parse(xml_fn)
     if args.t2s:
         from .simplify import simplify_work
@@ -263,7 +286,7 @@ def process_file(xml_fn, formats, args, theme, html_base=None):
             _fc_dir = None
         _run_font_check(w, args, theme, _fc_dir)
     for fmt in formats:
-        out_dir, out_name = resolve_output(xml_fn, fmt, args, w)
+        out_dir, out_name = resolve_output(xml_fn, fmt, args, w, _used)
         try:
             render_one(w, fmt, out_dir, out_name, args, theme,
                        html_base=html_base)
@@ -558,38 +581,52 @@ def main(argv=None):
         # 大字版：主题字号等比缩放（版心/边距不动，自动重排；em 随基准自动跟）
         theme.scale_font_sizes(args.font_scale)
 
+    _used_names = set()  # 本轮已用 (目录, 文件名)：多源同部时触发输入基名回退
     if os.path.isdir(args.input):
-        xmls = []
+        from .merge import split_paths, merge_groups_to_tmpdir
+        walked = []
         for dp, _dn, fns in os.walk(args.input):
             for f in sorted(fns):
                 if f.endswith(".xml"):
-                    xmls.append(os.path.join(dp, f))
+                    walked.append(os.path.join(dp, f))
+        whole, groups = split_paths(walked)
+        xmls = whole
+        if groups:
+            xmls = xmls + merge_groups_to_tmpdir(groups)
         if not xmls:
             ap.error(f"no XML files under {args.input}")
         for x in xmls:
-            process_file(x, formats, args, theme, html_base=html_base)
+            process_file(x, formats, args, theme, html_base=html_base,
+                         _used=_used_names)
     elif os.path.isfile(args.input):
         process_file(args.input, formats, args, theme, html_base=html_base)
     else:
         # -i 佛典編號：先查本地 XML 源，缺失则从官方下载
-        from .fetch import is_work_id, parse_work_id, find_local_xml, fetch_work
+        from .fetch import is_work_id, parse_work_id, fetch_work
         if not is_work_id(args.input):
             ap.error(f"input not found: {args.input}")
         work_id = args.input
         _presets = load_presets(args.config) if args.config else load_presets()
-        source_cfg = {**({"xml_dir": r"E:\dev\cbeta\test", "download_dir": r"E:\dev\cbeta\test"}),
-                      **(_presets.get("source") or {})}
-        xml_dir = args.xml_dir or source_cfg["xml_dir"]
+        from .fetch import resolve_source
+        try:
+            xml_dir, _dl_dir = resolve_source(
+                _presets, xml_dir=args.xml_dir, download_dir=args.download_dir)
+        except ValueError as exc:
+            ap.error(str(exc))
         canon, no = parse_work_id(work_id)
-        xmls = find_local_xml(xml_dir, canon, no)
+        from .merge import resolve_work_files
+        xmls, merged = resolve_work_files(xml_dir, canon, no)
+        if merged:
+            print(f"{work_id}: 碎片合册 → {len(xmls)} 册")
         if not xmls:
             print(f"{work_id}: 本地 XML 源 {xml_dir} 未找到，从官方下载…")
-            fetch_work(work_id, ["xml"], _presets, args.download_dir or source_cfg["download_dir"])
-            xmls = find_local_xml(xml_dir, canon, no)
+            fetch_work(work_id, ["xml"], _presets, _dl_dir)
+            xmls, _ = resolve_work_files(xml_dir, canon, no)
         if not xmls:
             ap.error(f"{work_id}: 本地与官方均未取得 XML")
         for x in xmls:
-            process_file(x, formats, args, theme, html_base=html_base)
+            process_file(x, formats, args, theme, html_base=html_base,
+                         _used=_used_names)
 
     # --verify：复用 pycbeta/verify.py 模块化能力，供 GUI 调用同一入口
     if args.verify:
