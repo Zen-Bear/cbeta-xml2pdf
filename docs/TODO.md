@@ -163,6 +163,7 @@
 - [x] **已完成 P10** GUI 深色模式（2026-09-10 用户点档）
   - 落点：`pycbeta/gui/dark.py`（三态 follow/light/dark，存用户槽顶层 `gui_theme`；`styleHints().setColorScheme` 生效 + 显式意图覆盖（offscreen 等不反射环境也确定）；hint/error helper（浅色沿用 legacy gray/red，深色 #B0B0B0/#FF7B72）；`recolor_widgets` 全局归一 legacy 精确串，双向幂等）；配置栏“外观”下拉（应用级，不记 presets 脏；panel/dialog 初始化即生效，publish 复用同覆盖）；panel 9+css_editor 4 共 13 处 `gray/red` 换 helper（QToolTip 深底白字/色块/#cc6600 超出范围不管）
   - 单测 `TestDarkMode` 4 项（槽 roundtrip/apply/helpers/recolor/下拉接线）；test_gui 153 OK
+  - 追修（用户目检三问题）：外观下拉搬数据源行最右（撤出面板配置栏）；深色输入黑字/面板表格不跟色——根因 ColorScheme-only（板子没换），实证 vista+完整深色板白字正常，遂只换板不换 style（Fusion 废弃：setStyle 删旧对象 + offscreen name() 无意义）；单测 5 项；test_gui 154 OK
   - 目检指引（用户目测）：Win 设置→个性化→颜色→深色，外观=跟随系统，逐卡看提示灰/报错红；再切浅色/深色各看一遍配置栏+七卡+批量表+编辑器；跟随+浅色下视觉与旧版逐像素一致（legacy 原样）
 
 - [x] **已完成 P4** `docx` 段合并到 `output`（死配置修复：顶层 `docx` 删段 → `output.docx.footnoteSeparator`；零代码改动，实测自定义 2.0pt 生效；单测 58 + verify 24 0 失败）

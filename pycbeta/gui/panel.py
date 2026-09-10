@@ -439,15 +439,6 @@ class XmlOptionsPanel(QWidget):
         bar.addWidget(self.btn_load)
         bar.addWidget(self.btn_set_default)
         bar.addWidget(self.btn_reset)
-        bar.addWidget(QLabel("外观"))
-        self.appear_box = QComboBox()
-        for label, value in _dark.theme_combo_items():
-            self.appear_box.addItem(label, value)
-        self.appear_box.setToolTip("跟随系统/浅色/深色（存用户槽 gui_theme；提示红灰自动适配）")
-        self.appear_box.setCurrentIndex(
-            max(0, self.appear_box.findData(_dark.get_mode())))
-        self.appear_box.currentIndexChanged.connect(self._on_theme_mode)
-        bar.addWidget(self.appear_box)
         layout.addWidget(cfg)
         self.tabs = QTabWidget()
         layout.addWidget(self.tabs)
@@ -1046,12 +1037,6 @@ class XmlOptionsPanel(QWidget):
         return w
 
     # ---------- 三槽 ----------
-    def _on_theme_mode(self, _index=0):
-        """外观三态切换：写用户槽 + 即时生效（应用级，不记入 presets 脏）。"""
-        mode = self.appear_box.currentData() or "follow"
-        _dark.set_mode(mode)
-        _dark.apply_mode(mode)
-
     def _on_save(self):
         cur, _actual = load_slot("user")
         self._presets = self._presets_merged(cur)

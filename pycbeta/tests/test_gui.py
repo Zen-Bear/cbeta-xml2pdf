@@ -554,7 +554,8 @@ class TestEngineSingles(unittest.TestCase):
         panel._status = {k: False for k in panel._status}
         panel._refresh_singles(keep="wps")
         self.assertEqual(panel.single_box.currentData(), "wps")
-        self.assertIn("red", panel.engine_hint.styleSheet())
+        import pycbeta.gui.dark as dark
+        self.assertEqual(panel.engine_hint.styleSheet(), dark.error_style())
         self.assertIn("wps", panel.engine_hint.text().lower())
         self.assertIn("未安装", panel.engine_hint.text())
         # 长说明进 tooltip，短状态留行内
@@ -2764,25 +2765,43 @@ class TestDarkMode(unittest.TestCase):
             dark.apply_mode("follow")
             lab.close()
 
-    def test_panel_appear_box(self):
+    def test_main_appear_box(self):
         import unittest.mock as mock
         import pycbeta.gui.dark as dark
-        import pycbeta.gui.panel as pm
+        from pycbeta.gui.__main__ import MainWindow
         with mock.patch.object(dark, "get_mode", return_value="dark"), \
                 mock.patch.object(dark, "apply_mode",
                                   return_value="dark") as m_apply, \
                 mock.patch.object(dark, "set_mode",
                                   return_value="dark") as m_set:
-            panel = pm.XmlOptionsPanel({"output": {}, "pages": {"a4": {}}})
+            w = MainWindow()
             try:
-                self.assertEqual(panel.appear_box.currentData(), "dark")
-                self.assertEqual(panel.appear_box.count(), 3)
-                panel.appear_box.setCurrentIndex(
-                    panel.appear_box.findData("light"))
+                self.assertEqual(w.appear_box.currentData(), "dark")
+                self.assertEqual(w.appear_box.count(), 3)
+                w.appear_box.setCurrentIndex(
+                    w.appear_box.findData("light"))
                 m_set.assert_called_with("light")
-                self.assertEqual(m_apply.call_count, 2)  # 初始化 1 + 切换 1
+                m_apply.assert_called_with("light")
             finally:
-                panel.close()
+                w.close()
+
+    def test_palette_dark_light_roundtrip(self):
+        import pycbeta.gui.dark as dark
+        from PySide6.QtGui import QPalette
+        app = dark._app()
+
+        def wintext():
+            return app.palette().color(QPalette.WindowText).name()
+
+        try:
+            dark.apply_mode("dark")
+            self.assertTrue(dark.is_dark())
+            self.assertEqual(wintext(), "#ffffff")
+            dark.apply_mode("light")
+            self.assertFalse(dark.is_dark())
+            self.assertEqual(wintext(), QPalette().color(QPalette.WindowText).name())
+        finally:
+            dark.apply_mode("follow")
 
 
 if __name__ == "__main__":

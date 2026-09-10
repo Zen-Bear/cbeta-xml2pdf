@@ -54,29 +54,57 @@ def _app():
 # 不依赖各平台 styleHints 是否反射——offscreen 等环境 setColorScheme 常驻 Unknown）。
 _FORCED = {"mode": None}
 
+# 深色板是否已应用（避免重复 repolish；回切判定不读已污染的 palette）。
+_APPLIED = {"dark": False}
+
+
+def _dark_palette():
+    """深色调色板（只换板、不换 style：windowsvista 原生 + 完整深色板实测白字正常；
+    Fusion 方案已废——setStyle 删旧对象有 ownership 坑，且 offscreen 下 name() 无意义）。
+    浅色回切 fresh QPalette()（恒为浅色标准板，不受深色系统污染）。"""
+    from PySide6.QtGui import QPalette, QColor
+    from PySide6.QtCore import Qt
+    window = QColor(53, 53, 53)
+    text = QColor(255, 255, 255)
+    base = QColor(35, 35, 35)
+    accent = QColor(42, 130, 218)
+    dim = QColor(150, 150, 150)
+    p = QPalette()
+    for group in (QPalette.Active, QPalette.Inactive, QPalette.Disabled):
+        p.setColor(group, QPalette.Window, window)
+        p.setColor(group, QPalette.WindowText, text)
+        p.setColor(group, QPalette.Base, base)
+        p.setColor(group, QPalette.AlternateBase, window)
+        p.setColor(group, QPalette.Text, text)
+        p.setColor(group, QPalette.Button, window)
+        p.setColor(group, QPalette.ButtonText, text)
+        p.setColor(group, QPalette.BrightText, QColor(255, 0, 0))
+        p.setColor(group, QPalette.Highlight, accent)
+        p.setColor(group, QPalette.HighlightedText, QColor(255, 255, 255))
+        p.setColor(group, QPalette.PlaceholderText, dim)
+        p.setColor(group, QPalette.Link, accent)
+    for role in (QPalette.WindowText, QPalette.Text, QPalette.ButtonText):
+        p.setColor(QPalette.Disabled, role, dim)
+    return p
+
 
 def is_dark() -> bool:
-    """当前生效是否为深色：显式意图优先；跟随（Unknown）看调色板窗口亮度。"""
+    """当前生效是否为深色：显式意图优先；跟随只认系统 scheme（不读 palette，
+    否则 follow 切回时会被自己刚刷的板子锁死）。"""
     if _FORCED["mode"] == "dark":
         return True
     if _FORCED["mode"] == "light":
         return False
+    return _system_dark()
+
+
+def _system_dark() -> bool:
     app = _app()
     if app is None:
         return False
     try:
         from PySide6.QtCore import Qt
-        scheme = app.styleHints().colorScheme()
-        if scheme == Qt.ColorScheme.Dark:
-            return True
-        if scheme == Qt.ColorScheme.Light:
-            return False
-    except Exception:
-        pass
-    try:
-        from PySide6.QtGui import QPalette
-        bg = app.palette().color(QPalette.Window)
-        return (bg.red() * 299 + bg.green() * 587 + bg.blue() * 114) // 1000 < 128
+        return app.styleHints().colorScheme() == Qt.ColorScheme.Dark
     except Exception:
         return False
 
@@ -92,7 +120,8 @@ def error_style() -> str:
 
 
 def apply_mode(mode) -> str:
-    """三态生效 + 全局 recolor；返回生效值（无 QApplication 时只返回，不崩）。"""
+    """三态生效 + 全局 recolor；返回生效值（无 QApplication 时只返回，不崩）。
+    深色走 Fusion+深色板（全控件跟随：输入框/下拉/tab/表/栏），浅色还原原厂。"""
     mode = mode if mode in MODES else "follow"
     _FORCED["mode"] = None if mode == "follow" else mode
     app = _app()
@@ -104,6 +133,17 @@ def apply_mode(mode) -> str:
                       "dark": Qt.ColorScheme.Dark}[mode]
             if hasattr(app.styleHints(), "setColorScheme"):
                 app.styleHints().setColorScheme(target)
+        except Exception:
+            pass
+        try:
+            from PySide6.QtGui import QPalette
+            want_dark = (mode == "dark") or (mode == "follow" and _system_dark())
+            if want_dark and not _APPLIED["dark"]:
+                app.setPalette(_dark_palette())
+                _APPLIED["dark"] = True
+            elif not want_dark and _APPLIED["dark"]:
+                app.setPalette(QPalette())
+                _APPLIED["dark"] = False
         except Exception:
             pass
         recolor_widgets()
