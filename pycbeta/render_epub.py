@@ -24,7 +24,7 @@ def _x(s: str) -> str:
 class EpubRenderer:
     def __init__(self, gaiji_db=None, theme=None, notes="endnote", base_css=None,
                  ignore_xml_style=False, ignore_xml_space=False, show_notes=True,
-                 annotations=None):
+                 annotations=None, strip_head_no=False):
         # theme=None → 纯基底（golden 默认）；pdf_docx 主题不再进 epub
         #（render_html 章节与 style.css 同源 base_css）。
         self.theme = theme
@@ -36,6 +36,7 @@ class EpubRenderer:
         self.show_notes = show_notes
         # 难字注音（P6）：None 或 {"table", "scheme"}，转发给内部 HtmlRenderer
         self._annotations = _ann_active(annotations)
+        self.strip_head_no = strip_head_no  # 去 head/jhead 行首 No. 令牌（转内部 HtmlRenderer）
 
     def render_work(self, work: Work, out_dir: str, filename: str = "") -> str:
         tmp = os.path.join(out_dir, "_epub_tmp")
@@ -44,7 +45,8 @@ class EpubRenderer:
                                   ignore_xml_style=self.ignore_xml_style,
                                   ignore_xml_space=self.ignore_xml_space,
                                   show_notes=self.show_notes,
-                                  annotations=self._annotations) \
+                                  annotations=self._annotations,
+                                  strip_head_no=self.strip_head_no) \
             .render_work(work, tmp)
         md = work.metadata
         title = md.get("title") or work.id

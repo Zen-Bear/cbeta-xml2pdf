@@ -4,7 +4,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from pycbeta.theme import Theme, _scale_font_size, _scale_font_dict, \
+from pycbeta.theme import Theme, _scale_font_size, _scale_font_dict, strip_head_no, \
     resolve_font_vars, resolve_page, resolve_theme_css, _abs_pt
 
 
@@ -36,6 +36,38 @@ class TestScaleFontDict(unittest.TestCase):
                 d["font-size"] = fs
             _scale_font_dict(d, 1.5)
             self.assertEqual(d.get("font-size"), fs)
+
+
+class TestStripHeadNo(unittest.TestCase):
+    def _t(self, text, line=None):
+        from pycbeta.model import Text
+        return Text(text, line=line) if line else Text(text)
+
+    def test_token_and_lstrip(self):
+        from pycbeta.model import Lb
+        out, tok = strip_head_no([self._t("No. 1116-B"), Lb(n="x"), self._t(" 序")])
+        self.assertEqual(tok, "No. 1116-B")
+        self.assertEqual([(type(n).__name__, getattr(n, "text", None)) for n in out],
+                         [("Lb", None), ("Text", "序")])
+
+    def test_empty_remainder_dropped(self):
+        out, tok = strip_head_no([self._t("No. 349")])
+        self.assertEqual(tok, "No. 349")
+        self.assertEqual(out, [])
+
+    def test_no_match_untouched(self):
+        kids = [self._t("序"), self._t("No. 1116-A经云")]
+        out, tok = strip_head_no(kids)
+        self.assertEqual(tok, "")
+        self.assertIs(out[0], kids[0])  # 非变异：原节点原样返回
+        self.assertIs(out[1], kids[1])
+
+    def test_input_not_mutated(self):
+        from pycbeta.model import Lb
+        kids = [self._t("No. 1116-B"), Lb(n="x"), self._t(" 序")]
+        strip_head_no(kids)
+        self.assertEqual([n.text for n in kids if hasattr(n, "text")],
+                         ["No. 1116-B", " 序"])
 
 
 class TestScaleFontSizes(unittest.TestCase):

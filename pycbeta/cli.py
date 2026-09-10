@@ -74,9 +74,10 @@ def render_one(w, fmt, out_dir, out_name, args, theme, html_base=None):
                              ignore_xml_style=args.ignore_xml_style,
                              ignore_xml_space=args.ignore_xml_space,
                              grayscale=args.grayscale,
-                             show_notes=args.show_notes,
+                              show_notes=args.show_notes,
                              inline_brackets=args.inline_brackets,
-                             annotations=ann).render_work(w, out_dir)
+                             annotations=ann,
+                             strip_head_no=getattr(args, "strip_head_no", False)).render_work(w, out_dir)
         print(f"{w.id}: html({note_mode}) -> {len(files)} file(s) in {out_dir}")
 
     elif fmt == "docx":
@@ -107,8 +108,9 @@ def render_one(w, fmt, out_dir, out_name, args, theme, html_base=None):
                            vertical=getattr(args, "vertical", False),
                            notes_marker_font=getattr(args, "notes_marker_font",
                                getattr(args, "marker_font", None)),
-                           annotations=ann) \
-              .render_work(w, out_dir, filename=out_name)
+                           annotations=ann,
+                           strip_head_no=getattr(args, "strip_head_no", False)) \
+               .render_work(w, out_dir, filename=out_name)
         if isinstance(res, list):
             print(f"{w.id}: docx({note_mode}, split) -> {len(res)} file(s)")
         else:
@@ -118,14 +120,16 @@ def render_one(w, fmt, out_dir, out_name, args, theme, html_base=None):
         fn = MdRenderer(theme=theme, notes=note_mode,
                         show_notes=args.show_notes,
                         inline_brackets=args.inline_brackets,
-                        annotations=ann).render_work(w, out_dir, filename=out_name)
+                        annotations=ann,
+                        strip_head_no=getattr(args, "strip_head_no", False)).render_work(w, out_dir, filename=out_name)
         print(f"{w.id}: md({note_mode}) -> {fn}")
 
     elif fmt == "txt":
         fn = TxtRenderer(theme=theme, notes=note_mode,
                          show_notes=args.show_notes,
                          inline_brackets=args.inline_brackets,
-                         annotations=ann).render_work(w, out_dir, filename=out_name)
+                         annotations=ann,
+                         strip_head_no=getattr(args, "strip_head_no", False)).render_work(w, out_dir, filename=out_name)
         print(f"{w.id}: txt({note_mode}) -> {fn}")
 
     elif fmt == "epub":
@@ -134,7 +138,8 @@ def render_one(w, fmt, out_dir, out_name, args, theme, html_base=None):
                           ignore_xml_style=args.ignore_xml_style,
                           ignore_xml_space=args.ignore_xml_space,
                           show_notes=args.show_notes,
-                          annotations=ann).render_work(
+                          annotations=ann,
+                          strip_head_no=getattr(args, "strip_head_no", False)).render_work(
             w, out_dir, filename=out_name)
         print(f"{w.id}: epub({note_mode}) -> {fn}")
 
@@ -173,7 +178,8 @@ def render_one(w, fmt, out_dir, out_name, args, theme, html_base=None):
                                     vertical=getattr(args, "vertical", False),
                                     notes_marker_font=getattr(args, "notes_marker_font",
                                         getattr(args, "marker_font", None)),
-                                    annotations=ann) \
+                                    annotations=ann,
+                                    strip_head_no=getattr(args, "strip_head_no", False)) \
                 .render_work(w, out_dir, filename=base + ".docx")
 
             def emit(pdf, backend):
@@ -208,7 +214,8 @@ def render_one(w, fmt, out_dir, out_name, args, theme, html_base=None):
                             show_notes=args.show_notes,
                             html_engine_chain=chain,
                             zoom=args.pdf_zoom,
-                            annotations=ann)
+                            annotations=ann,
+                            strip_head_no=getattr(args, "strip_head_no", False))
             html_res = r.render_work(w, out_dir, filename=base + ".html")
 
             def emit(pdf, backend):
@@ -378,6 +385,9 @@ def main(argv=None):
     note.add_argument("--notes", choices=["footnote", "endnote", "inline"],
                       help="注释方式。默认：docx=footnote（页底脚注），"
                            "html/pdf/md/epub=endnote（文末校注）")
+    note.add_argument("--strip-head-no", dest="strip_head_no", action="store_true",
+                      default=None,
+                      help="去 head/jhead 行首 No. 令牌（如 No. 1116-B 序→序；默认关，可配 output.strip_head_no）")
 
     pg = ap.add_argument_group("页面（pdf/docx；纯 HTML 输出不适用）")
     pg.add_argument("--page", default=None,
@@ -489,6 +499,8 @@ def main(argv=None):
         # 旧配置迁移：print_mode=true ≡ pagination={enabled:true, duplex:true, juan:true}
         args.pagination = {"enabled": True, "duplex": True, "juan": True}
     args.suppress_title_notes = bool(out_defaults.get("suppress_title_notes"))
+    if args.strip_head_no is None:
+        args.strip_head_no = bool(out_defaults.get("strip_head_no", False))
     args.pdf_zoom = float(out_defaults.get("pdf_zoom", 1.0))
     args.t2s = bool(out_defaults.get("t2s"))
     if args.font_scale is None:
@@ -581,7 +593,7 @@ def main(argv=None):
 
     # --verify：复用 pycbeta/verify.py 模块化能力，供 GUI 调用同一入口
     if args.verify:
-        from .verify import normalize as v_norm, extract_text as v_extract, diff_stats as v_diff, find_official as v_find, strip_infos as v_strip_infos, _extract_html_parts as _v_hparts, _norm_official_txt as _v_tnorm, _ann_brackets_from as _v_rb
+        from .verify import normalize as v_norm, extract_text as v_extract, diff_stats as v_diff, find_official as v_find, strip_infos as v_strip_infos, _extract_html_parts as _v_hparts, _norm_official_txt as _v_tnorm, _ann_brackets_from as _v_rb, _head_no_tokens as _v_htoks, _strip_official_no as _v_tstrip
         import datetime, glob as _glob
         try:
             _presets_full = load_presets(args.config) if args.config else load_presets()
@@ -612,10 +624,14 @@ def main(argv=None):
             from .simplify import simplify_text as _t2s
 
         def _theirs_norm(raw, bkind=None):
+            if getattr(_theirs_norm, "toks", ""):
+                # strip_head_no 联动：官方侧按行首精确令牌对等剥离（生成档已剥）
+                raw = _v_tstrip(raw, _theirs_norm.toks)
             if bkind in ("txt", "txt_notes"):
                 # text 族官方侧对齐（繁简通用）：版头剥离 + 注记块识别挪文末
                 raw = _v_tnorm(raw)
             return v_norm(_t2s(raw) if _t2s else raw, _rb)
+        _theirs_norm.toks = []
         xmls_v = xmls if os.path.isdir(args.input) else [args.input]
         for xml_fn in xmls_v:
             name = os.path.basename(xml_fn)
@@ -632,6 +648,8 @@ def main(argv=None):
                 if args.t2s:
                     from .simplify import simplify_work as _sw
                     _sw(w)
+                # strip_head_no 联动：本文件 head/jhead 行首令牌表（生成档已剥则官方侧对等剥离）
+                _theirs_norm.toks = _v_htoks(w) if getattr(args, "strip_head_no", False) else []
             except Exception as e:
                 block.append(f"  PARSE FAIL: {e}")
                 grand_fail += 1; grand_total += 1

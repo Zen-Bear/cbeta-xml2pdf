@@ -265,6 +265,60 @@ def _scale_font_dict(props: Dict[str, str], factor: float) -> None:
         props["font-size"] = scaled
 
 
+_HEAD_NO_RE = re.compile(r"\ANo\.\s*[A-Za-z0-9][A-Za-z0-9\-]*")
+
+
+def strip_head_no(children):
+    """head/jhead 行首 `No. XXXX` 令牌剥离（`output.strip_head_no` 用）。
+
+    非变异：跳过 Lb/Pb/anchor 空节点，首个有文本 Text 去行首令牌，
+    余部 lstrip（吃掉 `<lb/>` 后的版式空格，如 ` 序`→`序`）；余部为空则整节点丢弃，
+    并对后续首个 Text 再做一次 lstrip（单令牌，只剥一次 No.）。
+    返回 (new_children, token)；无命中 token 为 ""。正文内的 No.（非行首）不动。
+    """
+    from .model import Lb, Pb, Text
+    out = []
+    token = ""
+    phase = "skip"  # skip 空节点 → strip 首文本 → lstrip 后续 → done
+    for n in children or []:
+        if phase == "done":
+            out.append(n)
+            continue
+        if isinstance(n, (Lb, Pb)):
+            out.append(n)
+            continue
+        tag = getattr(n, "tag", None)
+        if tag == "anchor":
+            out.append(n)
+            continue
+        if isinstance(n, Text):
+            t = n.text or ""
+            if phase == "skip":
+                s = t.lstrip()
+                if not s:
+                    continue  # 纯空白 Text 丢弃（版式空格）
+                m = _HEAD_NO_RE.match(s)
+                if not m:
+                    out.append(n)
+                    phase = "done"
+                    continue
+                token = m.group(0)
+                rest = s[m.end():].lstrip()
+                phase = "lstrip"
+                if rest:
+                    out.append(Text(rest, line=n.line))
+                continue
+            else:  # lstrip：No. 后的首个文本去前导空格
+                s = t.lstrip()
+                phase = "done"
+                if s:
+                    out.append(Text(s, line=n.line))
+                continue
+        out.append(n)
+        phase = "done"
+    return out, token
+
+
 # ---------------- CSS 字体变量（:root 双栏，font_sets 已删除） ----------------
 # var 名规则：单标签 "--font-<tag>"（如 --font-note-inline），后代组合
 # "--font-<anc>-<tgt>"（如 --font-div-xu-head）；latin 不是标签，单独取。

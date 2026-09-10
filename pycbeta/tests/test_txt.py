@@ -198,6 +198,17 @@ class TestAuxEntry(unittest.TestCase):
             self.assertIsNone(r["official"])
 
 
+class TestStripHeadNo(unittest.TestCase):
+    def test_txt_head(self):
+        body = [E(tag="head", attrs={}, children=[Text(text="No. 1116-B"),
+                                                  Text(text=" 序")])]
+        t = TxtRenderer(strip_head_no=True)._render_node(body[0])
+        self.assertNotIn("No. 1116", t)
+        self.assertIn("序", t)
+        t2 = TxtRenderer()._render_node(body[0])
+        self.assertIn("No.1116-B", t2)  # txt 归一化无空格；默认保留令牌
+
+
 class TestOfficialTxtAlign(unittest.TestCase):
     HEAD = ("#----\n#【經文資訊】大正新脩大藏經\n#【版本記錄】2024\n#----\n\n"
             "No. 349 [No. 310(42)]\n後經\n\n西晉[15]月氏國譯\n\n聞如是\n\n"

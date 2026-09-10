@@ -15,7 +15,7 @@ from .render_docx import DocxRenderer
 from .render_epub import EpubRenderer
 from .render_md import MdRenderer
 from .render_txt import TxtRenderer
-from .theme import load_presets, _PRESETS_PATH
+from .theme import load_presets, _PRESETS_PATH, strip_head_no
 
 def normalize(text: str, ruby_brackets=None) -> str:
     # 官方基线 unclear 用 ▆，本管线渲染用 □（U+25A1）：两侧归一到 □ 再比较
@@ -313,6 +313,52 @@ def _strip_md_marks(text: str) -> str:
     官方侧无此标记体系；正文 `[^n]` 引用由 normalize 通规则处理。此处只动精确字面，安全退化。"""
     text = text.replace("\n\n## 校注\n\n", "\n\n", 1)
     return _MD_FN_RE.sub("", text)
+
+
+def _head_no_tokens(work) -> list:
+    """work 全部 head/jhead 的行首 No. 令牌（去重保序；`output.strip_head_no` 官方侧对等剥离用）。
+    同输入必同值（与生成侧同一 helper 同一规则）；无命中返回 []。"""
+    out = []
+    stack = list(getattr(work, "body", []) or [])
+    while stack:
+        n = stack.pop(0)
+        if isinstance(n, E) and n.tag in ("head", "jhead"):
+            _, token = strip_head_no(n.children)
+            if token and token not in out:
+                out.append(token)
+        stack[0:0] = list(getattr(n, "children", []) or [])
+    return out
+
+
+def _strip_official_no(text: str, tokens) -> str:
+    """官方侧对等剥离：行首精确令牌逐个移除（与生成侧逐 head/jhead 剥离同构）。
+    全串转义 + 行首锚定（非行首的正文 No. 不动）；空表时原样返回。"""
+    if not tokens:
+        return text
+    for token in tokens:
+        text = re.sub(r"(?m)^" + re.escape(token), "", text)
+    return text
+
+
+def _strip_no_from(config_path=None) -> bool:
+    """strip_head_no 开关读取（--config 双形态兼容，生成/官方双侧同源）。
+    presets 文件直读 output 槽；run.json 走组合单解算；任一为 true 即 true，全缺省 false。"""
+    try:
+        p = load_presets(config_path) if config_path else load_presets()
+        if (p.get("output") or {}).get("strip_head_no", False):
+            return True
+    except Exception:
+        pass
+    try:
+        from .theme import load_run_config, resolve_effective_config, default_run_path
+        run = load_run_config(config_path) if config_path else load_run_config()
+        rdir = os.path.dirname(os.path.abspath(config_path)) if config_path \
+            else os.path.dirname(os.path.abspath(default_run_path()))
+        if (resolve_effective_config(run, rdir).get("output") or {}).get("strip_head_no", False):
+            return True
+    except Exception:
+        pass
+    return False
 
 
 _XML_INLINE_NOTE_PLACES = ("inline", "inline2", "interlinear")
@@ -651,17 +697,18 @@ def generate_formal(xml_fn: str, work, fmt: str, outdir: str, config_path: Optio
         except (OSError, ValueError):
             theme = None
     p = lambda k, d=None: out_defaults.get(k, d)
+    _shn = _strip_no_from(config_path)
     if fmt == "html":
-        files = HtmlRenderer(theme=theme, notes="endnote", ignore_xml_style=bool(p("ignore_xml_style")), ignore_xml_space=bool(p("ignore_xml_space")), show_notes=p("show_notes", True), inline_brackets=p("inline_brackets", "fullwidth"), annotations=_ann).render_work(work, out_dir=outdir)
+        files = HtmlRenderer(theme=theme, notes="endnote", ignore_xml_style=bool(p("ignore_xml_style")), ignore_xml_space=bool(p("ignore_xml_space")), show_notes=p("show_notes", True), inline_brackets=p("inline_brackets", "fullwidth"), annotations=_ann, strip_head_no=_shn).render_work(work, out_dir=outdir)
         return [os.path.join(outdir, f) for f in files]
     if fmt == "docx":
-        return [os.path.join(outdir, DocxRenderer(theme=theme, notes="footnote", ignore_xml_style=bool(p("ignore_xml_style")), ignore_xml_space=bool(p("ignore_xml_space")), show_notes=p("show_notes", True), suppress_jhead_dup=p("suppress_jhead_dup", True), show_close_juan=bool(p("show_close_juan", False)), inline_brackets=p("inline_brackets", "fullwidth"), series_title=p("series_title", {}), annotations=_ann).render_work(work, out_dir=outdir, filename=f"{stem}.docx"))]
+        return [os.path.join(outdir, DocxRenderer(theme=theme, notes="footnote", ignore_xml_style=bool(p("ignore_xml_style")), ignore_xml_space=bool(p("ignore_xml_space")), show_notes=p("show_notes", True), suppress_jhead_dup=p("suppress_jhead_dup", True), show_close_juan=bool(p("show_close_juan", False)), inline_brackets=p("inline_brackets", "fullwidth"), series_title=p("series_title", {}), annotations=_ann, strip_head_no=_shn).render_work(work, out_dir=outdir, filename=f"{stem}.docx"))]
     if fmt == "epub":
-        return [os.path.join(outdir, EpubRenderer(theme=theme, notes="endnote", ignore_xml_style=bool(p("ignore_xml_style")), ignore_xml_space=bool(p("ignore_xml_space")), show_notes=p("show_notes", True), annotations=_ann).render_work(work, out_dir=outdir, filename=f"{stem}.epub"))]
+        return [os.path.join(outdir, EpubRenderer(theme=theme, notes="endnote", ignore_xml_style=bool(p("ignore_xml_style")), ignore_xml_space=bool(p("ignore_xml_space")), show_notes=p("show_notes", True), annotations=_ann, strip_head_no=_shn).render_work(work, out_dir=outdir, filename=f"{stem}.epub"))]
     if fmt == "md":
-        return [os.path.join(outdir, MdRenderer(theme=theme, notes="footnote", show_notes=p("show_notes", True), inline_brackets=p("inline_brackets", "fullwidth"), annotations=_ann).render_work(work, out_dir=outdir, filename=f"{stem}.md"))]
+        return [os.path.join(outdir, MdRenderer(theme=theme, notes="footnote", show_notes=p("show_notes", True), inline_brackets=p("inline_brackets", "fullwidth"), annotations=_ann, strip_head_no=_shn).render_work(work, out_dir=outdir, filename=f"{stem}.md"))]
     if fmt == "txt":
-        return [os.path.join(outdir, TxtRenderer(theme=theme, notes="footnote", show_notes=p("show_notes", True), inline_brackets=p("inline_brackets", "fullwidth"), annotations=_ann).render_work(work, out_dir=outdir, filename=f"{stem}.txt"))]
+        return [os.path.join(outdir, TxtRenderer(theme=theme, notes="footnote", show_notes=p("show_notes", True), inline_brackets=p("inline_brackets", "fullwidth"), annotations=_ann, strip_head_no=_shn).render_work(work, out_dir=outdir, filename=f"{stem}.txt"))]
     raise ValueError(f"unknown format {fmt}")
 
 def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int = 10, diff_lines: int = 5, config_path: Optional[str] = None, t2s: bool = False, baseline: str = "render") -> Dict:
@@ -697,6 +744,9 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
     if not compare_infos:
         ours_raw = strip_infos(ours_raw)
     ours = normalize(ours_raw, ruby_brackets)
+    # strip_head_no 联动：生成侧已剥 head/jhead 行首 No. 令牌；官方侧求同一令牌表对等剥离
+    _strip_no = _strip_no_from(config_path)
+    strip_tokens = _head_no_tokens(work) if _strip_no else []
     name = os.path.basename(xml_fn)
     stem = os.path.splitext(name)[0]
     if baseline == "xml":
@@ -733,6 +783,8 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
             theirs_raw += "\n\n" + "\n\n".join(foots_x)
         if not compare_infos:
             theirs_raw = strip_infos(theirs_raw)
+        if strip_tokens:
+            theirs_raw = _strip_official_no(theirs_raw, strip_tokens)
         if t2s:
             theirs_raw = t2s_baseline(theirs_raw)
         theirs = normalize(theirs_raw, ruby_brackets)
@@ -874,6 +926,8 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
             # text 族官方侧对齐（繁简通用）：版头剥离 + 注记块识别挪文末，
             # 与生成侧正文+注块同构；无注记行为无操作
             theirs_raw = _norm_official_txt(theirs_raw)
+        if strip_tokens:
+            theirs_raw = _strip_official_no(theirs_raw, strip_tokens)
         if t2s:
             # 简体校验：官方基线（繁体）经同一 t2s 管线转简体后再比对；
             # 作用于剥离后的纯文本，落盘 _compare 文件与比对输入一致

@@ -25,6 +25,16 @@ class TestMd(unittest.TestCase):
         import shutil
         shutil.rmtree(cls.tmp, ignore_errors=True)
 
+    def test_md_strip_head_no(self):
+        from pycbeta.model import E, Text
+        head = E(tag="head", attrs={}, children=[Text(text="No. 1116-B"),
+                                                 Text(text=" 序")])
+        t = MdRenderer(strip_head_no=True)._render_node(head)
+        self.assertNotIn("No. 1116", t)
+        self.assertIn("序", t)
+        t2 = MdRenderer()._render_node(head)
+        self.assertIn("No.1116-B", t2)  # md 归一化无空格；默认保留令牌
+
     def test_md(self):
         fn = MdRenderer(notes="endnote").render_work(self.work, self.tmp)
         text = open(fn, encoding="utf-8").read()

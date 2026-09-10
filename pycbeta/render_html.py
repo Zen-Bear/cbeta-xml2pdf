@@ -9,6 +9,7 @@ from typing import List, Optional
 from .gaiji import GaijiDb
 from .annotate import active as _ann_active, split_annotated as _split_ann, rt_css_rule as _rt_css, track_seen as _track_seen, page_repeat as _page_repeat
 from .model import App, E, Gaiji, Lb, Note, NoteRef, Pb, Text, Work
+from .theme import strip_head_no
 
 # 官方（golden）格式基底 CSS：styles/cbeta_golden.css（html/epub 用）。
 # pdf/docx 的默认主题是 styles/pdf_docx.css（theme.py 加载）。base_css 供
@@ -95,7 +96,7 @@ class HtmlRenderer:
     def __init__(self, gaiji_db=None, figure_base=None, theme=None, notes="endnote",
                  name_template=None, base_css=None, ignore_xml_style=False,
                  ignore_xml_space=False, show_notes=True, grayscale=False, inline_brackets="fullwidth",
-                 annotations=None):
+                 annotations=None, strip_head_no=False):
         self.gaiji_db = gaiji_db if gaiji_db is not None else GaijiDb()
         self.theme = theme
         self.figure_base = figure_base
@@ -107,6 +108,7 @@ class HtmlRenderer:
         self.show_notes = show_notes
         self.grayscale = grayscale  # 黑白：渲染时追加全局去色 CSS
         self.inline_brackets = inline_brackets  # halfwidth="()" / fullwidth="（）"（默认全角）
+        self.strip_head_no = strip_head_no  # 去 head/jhead 行首 No. 令牌（默认 false 保留）
         # 难字注音（P6）：None 或 {"table", "scheme"}（CLI 已由 resolve_annotations 装载；渲染器内不做 IO）
         self._annotations = _ann_active(annotations)
         self._ann_seen = set()  # repeat first/page 已注词集合（render_work 起始终置零）
@@ -398,8 +400,9 @@ class HtmlRenderer:
             return self._render_p(e) + "\n"
         if tag == "head":
             level = self._div_stack
+            kids = strip_head_no(e.children)[0] if self.strip_head_no else e.children
             with self._no_ann():
-                inner = self._render_nodes(e.children)
+                inner = self._render_nodes(kids)
             return f'<p data-head-level="{level}" class="head">{inner}</p>'
         if tag == "byline":
             with self._no_ann():
@@ -410,14 +413,15 @@ class HtmlRenderer:
                 inner = self._render_nodes(e.children)
             return f"<p class='juan'>{inner}</p>"
         if tag == "jhead":
+            kids = strip_head_no(e.children)[0] if self.strip_head_no else e.children
             if a.get("type") == "pin":
                 # 品名：与其他品名一致，渲染成 head 段落（data-head-level + class=head）
                 level = self._div_stack
                 with self._no_ann():
-                    inner = self._render_nodes(e.children)
+                    inner = self._render_nodes(kids)
                 return f'<p data-head-level="{level}" class="head">{inner}</p>'
             with self._no_ann():
-                return self._render_nodes(e.children)
+                return self._render_nodes(kids)
         if tag == "docNumber":
             with self._no_ann():
                 return self._render_nodes(e.children)

@@ -14,7 +14,7 @@ from typing import List, Optional
 
 from .model import App, E, Gaiji, Lb, Note, NoteRef, Pb, Text, Work
 from .gaiji import GaijiDb
-from .theme import Theme, resolve_page, _hex6
+from .theme import Theme, resolve_page, _hex6, strip_head_no
 from .render_html import split_juans
 from .filename import apply_template
 from .annotate import active as _ann_active, split_annotated as _split_ann, parse_rt_size as _parse_rt_size, split_eq_reading as _split_eq, track_seen as _track_seen, page_repeat as _page_repeat
@@ -176,8 +176,8 @@ class DocxRenderer:
                  suppress_jhead_dup=True,
                  inline_brackets="fullwidth",
                  footnote_per_page=True, show_notes=True,
-                  suppress_title_notes=False, footnote_separator=None,
-                  series_title=None, pagination=None, latin_font: Optional[str] = None,
+                   suppress_title_notes=False, footnote_separator=None, strip_head_no=False,
+                   series_title=None, pagination=None, latin_font: Optional[str] = None,
                    annotations=None, gaiji_fonts=None, gaiji_lang: str = "zh-Hant",
                    fallback_fonts=None, siddham_fonts=None,
                    vertical: bool = False, notes_marker_font: Optional[str] = None):
@@ -197,6 +197,7 @@ class DocxRenderer:
         self.footnote_separator = footnote_separator  # 脚注分隔线 {thicknessPt,lengthPercent,spaceTwips}
         self.show_notes = show_notes                # 关闭注释（默认 true 显示）
         self.suppress_title_notes = suppress_title_notes  # 压制卷名/品名校勘注码（默认 false 保留）
+        self.strip_head_no = strip_head_no  # 去 head/jhead 行首 No. 令牌（默认 false 保留）
         self.series_title = series_title or {}         # 经藏名（title level="s"）首页左上角配置 {enabled,font,size}
         self.pagination = pagination or {}             # 智能分页 {enabled,duplex,juan,juan_first,mulu_level1,pb,tei}
         self.vertical = vertical                      # 纵排：每节 sectPr 写 textDirection tbRl（上→下、右→左）
@@ -935,6 +936,8 @@ class DocxRenderer:
         if tag == "head":
             # 仅 jhead 去重，head 保留书名；若有 pending mulu（紧随的 cb:mulu），则以 mulu 的 level/text 作隐形书签（段内避免空白页）
             nodes = e.children
+            if self.strip_head_no:
+                nodes, _ = strip_head_no(nodes)
             is_pin = bool(re.search(r"品第[一二三四五六七八九十百千]", self._render_text(e)))
             para_tag = "pin" if is_pin else "head"
             with self._no_ann():
@@ -986,6 +989,8 @@ class DocxRenderer:
         if tag == "jhead":
             if a.get("type") == "pin":
                 nodes = self._children_no_dup_title(e) if self.suppress_jhead_dup else e.children
+                if self.strip_head_no:
+                    nodes, _ = strip_head_no(nodes)
                 with self._no_ann():
                     runs = self._render_tagged_clean(nodes, "pin", self._rend_tag(a))
                 p = self._para(runs, "pin")
@@ -1151,6 +1156,8 @@ class DocxRenderer:
             self._pending_juan = None
             return ""
         nodes = self._children_no_dup_title(e) if self.suppress_jhead_dup else e.children
+        if self.strip_head_no:
+            nodes, _ = strip_head_no(nodes)
         with self._no_ann():
             runs = self._render_tagged_clean(nodes, "juan", self._rend_tag(e.attrs))
         return self._para(runs, "juan",

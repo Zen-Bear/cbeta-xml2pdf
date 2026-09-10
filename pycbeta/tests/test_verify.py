@@ -10,9 +10,45 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pycbeta.fetch as fetch_mod
 from pycbeta.fetch import _fetch_one
-from pycbeta.verify import _extract_txt_parts, find_official
+from pycbeta.verify import _extract_txt_parts, find_official, _head_no_tokens, \
+    _strip_official_no
 
 NOTE_RE = re.compile(r"(?m)^ {4}\[[^\]\[]{1,12}\]")
+
+
+class TestStripOfficialNo(unittest.TestCase):
+    def test_token_from_work(self):
+        from pycbeta.model import E, Text, Work
+        w = Work(id="X", source_file="", metadata={}, body=[
+            E(tag="head", attrs={}, children=[Text(text="No. 1116-B"),
+                                              Text(text=" 序")])],
+            notes_by_n={}, apps=[], simplified=False)
+        self.assertEqual(_head_no_tokens(w), ["No. 1116-B"])
+
+    def test_official_line_start_only(self):
+        s = "No. 1116-B序\n正文提No. 1116-B\nNo. 1116-C序\n"
+        out = _strip_official_no(s, ["No. 1116-B", "No. 1116-C"])
+        self.assertTrue(out.startswith("序\n"))
+        self.assertIn("正文提No. 1116-B", out)  # 非行首不动
+        self.assertIn("\n序\n", out)  # 多令牌逐个剥
+        self.assertEqual(_strip_official_no(s, []), s)
+
+    def test_strip_no_from_dual_shape(self):
+        import json
+        import tempfile
+        from pycbeta.verify import _strip_no_from
+        d = tempfile.mkdtemp()
+        pre = os.path.join(d, "presets.json")
+        with open(pre, "w", encoding="utf-8") as f:
+            json.dump({"output": {"strip_head_no": True}}, f)
+        self.assertTrue(_strip_no_from(pre))  # presets 形态直读
+        run = os.path.join(d, "run.json")
+        with open(run, "w", encoding="utf-8") as f:
+            json.dump({"config-json": pre, "html-epub-theme": "",
+                       "html-epub-user-theme": "", "pdf-docx-theme": "",
+                       "pdf-docx-user-theme": ""}, f)
+        self.assertTrue(_strip_no_from(run))  # run 形态走组合单解算
+        self.assertFalse(_strip_no_from(os.path.join(d, "nope.json")))
 
 
 class TestExtractTxtParts(unittest.TestCase):

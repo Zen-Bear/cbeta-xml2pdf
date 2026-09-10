@@ -12,6 +12,7 @@ except Exception:
 from pycbeta.verify import (generate_formal, extract_text, normalize, diff_stats,
                             find_official, strip_infos, strip_docx_head, merge_docx,
                             _extract_html_parts, _norm_official_txt, _strip_md_marks,
+                            _head_no_tokens, _strip_official_no, _strip_no_from,
                             t2s_baseline, _ann_brackets_from)
 from pycbeta.simplify import simplify_work
 from pycbeta.parser import P5Parser
@@ -175,6 +176,9 @@ def main(argv=None):
             continue
         official = {}
         scope_juan = bool(_verify_cfg.get("scope_juan", True))
+        # strip_head_no 联动：生成侧（generate_formal 同源开关）已剥则官方侧对等剥离
+        _strip_no = _strip_no_from(args.config)
+        strip_tokens = _head_no_tokens(work) if _strip_no else []
         _juan = None
         if scope_juan:
             from pycbeta.verify import work_juan_numbers
@@ -317,6 +321,8 @@ def main(argv=None):
                 if bkind in ("txt", "txt_notes"):
                     # text 族官方侧对齐（繁简通用）：版头剥离 + 注记块识别挪文末
                     theirs_raw = _norm_official_txt(theirs_raw)
+                if strip_tokens:
+                    theirs_raw = _strip_official_no(theirs_raw, strip_tokens)
                 if args.t2s:
                     # 简体校验：官方基线（繁体）经同一 t2s 管线转简体后再比对；
                     # 作用于剥离后的纯文本，落盘 _compare 文件与比对输入一致

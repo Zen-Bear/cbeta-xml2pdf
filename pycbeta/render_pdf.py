@@ -315,11 +315,12 @@ class PdfRenderer(HtmlRenderer):
                  notes="endnote", page_presets=None, ignore_xml_style=False,
                  ignore_xml_space=False, grayscale=False, page_border=False,
                  bookmarks=True, split=False, show_notes=True,
-                 html_engine_chain=None, zoom=1.0, annotations=None):
+                 html_engine_chain=None, zoom=1.0, annotations=None, strip_head_no=False):
         super().__init__(gaiji_db=gaiji_db, figure_base=figure_base,
                          ignore_xml_style=ignore_xml_style,
                          ignore_xml_space=ignore_xml_space,
-                         show_notes=show_notes, annotations=annotations)
+                         show_notes=show_notes, annotations=annotations,
+                         strip_head_no=strip_head_no)
         cfg = resolve_page(page, page_presets)
         w_mm, h_mm = cfg["size"]
         self.page_size = f"{w_mm}mm {h_mm}mm"

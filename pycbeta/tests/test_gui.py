@@ -301,6 +301,16 @@ class TestConfigBar(unittest.TestCase):
             self.assertEqual(o.font_lang, "zh-Hans")
             self.assertTrue(o.engine.startswith("docx2pdf"))
 
+    def test_strip_no_box_roundtrip(self):
+        import pycbeta.gui.panel as pm
+        panel = pm.XmlOptionsPanel({"output": {}, "pages": {"a4": {}}})
+        try:
+            self.assertFalse(panel.strip_no_box.isChecked())  # 默认关
+            panel.strip_no_box.setChecked(True)
+            self.assertTrue(panel.get_options().output["strip_head_no"])
+        finally:
+            panel.close()
+
     def test_save_persists_margins_custom(self):
         import unittest.mock as mock
         import pycbeta.gui.panel as pm

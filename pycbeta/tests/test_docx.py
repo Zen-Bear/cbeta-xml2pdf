@@ -273,6 +273,23 @@ class TestPreNoFirstLine(unittest.TestCase):
         self.assertIn('w:val="p"', out)  # 正文走 p 命名样式（缩进在 styles.xml）
 
 
+class TestStripHeadNo(unittest.TestCase):
+    """head/jhead 行首 No. 令牌剥离（默认关，开后余部 lstrip）。"""
+
+    def test_head_default_kept(self):
+        r = DocxRenderer(bookmarks=False)
+        out = r._render_e(E(tag="head", attrs={},
+                            children=[Text(text="No. 1116-B"), Text(text=" 序")]))
+        self.assertIn("No. 1116-B", out)
+
+    def test_head_stripped(self):
+        r = DocxRenderer(bookmarks=False, strip_head_no=True)
+        out = r._render_e(E(tag="head", attrs={},
+                            children=[Text(text="No. 1116-B"), Text(text=" 序")]))
+        self.assertNotIn("No. 1116", out)
+        self.assertIn("序", out)
+
+
 class TestDocxOptions(unittest.TestCase):
     """presets.json output 段的 grayscale / page_border 参数。"""
 

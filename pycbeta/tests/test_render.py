@@ -84,6 +84,34 @@ class TestRenderYP0019(unittest.TestCase):
             self.assertEqual(mine_body, off_body, f"body differs from official for {f}")
 
 
+class TestStripHeadNoX1116(unittest.TestCase):
+    """X60n1116 真例：head 行首 `No. 1116-B` 开剥离、余部去空格（默认保留）。"""
+
+    @classmethod
+    def setUpClass(cls):
+        xml = os.path.join(CBETA, "X1116 毗尼日用切要香乳記", "X60n1116.xml")
+        cls.work = P5Parser().parse(xml)
+        cls.tmp = tempfile.mkdtemp()
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def test_default_kept(self):
+        files = HtmlRenderer().render_work(self.work, self.tmp)
+        text = "".join(open(os.path.join(self.tmp, f), encoding="utf-8").read()
+                       for f in files)
+        self.assertIn("No. 1116-B", text)
+
+    def test_stripped(self):
+        sub = os.path.join(self.tmp, "strip")
+        files = HtmlRenderer(strip_head_no=True).render_work(self.work, sub)
+        text = "".join(open(os.path.join(sub, f), encoding="utf-8").read()
+                       for f in files)
+        self.assertNotIn("No. 1116-B", text)
+        self.assertIn("序", text)
+
+
 class TestUnclear(unittest.TestCase):
     """<unclear>（文字无法辨析）渲染为标准虚缺符号 □（U+25A1），四格式一致。"""
 

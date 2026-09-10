@@ -11,17 +11,18 @@ from typing import List, Optional
 from .model import App, E, Gaiji, Lb, Note, NoteRef, Pb, Text, Work
 from .annotate import active as _ann_active, split_annotated as _split_ann, track_seen as _track_seen
 from .gaiji import GaijiDb
-from .theme import Theme
+from .theme import Theme, strip_head_no
 
 
 class MdRenderer:
     def __init__(self, gaiji_db=None, theme=None, notes="endnote", show_notes=True, inline_brackets="fullwidth",
-                 annotations=None):
+                 annotations=None, strip_head_no=False):
         self.gaiji_db = gaiji_db if gaiji_db is not None else GaijiDb()
         self.theme = theme if theme is not None else Theme()
         self.notes = notes  # 'footnote' | 'endnote' | 'inline'
         self.show_notes = show_notes
         self.inline_brackets = inline_brackets  # halfwidth="()" / fullwidth="（）"（默认全角）
+        self.strip_head_no = strip_head_no  # 去 head/jhead 行首 No. 令牌（默认 false 保留）
         # 难字注音（P6）：None 或 {"table", "scheme"}；md 无 ruby，用〔注音〕括注
         # （不用（），避免与校勘记 inline 括号混淆；verify 侧 normalize 已剥除〔〕）
         self._annotations = _ann_active(annotations)
@@ -156,8 +157,8 @@ class MdRenderer:
             return self._render_e(n)
         return ""
 
-    def _render_children(self, el) -> str:
-        return "".join(self._render_node(c) for c in el.children)
+    def _render_children(self, el, kids=None) -> str:
+        return "".join(self._render_node(c) for c in (kids if kids is not None else el.children))
 
     def _render_noteref(self, ref: NoteRef) -> str:
         if not self.show_notes:
@@ -210,8 +211,9 @@ class MdRenderer:
             return self._render_children(e).strip() + "\n\n"
         if tag == "head":
             level = min(self._div_depth + 1, 6)
+            kids = strip_head_no(e.children)[0] if self.strip_head_no else None
             with self._no_ann():
-                inner = self._render_children(e).strip()
+                inner = self._render_children(e, kids).strip()
             return f"{'#' * level} {inner}\n\n"
         if tag == "byline":
             with self._no_ann():
@@ -226,8 +228,11 @@ class MdRenderer:
                 inner = self._render_children(e).strip()
             return f"## {inner}\n\n"
         if tag in ("jhead", "docNumber"):
+            kids = None
+            if tag == "jhead" and self.strip_head_no:
+                kids = strip_head_no(e.children)[0]
             with self._no_ann():
-                return self._render_children(e)
+                return self._render_children(e, kids)
         if tag == "lg":
             return self._render_lg(e)
         if tag == "l":
