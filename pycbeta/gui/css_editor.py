@@ -27,7 +27,6 @@ from PySide6.QtWidgets import (
     QSplitter, QTabWidget,
     QTextEdit, QVBoxLayout, QWidget,
 )
-from . import dark as _dark
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _STYLES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -1479,7 +1478,6 @@ class CssEditorDialog(QDialog):
         self._report_dlg = None          # 检查窗（打开检查时懒建）
         self._thread = None
         self._rows = {}              # selector -> 控件组
-        _dark.apply_mode(_dark.get_mode())  # 用户槽外观（面板未嵌入时也生效）
         self._build(sample_xml or default_sample())
 
     # ----- 构造 -----
@@ -1542,10 +1540,10 @@ class CssEditorDialog(QDialog):
         self.preview.setReadOnly(True)
         rl.addWidget(self.preview, 1)
         self.status = QLabel("就绪")
-        self.status.setStyleSheet(_dark.hint_style())
+        self.status.setStyleSheet("color: gray")
         rl.addWidget(self.status)
         self.sim_tip = QLabel("预览为模拟显示（字体四参数为真值），分页/页边距以 Word 为准；图片不显示")
-        self.sim_tip.setStyleSheet(_dark.hint_style())
+        self.sim_tip.setStyleSheet("color: gray")
         self.sim_tip.setWordWrap(True)
         rl.addWidget(self.sim_tip)
         split.addWidget(right)
@@ -1909,7 +1907,7 @@ class CssEditorDialog(QDialog):
                                      ("字号", 0, 60), ("粗细", 0, 60),
                                      ("颜色", 0, 26)):
             lab = QLabel(f"<b>{text}</b>")
-            lab.setStyleSheet(_dark.hint_style())
+            lab.setStyleSheet("color: gray")
             if width:
                 lab.setFixedWidth(width)
             chead.addWidget(lab, stretch)
@@ -1994,7 +1992,7 @@ class CssEditorDialog(QDialog):
         self._source_edit.textChanged.connect(self._on_source_changed)
         sl.addWidget(self._source_edit, 1)
         self._source_err = QLabel()
-        self._source_err.setStyleSheet(_dark.error_style())
+        self._source_err.setStyleSheet("color: red")
         self._source_err.setWordWrap(True)
         sl.addWidget(self._source_err)
         tabs.addTab(sw, "源码")

@@ -19,7 +19,6 @@ from pycbeta.gui.panel import (
     XmlOptionsPanel, load_run_and_presets, write_temp_presets,
     write_temp_run,
 )
-from pycbeta.gui import dark as _dark
 
 
 def _gui_date() -> str:
@@ -240,14 +239,6 @@ class MainWindow(QMainWindow):
         self.src_btn.clicked.connect(self._edit_source)
         mode_row.addWidget(self.src_btn)
         mode_row.addStretch(1)
-        mode_row.addWidget(QLabel("外观"))
-        self.appear_box = QComboBox()
-        for label, value in _dark.theme_combo_items():
-            self.appear_box.addItem(label, value)
-        self.appear_box.setToolTip("跟随系统/浅色/深色（存用户槽 gui_theme；深色走 Fusion 整应用跟随）")
-        self.appear_box.setCurrentIndex(
-            max(0, self.appear_box.findData(_dark.get_mode())))
-        self.appear_box.currentIndexChanged.connect(self._on_theme_mode)
         src.addWidget(QLabel("输入来源"), 0, 0)
         src.addLayout(mode_row, 0, 1, 1, 3)
         self.path_edit = QLineEdit()
@@ -324,11 +315,6 @@ class MainWindow(QMainWindow):
         d = self.out_edit.text().strip() or os.path.join(os.getcwd(), "out")
         os.makedirs(d, exist_ok=True)
         QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.abspath(d)))
-
-    def _on_theme_mode(self, _index=0):
-        """外观三态切换：写用户槽 + 即时生效（整应用换肤，不进批量配置）。"""
-        _dark.set_mode(self.appear_box.currentData() or "follow")
-        _dark.apply_mode(self.appear_box.currentData() or "follow")
 
     def _edit_source(self):
         from pycbeta.gui.panel import SourceDialog

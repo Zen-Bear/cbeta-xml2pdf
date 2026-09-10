@@ -554,8 +554,7 @@ class TestEngineSingles(unittest.TestCase):
         panel._status = {k: False for k in panel._status}
         panel._refresh_singles(keep="wps")
         self.assertEqual(panel.single_box.currentData(), "wps")
-        import pycbeta.gui.dark as dark
-        self.assertEqual(panel.engine_hint.styleSheet(), dark.error_style())
+        self.assertIn("red", panel.engine_hint.styleSheet())
         self.assertIn("wps", panel.engine_hint.text().lower())
         self.assertIn("未安装", panel.engine_hint.text())
         # 长说明进 tooltip，短状态留行内
@@ -2717,91 +2716,6 @@ class TestFontStacks(unittest.TestCase):
             self.assertIn("SimSn", html)
         finally:
             w.close()
-
-
-class TestDarkMode(unittest.TestCase):
-    """P10 外观三态：用户槽 roundtrip + apply/is_dark + recolor + 配置栏下拉。"""
-
-    @classmethod
-    def setUpClass(cls):
-        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-        from PySide6.QtWidgets import QApplication
-        cls.app = QApplication.instance() or QApplication([])
-
-    def test_slot_roundtrip_tmp_root(self):
-        import tempfile
-        import pycbeta.gui.dark as dark
-        root = tempfile.mkdtemp()
-        self.assertEqual(dark.get_mode(root), "follow")  # 缺槽回退
-        self.assertEqual(dark.set_mode("dark", root), "dark")
-        self.assertEqual(dark.get_mode(root), "dark")
-        self.assertEqual(dark.set_mode("nope", root), "follow")  # 非法回退
-
-    def test_apply_and_helpers(self):
-        import pycbeta.gui.dark as dark
-        try:
-            dark.apply_mode("dark")
-            self.assertTrue(dark.is_dark())
-            self.assertNotEqual(dark.hint_style(), "color: gray")
-            self.assertNotEqual(dark.error_style(), "color: red")
-            dark.apply_mode("light")
-            self.assertFalse(dark.is_dark())
-            self.assertEqual(dark.hint_style(), "color: gray")  # 浅色沿用 legacy
-            self.assertEqual(dark.error_style(), "color: red")
-        finally:
-            dark.apply_mode("follow")
-
-    def test_recolor_widgets(self):
-        from PySide6.QtWidgets import QLabel
-        import pycbeta.gui.dark as dark
-        lab = QLabel("x")
-        try:
-            lab.setStyleSheet("color: gray")
-            dark.apply_mode("dark")
-            self.assertEqual(lab.styleSheet(), dark.hint_style())
-            dark.apply_mode("light")
-            self.assertEqual(lab.styleSheet(), "color: gray")
-        finally:
-            dark.apply_mode("follow")
-            lab.close()
-
-    def test_main_appear_box(self):
-        import unittest.mock as mock
-        import pycbeta.gui.dark as dark
-        from pycbeta.gui.__main__ import MainWindow
-        with mock.patch.object(dark, "get_mode", return_value="dark"), \
-                mock.patch.object(dark, "apply_mode",
-                                  return_value="dark") as m_apply, \
-                mock.patch.object(dark, "set_mode",
-                                  return_value="dark") as m_set:
-            w = MainWindow()
-            try:
-                self.assertEqual(w.appear_box.currentData(), "dark")
-                self.assertEqual(w.appear_box.count(), 3)
-                w.appear_box.setCurrentIndex(
-                    w.appear_box.findData("light"))
-                m_set.assert_called_with("light")
-                m_apply.assert_called_with("light")
-            finally:
-                w.close()
-
-    def test_palette_dark_light_roundtrip(self):
-        import pycbeta.gui.dark as dark
-        from PySide6.QtGui import QPalette
-        app = dark._app()
-
-        def wintext():
-            return app.palette().color(QPalette.WindowText).name()
-
-        try:
-            dark.apply_mode("dark")
-            self.assertTrue(dark.is_dark())
-            self.assertEqual(wintext(), "#ffffff")
-            dark.apply_mode("light")
-            self.assertFalse(dark.is_dark())
-            self.assertEqual(wintext(), QPalette().color(QPalette.WindowText).name())
-        finally:
-            dark.apply_mode("follow")
 
 
 if __name__ == "__main__":
