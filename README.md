@@ -165,3 +165,10 @@ pycbeta/
 docs/              设计报告与规格
 test/              run_tests.py 端到端测试 + 样例 XML
 ```
+
+## 渊源
+
+CBETA 佛典編號/册号规则（`pycbeta/names.py`）移植自
+[RayCHOU/ruby-cbeta](https://github.com/RayCHOU/ruby-cbeta) 的 `cbeta.rb`
+（Copyright (c) 2016 Dharma Drum Institute of Liberal Arts, MIT License），
+其余为独立重写；与上游无 fork 关系、无共享历史。本仓代码同样采用 MIT License（见根 `LICENSE`）。

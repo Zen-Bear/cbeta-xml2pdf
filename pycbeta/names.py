@@ -1,4 +1,9 @@
-"""CBETA ID rules (canon / vol / work / linehead), ported from ruby-cbeta cbeta.rb."""
+"""CBETA ID rules (canon / vol / work / linehead).
+
+Ported from ruby-cbeta cbeta.rb (https://github.com/RayCHOU/ruby-cbeta),
+Copyright (c) 2016 Dharma Drum Institute of Liberal Arts, MIT License.
+Rest of this repository is an independent rewrite (see root LICENSE).
+"""
 
 import re
 
