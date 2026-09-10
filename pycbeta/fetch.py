@@ -491,6 +491,9 @@ def check_ebook_updates(cbeta_ebook: str, presets: Optional[Dict] = None,
     """远程源更新检查：遍历 cbeta_ebook 各 work 目录，对 XML 逐册条件下载
     （If-Modified-Since/字节比对；不改项不落盘）。返回报告：
     [{"id","status","detail"}]，status ∈ updated/unchanged/failed/skipped。
+
+    只走远程源（catalog 记录的 XML URL）——**不读本地 xml_dir 候选源**
+    （远程永远最新；本地 CBReader 仅用于材料化首次导入，不参与更新）。
     probe(url, dest) 可注入（单测）；progress(id, done, total) 可注入。"""
     if probe is None:
         probe = _download_if_changed
