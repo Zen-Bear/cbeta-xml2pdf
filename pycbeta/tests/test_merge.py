@@ -119,35 +119,34 @@ class TestCollectMerge(unittest.TestCase):
         self.assertEqual(sorted(groups), [("TX", "TX07", "0006"),
                                           ("TX", "TX08", "0006")])
 
-    def test_resolve_prefers_whole(self):
-        import unittest.mock as mock
-        tmp = tempfile.mkdtemp()
-        with mock.patch("pycbeta.fetch.find_local_xml",
-                        return_value=["whole.xml"]):
-            paths, merged = M.resolve_work_files(self.src, "TX", "0006", tmp)
-            self.assertEqual(paths, ["whole.xml"])
-            self.assertFalse(merged)
+    def test_merge_groups_to_dir(self):
+        dest = tempfile.mkdtemp()
+        groups = M.collect_work_frags(self.src, "TX", "0006")
+        paths = M.merge_groups_to_dir(groups, dest, quiet=True)
+        self.assertEqual(len(paths), 2)  # 两册两文件
+        self.assertTrue(paths[0].endswith("TX07n0006.xml"))
+        self.assertTrue(paths[1].endswith("TX08n0006.xml"))
+        from lxml import etree
+        t0 = "".join(etree.parse(paths[0]).getroot().itertext())
+        self.assertIn("甲", t0)
+        self.assertNotIn("丙", t0)
 
-    def test_resolve_merges_frags(self):
-        import unittest.mock as mock
-        tmp = tempfile.mkdtemp()
-        with mock.patch("pycbeta.fetch.find_local_xml", return_value=[]):
-            paths, merged = M.resolve_work_files(self.src, "TX", "0006", tmp)
-            self.assertTrue(merged)
-            self.assertEqual(len(paths), 2)  # 两册两文件
-            self.assertTrue(paths[0].endswith("TX07n0006.xml"))
-            self.assertTrue(paths[1].endswith("TX08n0006.xml"))
-            from lxml import etree
-            t0 = "".join(etree.parse(paths[0]).getroot().itertext())
-            self.assertIn("甲", t0)
-            self.assertNotIn("丙", t0)
+    def test_merge_groups_mtime_skip(self):
+        dest = tempfile.mkdtemp()
+        groups = M.collect_work_frags(self.src, "TX", "0006")
+        paths = M.merge_groups_to_dir(groups, dest, quiet=True)
+        mt = os.path.getmtime(paths[0])
+        paths2 = M.merge_groups_to_dir(groups, dest, quiet=True)
+        self.assertEqual(paths, paths2)
+        self.assertEqual(os.path.getmtime(paths2[0]), mt)  # 未重写
 
-    def test_resolve_empty(self):
-        import unittest.mock as mock
-        with mock.patch("pycbeta.fetch.find_local_xml", return_value=[]):
-            self.assertEqual(M.resolve_work_files(self.src, "ZZ", "9999",
-                                                  tempfile.mkdtemp()),
-                             ([], False))
+    def test_merge_groups_tmp_when_none(self):
+        groups = M.collect_work_frags(self.src, "TX", "0006")
+        paths = M.merge_groups_to_dir(groups, None, quiet=True)
+        self.assertEqual(len(paths), 2)
+        for p in paths:
+            self.assertFalse(os.path.abspath(p).startswith(
+                os.path.abspath(self.src)))
 
     def test_main_only_forms(self):
         import io

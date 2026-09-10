@@ -20,7 +20,7 @@ from pycbeta.theme import load_presets
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description="内容逐字校验")
-    ap.add_argument("--source", default=r"E:\dev\cbeta\test")
+    ap.add_argument("--source", default=r"E:\dev\cbeta\cbeta_ebook")
     ap.add_argument("-f", "--formats", default="html,md,docx,epub")
     ap.add_argument("--out", default=None)
     ap.add_argument("--max-diff", type=int, default=None)
@@ -224,7 +224,10 @@ def main(argv=None):
                         "html": ["html"], "epub": ["epub"]}.get(fmt, ["html"])
                 if args.t2s and "txt_notes" not in need:
                     need = ["txt_notes"] + need
-                ensure_baselines(work.id, need, load_presets(args.config) if args.config else load_presets(), src)
+                _presets_af = load_presets(args.config) if args.config else load_presets()
+                _ebook_af = ((_presets_af.get("source") or {}).get("cbeta_ebook")
+                             or "").strip() or src
+                ensure_baselines(work.id, need, _presets_af, _ebook_af)
                 official = {}
                 for kind in ("html", "txt", "txt_notes", "docx", "epub", "odt"):
                     found = find_official(src, os.path.splitext(name)[0], kind,

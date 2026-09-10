@@ -56,7 +56,7 @@ class XmlOptions:
 | 经藏名 | `output.series_title.*` | 复选+字体+字号 | `series_title.*` |
 | 校验 | `verify.maxDiff/diffLines/auto_fetch/scope_juan` | 高级页（阈值/自动下载/卷限定） | `verify.*` |
 
-**不适合 GUI 修改**：`source.xml_dir/catalog/download_dir`（路径，走浏览/配置页而非面板）、`downloads.*` URL 模板（固定，改配置文件）。
+**不适合 GUI 修改**：`source.xml_dir/cbeta_ebook/catalog`（路径，走浏览/配置页而非面板）、`downloads.*` URL 模板（固定，改配置文件）、`source.title_t2s`（数据源窗口复选）。
 
 ### 2.2 回存语义
 - 面板 `set_options()` 以 `load_presets()` 的 `output/pagination/series_title` 为默认值回填，未勾选项不写入（保持继承）。
@@ -163,11 +163,12 @@ class XmlOptions:
 
 对列表内每个 ID：
 1. `fetch.is_work_id(id)` 校验；`parse_work_id` → `(canon, no)`
-2. **本地查找**：`fetch.find_local_xml(source.xml_dir, canon, no)`（统一根目录两档：平展优先、仓库次之，排除 `out/`）
-   - 未找到 → 碎片按组合册（`pycbeta/merge.py:resolve_work_files`，tmpdir 随批量清，行来源标「合册合成」；xml_dir 可直指 CBReader 书库）
-   - 仍未找到且勾选「自动下载缺失 XML」→ `fetch.fetch_work(id, ["xml"], presets, download_dir)` 下载到 `source.download_dir`，再查找
-   - 未找到且未勾选 → 行状态标「缺 XML」跳过
-3. **（可选）官方基线**：勾选「同时下载官方基线」→ `fetch.ensure_baselines(id, ["html","docx","txt"], presets, download_dir)`（校验用；docx/odt 非 T/X 静默失败）
+2. **三源材料化**：`fetch.materialize_work(id, presets, xml_dir, cbeta_ebook)`
+   - `cbeta_ebook/{id} {书名}/` 已有 → 直接用（来源标「本地XML」）
+   - `xml_dir`（只读候选源，如 CBReader 书库）有 → 拷贝/碎片按组合册落 work 目录（来源标「本地拷贝/合册合成」）
+   - 勾选「自动下载缺失 XML」且前两源无 → `fetch.fetch_work(id, ["xml"], presets, cbeta_ebook)`（来源标「已下载」）
+   - 全无 → 行状态标「缺 XML」跳过
+3. **（可选）官方基线**：勾选「同时下载官方基线」→ `fetch.ensure_baselines(id, ["html","docx","txt"], presets, cbeta_ebook)`（落 work 目录；docx/odt 非 T/X 静默失败）
 4. **转换**：`cli.render_one` 或子进程 `[sys.executable, "-m", "pycbeta", "-i", xml, "-f", fmt, "--page", opts.page, "-o", out_dir]`（`t2s=True` 时追加 `--t2s`）
 5. **（可选）校验**：`verify.verify_one(xml, fmt, source, out_root)`，行状态显示 `OK/缺N/多N`（简体转换开启时官方基线同步转简体后比对）
 
@@ -217,7 +218,7 @@ class XmlOptions:
 ```python
 def batch_convert(work_ids: list[str], out_dir: Path,
                   opts: XmlOptions, progress_cb) -> dict[str, Path]:
-    # 1) 确保 XML：fetch.find_local_xml / fetch_work（source.download_dir，缺失自动下载）
+    # 1) 确保 XML：fetch.materialize_work（cbeta_ebook → xml_dir → 下载）
     # 2) 每部：subprocess [sys.executable, "-m", "pycbeta", "-i", xml, "-f", fmt,
     #                     "--page", opts.page, "-o", out_dir]
     # 3) progress_cb(done, total, work_id)

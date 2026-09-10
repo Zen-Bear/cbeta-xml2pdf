@@ -159,7 +159,7 @@ class BatchWorker(QThread):
 
     def _resolve(self, job, idx, fetch, presets):
         try:
-            xml_dir, dl_dir = fetch.resolve_source(presets)
+            xml_dir, cbeta_ebook = fetch.resolve_source(presets)
         except ValueError as e:
             self.row_status.emit(idx, f"未配置: {e}")
             return []
@@ -167,10 +167,10 @@ class BatchWorker(QThread):
             return [job["xml"]] if os.path.isfile(job["xml"]) else []
         if job["kind"] == "merged":
             # 目录模式碎片组：worker 内合成（tmpdir 随批量清），一行一部一册
-            from pycbeta.merge import merge_groups_to_tmpdir
+            from pycbeta.merge import merge_groups_to_dir
             key, files = job["group"]
             try:
-                paths = merge_groups_to_tmpdir(
+                paths = merge_groups_to_dir(
                     {key: files}, getattr(self, "_merge_tmp", None), quiet=True)
             except Exception as e:
                 self.row_status.emit(idx, f"合册失败: {e}")
@@ -182,31 +182,26 @@ class BatchWorker(QThread):
         if not fetch.is_work_id(wid):
             self.row_status.emit(idx, "非法編號")
             return []
-        canon, no = fetch.parse_work_id(wid)
-        from pycbeta.merge import resolve_work_files
-        found, merged = resolve_work_files(xml_dir, canon, no,
-                                           getattr(self, "_merge_tmp", None),
-                                           quiet=True)
+        # 三源材料化：cbeta_ebook → 本地候选源（拷/合册）→ 官方下载
+        try:
+            found, label = fetch.materialize_work(
+                wid, presets, xml_dir=xml_dir, cbeta_ebook=cbeta_ebook,
+                download=bool(self.flags.get("auto_xml")), quiet=True)
+        except ValueError as e:
+            self.row_status.emit(idx, f"未配置: {e}")
+            return []
         if found:
-            self.row_source.emit(idx, "合册合成" if merged else "本地XML")
+            self.row_source.emit(idx, {
+                "cbeta_ebook": "本地XML", "xml_copy": "本地拷贝",
+                "xml_merge": "合册合成", "downloaded": "已下载",
+            }.get(label, ""))
+            if self.flags.get("auto_base"):
+                try:
+                    fetch.ensure_baselines(wid, ["html", "docx", "txt"],
+                                           presets, cbeta_ebook)
+                except Exception:
+                    pass
             return found
-        if self.flags.get("auto_xml"):
-            self.row_status.emit(idx, "下载XML…")
-            try:
-                fetch.fetch_work(wid, ["xml"], presets, dl_dir)
-            except Exception as e:
-                self.row_status.emit(idx, f"下载失败: {e}")
-                return []
-            found = fetch.find_local_xml(xml_dir, canon, no) or \
-                fetch.find_local_xml(dl_dir, canon, no)
-            if found:
-                self.row_source.emit(idx, "已下载")
-                return found
-        if self.flags.get("auto_base"):
-            try:
-                fetch.ensure_baselines(wid, ["html", "docx", "txt"], presets, dl_dir)
-            except Exception:
-                pass
         self.row_status.emit(idx, "缺 XML")
         return []
 

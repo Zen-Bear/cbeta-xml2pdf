@@ -389,9 +389,9 @@ def main(argv=None):
                              "html-epub-user-theme/pdf-docx-theme/pdf-docx-user-theme）；"
                              "缺省仓库根 run.json，没有就全出厂")
     shared.add_argument("--xml-dir", default=None,
-                        help="本地 XML 源目录（-i 佛典編號 查找；默认 config source.xml_dir）")
-    shared.add_argument("--download-dir", default=None,
-                        help="官方下载落盘目录（默认 config source.download_dir）")
+                        help="本地 XML 候选源（只读，角色同远端 URL；默认 config source.xml_dir）")
+    shared.add_argument("--cbeta-ebook", default=None,
+                        help="电子书工作根（唯一可写；默认 config source.cbeta_ebook）")
     shared.add_argument("--name-template",
                         help='output filename template, e.g. "[id] [书名]（[作者]）" '
                              "(tokens: [id] [书名] [作者] [vol] [juan])")
@@ -579,7 +579,7 @@ def main(argv=None):
 
     _used_names = {}  # 本轮命名状态（render 与 verify 共用，重放得终态名）
     if os.path.isdir(args.input):
-        from .merge import split_paths, merge_groups_to_tmpdir
+        from .merge import split_paths, merge_groups_to_dir
         walked = []
         for dp, _dn, fns in os.walk(args.input):
             for f in sorted(fns):
@@ -588,7 +588,7 @@ def main(argv=None):
         whole, groups = split_paths(walked)
         xmls = whole
         if groups:
-            xmls = xmls + merge_groups_to_tmpdir(groups)
+            xmls = xmls + merge_groups_to_dir(groups)
         if not xmls:
             ap.error(f"no XML files under {args.input}")
         for x in xmls:
@@ -597,29 +597,18 @@ def main(argv=None):
     elif os.path.isfile(args.input):
         process_file(args.input, formats, args, theme, html_base=html_base)
     else:
-        # -i 佛典編號：先查本地 XML 源，缺失则从官方下载
-        from .fetch import is_work_id, parse_work_id, fetch_work
+        # -i 佛典編號：三源材料化（cbeta_ebook → 本地候选源 → 官方下载）
+        from .fetch import is_work_id, materialize_work
         if not is_work_id(args.input):
             ap.error(f"input not found: {args.input}")
-        work_id = args.input
-        _presets = load_presets(args.config) if args.config else load_presets()
-        from .fetch import resolve_source
         try:
-            xml_dir, _dl_dir = resolve_source(
-                _presets, xml_dir=args.xml_dir, download_dir=args.download_dir)
+            xmls, label = materialize_work(
+                args.input, presets, xml_dir=args.xml_dir,
+                cbeta_ebook=args.cbeta_ebook)
         except ValueError as exc:
             ap.error(str(exc))
-        canon, no = parse_work_id(work_id)
-        from .merge import resolve_work_files
-        xmls, merged = resolve_work_files(xml_dir, canon, no)
-        if merged:
-            print(f"{work_id}: 碎片合册 → {len(xmls)} 册")
         if not xmls:
-            print(f"{work_id}: 本地 XML 源 {xml_dir} 未找到，从官方下载…")
-            fetch_work(work_id, ["xml"], _presets, _dl_dir)
-            xmls, _ = resolve_work_files(xml_dir, canon, no)
-        if not xmls:
-            ap.error(f"{work_id}: 本地与官方均未取得 XML")
+            ap.error(f"{args.input}: 本地候选源与官方均未取得 XML")
         for x in xmls:
             process_file(x, formats, args, theme, html_base=html_base,
                          _used=_used_names)
@@ -731,7 +720,10 @@ def main(argv=None):
                             "html": ["html"], "epub": ["epub"]}.get(fmt, ["html"])
                     if args.t2s and "txt_notes" not in need:
                         need = ["txt_notes"] + need
-                    ensure_baselines(w.id, need, load_presets(args.config) if args.config else load_presets(), src)
+                    _presets_af = load_presets(args.config) if args.config else load_presets()
+                    _ebook_af = ((_presets_af.get("source") or {}).get("cbeta_ebook")
+                                 or "").strip() or src
+                    ensure_baselines(w.id, need, _presets_af, _ebook_af)
                     official = {}
                     for kind in ("html","txt","txt_notes","docx","epub","odt"):
                         found = v_find(src, stem, kind, juan=_juan if kind in ("html", "docx", "txt_notes") else None)

@@ -11,8 +11,8 @@ from pycbeta.parser import P5Parser
 from pycbeta.model import App, E, Text
 from pycbeta.render_docx import DocxRenderer, split_sections
 
-CBETA = r"E:\dev\cbeta\test"
-TESTDATA = r"E:\dev\cbeta\test"
+CBETA = r"E:\dev\cbeta\cbeta_ebook"
+TESTDATA = r"E:\dev\cbeta\cbeta_ebook"
 
 
 def _ops_text(ops):

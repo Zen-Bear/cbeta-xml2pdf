@@ -14,7 +14,7 @@ from pycbeta.render_html import HtmlRenderer
 from pycbeta.render_md import MdRenderer
 from pycbeta.verify import normalize
 
-CBETA = r"E:\dev\cbeta\test"
+CBETA = r"E:\dev\cbeta\cbeta_ebook"
 
 
 def _body(html):

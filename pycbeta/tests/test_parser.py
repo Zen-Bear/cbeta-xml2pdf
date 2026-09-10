@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from pycbeta.model import App, Gaiji, Note, NoteRef, Text
 from pycbeta.parser import P5Parser
 
-CBETA = r"E:\dev\cbeta\test"
+CBETA = r"E:\dev\cbeta\cbeta_ebook"
 
 
 def iter_nodes(nodes):

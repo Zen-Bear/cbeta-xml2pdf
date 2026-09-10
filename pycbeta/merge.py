@@ -6,9 +6,10 @@ CBReader 书库布局 `XML/<CANON>/<VOL>/<canon><vol>n<no>_<seq>.xml`
 合并规则：组内取首卷 teiHeader（charDecl 按 xml:id 并集，缺字不断），
 按 (vol, seq) 拼接各卷 `<body>` 子节点（back 恒无，有则警告并丢弃），外包同一 TEI。
 
-管线入口 `resolve_work_files` / `split_paths` 只做“路径替换”：
-下游（渲染/校验/桥）拿到的仍是文件路径，零感知。合成文件落调用方给定的
-tmpdir（随跑随清），不写回书库（源只读）。
+管线入口 `fetch.materialize_work` 三源材料化时调用 `merge_groups_to_dir`：
+碎片按组合册落 work 目录（`cbeta_ebook/{id} {书名}/`，与下载整文件同处）。
+目录模式（用户给目录）仍可落临时目录（`merge_groups_to_dir(groups)` 自建，随进程清）。
+下游只见文件路径，零感知。
 """
 
 import os
@@ -228,13 +229,13 @@ def merge(files, out_path, quiet=False):
     return len(files), count
 
 
-def _dest_for(tmpdir, canon, vol, stem):
-    # 落盘布局沿用源册目录名（不假设 canon+vol 拼接，用首碎片实测目录名）
-    return os.path.join(tmpdir, canon, vol, stem + ".xml")
+def _dest_for(root, canon, vol, stem):
+    # 平展：{stem}.xml 直接落 root（work 目录内一部多册各自成文件，同下载布局）
+    return os.path.join(root, stem + ".xml")
 
 
 def _ensure_tmpdir(tmpdir=None):
-    """调用方未给目录时自建（atexit 随进程清；CLI 用）。返回 tmpdir。"""
+    """调用方未给目录时自建（atexit 随进程清；目录模式用）。返回 tmpdir。"""
     if tmpdir:
         return tmpdir
     import tempfile
@@ -245,33 +246,18 @@ def _ensure_tmpdir(tmpdir=None):
     return tmpdir
 
 
-def merge_groups_to_tmpdir(groups, tmpdir=None, quiet=True):
-    """碎片组 → tmpdir 落盘，返回有序路径列表（按组键排序；组内按 (vol, seq)）。
-    tmpdir=None 时自建（随进程清）；显式传入时由调用方管理（GUI worker 随批量清）。"""
+def merge_groups_to_dir(groups, dest_root=None, quiet=True):
+    """碎片组 → 平展落盘（`{stem}.xml` 直接放 root；按组键排序），返回路径列表。
+
+    dest_root=None 时自建临时目录（随进程清，目录模式用）；材料化时传 work 目录
+    （`cbeta_ebook/{id} {书名}/`，与下载整文件/基线同目录）。"""
+    dest_root = _ensure_tmpdir(dest_root)
     out = []
     for key in sorted(groups):
         files = sorted(groups[key])
         canon, vol = key[0], key[1]
         stem0 = files[0][3]
-        dest = _dest_for(tmpdir, canon, vol, stem0)
+        dest = _dest_for(dest_root, canon, vol, stem0)
         merge(files, dest, quiet=quiet)
         out.append(dest)
     return out
-
-
-def resolve_work_files(xml_dir, canon, no, tmpdir=None, quiet=True):
-    """編號流输入解析：整文件优先，否则碎片按组合册。返回 (paths, did_merge)。
-    tmpdir=None 时自建（atexit 随进程清；CLI 用）；GUI 传 worker 级目录自行管理。"""
-    from .fetch import find_local_xml
-    whole = find_local_xml(xml_dir, canon, no)
-    if whole:
-        return whole, False
-    groups = collect_work_frags(xml_dir, canon, no)
-    if not groups:
-        return [], False
-    auto = tmpdir is None
-    tmpdir = _ensure_tmpdir(tmpdir)
-    if auto:
-        print(f"合册：{sum(len(v) for v in groups.values())} 碎片 → "
-              f"{len(groups)} 册（{tmpdir}，进程退出清理）")
-    return merge_groups_to_tmpdir(groups, tmpdir, quiet=quiet), True

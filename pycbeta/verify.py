@@ -843,7 +843,10 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
                 "html": ["html"], "epub": ["epub"]}.get(fmt, ["html"])
         if t2s and "txt_notes" not in need:
             need = ["txt_notes"] + need
-        ensure_baselines(work.id, need, presets, source)
+        # 材料化模型：基线落 cbeta_ebook work 目录（缺省回退 source）
+        ebook = ((presets.get("source") or {}).get("cbeta_ebook") or "").strip() \
+            or source
+        ensure_baselines(work.id, need, presets, ebook)
         official = _discover()
         bases = []
         if base_kind in official:

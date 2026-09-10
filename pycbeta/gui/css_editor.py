@@ -36,8 +36,8 @@ FACTORY_CSS = os.path.join(_STYLES_DIR, "pdf_docx.css")
 # 样张候选（首选用户精简样本 css-presets/sample.xml；glob，按序取首个命中者）
 SAMPLE_CANDIDATES = (
     os.path.join(REPO_ROOT, "css-presets", "sample.xml"),
-    r"E:\dev\cbeta\test\T0349*\T12n0349.xml",
-    r"E:\dev\cbeta\test\T1144*\T20n1144.xml",
+    r"E:\dev\cbeta\cbeta_ebook\T0349*\T12n0349.xml",
+    r"E:\dev\cbeta\cbeta_ebook\T1144*\T20n1144.xml",
 )
 
 # 左侧可调行（书本排版顺序）：(覆盖块选择器, 显示名)

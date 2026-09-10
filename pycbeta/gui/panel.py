@@ -1298,11 +1298,11 @@ class XmlOptionsPanel(QWidget):
 
 
 SOURCE_LABELS = [
-    ("xml_dir", "本地 XML 目录（优先查找）"),
-    ("download_dir", "官方下载落盘目录（缺失时下载到这）"),
+    ("xml_dir", "本地 XML 候选源（只读；角色同远端 URL）"),
+    ("cbeta_ebook", "电子书工作根（唯一可写，平展一部一目录）"),
     ("catalog", "佛典目录 catalog（sutra_mapping.txt）"),
 ]
-DOWNLOAD_KEYS = ["xml", "xml_repo", "html", "docx", "epub", "txt", "txt_notes", "odt"]
+DOWNLOAD_KEYS = ["xml", "html", "docx", "epub", "txt", "txt_notes", "odt"]
 
 
 def apply_source_edits(base, values):
@@ -1344,6 +1344,11 @@ class SourceDialog(QDialog):
             form.addRow(f"{label}\nsource.{key}", row)
             self.path_edits[key] = edit
         layout.addLayout(form)
+        self.title_t2s_box = QCheckBox("工作目录书名转简体（t2s）")
+        self.title_t2s_box.setToolTip(
+            "source.title_t2s：电子书工作目录名 `{id} {书名}` 的书名是否转简体（默认开）")
+        self.title_t2s_box.setChecked(bool(src.get("title_t2s", True)))
+        layout.addWidget(self.title_t2s_box)
         layout.addWidget(QLabel("官方下载 URL 模板（{canon}/{vol}/{file}/{id} 为占位符）："))
         self.dl_table = QTableWidget(0, 2)
         self.dl_table.setHorizontalHeaderLabels(["格式", "URL 模板"])
@@ -1441,6 +1446,7 @@ class SourceDialog(QDialog):
         data, _actual = load_slot("user")
         values = {"source": {k: e.text().strip() for k, e in self.path_edits.items()},
                   "downloads": {}}
+        values["source"]["title_t2s"] = bool(self.title_t2s_box.isChecked())
         for i in range(self.dl_table.rowCount()):
             k = self.dl_table.item(i, 0).text()
             v = self.dl_table.item(i, 1).text() if self.dl_table.item(i, 1) else ""

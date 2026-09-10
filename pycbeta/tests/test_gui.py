@@ -885,19 +885,20 @@ class TestBatchMergeResolve(unittest.TestCase):
         from pycbeta import fetch
         from pycbeta.gui.__main__ import BatchWorker
         book = self._bookcase()
-        tmp = tempfile.mkdtemp()
+        ebook = tempfile.mkdtemp()
         try:
             w = BatchWorker([], None, {}, {})
-            w._merge_tmp = tmp
+            w._merge_tmp = tempfile.mkdtemp()
             labels = []
             w.row_source.connect(lambda i, t: labels.append(t))
-            presets = {"source": {"xml_dir": book, "download_dir": book}}
+            presets = {"source": {"xml_dir": book, "cbeta_ebook": ebook}}
             paths = w._resolve({"kind": "id", "id": "TX0006"}, 0, fetch,
                                presets)
             self.assertEqual(labels, ["合册合成"])
             self.assertEqual(len(paths), 2)
             self.assertTrue(paths[0].endswith("TX07n0006.xml"))
             self.assertTrue(paths[1].endswith("TX08n0006.xml"))
+            self.assertTrue(all(p.startswith(ebook) for p in paths))
             from lxml import etree
             t0 = "".join(etree.parse(paths[0]).getroot().itertext())
             self.assertIn("甲", t0)
@@ -905,8 +906,8 @@ class TestBatchMergeResolve(unittest.TestCase):
             self.assertNotIn("丙", t0)
         finally:
             shutil.rmtree(book, ignore_errors=True)
-            shutil.rmtree(tmp, ignore_errors=True)
-            w.close() if hasattr(w, "close") else None
+            shutil.rmtree(ebook, ignore_errors=True)
+            shutil.rmtree(w._merge_tmp, ignore_errors=True)
 
     def test_merged_dir_job(self):
         import shutil
@@ -914,6 +915,7 @@ class TestBatchMergeResolve(unittest.TestCase):
         from pycbeta import fetch
         from pycbeta.gui.__main__ import BatchWorker
         book = self._bookcase()
+        ebook = tempfile.mkdtemp()
         tmp = tempfile.mkdtemp()
         try:
             w = BatchWorker([], None, {}, {})
@@ -926,23 +928,24 @@ class TestBatchMergeResolve(unittest.TestCase):
             paths = w._resolve({"kind": "merged", "id": "X",
                                 "group": (key, groups[key])}, 0, fetch,
                                {"source": {"xml_dir": book,
-                                           "download_dir": book}})
+                                           "cbeta_ebook": ebook}})
             self.assertEqual(labels, ["合册合成"])
             self.assertEqual(len(paths), 1)
         finally:
             shutil.rmtree(book, ignore_errors=True)
+            shutil.rmtree(ebook, ignore_errors=True)
             shutil.rmtree(tmp, ignore_errors=True)
 
 
 class TestSourceDialog(unittest.TestCase):
     def test_apply_merge(self):
-        base = {"source": {"xml_dir": "A", "download_dir": "B", "catalog": "C"},
+        base = {"source": {"xml_dir": "A", "cbeta_ebook": "B", "catalog": "C"},
                 "downloads": {"xml": "U1", "html": "U2"},
                 "output": {"t2s": False}}
         out = apply_source_edits(base, {"source": {"xml_dir": "A2"},
                                         "downloads": {"xml": "U9", "docx": "U3"}})
         self.assertEqual(out["source"]["xml_dir"], "A2")
-        self.assertEqual(out["source"]["download_dir"], "B")
+        self.assertEqual(out["source"]["cbeta_ebook"], "B")
         self.assertEqual(out["downloads"]["xml"], "U9")
         self.assertEqual(out["downloads"]["html"], "U2")
         self.assertEqual(out["downloads"]["docx"], "U3")

@@ -49,7 +49,7 @@ python -m pycbeta -i 经文.xml -f docx,pdf --presets-file my.json
 | `--engine 管线[:单体]` | PDF 输出选择，见下节 |
 | `--engine-tag` | PDF 文件名追加实际引擎名（如 `X60n1116_wps.pdf`）|
 | `--vertical` | 竖排 PDF（走 HTML 管线）|
-| `--xml-dir` / `--download-dir` | 本地 XML 源 / 官方下载落盘（默认 config `source.*`）|
+| `--xml-dir` / `--cbeta-ebook` | 本地 XML 候选源（只读）/ 电子书工作根（可写，平展一部一目录，XML+基线同目录）|
 | `--name-template` | 输出文件名模板（`[id]`/`[书名]`/`[作者]`/`[vol]`/`[juan]`）|
 | `--list-fonts [关键词]` | 列出本机字体（家族名\|路径），仅列表不渲染 |
 | `--verify` | 生成后逐字校验（对比官方文档；`--verify-max-diff` 阈值默认 10，`--verify-diff-lines` 默认 5）|

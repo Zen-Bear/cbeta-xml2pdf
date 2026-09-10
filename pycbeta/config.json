@@ -158,16 +158,16 @@
 
   "source": {
     // 本机路径放 config.user.json（不入库）；出厂留空，空即报错提示去配。
-    // CLI --xml-dir/--download-dir 可覆盖；GUI 数据源窗口可视编辑后存用户槽
+    // CLI --xml-dir/--cbeta-ebook 可覆盖；GUI 数据源窗口可视编辑后存用户槽
     "catalog": "E:\\dev\\cbeta\\xml2pdf\\cbeta\\data\\sutra_mapping.txt",  // 編號→冊目录（canon,vol,no,…；仓内版，随包更新；publish 原件仅作上游备份）
-    "xml_dir": "",        // 本地 XML 源目录（-i 佛典編號 查找；缺省由官方下载）
-    "download_dir": ""    // 下载落盘：XML→{canon}/{canon}{vol}/，基线→{canon}/{id}/
+    "xml_dir": "",        // 本地 XML 候选源（只读，角色同远端 URL；不得与 cbeta_ebook 相同）
+    "cbeta_ebook": "",    // 电子书工作根（唯一可写）：平展一部一目录，XML+基线同目录
+    "title_t2s": true     // 工作目录名 {id} {书名} 的书名转简体（t2s；目录名用）
   },
 
   "downloads": {
     // CBETA 官方下载 URL 模板（{} 为占位符，可按官方更新）
     "xml": "https://raw.githubusercontent.com/cbeta-org/xml-p5/master/{canon}/{canon}{vol}/{file}",
-    "xml_repo": "https://github.com/cbeta-org/xml-p5",
     "html": "https://cbdata.dila.edu.tw/stable/download/html/{id}.html.zip",
     "docx": "https://cbdata.dila.edu.tw/stable/download/docx/{canon}/{id}.zip",
     "epub": "https://cbdata.dila.edu.tw/stable/download/epub/{canon}/{id}.epub",

@@ -19,7 +19,7 @@ from pycbeta.render_html import HtmlRenderer
 from pycbeta.render_md import MdRenderer
 from pycbeta.verify import extract_text, normalize
 
-CBETA = r"E:\dev\cbeta\test"
+CBETA = r"E:\dev\cbeta\cbeta_ebook"
 
 CUSTOM_TABLE = "彌勒\tmí lè\tㄇㄧˊ ㄌㄜˋ\n菩薩\tpú sà\tㄆㄨˊ ㄙㄚˋ\n月氏國\tyuè shì guó\tㄩㄝˋ ㄕˋ ㄍㄨㄛˊ\n"
 

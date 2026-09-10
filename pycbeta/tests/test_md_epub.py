@@ -10,7 +10,7 @@ from pycbeta.parser import P5Parser
 from pycbeta.render_md import MdRenderer
 from pycbeta.render_epub import EpubRenderer
 
-CBETA = r"E:\dev\cbeta\test"
+CBETA = r"E:\dev\cbeta\cbeta_ebook"
 
 
 class TestMd(unittest.TestCase):

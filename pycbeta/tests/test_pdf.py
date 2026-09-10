@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from pycbeta.parser import P5Parser
 from pycbeta.render_pdf import PdfRenderer, _draw_page_borders, _add_pdf_bookmarks
 
-CBETA = r"E:\dev\cbeta\test"
+CBETA = r"E:\dev\cbeta\cbeta_ebook"
 
 
 def extract_text(pdf):

@@ -86,7 +86,7 @@ class TestExtractTxtParts(unittest.TestCase):
         self.assertEqual(body, s)
 
     def test_real_file_anchor(self):
-        p = os.path.join(r"E:\dev\cbeta\test", "T0349 彌勒菩薩所問本願經",
+        p = os.path.join(r"E:\dev\cbeta\cbeta_ebook", "T0349 彌勒菩薩所問本願經",
                          "T0349.txt", "T0349_001.txt")
         with open(p, encoding="utf-8") as f:
             s = f.read()

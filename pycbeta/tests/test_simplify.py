@@ -9,7 +9,7 @@ from pycbeta.parser import P5Parser
 from pycbeta.simplify import _Converter, simplify_text, simplify_work
 from pycbeta.verify import t2s_baseline
 
-CBETA = r"E:\dev\cbeta\test"
+CBETA = r"E:\dev\cbeta\cbeta_ebook"
 
 
 class TestConvertUnit(unittest.TestCase):
