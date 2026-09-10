@@ -66,6 +66,10 @@
   - 主轨 txt/md 对齐 A 落地（2026-09-10）：官方 txt 侧 `_norm_official_txt`（版头 `#` 块剥离 + `    [n]` 注记块识别挪文末，繁简通用，三比对入口同构；`No.` 行不搬——生成侧 docNumber 本就在体首；`relocate` 试过方向反了已 revert）+ 生成侧 md 标记剥离 `_strip_md_marks`（`## 校注` + `[^n]: `，官方无此体系）；T0349 主轨 txt 624→15；md 经此与 txt 逐字同分（T0672 1012→12，证两者除标记外同一文本）；全集 11 部有官方 txt 者 txt 12~21、missing 全 0，md 与 txt 同分；无官方 txt 者回退 html（先天红，门禁外）；残留=注全变体vs单选每注几个字 + 题署/No. 顺序噪声，门禁仍只看 docx/html+辅轨；单测 +3（432 OK）
   - txt 不回退（2026-09-10）：无官方 txt 直接 `no_baseline`（三入口 `fmt != "txt"` 门控各两处；t2s 的 `txt_notes` 优先保留，仍是 txt 族；`auto_fetch` 先下载、仍无才报）；单测 `test_no_txt_no_html_fallback` 锁死；全量 433 OK
   - 已知局限（非 bug）：主轨 txt-vs-官方txt 与 md 同类红（官方 txt 把全部注变体行内化 + 版头 boilerplate，生成侧注文末集中——语义差异，非丢字；md 同理既有）；`_extract_xml_parts` 与 parser 共享缺字数据（GaijiDb）与版头选取语义，盲区仅限缺字解析本身
+  - [ ] **待办** 门禁外 6 红后续（2026-09-10 取证，详见校验说明书 §5“门禁外已知红”；无一回归，门禁口径不变）：
+    1. 渲染 body-placed foot 注（parser 收编 + 六渲染器出注 + aux 镜像 + 全门禁回归；收 TX08 类注 + T01 stub，T01 25k 本体仍红——输入就没有）；
+    2. T01 `_cbreader` 重合（9/5 旧版 charDecl 4/应 70，卫生；与 17k 缺失无关）；
+    3. 辅轨 `No.` 令牌镜像剥离（5 行；`strip_head_no=true` 时 aux 16 缺转 0）
 - [x] **已完成 P1 GUI 样式编辑器**（2026-09-06 用户点档：DOCX 所见即所得调 `pdf_docx.css` 字体参数）
   - `pycbeta/gui/css_editor.py`：`CssEditorDialog`（样式表卡按钮弹窗，publish 可复用）+ `python -m pycbeta.gui.css_editor --sample` 独立运行；左标签分组四件套+源码页（tinycss2 红字不覆盖）/右 QTextDocument 模拟预览（回读 `DocxRenderer` run 真值：字号/字体/颜色/加粗/上标，ruby/EQ 展小字灰，注文尾注归并；分页以 Word 为准）/底导出样张 DOCX+PDF（跟主窗口引擎链）+ `user.css` 落盘自动生效+恢复出厂；样张默认 `css-presets/sample.xml`（用户已定稿）
   - 附带修批量桥：`--font-set` 默认省略（保 `user.css` 字体不被 `apply_font_set` 踩；显式组合/t2s 照旧覆盖）；`build_render_cmd` 纯函数可测；单测 TestStyleEditor 8 项；全量待跑
