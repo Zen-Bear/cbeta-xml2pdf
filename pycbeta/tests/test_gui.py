@@ -1049,6 +1049,45 @@ class TestSourceDialog(unittest.TestCase):
             finally:
                 dlg.close()
 
+    def test_ebook_update_dialog_copy(self):
+        import pycbeta.gui.panel as pm
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PySide6.QtWidgets import QApplication
+        app = QApplication.instance() or QApplication([])
+        rep = [{"id": "T0349", "status": "updated", "detail": "1→2B"},
+               {"id": "T0625", "status": "unchanged", "detail": ""},
+               {"id": "T0670", "status": "failed", "detail": "HTTP 500"}]
+        dlg = pm.EbookUpdateDialog(rep)
+        try:
+            self.assertIn("T0349", dlg.text.toPlainText())
+            self.assertTrue(dlg.btn_copy.isEnabled())
+            dlg._on_copy()
+            self.assertEqual(app.clipboard().text(), "T0349")
+            self.assertIn("1", dlg.copy_status.text())
+        finally:
+            dlg.close()
+        dlg2 = pm.EbookUpdateDialog([{"id": "T1", "status": "unchanged",
+                                      "detail": ""}])
+        try:
+            self.assertFalse(dlg2.btn_copy.isEnabled())
+        finally:
+            dlg2.close()
+
+    def test_source_dialog_preset_keys(self):
+        import pycbeta.gui.panel as pm
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PySide6.QtWidgets import QApplication
+        QApplication.instance() or QApplication([])
+        dlg = pm.SourceDialog()
+        try:
+            keys = [k for k, _ in pm.SOURCE_LABELS]
+            self.assertIn("cbeta_ebook", keys)
+            self.assertNotIn("download_dir", keys)
+            self.assertIn("cbeta_ebook", dlg.path_edits)
+            self.assertTrue(dlg.title_t2s_box.isChecked())  # 默认开
+        finally:
+            dlg.close()
+
 
 class TestCssEditor(unittest.TestCase):
     """样式编辑器：覆盖块 roundtrip / spec 解析 / user.css 落盘 / 接线（全 offscreen）。"""

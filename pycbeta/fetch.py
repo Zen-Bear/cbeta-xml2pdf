@@ -443,6 +443,118 @@ def ensure_baselines(work_id: str, kinds: List[str], presets: Optional[Dict],
     return fetched
 
 
+def _work_id_from_dirname(name: str) -> str:
+    """work 目录名 → 佛典編號（首个空白前 token），非 work 目录返回 ""。
+    `T0349 彌勒菩薩...` → T0349；`out`/`T` 等 → ""。"""
+    tok = re.split(r"[\s\u3000]+", name.strip(), 1)[0].upper()
+    return tok if is_work_id(tok) else ""
+
+
+def _download_if_changed(url: str, dest: str, timeout: int = 90):
+    """条件下载：本地已有则带 If-Modified-Since（304 免下载）；否则比对字节。
+    返回 (status, detail)，status ∈ changed/unchanged/failed。"""
+    import ssl
+    import email.utils
+    import urllib.error
+    ctx = ssl._create_unverified_context()
+    headers = {"User-Agent": "pycbeta/1.0"}
+    if os.path.isfile(dest):
+        headers["If-Modified-Since"] = email.utils.formatdate(
+            os.path.getmtime(dest), usegmt=True)
+    req = urllib.request.Request(url, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout, context=ctx) as r:
+            data = r.read()
+    except urllib.error.HTTPError as e:
+        if e.code == 304:
+            return "unchanged", ""
+        return "failed", f"HTTP {e.code}"
+    except Exception as e:  # noqa: BLE001
+        return "failed", type(e).__name__
+    old = b""
+    if os.path.isfile(dest):
+        try:
+            with open(dest, "rb") as f:
+                old = f.read()
+        except OSError:
+            old = b""
+    if old == data:
+        return "unchanged", ""
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    with open(dest, "wb") as f:
+        f.write(data)
+    return "changed", f"{len(old)}→{len(data)}B"
+
+
+def check_ebook_updates(cbeta_ebook: str, presets: Optional[Dict] = None,
+                        probe=None, progress=None):
+    """远程源更新检查：遍历 cbeta_ebook 各 work 目录，对 XML 逐册条件下载
+    （If-Modified-Since/字节比对；不改项不落盘）。返回报告：
+    [{"id","status","detail"}]，status ∈ updated/unchanged/failed/skipped。
+    probe(url, dest) 可注入（单测）；progress(id, done, total) 可注入。"""
+    if probe is None:
+        probe = _download_if_changed
+    if presets is None:
+        presets = load_presets()
+    src = presets.get("source") or {}
+    catalog = src.get("catalog", "")
+    dl = {**DEFAULT_DOWNLOADS, **(presets.get("downloads") or {})}
+    xml_tmpl = dl.get("xml", DEFAULT_DOWNLOADS["xml"])
+    entries = []
+    if os.path.isdir(cbeta_ebook):
+        for name in sorted(os.listdir(cbeta_ebook)):
+            d = os.path.join(cbeta_ebook, name)
+            if not os.path.isdir(d):
+                continue
+            wid = _work_id_from_dirname(name)
+            if wid:
+                entries.append((wid, d))
+    report = []
+    for i, (wid, d) in enumerate(entries):
+        if progress:
+            progress(wid, i, len(entries))
+        canon, no = parse_work_id(wid)
+        recs = catalog_lookup(catalog, canon, no)
+        if not recs:
+            report.append({"id": wid, "status": "skipped",
+                           "detail": "catalog 无记录"})
+            continue
+        changed, failed, details = 0, 0, []
+        for rec in recs:
+            dest = os.path.join(d, rec["file"])
+            url = xml_tmpl.format(canon=canon, vol=rec["vol"], file=rec["file"])
+            st, detail = probe(url, dest)
+            if st == "changed":
+                changed += 1
+                details.append(f"{rec['file']} {detail}")
+            elif st == "failed":
+                failed += 1
+                details.append(f"{rec['file']} 失败:{detail}")
+        status = "updated" if changed else ("failed" if failed else "unchanged")
+        report.append({"id": wid, "status": status, "detail": "; ".join(details)})
+    return report
+
+
+def format_update_report(report) -> list:
+    """更新检查报告 → 文本行（供 GUI 弹窗/CLI）。"""
+    n_up = sum(1 for r in report if r["status"] == "updated")
+    n_fail = sum(1 for r in report if r["status"] == "failed")
+    n_skip = sum(1 for r in report if r["status"] == "skipped")
+    n_same = len(report) - n_up - n_fail - n_skip
+    lines = [f"已更新 {n_up} / 无变化 {n_same} / 失败 {n_fail}"
+             + (f" / 跳过 {n_skip}" if n_skip else "")]
+    if n_up:
+        lines.append("")
+        lines.append("【需重新生成电子书】")
+        for r in report:
+            if r["status"] == "updated":
+                lines.append(f"  {r['id']}  {r['detail']}")
+    for r in report:
+        if r["status"] == "failed":
+            lines.append(f"  失败 {r['id']}  {r['detail']}")
+    return lines
+
+
 def main(argv=None) -> int:
     import argparse
     ap = argparse.ArgumentParser(prog="pycbeta.fetch",

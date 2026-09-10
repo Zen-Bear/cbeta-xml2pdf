@@ -17,9 +17,10 @@ from typing import Dict, List, Optional
 from PySide6.QtCore import Qt, QThread, Signal, QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox,
+    QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox,
     QFileDialog, QFormLayout, QGridLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit,
-    QMessageBox, QPushButton, QSpinBox, QTableWidget, QTableWidgetItem, QTabWidget, QVBoxLayout,
+    QMessageBox, QPlainTextEdit, QPushButton, QSpinBox, QTableWidget, QTableWidgetItem,
+    QTabWidget, QVBoxLayout,
     QWidget,
 )
 
@@ -393,6 +394,60 @@ class DataUpdateWorker(QThread):
         except Exception as exc:  # noqa: BLE001 —— 网络全挂也不崩界面
             rep = [{"key": "all", "status": "failed", "detail": str(exc)}]
         self.finished_report.emit(rep)
+
+
+class EbookUpdateWorker(QThread):
+    """电子书远程更新检查后台线程：逐 work 条件下载 XML（不改项不落盘）。"""
+    finished_report = Signal(list)
+
+    def __init__(self, presets, parent=None):
+        super().__init__(parent)
+        self._presets = presets
+
+    def run(self):
+        from pycbeta.fetch import check_ebook_updates
+        try:
+            ebook = ((self._presets.get("source") or {})
+                     .get("cbeta_ebook") or "").strip()
+            rep = check_ebook_updates(ebook, self._presets)
+        except Exception as exc:  # noqa: BLE001
+            rep = [{"id": "all", "status": "failed", "detail": str(exc)}]
+        self.finished_report.emit(rep)
+
+
+class EbookUpdateDialog(QDialog):
+    """更新检查结果：状态摘要 + 明细；一键拷贝「已更新 ID」（供重新生成电子书）。"""
+
+    def __init__(self, report, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("电子书更新检查")
+        self.resize(560, 420)
+        from pycbeta.fetch import format_update_report
+        layout = QVBoxLayout(self)
+        self.text = QPlainTextEdit()
+        self.text.setReadOnly(True)
+        self.text.setPlainText("\n".join(format_update_report(report or [])))
+        layout.addWidget(self.text, 1)
+        self._updated = [r["id"] for r in (report or [])
+                         if r.get("status") == "updated"]
+        row = QHBoxLayout()
+        self.btn_copy = QPushButton("拷贝已更新 ID")
+        self.btn_copy.setToolTip("将需重新生成的佛典編號复制到剪贴板（换行分隔）")
+        self.btn_copy.setEnabled(bool(self._updated))
+        self.btn_copy.clicked.connect(self._on_copy)
+        row.addWidget(self.btn_copy)
+        self.copy_status = QLabel("")
+        self.copy_status.setStyleSheet("color: gray")
+        row.addWidget(self.copy_status, 1)
+        layout.addLayout(row)
+        buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        buttons.rejected.connect(self.reject)
+        buttons.accepted.connect(self.accept)
+        layout.addWidget(buttons)
+
+    def _on_copy(self):
+        QApplication.clipboard().setText("\n".join(self._updated))
+        self.copy_status.setText(f"已复制 {len(self._updated)} 个編號")
 
 
 class XmlOptionsPanel(QWidget):
@@ -1368,10 +1423,16 @@ class SourceDialog(QDialog):
         self.btn_update_data.setToolTip(
             "缺字库/补充字型/目录从上游直链同步（先校验再落盘，一致跳过）")
         self.btn_update_data.clicked.connect(self._on_update_data)
+        self.btn_check_update = QPushButton("检查电子书更新")
+        self.btn_check_update.setToolTip(
+            "逐 work 目录比对远程 XML（If-Modified-Since/字节；不改项不落盘），"
+            "列出需重新生成电子书的 ID（可一键拷贝）")
+        self.btn_check_update.clicked.connect(self._on_check_ebook_updates)
         self.update_status = QLabel("")
         self.update_status.setStyleSheet("color: gray")
         self.update_status.setWordWrap(True)
         urow.addWidget(self.btn_update_data)
+        urow.addWidget(self.btn_check_update)
         urow.addWidget(self.update_status, 1)
         layout.addLayout(urow)
         self._refresh_last_update()
@@ -1385,6 +1446,7 @@ class SourceDialog(QDialog):
         layout.addWidget(buttons)
         self._buttons_box = buttons
         self._update_worker = None
+        self._ebook_worker = None
 
     def _refresh_last_update(self):
         from pycbeta.update_data import last_update_summary
@@ -1430,6 +1492,40 @@ class SourceDialog(QDialog):
         QMessageBox.information(
             self, "官方数据更新",
             "\n".join(format_report(report or [])) or "无更新项")
+
+    def _dialog_presets(self):
+        """以对话框当前编辑值构造 presets（未保存也能检查更新）。"""
+        src = {k: e.text().strip() for k, e in self.path_edits.items()}
+        src["title_t2s"] = bool(self.title_t2s_box.isChecked())
+        dl = {}
+        for i in range(self.dl_table.rowCount()):
+            k = self.dl_table.item(i, 0).text()
+            v = self.dl_table.item(i, 1)
+            dl[k] = v.text().strip() if v else ""
+        return {"source": src, "downloads": dl}
+
+    def _on_check_ebook_updates(self):
+        """电子书远程更新检查（后台线程跑；跑完弹结果窗）。"""
+        self.btn_check_update.setEnabled(False)
+        self.btn_update_data.setEnabled(False)
+        self.btn_reset_urls.setEnabled(False)
+        self._buttons_box.setEnabled(False)
+        self.update_status.setText("正在检查电子书更新…")
+        self._ebook_worker = EbookUpdateWorker(self._dialog_presets())
+        self._ebook_worker.finished_report.connect(self._on_check_finished)
+        self._ebook_worker.finished.connect(self._on_check_done)
+        self._ebook_worker.start()
+
+    def _on_check_done(self):
+        self.btn_check_update.setEnabled(True)
+        self.btn_update_data.setEnabled(True)
+        self.btn_reset_urls.setEnabled(True)
+        self._buttons_box.setEnabled(True)
+        self.update_status.setText("更新检查完成")
+
+    def _on_check_finished(self, report):
+        dlg = EbookUpdateDialog(report or [], self)
+        dlg.exec()
 
     def _browse_dir(self, edit):
         d = QFileDialog.getExistingDirectory(self, "选择目录", edit.text().strip() or "")

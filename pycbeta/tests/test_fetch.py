@@ -7,7 +7,8 @@ from unittest import mock
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from pycbeta.fetch import (resolve_source, fetch_work, catalog_lookup,
-                           work_dir, materialize_work, title_t2s)
+                           work_dir, materialize_work, title_t2s,
+                           check_ebook_updates)
 
 
 def _presets(xml_dir="", cbeta_ebook="", **extra):
@@ -184,6 +185,68 @@ class TestFetchWork(unittest.TestCase):
         with mock.patch("pycbeta.fetch.catalog_lookup", return_value=[]):
             res = fetch_work("T0349", ["xml"], _presets(cbeta_ebook="X:\\b"))
         self.assertEqual(res, {"xml": []})
+
+
+class TestCheckUpdates(unittest.TestCase):
+    def test_work_id_from_dirname(self):
+        from pycbeta.fetch import _work_id_from_dirname
+        self.assertEqual(_work_id_from_dirname("T0349 彌勒菩薩"), "T0349")
+        self.assertEqual(_work_id_from_dirname("T0001 长阿含经"), "T0001")
+        self.assertEqual(_work_id_from_dirname("TX0006 太虛"), "TX0006")
+        self.assertEqual(_work_id_from_dirname("out"), "")
+        self.assertEqual(_work_id_from_dirname("T"), "")
+
+    def test_format_report(self):
+        from pycbeta.fetch import format_update_report
+        rep = [{"id": "T1", "status": "updated", "detail": "a"},
+               {"id": "T2", "status": "unchanged", "detail": ""},
+               {"id": "T3", "status": "failed", "detail": "HTTP 500"}]
+        lines = "\n".join(format_update_report(rep))
+        self.assertIn("已更新 1", lines)
+        self.assertIn("T1", lines)
+        self.assertIn("失败 T3", lines)
+
+    def _mk(self, root, wid, title, file):
+        d = os.path.join(root, f"{wid} {title}")
+        os.makedirs(d, exist_ok=True)
+        p = os.path.join(d, file)
+        with open(p, "w", encoding="utf-8") as f:
+            f.write("old")
+        return d, p
+
+    def test_check_updates(self):
+        root = tempfile.mkdtemp()
+        self._mk(root, "T0349", "书", "T12n0349.xml")
+        self._mk(root, "T0625", "书2", "T15n0625.xml")
+        self._mk(root, "T0670", "书3", "T16n0670.xml")
+        cat = os.path.join(root, "m.csv")
+        with open(cat, "w", encoding="utf-8") as f:
+            f.write("T,12,0349,1,1,x,书\nT,15,0625,1,1,x,书2\nT,16,0670,1,1,x,书3\n")
+        presets = {"source": {"cbeta_ebook": root, "catalog": cat},
+                   "downloads": {"xml": "http://x/{file}"}}
+
+        def probe(url, dest):
+            if "0349" in dest:
+                with open(dest, "w", encoding="utf-8") as f:
+                    f.write("new")
+                return "changed", "3→3B"
+            if "0625" in dest:
+                return "unchanged", ""
+            return "failed", "HTTP 500"
+
+        rep = {r["id"]: r for r in
+               check_ebook_updates(root, presets, probe=probe)}
+        self.assertEqual(rep["T0349"]["status"], "updated")
+        self.assertEqual(rep["T0625"]["status"], "unchanged")
+        self.assertEqual(rep["T0670"]["status"], "failed")
+
+    def test_check_skips_no_catalog(self):
+        root = tempfile.mkdtemp()
+        self._mk(root, "T9999", "书", "T99n9999.xml")
+        rep = check_ebook_updates(
+            root, {"source": {"cbeta_ebook": root, "catalog": ""}},
+            probe=lambda u, d: ("unchanged", ""))
+        self.assertEqual(rep[0]["status"], "skipped")
 
 
 if __name__ == "__main__":
