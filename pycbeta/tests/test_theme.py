@@ -73,10 +73,10 @@ class TestStripHeadNo(unittest.TestCase):
 class TestScaleFontSizes(unittest.TestCase):
     def test_tags_scaled(self):
         t = Theme().scale_font_sizes(1.5)
-        # 注意：title 取 CSS 合并后的有效值（h1.title 30pt）；
+        # 注意：title 取 CSS 合并后的有效值（h1.title 26pt）；
         # note-ref 取用户 CSS 值（现为 0.75em，随资源走，旧 9pt 已作废）
         self.assertEqual(t.tags["p"]["font-size"], "18pt")
-        self.assertEqual(t.tags["title"]["font-size"], "45pt")
+        self.assertEqual(t.tags["title"]["font-size"], "39pt")
         # footnote 出厂已是 0.75em：字符串不动，有效值随放大的 base 走
         self.assertEqual(t.tags["footnote"]["font-size"], "0.75em")
         self.assertIn('w:val="27"', t.docx_run("footnote"))

@@ -76,7 +76,7 @@ a { text-decoration: none; }
 /* ============ 标题 ============ */
 /* 书名（<title level="m">）：全书最大字号，居中加粗，段后空 1 行。 */
 h1.title {
-  font-size: 30pt;
+  font-size: 26pt;
   font-weight: bold;
   text-align: center;
   margin-bottom: 1em;        /* 书名段后 1 行 */

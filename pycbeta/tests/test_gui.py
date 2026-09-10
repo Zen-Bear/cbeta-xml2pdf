@@ -1668,15 +1668,15 @@ class TestCssEditor(unittest.TestCase):
                                    return_value="pdf_docx.css"):
                 dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
                 try:
-                    open30 = dlg._rows["h1.title"]["size"].text()
-                    self.assertEqual(open30, "30pt")  # 打开时显示出厂有效值
+                    open26 = dlg._rows["h1.title"]["size"].text()
+                    self.assertEqual(open26, "26pt")  # 打开时显示出厂有效值
                     dlg._load_preset_path(fn)
                     # 预设自有生效
                     self.assertEqual(
                         dlg._rows["p.head"]["size"].text(), "40pt")
                     # 未覆盖的显示继承（base），不是空白
                     self.assertEqual(
-                        dlg._rows["h1.title"]["size"].text(), "30pt")
+                        dlg._rows["h1.title"]["size"].text(), "26pt")
                     # touched 只记预设自有——保存不写继承值
                     self.assertNotIn(("h1.title", "font-size"), dlg._touched)
                     self.assertIn(("p.head", "font-size"), dlg._touched)
@@ -2312,7 +2312,7 @@ class TestCssEditor(unittest.TestCase):
                     # 回到出厂 → 控件回预填、块清空
                     dlg._reset_editor_state()
                     self.assertEqual(
-                        dlg._rows["h1.title"]["size"].text(), "30pt")
+                        dlg._rows["h1.title"]["size"].text(), "26pt")
                     self.assertEqual(dlg._touched, set())
                 finally:
                     dlg.close()
@@ -2471,7 +2471,7 @@ class TestCssEditor(unittest.TestCase):
             dlg = CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
         try:
             # 控件预填出厂值，但源码块保持空（不算 touched）
-            self.assertEqual(dlg._rows["h1.title"]["size"].text(), "30pt")
+            self.assertEqual(dlg._rows["h1.title"]["size"].text(), "26pt")
             self.assertEqual(dlg._rows["p"]["size"].text(), "12pt")
             self.assertEqual(dlg._touched, set())
             self.assertNotIn("h1.title {", dlg._source_edit.toPlainText())
