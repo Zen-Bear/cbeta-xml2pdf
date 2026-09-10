@@ -47,12 +47,14 @@ _DOWNLOAD_HINT = ("下载目录未配置：在 config.user.json 的 source.downl
                   "（GUI 数据源窗口可视编辑），或 --download-dir 指定")
 
 
-def resolve_source(presets=None, xml_dir=None, download_dir=None):
+def resolve_source(presets=None, xml_dir=None, download_dir=None,
+                   need_xml=True):
     """source 解析（显式参数 > presets source > 空即报错）。
-    两键都必须显式有值（出厂留空），空即 ValueError 指引去处；"" 视同未配。"""
+    两键都必须显式有值（出厂留空），空即 ValueError 指引去处；"" 视同未配。
+    need_xml=False 时不要求 xml_dir（纯下载场景；download_dir 仍必须）。"""
     cfg = (presets.get("source") or {}) if isinstance(presets, dict) else {}
     xml_dir = (xml_dir or cfg.get("xml_dir") or "").strip()
-    if not xml_dir:
+    if not xml_dir and need_xml:
         raise ValueError(_SOURCE_HINT)
     download_dir = (download_dir or cfg.get("download_dir") or "").strip()
     if not download_dir:
@@ -399,7 +401,8 @@ def fetch_work(work_id: str, formats: List[str], presets: Optional[Dict] = None,
         presets = load_presets()
     source_cfg = {**DEFAULT_SOURCE, **(presets.get("source") or {})}
     dl = {**DEFAULT_DOWNLOADS, **(presets.get("downloads") or {})}
-    _, download_dir = resolve_source(presets, download_dir=download_dir)
+    _, download_dir = resolve_source(presets, download_dir=download_dir,
+                                     need_xml=False)
     canon, no = parse_work_id(work_id)
     out = {}
     for fmt in formats:

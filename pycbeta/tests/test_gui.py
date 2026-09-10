@@ -2720,6 +2720,31 @@ class TestCssEditor(unittest.TestCase):
         cmd3 = build_render_cmd(opts3, "x.xml", "docx", "out", "tmp.json")
         self.assertIn("--font-lang", cmd3)
 
+    def test_build_render_cmd_out_name(self):
+        # 统一回退显式文件名：-o 指向确切文件；缺省仍是目录
+        from pycbeta.gui.__main__ import build_render_cmd
+        from pycbeta.gui.panel import XmlOptions
+        opts = XmlOptions(page="a4", font_lang="zh-Hant", engine="docx2pdf",
+                          formats=["txt"], t2s=False, vertical=False)
+        cmd = build_render_cmd(opts, "x.xml", "txt", "out", "tmp.json",
+                               out_name="TX08n0006.txt")
+        i = cmd.index("-o")
+        self.assertEqual(cmd[i + 1], os.path.join("out", "TX08n0006.txt"))
+        cmd0 = build_render_cmd(opts, "x.xml", "txt", "out", "tmp.json")
+        self.assertEqual(cmd0[cmd0.index("-o") + 1], "out")
+
+    def test_out_name_for_uniform_group(self):
+        # worker 命名与 CLI 同规则：首文件 legacy，后续统一 stem
+        import pycbeta.gui.__main__ as M
+        used = {}
+        w = M.BatchWorker.__new__(M.BatchWorker)
+        n1 = w._out_name_for(used, "out", "TX0006", "TX07n0006", "txt")
+        n2 = w._out_name_for(used, "out", "TX0006", "TX08n0006", "txt")
+        n3 = w._out_name_for(used, "out", "TX0006", "TX09n0006", "html")
+        self.assertIsNone(n1)  # 首个沿用默认
+        self.assertEqual(n2, "TX08n0006.txt")
+        self.assertIsNone(n3)  # html 照旧默认（残留）
+
     def test_styles_tab_opens_editor(self):
         from pycbeta.gui.panel import XmlOptionsPanel
         panel = XmlOptionsPanel(load_presets())

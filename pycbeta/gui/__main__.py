@@ -52,14 +52,16 @@ def parse_produced_paths(log):
     return out
 
 
-def build_render_cmd(opts, xml, fmt, out_dir, tmpcfg):
+def build_render_cmd(opts, xml, fmt, out_dir, tmpcfg, out_name=None):
     """子进程桥命令（纯函数，可单测）：批量渲染一行。
 
     - 字库语言只在简体时传 --font-lang（默认繁体省略；t2s 自动简体）；
     - tmpcfg 是临时 run.json（5 槽组合单；主题走槽，不传 --theme）。
+    - out_name 给定时 -o 指向确切文件（多源同名统一回退用；html 忽略，见残留）。
     """
+    out_target = os.path.join(out_dir, out_name) if out_name else out_dir
     cmd = [sys.executable, "-m", "pycbeta", "-i", xml, "-f", fmt,
-           "--page", opts.page, "--config", tmpcfg, "-o", out_dir]
+           "--page", opts.page, "--config", tmpcfg, "-o", out_target]
     if (opts.font_lang or "zh-Hant") == "zh-Hans" and not opts.t2s:
         cmd += ["--font-lang", "zh-Hans"]
     if abs(float(opts.font_scale or 1.0) - 1.0) > 1e-9:
@@ -113,6 +115,7 @@ class BatchWorker(QThread):
             tmpcfg = write_temp_run(run, snapshot)
             total_units = sum(len(self.opts.formats) for _j in self.jobs)
             done_units = 0
+            used_names = {}  # 本轮命名状态（多源同名统一回退，与 CLI 同规则）
             for idx, job in enumerate(self.jobs):
                 if self._cancel:
                     self.row_status.emit(idx, "已取消")
@@ -123,12 +126,16 @@ class BatchWorker(QThread):
                 for xml in xmls:
                     if self._cancel:
                         break
-                    title = self._title_of(xml, idx, P5Parser)
+                    title, wid = self._title_of(xml, idx, P5Parser)
                     produced, ok = [], True
                     for fmt in self.opts.formats:
                         if self._cancel:
                             break
-                        ok, paths = self._render_one(xml, fmt, out_dir, tmpcfg)
+                        out_name = self._out_name_for(
+                            used_names, out_dir, wid,
+                            os.path.splitext(os.path.basename(xml))[0], fmt)
+                        ok, paths = self._render_one(xml, fmt, out_dir, tmpcfg,
+                                                     out_name=out_name)
                         produced += paths
                         done_units += 1
                         self.total_progress.emit(done_units, max(total_units, 1))
@@ -208,12 +215,33 @@ class BatchWorker(QThread):
             w = P5Parser().parse(xml)
             title = (w.metadata.get("title") or "").strip() or w.id
             self.row_title.emit(idx, title)
-            return title
+            return title, w.id
         except Exception:
-            return os.path.basename(xml)
+            return os.path.basename(xml), ""
 
-    def _render_one(self, xml, fmt, out_dir, tmpcfg):
-        cmd = build_render_cmd(self.opts, xml, fmt, out_dir, tmpcfg)
+    def _out_name_for(self, used, out_dir, wid, stem, fmt):
+        """本轮统一命名：多源同名全组改输入基名（与 CLI 同规则，共 filename helper）。
+        返回最终名；None 表示沿用默认（单文件/html/无 wid）。改名执行缺失忽略。"""
+        if fmt == "html" or not wid:
+            return None
+        from pycbeta.filename import dedupe_run_outputs
+        from pycbeta.cli import _FORMAT_EXT
+        ext = _FORMAT_EXT.get(fmt)
+        if not ext:
+            return None
+        default = f"{wid}{ext}"
+        final, renames = dedupe_run_outputs(used, out_dir, default, stem)
+        for old, new in renames:
+            try:
+                if os.path.isfile(old):
+                    os.rename(old, new)
+            except OSError:
+                pass
+        return None if final == default else final
+
+    def _render_one(self, xml, fmt, out_dir, tmpcfg, out_name=None):
+        cmd = build_render_cmd(self.opts, xml, fmt, out_dir, tmpcfg,
+                               out_name=out_name)
         self.log.emit("$ " + " ".join(cmd))
         try:
             self._proc = subprocess.Popen(

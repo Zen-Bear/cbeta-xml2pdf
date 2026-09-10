@@ -32,6 +32,8 @@
   - 验收：TX0006 实合 49 碎片→1 部（199 body 节点）；合部 body/注块与碎片拼接逐字相等（509548 字）；辅轨 `--baseline xml` 0/0；docx 冒烟 826KB/4642 段/outline 俱全；单测 28 OK（merge/txt/verify）；全量回归按用户指示跳过（改动面：一次性合部脚本 + aux 抽取镜像，渲染/解析零触碰）
   - 备选 B（管线原生多文件感知）改动面大未采用；旧同目录合部语义保持原样（T01n0001 路径不变，单测锁死）
   - 自动合册入管线（2026-09-10 用户立项：xml_dir 直指 CBReader 书库免下载出书）：`pycbeta/merge.py` 库化（分组改按册 `(canon,vol,no)`；`resolve_work_files` 整文件优先否则碎片合册；`split_paths` 目录分区；合成落 tmpdir 随跑随清；`test/merge_cbreader.py` 瘦身薄 wrapper）；CLI 編號流 + 目录 walk + GUI ID/目录双模式接线（下游只见路径零感知；GUI 行标签“合册合成”）；多源同部输出触发式回退输入基名（`resolve_output _used`，单文件逐字节不变；html 命名 renderer 内置残留已知；GUI 批量同撞既有，另立项）；验收 TX0006 书库直出 3 txt + 逐册辅轨 0/0 + 逐册官方对照（TX07 0/0；TX08/TX09 差源 variance + 体注既有语义，非合部丢字，见下）；单册保真（组内拼接逐字相等）；全量 473 OK；门禁 html 双 OK（txt/md 残留已知类）；全量 verify 超时系环境慢（子集正常落盘），非失败
+  - 统一命名（2026-09-10）：同轮多源同名全组改输入基名（首个亦回溯改名，`TX07n0006/TX08n0006/TX09n0006`，册数可见；`filename.dedupe_run_outputs`，render/verify 共用 state 重放得终态；GUI worker 显式 `-o` 同规则）；单文件/重跑逐字节不变；全量 483 OK
+  - fetch 纯下载不要求 xml_dir（`need_xml=False`；download 空仍报错，堵 cwd 落盘保留）
 - [x] **已完成** 单元测试数据路径迁移（`CBETA` 常量 → `E:\dev\cbeta\test`；`TestRenderYP0012` → `TestRenderYP0019`；`_body` 归一化剥 `<style>`/border span/style 属性/标签空白）
 - [x] **已完成** `parser.py:221` charDecl `xml:id` 命名空间缺陷修复（`{NS_XML}id`）；并调整 `_resolve_gaiji` 优先级为 **gaiji_db → charDecl → raw**（官方 html 与 gaiji_db 一致，charDecl composition 非真实字符，仅作兜底）
 - [x] **P8 低** 官方数据更新（2026-09-09 落实：上游 cbeta_gaiji 8/12 新增 CB35027-CB35032

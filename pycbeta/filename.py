@@ -69,3 +69,58 @@ def apply_template(template: str, work, juan=None) -> str:
     for token, val in values.items():
         name = name.replace(token, val)
     return sanitize(name)
+
+
+def _claim(taken, emitted, out_dir, name):
+    """认领一名：已登记（同轮重放/同文件重复）原样返回，不 churn taken；
+    否则占用（仍撞则 _2 后缀），返回最终名。"""
+    import os as _os
+    if (out_dir, name) in emitted:
+        return name
+    ndir = _os.path.normcase(_os.path.abspath(out_dir))
+    cand = name
+    if (ndir, cand.lower()) in taken:
+        base, ext = _os.path.splitext(name)
+        i = 2
+        while (ndir, f"{base}_{i}{ext}".lower()) in taken:
+            i += 1
+        cand = f"{base}_{i}{ext}"
+    taken.add((ndir, cand.lower()))
+    emitted.append((out_dir, cand))
+    return cand
+
+
+def dedupe_run_outputs(state, out_dir, default_name, src_stem):
+    """多源同名统一回退：一次运行内多输入同名时，全组改用输入基名。
+
+    state: 调用方持有 dict（一次运行共用；CLI 主循环 / GUI worker 各持一份；
+    render 与 verify 两阶段共用同一对象，重放即得终态名）。
+    返回 (final_name, renames)，renames 为需预执行的 [(old_abs, new_abs)]
+    （首文件已落盘输出改名；调用方执行，缺失忽略）。
+    单文件/重跑/同文件重复：与旧逻辑逐字节一致。
+    """
+    import os as _os
+    base_d, ext = _os.path.splitext(default_name)
+    stem = _os.path.splitext(_os.path.basename(src_stem or ""))[0] or base_d
+    taken = state.setdefault("_taken", set())
+    groups = state.setdefault("_groups", {})
+    key = (_os.path.normcase(_os.path.abspath(out_dir)), default_name.lower())
+    g = groups.setdefault(key, {"first": stem, "converted": False,
+                                "emitted": []})
+    if stem == g["first"] and not g["converted"]:
+        # 首源（转换前）：legacy 名，幂等
+        final = _claim(taken, g["emitted"], out_dir, default_name)
+        return final, []
+    # 多源组（或其重放）：统一 stem 命名
+    renames = []
+    if not g["converted"]:
+        first = g["first"]
+        conv = []
+        for (d, n) in g["emitted"]:
+            nn = _claim(taken, conv, d, first + _os.path.splitext(n)[1])
+            if nn != n:
+                renames.append((_os.path.join(d, n), _os.path.join(d, nn)))
+        g["emitted"] = conv
+        g["converted"] = True
+    final = _claim(taken, g["emitted"], out_dir, stem + ext)
+    return final, renames

@@ -237,9 +237,9 @@ def render_one(w, fmt, out_dir, out_name, args, theme, html_base=None):
 
 def resolve_output(xml_fn, fmt, args, work, _used=None):
     """输出目录与文件名。默认 `{work.id}{ext}`（单文件行为逐字节不变）；
-    _used 为本轮已用 {(目录, 文件名)} 集合时：同目录同名且输入基名不同
-    （多源同部，如按册三文件）→ 回退输入基名，仍撞则 _2 后缀。防覆盖，
-    不改变任何单文件行为。"""
+    _used 为本轮共享 dict 时：多输入同名全组统一改输入基名
+    （`filename.dedupe_run_outputs`；首文件已落盘输出预先改名，缺失/锁定忽略）。
+    html 与显式 -o 文件走旧路径（前者 renderer 内部命名，后者用户强制）。"""
     ext = _FORMAT_EXT[fmt]
     src_dir = os.path.dirname(os.path.abspath(xml_fn))
     base = os.path.splitext(os.path.basename(xml_fn))[0]
@@ -254,21 +254,17 @@ def resolve_output(xml_fn, fmt, args, work, _used=None):
     else:
         out_dir = src_dir
         out_name = apply_template(args.name_template, work) + ext if args.name_template else f"{work.id}{ext}"
-    if _used is not None:
-        key = (os.path.normcase(os.path.abspath(out_dir)),
-               out_name.lower())
-        if key in _used and base != os.path.splitext(out_name)[0]:
-            cand = base + ext
-            key2 = (os.path.normcase(os.path.abspath(out_dir)), cand.lower())
-            if key2 in _used:
-                i = 2
-                while (os.path.normcase(os.path.abspath(out_dir)),
-                       f"{base}_{i}{ext}".lower()) in _used:
-                    i += 1
-                cand = f"{base}_{i}{ext}"
-            out_name = cand
-            key = (os.path.normcase(os.path.abspath(out_dir)), out_name.lower())
-        _used.add(key)
+    if _used is not None and fmt != "html":
+        from .filename import dedupe_run_outputs
+        out_name, renames = dedupe_run_outputs(_used, out_dir, out_name, base)
+        for old, new in renames:
+            try:
+                if os.path.isfile(old):
+                    os.rename(old, new)
+                    print(f"改名: {os.path.basename(old)} -> "
+                          f"{os.path.basename(new)}（多源同名统一回退）")
+            except OSError:
+                pass
     if args.output:
         return out, (None if fmt == "html" else out_name)
     return src_dir, out_name
@@ -581,7 +577,7 @@ def main(argv=None):
         # 大字版：主题字号等比缩放（版心/边距不动，自动重排；em 随基准自动跟）
         theme.scale_font_sizes(args.font_scale)
 
-    _used_names = set()  # 本轮已用 (目录, 文件名)：多源同部时触发输入基名回退
+    _used_names = {}  # 本轮命名状态（render 与 verify 共用，重放得终态名）
     if os.path.isdir(args.input):
         from .merge import split_paths, merge_groups_to_tmpdir
         walked = []
@@ -694,8 +690,9 @@ def main(argv=None):
                 results.append((block_failed, name, block))
                 continue
             for fmt in formats:
-                # 计算生成档路径（复用 resolve_output）
-                out_dir, out_name = resolve_output(xml_fn, fmt, args, w)
+                # 计算生成档路径（复用 resolve_output；与 render 同一 _used 重放得终态名）
+                out_dir, out_name = resolve_output(xml_fn, fmt, args, w,
+                                                   _used=_used_names)
                 if fmt == "html":
                     # html 为多文件 Txxx_001.html，全部卷参与比较
                     gen_paths = sorted(_glob.glob(os.path.join(out_dir, "*.html")))

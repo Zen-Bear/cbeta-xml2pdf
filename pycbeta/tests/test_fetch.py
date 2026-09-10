@@ -35,6 +35,14 @@ class TestResolveSource(unittest.TestCase):
         with self.assertRaises(ValueError):
             fetch_work("T0349", ["xml"], {"source": {"xml_dir": "X:\\a"}})
 
+    def test_fetch_only_needs_download_dir(self):
+        # 纯下载不要求 xml_dir（need_xml=False）
+        xml, dl = resolve_source({"source": {"download_dir": "X:\\b"}},
+                                 need_xml=False)
+        self.assertEqual((xml, dl), ("", "X:\\b"))
+        with self.assertRaises(ValueError):
+            resolve_source({"source": {"download_dir": "X:\\b"}})
+
 
 if __name__ == "__main__":
     unittest.main()
