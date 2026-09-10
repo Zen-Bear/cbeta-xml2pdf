@@ -34,12 +34,30 @@ ALL_FORMATS = ("xml", "html", "docx", "epub", "txt", "txt_notes", "odt")
 _ZIP_FORMATS = {"html", "docx", "txt", "txt_notes", "odt"}
 
 DEFAULT_SOURCE = {
-    "xml_dir": r"E:\dev\cbeta\test",
+    "xml_dir": "",
     # catalog 默认用仓内版（cbeta/data/sutra_mapping.txt，随包更新；publish 原件仅作上游备份）
     "catalog": os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                             "cbeta", "data", "sutra_mapping.txt"),
-    "download_dir": r"E:\dev\cbeta\test",
+    "download_dir": "",
 }
+
+_SOURCE_HINT = ("本地 XML 源未配置：在 config.user.json 的 source.xml_dir 填写 "
+                "（GUI 数据源窗口可视编辑），或 --xml-dir 指定")
+_DOWNLOAD_HINT = ("下载目录未配置：在 config.user.json 的 source.download_dir 填写 "
+                  "（GUI 数据源窗口可视编辑），或 --download-dir 指定")
+
+
+def resolve_source(presets=None, xml_dir=None, download_dir=None):
+    """source 解析（显式参数 > presets source > 空即报错）。
+    两键都必须显式有值（出厂留空），空即 ValueError 指引去处；"" 视同未配。"""
+    cfg = (presets.get("source") or {}) if isinstance(presets, dict) else {}
+    xml_dir = (xml_dir or cfg.get("xml_dir") or "").strip()
+    if not xml_dir:
+        raise ValueError(_SOURCE_HINT)
+    download_dir = (download_dir or cfg.get("download_dir") or "").strip()
+    if not download_dir:
+        raise ValueError(_DOWNLOAD_HINT)
+    return xml_dir, download_dir
 DEFAULT_DOWNLOADS = {
     "xml": "https://raw.githubusercontent.com/cbeta-org/xml-p5/master/{canon}/{canon}{vol}/{file}",
     "xml_repo": "https://github.com/cbeta-org/xml-p5",
@@ -381,7 +399,7 @@ def fetch_work(work_id: str, formats: List[str], presets: Optional[Dict] = None,
         presets = load_presets()
     source_cfg = {**DEFAULT_SOURCE, **(presets.get("source") or {})}
     dl = {**DEFAULT_DOWNLOADS, **(presets.get("downloads") or {})}
-    download_dir = download_dir or source_cfg["download_dir"]
+    _, download_dir = resolve_source(presets, download_dir=download_dir)
     canon, no = parse_work_id(work_id)
     out = {}
     for fmt in formats:
