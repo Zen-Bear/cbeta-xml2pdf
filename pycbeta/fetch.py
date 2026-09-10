@@ -254,10 +254,11 @@ def _collect_txt_flat(flat: str, fmt: str, work_id: str) -> List[str]:
 
 
 def _fetch_baseline_flat(work_id: str, fmt: str, dl: Dict, canon: str,
-                         wdir: str) -> List[str]:
+                         wdir: str, force: bool = False) -> List[str]:
     """基线落 work 目录（平展）：html/docx/odt/epub 放目录根下，
     txt 进 {id}.txt、txt_notes 进 {id}.txt_notes/；递归收集时排除 out/
-    （work 目录自带 out/ 生成物）。失败静默返回 []。"""
+    （work 目录自带 out/ 生成物）。失败静默返回 []。
+    force=True 时忽略「已有」短路，强制重下覆盖（XML 更新后刷新基线用）。"""
     if fmt == "epub":
         p = os.path.join(wdir, f"{work_id}.epub")
         existing = [p] if os.path.isfile(p) else []
@@ -270,32 +271,32 @@ def _fetch_baseline_flat(work_id: str, fmt: str, dl: Dict, canon: str,
             if f"{os.sep}out{os.sep}" in os.path.abspath(p):
                 continue
             existing.append(p)
-    if existing:
+    if existing and not force:
         return existing  # work 目录已有，不重复下载
 
     if fmt == "epub":
         url = dl.get("epub", DEFAULT_DOWNLOADS["epub"]).format(canon=canon, id=work_id)
         dest = os.path.join(wdir, f"{work_id}.epub")
-        if not os.path.isfile(dest):
+        if force or not os.path.isfile(dest):
             if not _http_download(url, dest):
-                return []
+                return existing if force else []
         return [dest]
 
     tmpl = dl.get(fmt, DEFAULT_DOWNLOADS.get(fmt, ""))
     if not tmpl:
-        return []
+        return existing if force else []
     if fmt in ("html", "txt", "txt_notes"):
         url = tmpl.format(id=work_id)
     else:  # docx / odt：需 {canon} 前缀
         url = tmpl.format(canon=canon, id=work_id)
     zip_path = os.path.join(wdir, f"{work_id}.{fmt}.zip")
-    if not os.path.isfile(zip_path):
+    if force or not os.path.isfile(zip_path):
         if not _http_download(url, zip_path):
-            return []
+            return existing if force else []
     try:
         _unzip(zip_path, wdir)
     except zipfile.BadZipFile:
-        return []
+        return existing if force else []
     if fmt in ("txt", "txt_notes"):
         # 顶层 {id}_*.txt 整理入 {id}.txt/ 或 {id}.txt_notes/ 目录
         #（find_official 的 {s}.txt/*.txt 与 {s}.txt_notes/*.txt 模式）
@@ -310,6 +311,25 @@ def _fetch_baseline_flat(work_id: str, fmt: str, dl: Dict, canon: str,
         if f"{os.sep}out{os.sep}" in os.path.abspath(p):
             continue
         out.append(p)
+    return out
+
+
+_BASELINE_FORMATS = ("html", "docx", "epub", "txt", "txt_notes", "odt")
+
+
+def _present_baseline_formats(wdir: str, work_id: str) -> List[str]:
+    """work 目录内本地已有的基线格式（不会为不存在者新下载）。"""
+    out = []
+    for fmt in _BASELINE_FORMATS:
+        if fmt == "epub":
+            if os.path.isfile(os.path.join(wdir, f"{work_id}.epub")):
+                out.append(fmt)
+        elif fmt in ("txt", "txt_notes"):
+            if _collect_txt_flat(wdir, fmt, work_id):
+                out.append(fmt)
+        elif glob.glob(os.path.join(wdir, "**", f"{work_id}_*.{fmt}"),
+                       recursive=True):
+            out.append(fmt)
     return out
 
 
@@ -483,17 +503,19 @@ def _download_if_changed(url: str, dest: str, timeout: int = 90):
     os.makedirs(os.path.dirname(dest), exist_ok=True)
     with open(dest, "wb") as f:
         f.write(data)
-    return "changed", f"{len(old)}→{len(data)}B"
+    return "changed", f"{len(old)}→{len(data)}"
 
 
 def check_ebook_updates(cbeta_ebook: str, presets: Optional[Dict] = None,
-                        probe=None, progress=None):
+                        probe=None, progress=None, with_baselines: bool = True):
     """远程源更新检查：遍历 cbeta_ebook 各 work 目录，对 XML 逐册条件下载
     （If-Modified-Since/字节比对；不改项不落盘）。返回报告：
     [{"id","status","detail"}]，status ∈ updated/unchanged/failed/skipped。
 
     只走远程源（catalog 记录的 XML URL）——**不读本地 xml_dir 候选源**
     （远程永远最新；本地 CBReader 仅用于材料化首次导入，不参与更新）。
+    with_baselines=True：XML 有更新的 work，其**本地已有的基线**一并强制刷新
+    （只为已存在格式重下，不新增格式）。
     probe(url, dest) 可注入（单测）；progress(id, done, total) 可注入。"""
     if probe is None:
         probe = _download_if_changed
@@ -533,6 +555,13 @@ def check_ebook_updates(cbeta_ebook: str, presets: Optional[Dict] = None,
             elif st == "failed":
                 failed += 1
                 details.append(f"{rec['file']} 失败:{detail}")
+        if changed and with_baselines:
+            refreshed = []
+            for fmt in _present_baseline_formats(d, wid):
+                if _fetch_baseline_flat(wid, fmt, dl, canon, d, force=True):
+                    refreshed.append(fmt)
+            if refreshed:
+                details.append("基线已刷新:" + ",".join(refreshed))
         status = "updated" if changed else ("failed" if failed else "unchanged")
         report.append({"id": wid, "status": status, "detail": "; ".join(details)})
     return report

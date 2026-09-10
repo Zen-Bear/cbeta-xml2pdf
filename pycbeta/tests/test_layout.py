@@ -135,6 +135,31 @@ class TestFlatLanding(unittest.TestCase):
             fetch_mod._http_download = real_http
         self.assertEqual(res, [os.path.join(self.flat, "T9999_001.html")])
 
+    def test_baseline_force_refresh_overwrites(self):
+        # work 目录已有 html，force=True 仍重下并覆盖
+        want = os.path.join(self.flat, "T9999_001.html")
+        with open(want, "w", encoding="utf-8") as f:
+            f.write("old")
+        fakezip = os.path.join(self.root, "b.zip")
+        with zipfile.ZipFile(fakezip, "w") as z:
+            z.writestr("T9999_001.html", "new-content")
+
+        real_http = fetch_mod._http_download
+
+        def fake_zip(url, dest):
+            shutil.copy(fakezip, dest)
+            return True
+
+        fetch_mod._http_download = fake_zip
+        try:
+            res = fetch_mod._fetch_baseline_flat(
+                "T9999", "html", self.dl, "T", self.flat, force=True)
+        finally:
+            fetch_mod._http_download = real_http
+        self.assertEqual(res, [want])
+        with open(want, encoding="utf-8") as f:
+            self.assertEqual(f.read(), "new-content")
+
     def test_nested_txt_notes_found_without_redownload(self):
         # 手工整理的嵌套形态（{work}/text-with-notes/{id}.txt_notes/）
         # 必须被认作已落盘，不重复下载、不搬动

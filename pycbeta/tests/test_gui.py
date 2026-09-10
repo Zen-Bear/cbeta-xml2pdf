@@ -1085,6 +1085,7 @@ class TestSourceDialog(unittest.TestCase):
             self.assertNotIn("download_dir", keys)
             self.assertIn("cbeta_ebook", dlg.path_edits)
             self.assertTrue(dlg.title_t2s_box.isChecked())  # 默认开
+            self.assertTrue(dlg.ebook_base_box.isChecked())  # 默认同时更新基线
         finally:
             dlg.close()
 

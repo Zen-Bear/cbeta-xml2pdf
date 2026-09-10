@@ -235,10 +235,47 @@ class TestCheckUpdates(unittest.TestCase):
             return "failed", "HTTP 500"
 
         rep = {r["id"]: r for r in
-               check_ebook_updates(root, presets, probe=probe)}
+               check_ebook_updates(root, presets, probe=probe,
+                                   with_baselines=False)}
         self.assertEqual(rep["T0349"]["status"], "updated")
         self.assertEqual(rep["T0625"]["status"], "unchanged")
         self.assertEqual(rep["T0670"]["status"], "failed")
+
+    def test_check_refreshes_present_baselines(self):
+        root = tempfile.mkdtemp()
+        d, _ = self._mk(root, "T0349", "书", "T12n0349.xml")
+        with open(os.path.join(d, "T0349_001.html"), "w", encoding="utf-8") as f:
+            f.write("old-html")
+        cat = os.path.join(root, "m.csv")
+        with open(cat, "w", encoding="utf-8") as f:
+            f.write("T,12,0349,1,1,x,书\n")
+        presets = {"source": {"cbeta_ebook": root, "catalog": cat},
+                   "downloads": {"xml": "http://x/{file}"}}
+        seen = []
+
+        def probe(url, dest):
+            return "changed", "1→2"
+
+        def fake_base(work_id, fmt, dl, canon, wdir, force=False):
+            seen.append((fmt, force))
+            return ["x"] if force else []
+
+        with mock.patch("pycbeta.fetch._fetch_baseline_flat",
+                        side_effect=fake_base):
+            rep = check_ebook_updates(root, presets, probe=probe)
+        self.assertEqual(rep[0]["status"], "updated")
+        self.assertIn(("html", True), seen)  # 仅已有格式、强制刷新
+        self.assertIn("基线已刷新:html", rep[0]["detail"])
+
+    def test_present_baseline_formats(self):
+        from pycbeta.fetch import _present_baseline_formats
+        d = tempfile.mkdtemp()
+        with open(os.path.join(d, "T0349_001.html"), "w", encoding="utf-8") as f:
+            f.write("x")
+        with open(os.path.join(d, "T0349.epub"), "w", encoding="utf-8") as f:
+            f.write("x")
+        self.assertEqual(sorted(_present_baseline_formats(d, "T0349")),
+                         ["epub", "html"])
 
     def test_check_skips_no_catalog(self):
         root = tempfile.mkdtemp()

@@ -400,16 +400,18 @@ class EbookUpdateWorker(QThread):
     """电子书远程更新检查后台线程：逐 work 条件下载 XML（不改项不落盘）。"""
     finished_report = Signal(list)
 
-    def __init__(self, presets, parent=None):
+    def __init__(self, presets, with_baselines=True, parent=None):
         super().__init__(parent)
         self._presets = presets
+        self._with_baselines = with_baselines
 
     def run(self):
         from pycbeta.fetch import check_ebook_updates
         try:
             ebook = ((self._presets.get("source") or {})
                      .get("cbeta_ebook") or "").strip()
-            rep = check_ebook_updates(ebook, self._presets)
+            rep = check_ebook_updates(ebook, self._presets,
+                                      with_baselines=self._with_baselines)
         except Exception as exc:  # noqa: BLE001
             rep = [{"id": "all", "status": "failed", "detail": str(exc)}]
         self.finished_report.emit(rep)
@@ -1428,11 +1430,17 @@ class SourceDialog(QDialog):
             "逐 work 目录比对远程 XML（If-Modified-Since/字节；不改项不落盘），"
             "列出需重新生成电子书的 ID（可一键拷贝）")
         self.btn_check_update.clicked.connect(self._on_check_ebook_updates)
+        self.ebook_base_box = QCheckBox("同时更新已有基线")
+        self.ebook_base_box.setChecked(True)
+        self.ebook_base_box.setToolTip(
+            "XML 有更新的 work，其本地已有的官方基线（html/docx/txt 等）一并刷新；"
+            "只为已存在格式重下，不新增格式")
         self.update_status = QLabel("")
         self.update_status.setStyleSheet("color: gray")
         self.update_status.setWordWrap(True)
         urow.addWidget(self.btn_update_data)
         urow.addWidget(self.btn_check_update)
+        urow.addWidget(self.ebook_base_box)
         urow.addWidget(self.update_status, 1)
         layout.addLayout(urow)
         self._refresh_last_update()
@@ -1509,9 +1517,12 @@ class SourceDialog(QDialog):
         self.btn_check_update.setEnabled(False)
         self.btn_update_data.setEnabled(False)
         self.btn_reset_urls.setEnabled(False)
+        self.ebook_base_box.setEnabled(False)
         self._buttons_box.setEnabled(False)
         self.update_status.setText("正在检查电子书更新…")
-        self._ebook_worker = EbookUpdateWorker(self._dialog_presets())
+        self._ebook_worker = EbookUpdateWorker(
+            self._dialog_presets(),
+            with_baselines=bool(self.ebook_base_box.isChecked()))
         self._ebook_worker.finished_report.connect(self._on_check_finished)
         self._ebook_worker.finished.connect(self._on_check_done)
         self._ebook_worker.start()
@@ -1520,6 +1531,7 @@ class SourceDialog(QDialog):
         self.btn_check_update.setEnabled(True)
         self.btn_update_data.setEnabled(True)
         self.btn_reset_urls.setEnabled(True)
+        self.ebook_base_box.setEnabled(True)
         self._buttons_box.setEnabled(True)
         self.update_status.setText("更新检查完成")
 
