@@ -80,6 +80,28 @@ class TestTxtRenderer(unittest.TestCase):
         self.assertIn("\u25c7", t)
         self.assertIn("raṃ", t)
 
+    def test_note_inside_tt_keeps_reading(self):
+        # 逐字咒文表内的 NoteRef：注内容不受 _drop_sa 影响，读数照常
+        note = Note(tag="note", attrs={}, n="n1", ntype="add", place="foot",
+                    children=[Gaiji(code="RJ-CCEB", char="Y"),
+                              Text(text="【CB】，"),
+                              Gaiji(code="RJ-E046", char="X"),
+                              Text(text="【卍續】")])
+        tt = E(tag="tt", attrs={}, children=[
+            E(tag="t", attrs={"xml:lang": "zh-Hant"}, children=[Text(text="南")]),
+            E(tag="t", attrs={"xml:lang": "sa-x-rj"},
+              children=[NoteRef(n="n1", notes=[note])])])
+        work = _work([E(tag="p", attrs={"cb:type": "dharani"}, children=[tt])],
+                     {"n1": [note]})
+        work.metadata["charDecl"] = {"RJ-CCEB": {"roman": "raṃ"},
+                                     "RJ-E046": {"rjchar": "誆"}}
+        out = TxtRenderer().render_work(work, tempfile.mkdtemp(), "t.txt")
+        with open(out, encoding="utf-8") as f:
+            t = f.read()
+        self.assertIn("[1]", t)                      # 正文标记
+        self.assertIn("[1] raṃ【CB】，\u25c7【卍續】", t)  # 注内读数/占位都在
+        self.assertNotIn("[1] 【CB】【卍續】", t)
+
     def test_inline_brackets(self):
         ref = NoteRef(n="n1", notes=[_note("小注", "mod")])
         body = [E(tag="p", attrs={}, children=[Text(text="正文"), ref])]

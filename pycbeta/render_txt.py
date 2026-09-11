@@ -183,6 +183,15 @@ class TxtRenderer:
     def _render_children(self, el, kids=None) -> str:
         return "".join(self._render_node(c) for c in (kids if kids is not None else el.children))
 
+    def _render_note_content(self, note) -> str:
+        """注内容在正文逐字咒文表上下文之外渲染（注内悉昙照常出读音/占位）。"""
+        prev = self._drop_sa
+        self._drop_sa = False
+        try:
+            return self._render_children(note)
+        finally:
+            self._drop_sa = prev
+
     def _render_noteref(self, ref: NoteRef) -> str:
         if not self.show_notes:
             return ""
@@ -190,7 +199,7 @@ class TxtRenderer:
         if not notes:
             return ""
         note = self._pick_note(notes)
-        content = self._render_children(note)
+        content = self._render_note_content(note)
         if self.notes == "inline":
             lb, rb = ("(", ")") if self.inline_brackets == "halfwidth" else ("（", "）")
             return f"{lb}{content}{rb}"
@@ -207,7 +216,7 @@ class TxtRenderer:
             notes = (self._work.notes_by_n or {}).get(n) if self._work else None
             if notes:
                 note = self._pick_note(notes)
-                content = self._render_children(note)
+                content = self._render_note_content(note)
                 if self.notes == "inline":
                     lb, rb = ("(", ")") if self.inline_brackets == "halfwidth" else ("（", "）")
                     return f"{lb}{content}{rb}"
@@ -219,7 +228,7 @@ class TxtRenderer:
     def _render_inline_note(self, note: Note) -> str:
         if note.place in ("inline", "inline2", "interlinear"):
             lb, rb = ("(", ")") if self.inline_brackets == "halfwidth" else ("（", "）")
-            return f"{lb}{self._render_children(note)}{rb}"
+            return f"{lb}{self._render_note_content(note)}{rb}"
         return ""
 
     def _pick_note(self, notes):

@@ -120,6 +120,11 @@
   - 比较不变：`normalize` 两侧都剥 `[n]`/`[A**]` 标记、`◇`/PUA 都归一 `□`；主轨 txt→txt_notes 仍 `缺69/多9`（较改前 55/9 变动系去掉正文伪 PUA、注块对齐波动，门禁外）；docx/html 不受影响
   - 验收：`test_txt.TestTxtRenderer` 改/加（`[1]`↔`[1] 内容` 对应、show_notes=false 全无、RJ 无 roman→`◇`）；全量 550 OK
   - 已知残留（门禁外，另议）：aux P3 仍 `缺85`——`No.` 令牌镜像（待办3）+ 注块选取/顺序差（我方 136 条 vs 官方 252 行）
+- [x] **已完成** 逐字咒文表内 NoteRef 注内容丢读音修复（2026-09-11 用户点档：注释 21–38 成 `【CB】【卍續】`）
+  - 根因：`TxtRenderer._render_noteref`/`_render_app` 在当前上下文渲染注内容；逐字咒文表 `<cb:tt>` 内 `_drop_sa=True` 连带把注内悉昙 `<g>` 也丢了 → `na【CB】ba【卍續】` 变 `【CB】【卍續】`。md 同病
+  - 落点：txt/md 新增 `_render_note_content(note)`（渲染注内容时临时置 `_drop_sa=False`，结束恢复），`_render_noteref`/`_render_app`/`_render_inline_note` 统一走它
+  - 收获：X59 主轨 txt `缺69/多9` → **`缺0/多9`（≤阈值，通过）**；docx `0/0`；P3 aux `缺85` → `缺16`（余为 `No.` 令牌镜像 + 个别注序，门禁外）
+  - 验收：`test_txt.TestTxtRenderer.test_note_inside_tt_keeps_reading`；全量 551 OK
 - [x] **已完成** 还原出厂确认 + 校验参数持久化默认开 + 报告差异行数改名（2026-09-11 用户点档）
   - 还原出厂：`panel._on_reset` 执行前弹警告确认（「当前配置会被还原为出厂配置」，确定/取消；取消不动作）
   - 校验持久化：出厂 `config.json` verify 块补 `enabled: true`（默认打开）；`set_options` 缺键默认亦 True；`get_options`/`_presets_merged` 本就 roundtrip 开关/阈值/差异行数/自动下载/卷限定
