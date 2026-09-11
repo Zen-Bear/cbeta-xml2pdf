@@ -112,6 +112,30 @@ class TestTxtRenderer(unittest.TestCase):
             E(tag="p", attrs={}, children=[Text(text="正文"), ref]))
         self.assertIn("（小注）", t2)
 
+    def test_note_inline_brackets_independent(self):
+        # 校注内联用 note_inline_brackets，正文夹注用 inline_brackets，两者独立
+        ref = NoteRef(n="n1", notes=[_note("校注", "mod")])
+        t = TxtRenderer(notes="inline", inline_brackets="halfwidth",
+                        note_inline_brackets="fullwidth")._render_node(
+            E(tag="p", attrs={}, children=[Text(text="正文"), ref]))
+        self.assertIn("（校注）", t)
+        n = Note(tag="note", attrs={}, n="", ntype="", place="inline",
+                 children=[Text(text="夾注")])
+        t2 = TxtRenderer(inline_brackets="halfwidth",
+                         note_inline_brackets="fullwidth")._render_node(n)
+        self.assertEqual(t2, "(夾注)")
+
+    def test_show_notes_off_keeps_inline_note(self):
+        # 正文夹注（place=inline）属原文，不受注释总开关控制；校注仍隐藏
+        n = Note(tag="note", attrs={}, n="", ntype="", place="inline",
+                 children=[Text(text="夾注")])
+        self.assertIn("夾注", TxtRenderer(show_notes=False)._render_node(n))
+        ref = NoteRef(n="n1", notes=[_note("校注", "mod")])
+        out = TxtRenderer(show_notes=False)._render_node(
+            E(tag="p", attrs={}, children=[Text(text="正文"), ref]))
+        self.assertEqual(out.strip(), "正文")
+        self.assertNotIn("校注", out)
+
     def test_gaiji_char_passthrough(self):
         body = [E(tag="p", attrs={}, children=[Gaiji(code="CB00096", char="𤬪")])]
         t = TxtRenderer()._render_node(body[0])

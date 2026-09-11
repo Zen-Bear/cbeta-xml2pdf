@@ -76,6 +76,7 @@ def render_one(w, fmt, out_dir, out_name, args, theme, html_base=None):
                              grayscale=args.grayscale,
                               show_notes=args.show_notes,
                              inline_brackets=args.inline_brackets,
+                             note_inline_brackets=getattr(args, "note_inline_brackets", None),
                              annotations=ann,
                              strip_head_no=getattr(args, "strip_head_no", False)).render_work(w, out_dir)
         print(f"{w.id}: html({note_mode}) -> {len(files)} file(s) in {out_dir}")
@@ -95,6 +96,7 @@ def render_one(w, fmt, out_dir, out_name, args, theme, html_base=None):
                            show_close_juan=args.show_close_juan,
                            suppress_jhead_dup=args.suppress_jhead_dup,
                            inline_brackets=args.inline_brackets,
+                           note_inline_brackets=getattr(args, "note_inline_brackets", None),
                            footnote_per_page=args.footnote_per_page,
                            show_notes=args.show_notes,
                            pagination=args.pagination,
@@ -122,6 +124,7 @@ def render_one(w, fmt, out_dir, out_name, args, theme, html_base=None):
         fn = MdRenderer(theme=theme, notes=note_mode,
                         show_notes=args.show_notes,
                         inline_brackets=args.inline_brackets,
+                        note_inline_brackets=getattr(args, "note_inline_brackets", None),
                         annotations=ann,
                         strip_head_no=getattr(args, "strip_head_no", False),
                         show_dharani_transliteration=getattr(
@@ -132,6 +135,7 @@ def render_one(w, fmt, out_dir, out_name, args, theme, html_base=None):
         fn = TxtRenderer(theme=theme, notes=note_mode,
                          show_notes=args.show_notes,
                          inline_brackets=args.inline_brackets,
+                         note_inline_brackets=getattr(args, "note_inline_brackets", None),
                          annotations=ann,
                          strip_head_no=getattr(args, "strip_head_no", False),
                          show_dharani_transliteration=getattr(
@@ -144,6 +148,8 @@ def render_one(w, fmt, out_dir, out_name, args, theme, html_base=None):
                           ignore_xml_style=args.ignore_xml_style,
                           ignore_xml_space=args.ignore_xml_space,
                           show_notes=args.show_notes,
+                          inline_brackets=args.inline_brackets,
+                          note_inline_brackets=getattr(args, "note_inline_brackets", None),
                           annotations=ann,
                           strip_head_no=getattr(args, "strip_head_no", False)).render_work(
             w, out_dir, filename=out_name)
@@ -223,7 +229,9 @@ def render_one(w, fmt, out_dir, out_name, args, theme, html_base=None):
                             html_engine_chain=chain,
                             zoom=args.pdf_zoom,
                             annotations=ann,
-                            strip_head_no=getattr(args, "strip_head_no", False))
+                            strip_head_no=getattr(args, "strip_head_no", False),
+                            inline_brackets=args.inline_brackets,
+                            note_inline_brackets=getattr(args, "note_inline_brackets", None))
             html_res = r.render_work(w, out_dir, filename=base + ".html")
 
             def emit(pdf, backend):
@@ -294,6 +302,7 @@ def process_file(xml_fn, formats, args, theme, html_base=None, _used=None):
         except Exception:
             _fc_dir = None
         _run_font_check(w, args, theme, _fc_dir)
+    failed = 0
     for fmt in formats:
         out_dir, out_name = resolve_output(xml_fn, fmt, args, w, _used)
         try:
@@ -301,6 +310,11 @@ def process_file(xml_fn, formats, args, theme, html_base=None, _used=None):
                        html_base=html_base)
         except NotImplementedError as e:
             print(f"{w.id}: {fmt} skipped - {e}", file=sys.stderr)
+        except OSError as e:
+            # 目标被占用/无写权限等：不中断其余格式，报一行可读原因并以非 0 退出
+            failed += 1
+            print(f"{w.id}: {fmt} 生成失败：{e}", file=sys.stderr)
+    return failed
 
 
 def _stack_font_files(theme, latin_font):
@@ -525,6 +539,7 @@ def main(argv=None):
     args.show_close_juan = bool(out_defaults.get("show_close_juan"))
     args.suppress_jhead_dup = out_defaults.get("suppress_jhead_dup", True)
     args.inline_brackets = out_defaults.get("inline_brackets", "fullwidth")
+    args.note_inline_brackets = out_defaults.get("note_inline_brackets") or args.inline_brackets
     args.footnote_per_page = out_defaults.get("footnote_per_page", True)
     args.show_notes = out_defaults.get("show_notes", True)
     if args.notes is None:
@@ -599,6 +614,7 @@ def main(argv=None):
         theme.scale_font_sizes(args.font_scale)
 
     _used_names = {}  # 本轮命名状态（render 与 verify 共用，重放得终态名）
+    render_failed = 0  # 各格式渲染失败计数（OSError），决定进程退出码
     if os.path.isdir(args.input):
         from .merge import split_paths, merge_groups_to_dir
         walked = []
@@ -613,10 +629,10 @@ def main(argv=None):
         if not xmls:
             ap.error(f"no XML files under {args.input}")
         for x in xmls:
-            process_file(x, formats, args, theme, html_base=html_base,
-                         _used=_used_names)
+            render_failed += process_file(x, formats, args, theme, html_base=html_base,
+                                          _used=_used_names)
     elif os.path.isfile(args.input):
-        process_file(args.input, formats, args, theme, html_base=html_base)
+        render_failed += process_file(args.input, formats, args, theme, html_base=html_base)
     else:
         # -i 佛典編號：三源材料化（cbeta_ebook → 本地候选源 → 官方下载）
         from .fetch import is_work_id, materialize_work, inspect_xml_source
@@ -637,8 +653,8 @@ def main(argv=None):
         if not xmls:
             ap.error(f"{args.input}: 本地候选源与官方均未取得 XML")
         for x in xmls:
-            process_file(x, formats, args, theme, html_base=html_base,
-                         _used=_used_names)
+            render_failed += process_file(x, formats, args, theme, html_base=html_base,
+                                          _used=_used_names)
 
     # --verify：复用 pycbeta/verify.py 模块化能力，供 GUI 调用同一入口
     if args.verify:
@@ -655,8 +671,14 @@ def main(argv=None):
         v_auto_fetch = bool(_vp.get("auto_fetch", True))
         src = os.path.dirname(os.path.abspath(args.input)) if os.path.isfile(args.input) else os.path.abspath(args.input)
         # 若输入为文件，其官方在同目录；若为目录，则 source 即该目录
-        verify_out = os.path.join(src, "out", "verify")
-        os.makedirs(verify_out, exist_ok=True)
+        # 校验产物目录：镜像渲染输出根，每个经书独立 `{id 书名}（验证）/`（内含 {fmt}/ + report.txt）
+        if args.output:
+            _o = os.path.abspath(args.output)
+            verify_root = _o if (os.path.isdir(_o) or not os.path.splitext(_o)[1]) \
+                else os.path.dirname(_o)
+        else:
+            verify_root = src
+        from .filename import default_output_name as _default_out_name
         report_lines = []
         def vlog(msg=""):
             try:
@@ -705,6 +727,9 @@ def main(argv=None):
                 block_failed = True
                 results.append((block_failed, name, block))
                 continue
+            _vname = _default_out_name(
+                w.id, w.metadata.get("title"), getattr(args, "title_t2s", True))
+            verify_dir = os.path.join(verify_root, f"{_vname}（验证）")
             for fmt in formats:
                 # 计算生成档路径（复用 resolve_output；与 render 同一 _used 重放得终态名）
                 out_dir, out_name = resolve_output(xml_fn, fmt, args, w,
@@ -791,7 +816,7 @@ def main(argv=None):
                             merged_raw = "".join(parts)
                             # 保存合并文件到与生成文件相同的输出目录
                             try:
-                                merged_dir = os.path.dirname(gen_path) if gen_path else os.path.join(verify_out, fmt)
+                                merged_dir = os.path.join(verify_dir, fmt)
                                 os.makedirs(merged_dir, exist_ok=True)
                                 merged_path = os.path.join(merged_dir, f"{stem}_official_merged_{bkind}.txt")
                                 with open(merged_path, "w", encoding="utf-8") as mf:
@@ -891,6 +916,15 @@ def main(argv=None):
                 block.append(f"  {fmt} 【新】{gen_path}")
                 block.extend(detail_lines)
             results.append((block_failed, name, block))
+            # 每经书独立报告：{输出}/{id 书名}（验证）/report.txt
+            try:
+                os.makedirs(verify_dir, exist_ok=True)
+                _rpt = os.path.join(verify_dir, "report.txt")
+                with open(_rpt, "w", encoding="utf-8") as _f:
+                    _f.write("\n".join(block) + "\n")
+                print(f"报告已写入: {_rpt}")
+            except Exception as e:
+                print(f"写入报告失败: {e}")
         results.sort(key=lambda x: (0 if x[0] else 1, x[1]))
         for _,_,block in results:
             for line in block:
@@ -898,14 +932,7 @@ def main(argv=None):
         summary = f"{grand_total} compared, {grand_fail} failed (阈值 max-diff={args.verify_max_diff})"
         vlog(f"\n{summary}")
         vlog(f"完成时间: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        try:
-            rpt = os.path.join(verify_out, "report.txt")
-            with open(rpt, "w", encoding="utf-8") as f:
-                f.write("\n".join(report_lines)+"\n")
-            print(f"报告已写入: {rpt}")
-        except Exception as e:
-            print(f"写入报告失败: {e}")
-    return 0
+    return 1 if render_failed else 0
 
 
 if __name__ == "__main__":

@@ -1057,7 +1057,8 @@ def format_verify_report(records, diff_lines: int = 5, max_diff: int = 10):
                 lines.append(f"  {fmt} 【源】{t['official']}")
             if gen:
                 lines.append(f"  {fmt} 【新】{gen}")
-            if not ok:
+            # 有差异就列前 diff_lines 条（含绿灯但非 缺0/多0 的情况）
+            if not ok or (t.get("missing") or 0) + (t.get("extra") or 0) > 0:
                 theirs = t.get("norm_official") or ""
                 for idx, (_tag, i1, _i2, j1, _j2) in enumerate(
                         (t.get("ctx") or [])[:diff_lines], 1):

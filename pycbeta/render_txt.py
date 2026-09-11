@@ -16,17 +16,19 @@ from typing import List, Optional
 from .model import App, E, Gaiji, Lb, Note, NoteRef, Pb, Text, Work
 from .annotate import active as _ann_active, split_annotated as _split_ann, track_seen as _track_seen
 from .gaiji import GaijiDb
-from .theme import Theme, strip_head_no
+from .theme import Theme, strip_head_no, bracket_pair
 
 
 class TxtRenderer:
     def __init__(self, gaiji_db=None, theme=None, notes="endnote", show_notes=True, inline_brackets="fullwidth",
+                 note_inline_brackets=None,
                  annotations=None, strip_head_no=False, show_dharani_transliteration=False):
         self.gaiji_db = gaiji_db if gaiji_db is not None else GaijiDb()
         self.theme = theme if theme is not None else Theme()
         self.notes = notes  # 'footnote' | 'endnote' | 'inline'
         self.show_notes = show_notes
-        self.inline_brackets = inline_brackets  # halfwidth="()" / fullwidth="（）"（默认全角）
+        self.inline_brackets = inline_brackets  # 正文夹注（place=inline，原文）括号
+        self.note_inline_brackets = note_inline_brackets or inline_brackets  # 校注内联括号（缺省回退）
         self.strip_head_no = strip_head_no  # 去 head/jhead 行首 No. 令牌（默认 false 保留）
         self.show_dharani_transliteration = show_dharani_transliteration  # 逐字咒文表（无 place="inline"）转写（默认 false 去掉，官方 txt 一致）
         # 难字注音（P6）：None 或 {"table", "scheme"}；txt 无上方注音，恒为右侧行内括注
@@ -201,7 +203,7 @@ class TxtRenderer:
         note = self._pick_note(notes)
         content = self._render_note_content(note)
         if self.notes == "inline":
-            lb, rb = ("(", ")") if self.inline_brackets == "halfwidth" else ("（", "）")
+            lb, rb = bracket_pair(self.note_inline_brackets)
             return f"{lb}{content}{rb}"
         # 文末集中：正文留 [n] 标记，内容进文末注块（编号一一对应）
         self._fn_seq += 1
@@ -218,7 +220,7 @@ class TxtRenderer:
                 note = self._pick_note(notes)
                 content = self._render_note_content(note)
                 if self.notes == "inline":
-                    lb, rb = ("(", ")") if self.inline_brackets == "halfwidth" else ("（", "）")
+                    lb, rb = bracket_pair(self.note_inline_brackets)
                     return f"{lb}{content}{rb}"
                 self._fn_seq += 1
                 self._fn_notes.append(content)
@@ -227,7 +229,7 @@ class TxtRenderer:
 
     def _render_inline_note(self, note: Note) -> str:
         if note.place in ("inline", "inline2", "interlinear"):
-            lb, rb = ("(", ")") if self.inline_brackets == "halfwidth" else ("（", "）")
+            lb, rb = bracket_pair(self.inline_brackets)
             return f"{lb}{self._render_note_content(note)}{rb}"
         return ""
 

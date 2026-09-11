@@ -5,6 +5,7 @@
 """
 import glob
 import os
+import re
 import subprocess
 import sys
 
@@ -76,9 +77,37 @@ def build_render_cmd(opts, xml, fmt, out_dir, tmpcfg, out_name=None):
     return cmd
 
 
-def _row_outcome(render_ok, row_ver, verify_on):
+_ERR_RE = re.compile(r"(?i)(error|exception|permission|denied|traceback|失败|错误)")
+
+
+def _last_error_line(text):
+    """从子进程输出取最可能的错误行（截 300 字）。
+
+    优先最后一次 traceback 的异常行（stdout 块缓冲会让正常行落在 traceback 之后），
+    否则取含 error/失败 关键词的末行，再否则取末行。
+    """
+    lines = [l.rstrip() for l in (text or "").splitlines() if l.strip()]
+    if not lines:
+        return "未知错误"
+    tb = [i for i, l in enumerate(lines)
+          if l.strip().startswith("Traceback (most recent call last):")]
+    scope = lines[tb[-1] + 1:] if tb else lines
+    for l in reversed(scope):
+        if _ERR_RE.search(l):
+            return l.strip()[:300]
+    for l in reversed(scope):
+        if l and not l[0].isspace():
+            return l.strip()[:300]
+    return lines[-1].strip()[:300]
+
+
+def _row_outcome(render_ok, row_ver, verify_on, render_errors=None):
     """行终态（状态列文本, 配色等级）。等级 ∈ ok/fail/none/"" 。"""
-    base = "完成" if render_ok else "失败"
+    if not render_ok:
+        detail = "；".join(render_errors or [])
+        base = f"失败：{detail}" if detail else "失败"
+        return base, "fail"
+    base = "完成"
     if not verify_on or not row_ver:
         return base, ""
     ok = sum(1 for r in row_ver if r.get("status") == "ok")
@@ -115,6 +144,7 @@ class BatchWorker(QThread):
         self.flags = flags
         self._cancel = False
         self._proc = None
+        self._last_render_err = ""
 
     def cancel(self):
         self._cancel = True
@@ -153,8 +183,12 @@ class BatchWorker(QThread):
                     continue
                 row_ver = []      # 本行校验结果
                 row_produced = []  # 本行全部产物（跨 xml 累积，行末一次发文件列）
+                render_errors = []
                 render_ok = True
                 row_stem = None
+                row_wid = None
+                row_title = ""
+                verify_dir = None
                 for xml in xmls:
                     if self._cancel:
                         break
@@ -162,6 +196,11 @@ class BatchWorker(QThread):
                     if row_stem is None:
                         row_stem = wid or os.path.splitext(
                             os.path.basename(xml))[0]
+                    if row_wid is None:
+                        row_wid, row_title = wid, title
+                    if verify_on and verify_dir is None:
+                        # 校验产物独立成 {(id) 书名}（验证）/ 子目录（保持 {fmt}/ 结构）
+                        verify_dir = self._verify_dir(out_dir, wid, title)
                     for fmt in self.opts.formats:
                         if self._cancel:
                             break
@@ -172,21 +211,24 @@ class BatchWorker(QThread):
                                                      out_name=out_name)
                         row_produced += paths
                         render_ok = render_ok and ok
+                        if not ok:
+                            render_errors.append(
+                                f"{fmt}: {self._last_render_err or '未知错误'}")
                         done_units += 1
                         self.total_progress.emit(done_units, max(total_units, 1))
                         if ok and verify_on:
                             self.row_status.emit(idx, f"校验中（{fmt}）…")
-                            vr = self._verify_one(xml, fmt, out_dir, tmpcfg,
-                                                  verify_one, wid)
+                            vr = self._verify_one(xml, fmt, verify_dir or out_dir,
+                                                  tmpcfg, verify_one, wid)
                             row_ver.append(vr)
                             self.verify_result.emit(vr)
                             done_units += 1
                             self.total_progress.emit(
                                 done_units, max(total_units, 1))
-                # 验证总报告：每行一份，排文件列最后
+                # 验证总报告：每行一份，放该行（验证）子目录，排文件列最后
                 if verify_on and row_ver and row_stem:
                     report = os.path.join(
-                        out_dir, f"{row_stem}_verify_report.txt")
+                        verify_dir or out_dir, f"{row_stem}_verify_report.txt")
                     try:
                         vv = self.opts.verify
                         lines = format_verify_report(
@@ -202,7 +244,8 @@ class BatchWorker(QThread):
                 if row_produced:
                     self.row_file.emit(
                         idx, ";".join(dict.fromkeys(row_produced)))
-                text, level = _row_outcome(render_ok, row_ver, verify_on)
+                text, level = _row_outcome(
+                    render_ok, row_ver, verify_on, render_errors)
                 self.row_status.emit(idx, text)
                 self.row_verify.emit(idx, level)
         finally:
@@ -297,21 +340,39 @@ class BatchWorker(QThread):
                 pass
         return None if final == default else final
 
+    def _verify_dir(self, out_dir, wid, title):
+        """校验产物子目录 `{输出}/{id 书名}（验证）/`（内部保持 {fmt}/ 结构）。"""
+        from pycbeta.filename import default_output_name
+        name = default_output_name(
+            wid or "", title, getattr(self, "_title_t2s", True))
+        path = os.path.join(out_dir, f"{name}（验证）")
+        os.makedirs(path, exist_ok=True)
+        return path
+
     def _render_one(self, xml, fmt, out_dir, tmpcfg, out_name=None):
         cmd = build_render_cmd(self.opts, xml, fmt, out_dir, tmpcfg,
                                out_name=out_name)
         self.log.emit("$ " + " ".join(cmd))
+        self._last_render_err = ""
         try:
             self._proc = subprocess.Popen(
-                cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                 text=True, encoding="utf-8", errors="replace",
                 env={**os.environ, "PYTHONIOENCODING": "utf-8"})
-            out, _ = self._proc.communicate()
-            self.log.emit(out[-2000:])
+            out, err = self._proc.communicate()
+            for chunk in (out, err):
+                if chunk and chunk.strip():
+                    self.log.emit(chunk[-2000:])
             ok = self._proc.returncode == 0
+            if not ok:
+                # stderr 优先（traceback/报错），stdout 兜底（友好信息可能走 stdout）
+                self._last_render_err = (_last_error_line(err)
+                                         or _last_error_line(out))
+                self.log.emit(f"✗ {fmt} 生成失败：{self._last_render_err}")
             return ok, parse_produced_paths(out) if ok else []
         except Exception as e:
-            self.log.emit(f"render fail: {e}")
+            self._last_render_err = str(e)
+            self.log.emit(f"✗ {fmt} 生成失败：{e}")
             return False, []
         finally:
             self._proc = None

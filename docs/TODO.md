@@ -133,6 +133,21 @@
   - 校验 `generate_formal` 注释模式保持固定（html/epub=endnote、docx=footnote、md/txt=footnote），不读 `output.notes`（否则官方对照口径变）
   - 验收：`test_theme.TestResolveNotes` 4 项 + `test_gui.TestNotesTab.test_notes_mode_default_and_roundtrip`；CLI 实测 `--notes inline` 出内联括号、无 `[n]`
   - 布局微调（2026-09-11）：「显示注释」行加标签「注释总开关」；「注释方式」下拉收窄（maxWidth 110）并与 inline 括号同行、居其左（HBox）；`inline_brackets` 注释明确为「inline 夹注 + 注释方式=inline 的全部注释」括号、六格式、与注音括号独立
+- [x] **已完成** 正文夹注 vs 校注内联：tag 分离确认 + 括号拆分 + show_notes 语义修正（2026-09-11 用户点档 A/B/C）
+  - 结论：原文夹注 `<note place="inline|inline2|interlinear">` 的 docx/html tag（`doube-line-note`/`interlinear-note`）本就与校注内联（`note-inline`）不同；唯一共用为括号键，另 `show_notes` 门控 docx/html 与 txt/md 不一致
+  - B：新增 `output.note_inline_brackets`（默认 fullwidth）专管校注内联；`output.inline_brackets` 专管正文夹注；`note_inline_brackets` 缺省回退 `inline_brackets`（旧调用/官方对照不变）；四渲染器 + epub/pdf 透传；CLI `args.note_inline_brackets = out_defaults.get(...) or args.inline_brackets`
+  - A：正文夹注属原文，**不受 `show_notes` 控制** → 去掉 `render_docx._render_inline_note` / `render_html._render_note` 的 `if not show_notes: return ""`；txt/md 本就无门控，四格式统一
+  - C：CSS 编辑器行名区分——`doube-line-note`→「正文夹注·双行」、`interlinear-note`→「正文夹注·单行」、`note-inline`→「校注内联」；GUI 注释卡「inline 括号」拆为「正文夹注」（与注释方式同行）+「校注内联括号」
+  - 验收：`test_render.TestNoteInlineSemantics` 5 项 + `test_txt` 2 项
+  - 追加（2026-09-11）：校注内联括号增 `corner〔〕`/`square[]`（GUI 优先排前，`theme.bracket_pair` 统一映射，未知回退全角）；GUI 转换失败不再只留泛化「失败」——`_render_one` 记 `_last_render_err`（子进程输出末行），`_row_outcome(..., render_errors)` 写入状态列，`✗ {fmt} 生成失败：…` 同步状态栏；`test_gui` 2 项 + `test_theme.TestBracketPair` + `test_render` 1 项
+- [x] **已完成** 校验产物独立子目录 + 绿灯非 0/0 也列差异 + CLI 渲染失败友好化（2026-09-11 用户点档）
+  - 布局：校验产物（重生成 + compare + report）落 `{输出}/{id 书名}（验证）/`（内部保持 `{fmt}/` 结构；渲染输出仍在输出根）；仅勾选「转换后校验」时启用
+  - GUI：`BatchWorker._verify_dir(out_dir, wid, title)`（`default_output_name` + `（验证）`）；`_verify_one` 的 `out_root` 与验证总报告均改该目录；`test_gui.TestVerifyFeedback.test_verify_dir_naming` + `test_run_appends_verify_report_to_files` 更新
+  - CLI：`--verify` 的 `verify_root`（镜像输出根）+ `verify_dir`，合并官方文件与 `report.txt` 落该目录（每经书一份），移除旧 `src/out/verify` 全局报告
+  - 报告：`format_verify_report` 差异行条件由「失败」放宽为「失败 或 缺/多≠0」，绿灯也列前 `diff_lines` 条【源】【新】
+  - CLI 失败：`process_file` 捕获 `OSError` → stderr `{id}: {fmt} 生成失败：{e}`、**继续其余格式**、返回失败计数；`main` 末 `return 1 if render_failed else 0`
+  - GUI 解析：`_render_one` stdout/stderr 分流，`_last_error_line` 优先 traceback 异常行 / 关键词行（避免被缓冲的正常 stdout 行顶掉）
+  - 验收：`test_cli.TestProcessFileErrors` + `test_gui` 4 项；CLI 实测锁 docx 后 `-f docx,txt` 出 `X1077: docx 生成失败：[Errno 13]...`、txt 仍生成、`EXIT=1`；`--verify` 实测出 `{id 书名}（验证）/report.txt`
 - [x] **已完成** 还原出厂确认 + 校验参数持久化默认开 + 报告差异行数改名（2026-09-11 用户点档）
   - 还原出厂：`panel._on_reset` 执行前弹警告确认（「当前配置会被还原为出厂配置」，确定/取消；取消不动作）
   - 校验持久化：出厂 `config.json` verify 块补 `enabled: true`（默认打开）；`set_options` 缺键默认亦 True；`get_options`/`_presets_merged` 本就 roundtrip 开关/阈值/差异行数/自动下载/卷限定

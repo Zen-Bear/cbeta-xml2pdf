@@ -201,6 +201,19 @@ except (OSError, ValueError) as _e:
 NOTES_MODES = ("footnote", "endnote", "inline")
 _DEFAULT_NOTE_MODE = "footnote"
 
+# 内联括号形态：正文夹注（output.inline_brackets）与校注内联（output.note_inline_brackets）共用取值
+INLINE_BRACKET_PAIRS = {
+    "fullwidth": ("（", "）"),
+    "halfwidth": ("(", ")"),
+    "corner": ("〔", "〕"),
+    "square": ("[", "]"),
+}
+
+
+def bracket_pair(value) -> tuple:
+    """括号键 → (左, 右)；未知/空回退全角圆括号（保持旧行为）。"""
+    return INLINE_BRACKET_PAIRS.get(value or "", INLINE_BRACKET_PAIRS["fullwidth"])
+
 
 def resolve_notes(presets=None, fmt: Optional[str] = None,
                   explicit: Optional[str] = None) -> str:

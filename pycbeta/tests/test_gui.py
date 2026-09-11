@@ -3117,6 +3117,51 @@ class TestVerifyFeedback(unittest.TestCase):
         t, lv = _row_outcome(False, [{"status": "ok"}], True)
         self.assertTrue(t.startswith("失败"))
 
+    def test_row_outcome_render_error(self):
+        from pycbeta.gui.__main__ import _row_outcome
+        t, lv = _row_outcome(False, [], True, ["docx: PermissionError: denied"])
+        self.assertEqual(lv, "fail")
+        self.assertIn("docx: PermissionError: denied", t)
+
+    def test_last_error_line(self):
+        from pycbeta.gui.__main__ import _last_error_line
+        self.assertEqual(_last_error_line(""), "未知错误")
+        self.assertEqual(
+            _last_error_line("a\n\nPermissionError: [Errno 13] denied\n"),
+            "PermissionError: [Errno 13] denied")
+
+    def test_last_error_line_traceback_beats_late_stdout(self):
+        from pycbeta.gui.__main__ import _last_error_line
+        # stdout 块缓冲会让正常行落在 stderr traceback 之后：仍取异常行
+        text = ("Traceback (most recent call last):\n"
+                '  File "x.py", line 1, in <module>\n'
+                "PermissionError: [Errno 13] denied\n"
+                "annotations: pinyin, 7 terms, style=field, repeat=page\n")
+        self.assertEqual(_last_error_line(text),
+                         "PermissionError: [Errno 13] denied")
+
+    def test_last_error_line_friendly(self):
+        from pycbeta.gui.__main__ import _last_error_line
+        self.assertEqual(
+            _last_error_line("normal line\nX1077: docx 生成失败：拒绝访问\n"),
+            "X1077: docx 生成失败：拒绝访问")
+
+    def test_format_verify_report_green_with_diff(self):
+        from pycbeta.verify import format_verify_report
+        recs = [{
+            "xml": r"E:\x\X59n1077.xml", "fmt": "txt", "status": "ok",
+            "missing": 0, "extra": 2, "total": 2, "official_kind": "txt_notes",
+            "official": r"E:\base\X1077_001.txt", "gen": r"E:\out\X59n1077.txt",
+            "norm_gen": "abcdefghij0123456789",
+            "trials": [
+                {"kind": "txt_notes", "official": r"E:\base\X1077_001.txt",
+                 "missing": 0, "extra": 2, "total": 2, "ok": True,
+                 "ctx": [("replace", 0, 1, 0, 1)],
+                 "norm_official": "abcdefghijXXXX"}]}]
+        s = "\n".join(format_verify_report(recs, diff_lines=5, max_diff=10))
+        self.assertIn("[OK] (txt→txt_notes 缺0/多2 ≤阈值10)", s)
+        self.assertIn("1. 【源】", s)
+
     def test_verify_summary_dialog(self):
         from pycbeta.gui.__main__ import VerifySummaryDialog
         res = [{"id": "T1", "fmt": "docx", "status": "ok",
@@ -3219,16 +3264,30 @@ class TestVerifyFeedback(unittest.TestCase):
             M.write_temp_presets, M.write_temp_run = orig
             w.wait(1)
         files = captured[0].split(";")
-        report = os.path.join(tmp, "T0349_verify_report.txt")
+        from pycbeta.filename import default_output_name
+        vdir = os.path.join(tmp, default_output_name("T0349", "T0349") + "（验证）")
+        report = os.path.join(vdir, "T0349_verify_report.txt")
         self.assertEqual(files[0], rendered)
         self.assertNotIn(gcmp, files)                # 比较文件不列文件列
         self.assertNotIn(scmp, files)
         self.assertEqual(files[-1], report)          # 只列报告，排最后
         self.assertTrue(os.path.isfile(report))
+        self.assertTrue(os.path.isdir(vdir))         # 报告落在（验证）子目录
         body = open(report, encoding="utf-8").read()
         self.assertIn("=== T12n0349.xml", body)
         self.assertIn("[FAIL]", body)
         self.assertIn("缺0/多15", body)
+
+    def test_verify_dir_naming(self):
+        from types import SimpleNamespace
+        from pycbeta.gui.__main__ import BatchWorker
+        import tempfile
+        tmp = tempfile.mkdtemp(prefix="gverd-")
+        w = BatchWorker([], SimpleNamespace(verify={}, formats=[]), {}, {})
+        w._title_t2s = False
+        d = w._verify_dir(tmp, "X1077", "准提净业")
+        self.assertEqual(d, os.path.join(tmp, "X1077 准提净业（验证）"))
+        self.assertTrue(os.path.isdir(d))
 
     def test_batch_verify_one_error_rec(self):
         import tempfile

@@ -1021,14 +1021,25 @@ class XmlOptionsPanel(QWidget):
         self.notes_mode.setMaximumWidth(110)
         self.brackets_box = self._combo([("全角（）", "fullwidth"), ("半角()", "halfwidth")],
                                         "fullwidth")
+        self.brackets_box.setToolTip("正文夹注（<note place=\"inline\">，原文）括号形态，与校注内联独立")
+        self.note_brackets_box = self._combo(
+            [("〔〕", "corner"), ("[]", "square"),
+             ("全角（）", "fullwidth"), ("半角()", "halfwidth")], "fullwidth")
+        self.note_brackets_box.setToolTip(
+            "校注内联（注释方式=括号内联 时的脚注/校勘）括号形态，与正文夹注独立；"
+            "〔〕/[] 可与正文夹注（）明显区分")
         row = QHBoxLayout()
         row.addWidget(QLabel("注释方式"))
         row.addWidget(self.notes_mode)
         row.addSpacing(12)
-        row.addWidget(QLabel("inline 括号"))
+        row.addWidget(QLabel("正文夹注"))
         row.addWidget(self.brackets_box)
         row.addStretch(1)
         form.addRow("", row)
+        nb = QHBoxLayout()
+        nb.addWidget(self.note_brackets_box)
+        nb.addStretch(1)
+        form.addRow("校注内联括号", nb)
         return w
 
     def _tab_ann(self):
@@ -1261,6 +1272,7 @@ class XmlOptionsPanel(QWidget):
                 "suppress_title_notes": self.title_notes_box.isChecked(),
                 "show_body_siddham": self.siddham_box.isChecked(),
                 "inline_brackets": self.brackets_box.currentData(),
+                "note_inline_brackets": self.note_brackets_box.currentData(),
                 "split_juan": self.split_box.isChecked(),
                 "show_close_juan": self.close_juan_box.isChecked(),
                 "suppress_jhead_dup": self.dedup_box.isChecked(),
@@ -1364,6 +1376,10 @@ class XmlOptionsPanel(QWidget):
             i = self.brackets_box.findData(o.get("inline_brackets", "fullwidth"))
             if i >= 0:
                 self.brackets_box.setCurrentIndex(i)
+            j = self.note_brackets_box.findData(
+                o.get("note_inline_brackets") or o.get("inline_brackets", "fullwidth"))
+            if j >= 0:
+                self.note_brackets_box.setCurrentIndex(j)
             an = opts.annotations or {}
             self.ann_on.setChecked(bool(an.get("enabled", False)))
             for box, key, default in ((self.ann_scheme, "scheme", "pinyin"),

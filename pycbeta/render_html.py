@@ -9,7 +9,7 @@ from typing import List, Optional
 from .gaiji import GaijiDb
 from .annotate import active as _ann_active, split_annotated as _split_ann, rt_css_rule as _rt_css, track_seen as _track_seen, page_repeat as _page_repeat
 from .model import App, E, Gaiji, Lb, Note, NoteRef, Pb, Text, Work
-from .theme import strip_head_no
+from .theme import strip_head_no, bracket_pair
 
 # 官方（golden）格式基底 CSS：styles/cbeta_golden.css（html/epub 用）。
 # pdf/docx 的默认主题是 styles/pdf_docx.css（theme.py 加载）。base_css 供
@@ -96,6 +96,7 @@ class HtmlRenderer:
     def __init__(self, gaiji_db=None, figure_base=None, theme=None, notes="endnote",
                  name_template=None, base_css=None, ignore_xml_style=False,
                  ignore_xml_space=False, show_notes=True, grayscale=False, inline_brackets="fullwidth",
+                 note_inline_brackets=None,
                  annotations=None, strip_head_no=False):
         self.gaiji_db = gaiji_db if gaiji_db is not None else GaijiDb()
         self.theme = theme
@@ -107,7 +108,8 @@ class HtmlRenderer:
         self.ignore_xml_space = ignore_xml_space
         self.show_notes = show_notes
         self.grayscale = grayscale  # 黑白：渲染时追加全局去色 CSS
-        self.inline_brackets = inline_brackets  # halfwidth="()" / fullwidth="（）"（默认全角）
+        self.inline_brackets = inline_brackets  # 正文夹注（place=inline，原文）括号
+        self.note_inline_brackets = note_inline_brackets or inline_brackets  # 校注内联括号（缺省回退）
         self.strip_head_no = strip_head_no  # 去 head/jhead 行首 No. 令牌（默认 false 保留）
         # 难字注音（P6）：None 或 {"table", "scheme"}（CLI 已由 resolve_annotations 装载；渲染器内不做 IO）
         self._annotations = _ann_active(annotations)
@@ -554,11 +556,10 @@ class HtmlRenderer:
         return ""
 
     def _render_note(self, note: Note) -> str:
-        if not self.show_notes:
-            return ""
+        # 正文夹注（<note place="inline">）属原文，不受「注释总开关」控制
         if note.place in ("inline", "inline2", "interlinear"):
             inner = self._render_nodes(note.children)
-            lb, rb = ("(", ")") if self.inline_brackets == "halfwidth" else ("（", "）")
+            lb, rb = bracket_pair(self.inline_brackets)
             if note.place == "interlinear":
                 return f'<span class="interlinear-note">{lb}{inner}{rb}</span>'
             return f"<span class='doube-line-note'>{lb}{inner}{rb}</span>"
@@ -580,7 +581,7 @@ class HtmlRenderer:
                 if cfs:
                     refs = "; ".join(self._render_cf(app, c) for c in cfs)
                     content += f"(cf. {refs})"
-            lb, rb = ("(", ")") if self.inline_brackets == "halfwidth" else ("（", "）")
+            lb, rb = bracket_pair(self.note_inline_brackets)
             return f"<span class='note-inline'>{lb}{content}{rb}</span>"
         if note.ntype == "add":
             self._note_seq += 1

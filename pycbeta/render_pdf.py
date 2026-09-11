@@ -15,7 +15,7 @@ from typing import List, Optional
 
 from .model import App, E, Gaiji, Note, NoteRef, Pb, Text, Work
 from .render_html import HtmlRenderer, LINEHEAD_RE, _esc, split_juans
-from .theme import Theme, resolve_page
+from .theme import Theme, resolve_page, bracket_pair
 
 def _find_soffice() -> Optional[str]:
     # config.json engines.paths.libreoffice 优先（支持自定义安装位置）
@@ -315,12 +315,15 @@ class PdfRenderer(HtmlRenderer):
                  notes="endnote", page_presets=None, ignore_xml_style=False,
                  ignore_xml_space=False, grayscale=False, page_border=False,
                  bookmarks=True, split=False, show_notes=True,
-                 html_engine_chain=None, zoom=1.0, annotations=None, strip_head_no=False):
+                 html_engine_chain=None, zoom=1.0, annotations=None, strip_head_no=False,
+                 inline_brackets="fullwidth", note_inline_brackets=None):
         super().__init__(gaiji_db=gaiji_db, figure_base=figure_base,
                          ignore_xml_style=ignore_xml_style,
                          ignore_xml_space=ignore_xml_space,
                          show_notes=show_notes, annotations=annotations,
-                         strip_head_no=strip_head_no)
+                         strip_head_no=strip_head_no,
+                         inline_brackets=inline_brackets,
+                         note_inline_brackets=note_inline_brackets)
         cfg = resolve_page(page, page_presets)
         w_mm, h_mm = cfg["size"]
         self.page_size = f"{w_mm}mm {h_mm}mm"
@@ -426,7 +429,8 @@ class PdfRenderer(HtmlRenderer):
         self._note_seq += 1
         seq = self._note_seq
         if self.notes == "inline":
-            return f'<span class="note-inline">（{content}）</span>'
+            lb, rb = bracket_pair(self.note_inline_brackets)
+            return f'<span class="note-inline">{lb}{content}{rb}</span>'
         if self.footnotes:
             return (f'<sup class="footnote-call">[{seq}]</sup>'
                     f'<div class="fn"><span class="fn-marker">[{seq}]</span> {content}</div>')

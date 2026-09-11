@@ -14,7 +14,7 @@ from typing import List, Optional
 
 from .model import App, E, Gaiji, Lb, Note, NoteRef, Pb, Text, Work
 from .gaiji import GaijiDb
-from .theme import Theme, resolve_page, _hex6, strip_head_no
+from .theme import Theme, resolve_page, _hex6, strip_head_no, bracket_pair
 from .render_html import split_juans
 from .filename import apply_template
 from .annotate import active as _ann_active, split_annotated as _split_ann, parse_rt_size as _parse_rt_size, split_eq_reading as _split_eq, track_seen as _track_seen, page_repeat as _page_repeat
@@ -174,7 +174,7 @@ class DocxRenderer:
                  grayscale=False, page_border=False,
                  bookmarks=True, split=False, show_close_juan=False,
                  suppress_jhead_dup=True,
-                 inline_brackets="fullwidth",
+                 inline_brackets="fullwidth", note_inline_brackets=None,
                    footnote_per_page=True, show_notes=True,
                    suppress_title_notes=False, footnote_separator=None, strip_head_no=False,
                    show_body_siddham=True,
@@ -193,7 +193,8 @@ class DocxRenderer:
         self.bookmarks = bookmarks                # 每卷加书签（默认卷号）
         self.show_close_juan = show_close_juan    # 显示结束卷标题（fun="close"，默认隐藏）
         self.suppress_jhead_dup = suppress_jhead_dup  # 仅 jhead 去重（默认 true，head 保留书名）
-        self.inline_brackets = inline_brackets    # inline 注记括号：halfwidth="()" / fullwidth="（）"（默认全角）
+        self.inline_brackets = inline_brackets    # 正文夹注（place=inline，原文）括号：halfwidth="()" / fullwidth="（）"
+        self.note_inline_brackets = note_inline_brackets or inline_brackets  # 校注内联括号（缺省回退 inline_brackets）
         self.footnote_per_page = footnote_per_page  # 脚注每页重新编号（默认 true）
         self.footnote_separator = footnote_separator  # 脚注分隔线 {thicknessPt,lengthPercent,spaceTwips}
         self.show_notes = show_notes                # 关闭注释（默认 true 显示）
@@ -851,11 +852,10 @@ class DocxRenderer:
         return out
 
     def _render_inline_mode(self, content: str) -> str:
-        """--notes inline：夹注用主题 note-inline 样式（对齐 HTML 的 span.note-inline）。"""
+        """注释方式=inline：校注用主题 note-inline 样式（括号走 note_inline_brackets）。"""
         tags = self._current_tag() + ("note-inline",)
-        if getattr(self, "inline_brackets", "fullwidth") == "halfwidth":
-            return (self._run("(", *tags) + content + self._run(")", *tags))
-        return (self._run("（", *tags) + content + self._run("）", *tags))
+        lb, rb = bracket_pair(getattr(self, "note_inline_brackets", "fullwidth"))
+        return (self._run(lb, *tags) + content + self._run(rb, *tags))
 
     def _footnote_content(self, note) -> str:
         """脚注内容在正文 div 上下文之外渲染（不继承正文 div 的粗体/颜色）。"""
@@ -908,17 +908,14 @@ class DocxRenderer:
         return ""
 
     def _render_inline_note(self, note: Note) -> str:
-        if not self.show_notes:
-            return ""
+        # 正文夹注（<note place="inline">）属原文，不受「注释总开关」控制
         if note.place in ("inline", "inline2", "interlinear"):
             # 夹注样式跟随主题 doube-line-note / interlinear-note（对齐 HTML 的紫色夹注）
             nt = "interlinear-note" if note.place == "interlinear" else "doube-line-note"
             tags = self._current_tag() + (nt,)
-            if getattr(self, "inline_brackets", "fullwidth") == "halfwidth":
-                return (self._run("(", *tags) + self._render_children(note, nt)
-                        + self._run(")", *tags))
-            return (self._run("（", *tags) + self._render_children(note, nt)
-                    + self._run("）", *tags))
+            lb, rb = bracket_pair(getattr(self, "inline_brackets", "fullwidth"))
+            return (self._run(lb, *tags) + self._render_children(note, nt)
+                    + self._run(rb, *tags))
         return ""
 
     def _pick_note(self, notes):

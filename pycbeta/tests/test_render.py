@@ -8,7 +8,7 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from pycbeta.parser import P5Parser
-from pycbeta.model import E
+from pycbeta.model import E, Note, NoteRef, Text
 from pycbeta.render_docx import DocxRenderer
 from pycbeta.render_html import HtmlRenderer
 from pycbeta.render_md import MdRenderer
@@ -130,6 +130,54 @@ class TestUnclear(unittest.TestCase):
         # 官方基线用 ▆，本管线用 □：归一后两侧一致
         self.assertEqual(normalize("▆□▆"), "□□□")
         self.assertIn("□", normalize("傾向傾向▆▆演培"))
+
+
+class TestNoteInlineSemantics(unittest.TestCase):
+    """正文夹注（place=inline）与校注内联 tag/括号/开关分离。"""
+
+    def _inline_note(self, text="夾注"):
+        return Note(tag="note", attrs={}, n="", ntype="", place="inline",
+                    children=[Text(text=text)])
+
+    def _ref(self):
+        note = Note(tag="note", attrs={}, n="n1", ntype="mod", place="foot",
+                    children=[Text(text="校注")])
+        return NoteRef(n="n1", notes=[note])
+
+    def test_html_brackets_independent(self):
+        r = HtmlRenderer(notes="inline", inline_brackets="halfwidth",
+                         note_inline_brackets="fullwidth")
+        r._app_by_n = {}
+        self.assertIn("（校注）", r._render_noteref(self._ref()))
+        self.assertIn("(夾注)", r._render_note(self._inline_note()))
+
+    def test_html_show_notes_off_keeps_inline(self):
+        r = HtmlRenderer(show_notes=False)
+        self.assertIn("夾注", r._render_note(self._inline_note()))
+        self.assertEqual(r._render_noteref(self._ref()), "")
+
+    def test_docx_brackets_independent(self):
+        r = DocxRenderer(inline_brackets="halfwidth", note_inline_brackets="fullwidth")
+        self.assertIn("（", r._render_inline_mode("校注"))
+        self.assertNotIn("(", r._render_inline_mode("校注"))
+        self.assertIn("(", r._render_inline_note(self._inline_note()))
+
+    def test_docx_show_notes_off_keeps_inline(self):
+        r = DocxRenderer(show_notes=False)
+        self.assertIn("夾注", r._render_inline_note(self._inline_note()))
+
+    def test_md_brackets_independent(self):
+        r = MdRenderer(notes="inline", inline_brackets="halfwidth",
+                       note_inline_brackets="fullwidth")
+        self.assertIn("（校注）", r._render_noteref(self._ref()))
+        self.assertIn("(夾注)", r._render_inline_note(self._inline_note()))
+
+    def test_square_bracket_note_inline(self):
+        r = HtmlRenderer(notes="inline", note_inline_brackets="corner")
+        r._app_by_n = {}
+        self.assertIn("〔校注〕", r._render_noteref(self._ref()))
+        self.assertIn("[", DocxRenderer(note_inline_brackets="square")
+                      ._render_inline_mode("校注"))
 
 
 if __name__ == "__main__":

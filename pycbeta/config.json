@@ -111,7 +111,8 @@
     "split_juan": false,         // [docx|pdf] true=按卷输出多个文档（每卷一个文件，文件名带「_卷N」）；默认不分卷
     "show_close_juan": false,    // [docx] true=显示结束卷标题（<cb:juan fun="close">，默认隐藏且不加书签）
     "suppress_jhead_dup": true,  // [docx] true=仅 jhead 去重（卷头 <title> 与书名重复时去重，head 保留书名，默认 true）
-    "inline_brackets": "fullwidth", // [六格式] 括号内联（inline 夹注 + 注释方式=inline 时的全部注释）括号形态：halfwidth="()" 对齐CBETA官方，fullwidth="（）"（默认全角）；与注音的 annotations.brackets 独立
+    "inline_brackets": "fullwidth", // [六格式] 正文夹注（<note place="inline">，原文）括号形态：halfwidth="()" 对齐CBETA官方，fullwidth="（）"（默认全角）
+    "note_inline_brackets": "fullwidth", // [六格式] 校注内联（注释方式=inline 时的脚注/校勘）括号形态：fullwidth（）/halfwidth()/corner〔〕/square[]；与正文夹注、注音括号均独立（常用〔〕[] 与正文夹注（）区分）
     "footnote_per_page": true,   // [docx] true=脚注每页重新编号（默认）；false=全文连续编号
     "show_notes": true,          // [docx|pdf|html|epub|md] true=显示注释（默认）；false=全部关闭注释
     "notes": "footnote",         // [所有格式] 注释方式：footnote=页底脚注（docx/pdf 有效，其余同 endnote）/endnote=文末尾注/inline=括号内联（如（注））；html/epub/md/txt 仅区分 inline 与否

@@ -77,5 +77,22 @@ class TestResolveOutputCollision(unittest.TestCase):
         self.assertEqual(n, "mine.txt")
 
 
+class TestProcessFileErrors(unittest.TestCase):
+    def test_oserror_continues_and_counts(self):
+        # 某格式 OSError（如目标被 Word 占用）不中断其余格式，返回失败计数
+        from unittest import mock
+        import pycbeta.cli as cli
+        args = SimpleNamespace(t2s=False, font_check=False)
+        w = SimpleNamespace(id="T1", metadata={})
+        with mock.patch.object(cli, "P5Parser") as P, \
+                mock.patch.object(cli, "resolve_output", return_value=("d", "n")), \
+                mock.patch.object(cli, "render_one") as R:
+            P.return_value.parse.return_value = w
+            R.side_effect = [PermissionError("denied"), None]
+            n = cli.process_file("x.xml", ["docx", "txt"], args, None)
+        self.assertEqual(n, 1)
+        self.assertEqual(R.call_count, 2)
+
+
 if __name__ == "__main__":
     unittest.main()

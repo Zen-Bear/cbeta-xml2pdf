@@ -46,7 +46,8 @@ class XmlOptions:
 | 注释 | `output.notes` | 下拉「注释方式」页底脚注/文末尾注/括号内联（纯三值，出厂 footnote） | `output.notes` |
 | | `output.show_notes` | 复选「显示注释」 | `output.show_notes` |
 | | `output.footnote_per_page` | 复选「脚注每页重新编号」 | `output.footnote_per_page` |
-| | `output.inline_brackets` | 下拉 halfwidth/fullwidth | `output.inline_brackets` |
+| | `output.inline_brackets` | 下拉「正文夹注」全角/半角（`<note place="inline">` 原文夹注） | `output.inline_brackets` |
+| | `output.note_inline_brackets` | 下拉「校注内联括号」〔〕/[]/全角（）/半角()（`corner`/`square`/`fullwidth`/`halfwidth`，默认 fullwidth；〔〕[] 优先，与正文夹注区分） | `output.note_inline_brackets` |
 | | `output.suppress_title_notes` | 复选「压制标题注码」 | `output.suppress_title_notes` |
 | 排版 | `output.split_juan` | 复选「按卷分文件」 | `output.split_juan` |
 | | `output.show_close_juan` | 复选「显示结束卷标题」 | `output.show_close_juan` |
@@ -84,7 +85,8 @@ class XmlOptions:
 │ 注释: 注释总开关 ☑ 显示注释                                    │
 │       ☑ 脚注每页重新编号 ☐ 压制标题注码                        │
 │       ☑ 正文显示悉昙字和读音                                  │
-│       注释方式 [页底脚注 ▼]  inline 括号 [全角（） ▼]          │
+│       注释方式 [页底脚注 ▼]  正文夹注 [全角（） ▼]             │
+│       校注内联括号 [全角（） ▼]                                │
 ├───────────────────────────────────────────────────────────────┤
 │ 排版: ☐ 按卷分文件 ☐ 显示结束卷 ☑ 卷名去重 ☐ 忽略XML样式/空格    │
 │       偈颂分隔 [　　]  ☐ 去偈颂引号                            │
@@ -174,7 +176,7 @@ class XmlOptions:
    - 全无 → 行状态标「缺 XML」跳过
 3. **（可选）官方电子书**：勾选「同时下载官方电子书」→ `fetch.ensure_baselines(id, ["html","docx","txt"], presets, cbeta_ebook)`（落 work 目录；docx/odt 非 T/X 静默失败）
 4. **转换**：`cli.render_one` 或子进程 `[sys.executable, "-m", "pycbeta", "-i", xml, "-f", fmt, "--page", opts.page, "-o", out_dir]`（`t2s=True` 时追加 `--t2s`；子进程 stdout 强制 `PYTHONIOENCODING=utf-8`，中文产物名方可回读）。**默认产物名 = `{佛典編號 书名}`**（`filename.default_output_name`，书名跟随 `source.title_t2s` 转简；`--name-template` 显式覆盖，html 仍 renderer 内部命名）
-5. **（可选）校验**：`verify.verify_one(xml, fmt, source, out_root)`，进度条把校验计入总单元；行状态显示 `完成｜校验 OK/失败N/无对照N` 并按结果着色（通过绿 `#2e7d32` / 失败红 `#c62828` / 无对照灰）；转换期间状态列先示 `校验中（fmt）…`；文件列依次为「渲染产物 + **验证总报告 `{stem}_verify_report.txt`（排最后）**」，均可单击打开（各格式 `*_compare_*.txt` 仍落盘但**不列文件列**）；总报告由 `verify.format_verify_report(records, diff_lines, max_diff)` 生成，**逐条列出每个尝试过的对照**：`[OK]|[FAIL] ({fmt}→{对照kind} 缺X/多Y ≤|>阈值N)` + `【源】/【新】` + 失败项前 N 条【源】【新】（N=`verify.diffLines` 默认 5，落 `out/`）；全部结束弹 `VerifySummaryDialog` 汇总（通过/失败/无对照计数 + 逐项明细 + 「打开报告目录」，失败不强制弹窗）。信号：`row_verify(int, level)`、`verify_result(dict)`（简体转换开启时官方文档同步转简体后比对）
+5. **（可选）校验**：`verify.verify_one(xml, fmt, source, out_root)`，进度条把校验计入总单元；行状态显示 `完成｜校验 OK/失败N/无对照N` 并按结果着色（通过绿 `#2e7d32` / 失败红 `#c62828` / 无对照灰）；转换期间状态列先示 `校验中（fmt）…`；**校验产物独立成 `{输出}/{id 书名}（验证）/` 子目录**（内部保持 `{fmt}/` 结构：重生成文件 + 各格式 `*_compare_*.txt` + `report.txt`；渲染输出仍在输出根），文件列依次为「渲染产物 + **验证总报告 `{id 书名}（验证）/{stem}_verify_report.txt`（排最后）**」，均可单击打开（各格式 `*_compare_*.txt` 仍落盘但**不列文件列**）；总报告由 `verify.format_verify_report(records, diff_lines, max_diff)` 生成，**逐条列出每个尝试过的对照**：`[OK]|[FAIL] ({fmt}→{对照kind} 缺X/多Y ≤|>阈值N)` + `【源】/【新】` + 前 N 条【源】【新】差异（N=`verify.diffLines` 默认 5，绿灯但非 缺0/多0 也列）；全部结束弹 `VerifySummaryDialog` 汇总（通过/失败/无对照计数 + 逐项明细 + 「打开报告目录」，失败不强制弹窗）。信号：`row_verify(int, level)`、`verify_result(dict)`（简体转换开启时官方文档同步转简体后比对）
 
 批量列表列：`经号 | 经名 | 来源（本地/已下载/官方电子书） | 状态 | 进度`；`QThread` + 信号更新；取消中断后续。
 

@@ -744,5 +744,20 @@ class TestResolveNotes(unittest.TestCase):
             "endnote")
 
 
+class TestBracketPair(unittest.TestCase):
+    def test_pairs(self):
+        from pycbeta.theme import bracket_pair
+        self.assertEqual(bracket_pair("halfwidth"), ("(", ")"))
+        self.assertEqual(bracket_pair("fullwidth"), ("（", "）"))
+        self.assertEqual(bracket_pair("corner"), ("〔", "〕"))
+        self.assertEqual(bracket_pair("square"), ("[", "]"))
+
+    def test_fallback_fullwidth(self):
+        from pycbeta.theme import bracket_pair
+        self.assertEqual(bracket_pair(None), ("（", "）"))
+        self.assertEqual(bracket_pair(""), ("（", "）"))
+        self.assertEqual(bracket_pair("bogus"), ("（", "）"))
+
+
 if __name__ == "__main__":
     unittest.main()
