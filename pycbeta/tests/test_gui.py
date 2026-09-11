@@ -1060,8 +1060,8 @@ class TestNotesTab(unittest.TestCase):
         finally:
             panel.close()
 
-    def test_brackets_box_narrow(self):
-        from PySide6.QtWidgets import QFormLayout, QHBoxLayout
+    def test_notes_on_label_and_row(self):
+        from PySide6.QtWidgets import QFormLayout, QHBoxLayout, QLabel
         panel = self._panel()
         try:
             tab = next(panel.tabs.widget(i)
@@ -1069,15 +1069,26 @@ class TestNotesTab(unittest.TestCase):
                        if panel.tabs.tabText(i) == "注释")
             fl = tab.layout()
             self.assertIsInstance(fl, QFormLayout)
+            # 「注释总开关」标签在显示注释 checkbox 前
+            labels = [fl.itemAt(i, QFormLayout.LabelRole).widget().text()
+                      for i in range(fl.rowCount())
+                      if fl.itemAt(i, QFormLayout.LabelRole) is not None
+                      and fl.itemAt(i, QFormLayout.LabelRole).widget() is not None]
+            self.assertIn("注释总开关", labels)
+            # 注释方式与 inline 括号同一行，且注释方式在左
             found = False
             for i in range(fl.rowCount()):
-                lab = fl.itemAt(i, QFormLayout.LabelRole)
-                if lab is not None and lab.widget() is not None \
-                        and lab.widget().text() == "inline 括号":
-                    field = fl.itemAt(i, QFormLayout.FieldRole)
-                    self.assertIsInstance(field.layout(), QHBoxLayout)
-                    found = True
+                field = fl.itemAt(i, QFormLayout.FieldRole)
+                if field is not None and isinstance(field.layout(), QHBoxLayout):
+                    lay = field.layout()
+                    ws = [lay.itemAt(j).widget() for j in range(lay.count())]
+                    if panel.notes_mode in ws and panel.brackets_box in ws:
+                        found = True
+                        self.assertLess(ws.index(panel.notes_mode),
+                                        ws.index(panel.brackets_box))
             self.assertTrue(found)
+            # 注释方式下拉收窄
+            self.assertLessEqual(panel.notes_mode.maximumWidth(), 120)
         finally:
             panel.close()
 

@@ -998,14 +998,8 @@ class XmlOptionsPanel(QWidget):
     def _tab_notes(self):
         w = QWidget()
         form = QFormLayout(w)
-        self.notes_mode = self._combo(
-            [("页底脚注", "footnote"), ("文末尾注", "endnote"), ("括号内联", "inline")],
-            "footnote")
-        self.notes_mode.setToolTip(
-            "注释方式（output.notes）：footnote=页底脚注（docx/pdf），"
-            "endnote=文末尾注，inline=括号内联；html/epub/md/txt 仅区分 inline 与否")
-        form.addRow("注释方式", self.notes_mode)
         self.notes_on = self._check("显示注释", checked=True)
+        form.addRow("注释总开关", self.notes_on)
         self.per_page_box = self._check("脚注每页重新编号", checked=True)
         self.per_page_box.setToolTip("勾选后注释序号每页从 [1] 重排；不勾选则全文连续编号")
         self.title_notes_box = self._check("压制卷名/品名校勘注码")
@@ -1015,16 +1009,26 @@ class XmlOptionsPanel(QWidget):
             "勾选后正文显示悉昙字和读音（如 种子字(raṃ)）；"
             "未安装悉昙字体Ranjana时显示替代字形（如歾）。"
             "不勾选则正文不显示，脚注不受影响")
-        form.addRow("", self.notes_on)
         form.addRow("", self.per_page_box)
         form.addRow("", self.title_notes_box)
         form.addRow("", self.siddham_box)
+        self.notes_mode = self._combo(
+            [("页底脚注", "footnote"), ("文末尾注", "endnote"), ("括号内联", "inline")],
+            "footnote")
+        self.notes_mode.setToolTip(
+            "注释方式（output.notes）：footnote=页底脚注（docx/pdf），"
+            "endnote=文末尾注，inline=括号内联；html/epub/md/txt 仅区分 inline 与否")
+        self.notes_mode.setMaximumWidth(110)
         self.brackets_box = self._combo([("全角（）", "fullwidth"), ("半角()", "halfwidth")],
                                         "fullwidth")
-        brow = QHBoxLayout()
-        brow.addWidget(self.brackets_box)
-        brow.addStretch(1)
-        form.addRow("inline 括号", brow)
+        row = QHBoxLayout()
+        row.addWidget(QLabel("注释方式"))
+        row.addWidget(self.notes_mode)
+        row.addSpacing(12)
+        row.addWidget(QLabel("inline 括号"))
+        row.addWidget(self.brackets_box)
+        row.addStretch(1)
+        form.addRow("", row)
         return w
 
     def _tab_ann(self):

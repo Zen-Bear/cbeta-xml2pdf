@@ -132,6 +132,7 @@
   - GUI：注释卡顶部「注释方式」纯三值下拉（页底脚注/文末尾注/括号内联，无“跟随”），get/set roundtrip；子进程经 snapshot `output.notes` 生效（`build_render_cmd` 无需改）
   - 校验 `generate_formal` 注释模式保持固定（html/epub=endnote、docx=footnote、md/txt=footnote），不读 `output.notes`（否则官方对照口径变）
   - 验收：`test_theme.TestResolveNotes` 4 项 + `test_gui.TestNotesTab.test_notes_mode_default_and_roundtrip`；CLI 实测 `--notes inline` 出内联括号、无 `[n]`
+  - 布局微调（2026-09-11）：「显示注释」行加标签「注释总开关」；「注释方式」下拉收窄（maxWidth 110）并与 inline 括号同行、居其左（HBox）；`inline_brackets` 注释明确为「inline 夹注 + 注释方式=inline 的全部注释」括号、六格式、与注音括号独立
 - [x] **已完成** 还原出厂确认 + 校验参数持久化默认开 + 报告差异行数改名（2026-09-11 用户点档）
   - 还原出厂：`panel._on_reset` 执行前弹警告确认（「当前配置会被还原为出厂配置」，确定/取消；取消不动作）
   - 校验持久化：出厂 `config.json` verify 块补 `enabled: true`（默认打开）；`set_options` 缺键默认亦 True；`get_options`/`_presets_merged` 本就 roundtrip 开关/阈值/差异行数/自动下载/卷限定
