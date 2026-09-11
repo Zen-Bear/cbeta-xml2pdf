@@ -1042,6 +1042,24 @@ class TestNotesTab(unittest.TestCase):
         finally:
             panel.close()
 
+    def test_notes_mode_default_and_roundtrip(self):
+        from pycbeta.gui.panel import XmlOptions
+        panel = self._panel()
+        try:
+            # 出厂 config output.notes=footnote；下拉纯三值，无“跟随”
+            self.assertEqual(panel.notes_mode.currentData(), "footnote")
+            self.assertEqual(panel.notes_mode.count(), 3)
+            self.assertEqual(panel.get_options().output["notes"], "footnote")
+            panel.notes_mode.setCurrentIndex(
+                panel.notes_mode.findData("inline"))
+            self.assertEqual(panel.get_options().output["notes"], "inline")
+            panel.set_options(XmlOptions(page="a4", output={"notes": "endnote"}))
+            self.assertEqual(panel.notes_mode.currentData(), "endnote")
+            panel.set_options(XmlOptions(page="a4", output={}))
+            self.assertEqual(panel.notes_mode.currentData(), "footnote")  # 缺键默认
+        finally:
+            panel.close()
+
     def test_brackets_box_narrow(self):
         from PySide6.QtWidgets import QFormLayout, QHBoxLayout
         panel = self._panel()

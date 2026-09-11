@@ -125,6 +125,13 @@
   - 落点：txt/md 新增 `_render_note_content(note)`（渲染注内容时临时置 `_drop_sa=False`，结束恢复），`_render_noteref`/`_render_app`/`_render_inline_note` 统一走它
   - 收获：X59 主轨 txt `缺69/多9` → **`缺0/多9`（≤阈值，通过）**；docx `0/0`；P3 aux `缺85` → `缺16`（余为 `No.` 令牌镜像 + 个别注序，门禁外）
   - 验收：`test_txt.TestTxtRenderer.test_note_inside_tt_keeps_reading`；全量 551 OK
+- [x] **已完成** 注释方式可配（footnote/endnote/inline）+ GUI 三值下拉 + CLI/SDK 取 config（2026-09-11 用户点档）
+  - 关键事实：三值中 footnote/endnote 仅 docx（及 docx2pdf→pdf）有别（页底 vs 文末）；html/epub/md/txt 代码只判 `inline`，footnote≡endnote，故单一值不损现状
+  - `config.json output` 增正式键 `"notes": "footnote"`；`theme.resolve_notes(presets, fmt=None, explicit=None)`（explicit>output.notes（非空合法）>默认 footnote）供 SDK
+  - CLI：`--notes` 显式 > `config output.notes`（main 里回填 args.notes）> 按格式默认；help 同步
+  - GUI：注释卡顶部「注释方式」纯三值下拉（页底脚注/文末尾注/括号内联，无“跟随”），get/set roundtrip；子进程经 snapshot `output.notes` 生效（`build_render_cmd` 无需改）
+  - 校验 `generate_formal` 注释模式保持固定（html/epub=endnote、docx=footnote、md/txt=footnote），不读 `output.notes`（否则官方对照口径变）
+  - 验收：`test_theme.TestResolveNotes` 4 项 + `test_gui.TestNotesTab.test_notes_mode_default_and_roundtrip`；CLI 实测 `--notes inline` 出内联括号、无 `[n]`
 - [x] **已完成** 还原出厂确认 + 校验参数持久化默认开 + 报告差异行数改名（2026-09-11 用户点档）
   - 还原出厂：`panel._on_reset` 执行前弹警告确认（「当前配置会被还原为出厂配置」，确定/取消；取消不动作）
   - 校验持久化：出厂 `config.json` verify 块补 `enabled: true`（默认打开）；`set_options` 缺键默认亦 True；`get_options`/`_presets_merged` 本就 roundtrip 开关/阈值/差异行数/自动下载/卷限定

@@ -198,6 +198,23 @@ except (OSError, ValueError) as _e:
     ENGINE_PRESETS = {}
     VERIFY_PRESETS = {}
 
+NOTES_MODES = ("footnote", "endnote", "inline")
+_DEFAULT_NOTE_MODE = "footnote"
+
+
+def resolve_notes(presets=None, fmt: Optional[str] = None,
+                  explicit: Optional[str] = None) -> str:
+    """注释方式解析：显式 > presets `output.notes`（非空合法值）> 默认。
+
+    默认 `footnote`（docx/pdf 页底脚注；html/epub/md/txt 对 footnote/endnote
+    不作区分，均文末集中，只有 inline 变括号内联）。`fmt` 仅作保留参数。
+    """
+    if explicit in NOTES_MODES:
+        return explicit
+    cfg = (presets or {}).get("output") or {}
+    val = (cfg.get("notes") or "").strip().lower()
+    return val if val in NOTES_MODES else _DEFAULT_NOTE_MODE
+
 # CSS 通用字体族在序列化时保持不加引号，否则会变成普通字体名。
 _UNQUOTED_FONT_FAMILIES = frozenset({
     "serif", "sans-serif", "monospace", "cursive", "fantasy",

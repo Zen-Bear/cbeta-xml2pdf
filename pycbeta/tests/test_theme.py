@@ -712,5 +712,37 @@ class TestLineHeightInherit(unittest.TestCase):
         self.assertIn('w:line="432"', r._normal_spacing())
 
 
+class TestResolveNotes(unittest.TestCase):
+    def test_default_footnote(self):
+        from pycbeta.theme import resolve_notes
+        self.assertEqual(resolve_notes(None), "footnote")
+        self.assertEqual(resolve_notes({}), "footnote")
+        self.assertEqual(resolve_notes({"output": {}}), "footnote")
+
+    def test_config_value(self):
+        from pycbeta.theme import resolve_notes
+        self.assertEqual(
+            resolve_notes({"output": {"notes": "endnote"}}), "endnote")
+        self.assertEqual(
+            resolve_notes({"output": {"notes": "INLINE"}}), "inline")
+
+    def test_invalid_config_falls_back(self):
+        from pycbeta.theme import resolve_notes
+        self.assertEqual(
+            resolve_notes({"output": {"notes": "bogus"}}), "footnote")
+        self.assertEqual(
+            resolve_notes({"output": {"notes": ""}}), "footnote")
+
+    def test_explicit_wins(self):
+        from pycbeta.theme import resolve_notes
+        self.assertEqual(
+            resolve_notes({"output": {"notes": "endnote"}}, explicit="inline"),
+            "inline")
+        # 非法 explicit 忽略，取 config
+        self.assertEqual(
+            resolve_notes({"output": {"notes": "endnote"}}, explicit="x"),
+            "endnote")
+
+
 if __name__ == "__main__":
     unittest.main()

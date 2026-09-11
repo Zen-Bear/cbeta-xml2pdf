@@ -114,6 +114,7 @@
     "inline_brackets": "fullwidth", // [docx|html|md] inline 注记括号形态：halfwidth="()" 对齐CBETA官方，fullwidth="（）"（默认全角）
     "footnote_per_page": true,   // [docx] true=脚注每页重新编号（默认）；false=全文连续编号
     "show_notes": true,          // [docx|pdf|html|epub|md] true=显示注释（默认）；false=全部关闭注释
+    "notes": "footnote",         // [所有格式] 注释方式：footnote=页底脚注（docx/pdf 有效，其余同 endnote）/endnote=文末尾注/inline=括号内联（如（注））；html/epub/md/txt 仅区分 inline 与否
     "show_body_siddham": true, // [docx] true=正文显示悉昙字和读音（如 歾(raṃ)，默认）；false=正文不显示悉昙字和读音，脚注不受影响
     "notes_marker_font": "Times New Roman", // [docx] 注释注码字体（正文 [N]/文末 [N]/脚注编号上标；如 "宋体, SimSun"；字号恒为正文字号×0.75，不随标题段放大，随 font_scale 等比放大）
     "suppress_title_notes": false, // [docx] true=压制卷名/品名校勘注码（标题干净，默认 false 保留）

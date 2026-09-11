@@ -415,8 +415,9 @@ def main(argv=None):
 
     note = ap.add_argument_group("注释（所有格式）")
     note.add_argument("--notes", choices=["footnote", "endnote", "inline"],
-                      help="注释方式。默认：docx=footnote（页底脚注），"
-                           "html/pdf/md/epub=endnote（文末校注）")
+                      help="注释方式。缺省取 config output.notes（出厂 footnote）；"
+                           "footnote=页底脚注（docx/pdf），endnote=文末尾注，inline=括号内联；"
+                           "html/epub/md/txt 仅区分 inline 与否")
     note.add_argument("--strip-head-no", dest="strip_head_no", action="store_true",
                       default=None,
                       help="去 head/jhead 行首 No. 令牌（如 No. 1116-B 序→序；默认关，可配 output.strip_head_no）")
@@ -526,6 +527,10 @@ def main(argv=None):
     args.inline_brackets = out_defaults.get("inline_brackets", "fullwidth")
     args.footnote_per_page = out_defaults.get("footnote_per_page", True)
     args.show_notes = out_defaults.get("show_notes", True)
+    if args.notes is None:
+        # 缺省取 config output.notes（非法/空则不设，render_one 落按格式默认）
+        _n = str(out_defaults.get("notes") or "").strip().lower()
+        args.notes = _n if _n in ("footnote", "endnote", "inline") else None
     args.show_body_siddham = bool(out_defaults.get("show_body_siddham", True))
     args.show_dharani_transliteration = bool(out_defaults.get("show_dharani_transliteration", False))
     args.print_mode = bool(out_defaults.get("print_mode"))

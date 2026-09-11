@@ -998,6 +998,13 @@ class XmlOptionsPanel(QWidget):
     def _tab_notes(self):
         w = QWidget()
         form = QFormLayout(w)
+        self.notes_mode = self._combo(
+            [("页底脚注", "footnote"), ("文末尾注", "endnote"), ("括号内联", "inline")],
+            "footnote")
+        self.notes_mode.setToolTip(
+            "注释方式（output.notes）：footnote=页底脚注（docx/pdf），"
+            "endnote=文末尾注，inline=括号内联；html/epub/md/txt 仅区分 inline 与否")
+        form.addRow("注释方式", self.notes_mode)
         self.notes_on = self._check("显示注释", checked=True)
         self.per_page_box = self._check("脚注每页重新编号", checked=True)
         self.per_page_box.setToolTip("勾选后注释序号每页从 [1] 重排；不勾选则全文连续编号")
@@ -1245,6 +1252,7 @@ class XmlOptionsPanel(QWidget):
                 "grayscale": self.grayscale_box.isChecked(),
                 "page_border": self.border_box.isChecked(),
                 "show_notes": self.notes_on.isChecked(),
+                "notes": self.notes_mode.currentData() or "footnote",
                 "footnote_per_page": self.per_page_box.isChecked(),
                 "suppress_title_notes": self.title_notes_box.isChecked(),
                 "show_body_siddham": self.siddham_box.isChecked(),
@@ -1344,6 +1352,8 @@ class XmlOptionsPanel(QWidget):
             self._series_extra = {k: copy.deepcopy(v) for k, v in st.items()
                                   if k != "enabled"}
             self.notes_on.setChecked(bool(o.get("show_notes", True)))
+            i = self.notes_mode.findData(o.get("notes", "footnote"))
+            self.notes_mode.setCurrentIndex(i if i >= 0 else 0)
             self.per_page_box.setChecked(bool(o.get("footnote_per_page", True)))
             self.title_notes_box.setChecked(bool(o.get("suppress_title_notes", False)))
             self.siddham_box.setChecked(bool(o.get("show_body_siddham", True)))

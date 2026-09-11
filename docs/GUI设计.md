@@ -43,7 +43,8 @@ class XmlOptions:
 | 输出格式 | — | 多选 `pdf/epub/docx/html/md` | `xml_options.formats` |
 | | `output.font_scale` | 数字输入「字号缩放」（大字版 1.33/1.5） | `output.font_scale` |
 | | `output.t2s` | 复选「简体转换」（OpenCC t2s；未指定 --font-lang 时自动用简体字库；校验时官方文档同步转简体） | `output.t2s` |
-| 注释 | `output.show_notes` | 复选「显示注释」 | `output.show_notes` |
+| 注释 | `output.notes` | 下拉「注释方式」页底脚注/文末尾注/括号内联（纯三值，出厂 footnote） | `output.notes` |
+| | `output.show_notes` | 复选「显示注释」 | `output.show_notes` |
 | | `output.footnote_per_page` | 复选「脚注每页重新编号」 | `output.footnote_per_page` |
 | | `output.inline_brackets` | 下拉 halfwidth/fullwidth | `output.inline_brackets` |
 | | `output.suppress_title_notes` | 复选「压制标题注码」 | `output.suppress_title_notes` |
@@ -80,7 +81,8 @@ class XmlOptions:
 │ 引擎: (•) docx2pdf  ( ) html2pdf     单体 [自动 ▼]            │
 │       ☐ 简体转换（OpenCC t2s；校验时官方文档同步转简体）             │
 ├───────────────────────────────────────────────────────────────┤
-│ 注释: ☑ 显示注释 ☑ 脚注每页重新编号 ☐ 压制标题注码              │
+│ 注释: 注释方式 [页底脚注 ▼]                                    │
+│       ☑ 显示注释 ☑ 脚注每页重新编号 ☐ 压制标题注码              │
 │       ☑ 正文显示悉昙字和读音                                  │
 │       inline 括号 [halfwidth ▼]                               │
 ├───────────────────────────────────────────────────────────────┤
