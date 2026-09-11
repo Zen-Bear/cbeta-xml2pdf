@@ -183,7 +183,7 @@ def main(argv=None):
         if scope_juan:
             from pycbeta.verify import work_juan_numbers
             _juan = work_juan_numbers(work)
-        for kind in ("html", "txt", "txt_notes", "docx", "epub", "odt"):
+        for kind in ("html", "txt_notes", "docx", "epub", "odt"):
             found = find_official(src, os.path.splitext(name)[0], kind,
                                   juan=_juan if kind in ("html", "docx", "txt_notes") else None)
             if found: official[kind] = found
@@ -207,40 +207,33 @@ def main(argv=None):
             if not compare_infos:
                 ours_raw = strip_infos(ours_raw)
             ours = normalize(ours_raw, _ruby_brackets)
-            base_kind = {"md":"txt","docx":"docx","html":"html","epub":"epub","txt":"txt"}.get(fmt,"html")
-            bases = []
-            if base_kind in official:
-                bases.append((base_kind, official[base_kind]))
-            if fmt != "txt":
-                fb = official.get("html")
-                if fb and all(p != fb for _,p in bases): bases.append(("html",fb))
-            if args.t2s and "txt_notes" in official and all(p != official["txt_notes"] for _, p in bases):
-                # 简体统一：txt_notes 优先（传统不动；缺失时落回现有顺序）
-                bases.insert(0, ("txt_notes", official["txt_notes"]))
-            if not bases and bool(_verify_cfg.get("auto_fetch", True)):
-                # 基线缺失：按需调用 fetch 下载（docx/odt 非 T/X 等 404 静默跳过）
+            base_kind = {"md":"txt_notes","docx":"docx","html":"html","epub":"epub","txt":"txt_notes"}.get(fmt,"html")
+
+            def _bases(official):
+                b = []
+                if base_kind in official:
+                    b.append((base_kind, official[base_kind]))
+                if fmt != "txt":
+                    fb = official.get("html")
+                    if fb and all(p != fb for _, p in b): b.append(("html", fb))
+                return b
+
+            bases = _bases(official)
+            if base_kind not in official and bool(_verify_cfg.get("auto_fetch", True)):
+                # 首选基线缺失：按需调用 fetch 下载（docx/odt 非 T/X 等 404 静默跳过）
                 from pycbeta.fetch import ensure_baselines
-                need = {"md": ["txt"], "docx": ["docx", "html"], "txt": ["txt"],
+                need = {"md": ["txt_notes"], "docx": ["docx", "html"], "txt": ["txt_notes"],
                         "html": ["html"], "epub": ["epub"]}.get(fmt, ["html"])
-                if args.t2s and "txt_notes" not in need:
-                    need = ["txt_notes"] + need
                 _presets_af = load_presets(args.config) if args.config else load_presets()
                 _ebook_af = ((_presets_af.get("source") or {}).get("cbeta_ebook")
                              or "").strip() or src
                 ensure_baselines(work.id, need, _presets_af, _ebook_af)
                 official = {}
-                for kind in ("html", "txt", "txt_notes", "docx", "epub", "odt"):
+                for kind in ("html", "txt_notes", "docx", "epub", "odt"):
                     found = find_official(src, os.path.splitext(name)[0], kind,
                                           juan=_juan if kind in ("html", "docx", "txt_notes") else None)
                     if found: official[kind] = found
-                bases = []
-                if base_kind in official:
-                    bases.append((base_kind, official[base_kind]))
-                if fmt != "txt":
-                    fb = official.get("html")
-                    if fb and all(p != fb for _,p in bases): bases.append(("html",fb))
-                if args.t2s and "txt_notes" in official and all(p != official["txt_notes"] for _, p in bases):
-                    bases.insert(0, ("txt_notes", official["txt_notes"]))
+                bases = _bases(official)
             if not bases:
                 block.append(f"  [--]  {fmt:5} no baseline")
                 grand_total += 1; grand_nobase += 1
@@ -250,7 +243,7 @@ def main(argv=None):
             stem = os.path.splitext(name)[0]
             for bkind, bpath in bases:
                 if isinstance(bpath, list):
-                    if bkind in ("docx", "txt") and len(bpath) > 1:
+                    if bkind == "docx" and len(bpath) > 1:
                         title = t_title
                         if bkind == "docx":
                             # 多卷官方 docx 先合并为单个 docx，再抽取 TXT：脚注统一在文末
@@ -321,7 +314,7 @@ def main(argv=None):
                     if not compare_infos:
                         theirs_raw = strip_infos(theirs_raw)
                     bpath_disp = bpath
-                if bkind in ("txt", "txt_notes"):
+                if bkind == "txt_notes":
                     # text 族官方侧对齐（繁简通用）：版头剥离 + 注记块识别挪文末
                     theirs_raw = _norm_official_txt(theirs_raw)
                 if strip_tokens:

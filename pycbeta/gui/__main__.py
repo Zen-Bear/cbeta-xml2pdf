@@ -258,7 +258,7 @@ class BatchWorker(QThread):
             }.get(label, ""))
             if self.flags.get("auto_base"):
                 try:
-                    fetch.ensure_baselines(wid, ["html", "docx", "txt"],
+                    fetch.ensure_baselines(wid, ["html", "docx", "txt_notes"],
                                            presets, cbeta_ebook)
                 except Exception:
                     pass

@@ -118,7 +118,7 @@
     "notes_marker_font": "Times New Roman", // [docx] 注释注码字体（正文 [N]/文末 [N]/脚注编号上标；如 "宋体, SimSun"；字号恒为正文字号×0.75，不随标题段放大，随 font_scale 等比放大）
     "suppress_title_notes": false, // [docx] true=压制卷名/品名校勘注码（标题干净，默认 false 保留）
     "strip_head_no": false,     // [六格式] true=去 head/jhead 行首 No. 令牌（如 X 藏 "No. 1116-B 序"→"序"，余部 lstrip 吃版式空格；正文内 No. 不动；默认 false 保留）
-    "show_dharani_transliteration": false, // [txt|md] true=逐字咒文表（<cb:tt> 无 place="inline"）也显示梵文罗马字母；默认 false 去掉（官方 txt 一致）；place="inline" 与散文读音不受影响；docx/html 不受影响
+    "show_dharani_transliteration": false, // [txt|md] true=逐字咒文表（<cb:tt> 无 place="inline"）也显示梵文罗马字母；默认 false 去掉（官方 text-with-notes 一致）
     "pdf_zoom": 1.0,               // [pdf/仅chromium] HTML→PDF 整页缩放（Playwright page.pdf scale，不重排；范围 0.1-2.0，1.0=原尺寸；与 font_scale 正交可叠加）
     "font_scale": 1.0,             // [所有格式] 字号等比缩放（重排式大字，老人版推荐 1.33/1.5；与 pdf_zoom 正交；字号不影响逐字校验）
     "docx": {                      // [docx] DOCX 特有配置
@@ -173,7 +173,6 @@
     "html": "https://cbdata.dila.edu.tw/stable/download/html/{id}.html.zip",
     "docx": "https://cbdata.dila.edu.tw/stable/download/docx/{canon}/{id}.zip",
     "epub": "https://cbdata.dila.edu.tw/stable/download/epub/{canon}/{id}.epub",
-    "txt": "https://cbdata.dila.edu.tw/stable/download/text/{id}.txt.zip",
     "txt_notes": "https://cbdata.dila.edu.tw/stable/download/text-with-notes/{id}.txt.zip",
     "odt": "https://cbdata.dila.edu.tw/stable/download/odt/{canon}/{id}.zip"
   },

@@ -106,6 +106,20 @@
   - 规则（实证）：`<cb:tt>` **无 `place="inline"`**（逐字咒文表，全库 26 个）官方丢转写；`place="inline"`（68 个）与散文读音保留。非“dharani 段落”一刀切（首版误用导致缺32）
   - 落点：`output.show_dharani_transliteration`（默认 false）；txt/md `_render_e` 的 `tt` 分支按 `place` 置 `_drop_sa`，Gaiji 读音在该上下文丢弃；`verify._extract_xml_parts` 的 `chunks` 同镜像；CLI/`generate_formal` 透传
   - 验收：`test_txt.TestDharaniTransliteration` 4 项；X59 txt `缺0/多457`（579→457，余为注音表/尾注结构差）；docx `0/0` 不变
+- [x] **已完成** 基线只用 text-with-notes + 基线平展进格式目录 + 删 zip + 更新XML补 txt_notes（2026-09-11 用户点档）
+  - 背景：官方 plain `text` 实测 X1077/T0349 校注均 0 行，对比较无意义；`text-with-notes` 才有校注（X1077 135 条）。旧比较拿 plain text 当 baseline → X59「多457」
+  - 弃 plain txt：`fetch` `ALL_FORMATS`/`DEFAULT_DOWNLOADS`/`_BASELINE_FORMATS`/`_ZIP_FORMATS` 去 `txt`；gui `DOWNLOAD_KEYS`、config.json downloads 去 `txt`；`find_official` 去 `kind="txt"`。**渲染格式 `-f txt` 保留**（只删官方下载 kind）
+  - 基线选择：txt/md `base_kind="txt_notes"`（`verify.py`/`cli.py --verify`/`test/verify_text.py` 三入口），自动下载 `need` 用 `txt_notes`；txt 不回退、md 保留 html 兜底
+  - 新布局：work 根放 XML；基线进格式同名子目录**平展**（`html/ docx/ epub/ odt/ txt/`＝text-with-notes），`_unzip_flat` 忽略 zip 内目录层次，解压后删 zip；新增 `_fmt_dir/_fmt_ext/_collect_fmt`，弃 `_txt_subdir/_collect_txt_flat`；`_fetch_baseline_flat` 重写；`find_official` txt_notes 走 `**/txt/{s}_*.txt`（兼容旧 `{s}.txt_notes/`）
+  - 更新XML：`check_ebook_updates` 的 `with_baselines` 除刷新已有格式外，**缺失 `txt_notes` 自动补下**
+  - normalize：官方悉昙占位 `◇`(U+25C7) 与私用区字（PUA）统一为 `□`（text-with-notes 用 ◇，生成侧用 PUA）
+  - 验收：`test_layout`（落盘 `html/`、zip 平展进 `txt/`、缓存不重下）、`test_verify`（txt_notes 落 `txt/`）、`test_fetch`（present/补下）更新，全量 548 OK；X59 端到端重材料化后布局正确、无 zip；docx `0/0`；txt→txt_notes `缺0/多76`（注文交错位置 vs 集中，先天语义差）
+- [x] **已完成** txt 正文尾注标记 + 悉昙 `◇` 占位（2026-09-11 用户点档：正文无标记与文末尾注对不上）
+  - 根因：`TxtRenderer._render_noteref` 内容进 `_fn_notes` 后 `return ""`，正文无任何标记（md 早有 `[^n]`）；且 PUA 悉昙字官方用 `◇` 而我们吐私用字
+  - 落点：`render_txt.py` 加 `_fn_seq`；正文 NoteRef/App 处返回 `[n]`，文末注块改逐条 `[n] 内容`（一一对应）；`show_notes=false` 时标记与注释全无（`_render_noteref` 短路，不动）；RJ 悉昙无 roman → `◇`，逐字咒文表内整行不显示（有/无 roman 都丢）；`verify._extract_xml_parts` 镜像 `sg` 括号与 RJ roman/`◇`/咒文表丢弃
+  - 比较不变：`normalize` 两侧都剥 `[n]`/`[A**]` 标记、`◇`/PUA 都归一 `□`；主轨 txt→txt_notes 仍 `缺69/多9`（较改前 55/9 变动系去掉正文伪 PUA、注块对齐波动，门禁外）；docx/html 不受影响
+  - 验收：`test_txt.TestTxtRenderer` 改/加（`[1]`↔`[1] 内容` 对应、show_notes=false 全无、RJ 无 roman→`◇`）；全量 550 OK
+  - 已知残留（门禁外，另议）：aux P3 仍 `缺85`——`No.` 令牌镜像（待办3）+ 注块选取/顺序差（我方 136 条 vs 官方 252 行）
 - [x] **已完成** 还原出厂确认 + 校验参数持久化默认开 + 报告差异行数改名（2026-09-11 用户点档）
   - 还原出厂：`panel._on_reset` 执行前弹警告确认（「当前配置会被还原为出厂配置」，确定/取消；取消不动作）
   - 校验持久化：出厂 `config.json` verify 块补 `enabled: true`（默认打开）；`set_options` 缺键默认亦 True；`get_options`/`_presets_merged` 本就 roundtrip 开关/阈值/差异行数/自动下载/卷限定

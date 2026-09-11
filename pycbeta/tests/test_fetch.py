@@ -245,7 +245,9 @@ class TestCheckUpdates(unittest.TestCase):
     def test_check_refreshes_present_baselines(self):
         root = tempfile.mkdtemp()
         d, _ = self._mk(root, "T0349", "书", "T12n0349.xml")
-        with open(os.path.join(d, "T0349_001.html"), "w", encoding="utf-8") as f:
+        os.makedirs(os.path.join(d, "html"))
+        with open(os.path.join(d, "html", "T0349_001.html"), "w",
+                  encoding="utf-8") as f:
             f.write("old-html")
         cat = os.path.join(root, "m.csv")
         with open(cat, "w", encoding="utf-8") as f:
@@ -265,18 +267,23 @@ class TestCheckUpdates(unittest.TestCase):
                         side_effect=fake_base):
             rep = check_ebook_updates(root, presets, probe=probe)
         self.assertEqual(rep[0]["status"], "updated")
-        self.assertIn(("html", True), seen)  # 仅已有格式、强制刷新
+        self.assertIn(("html", True), seen)   # 已有格式强制刷新
+        self.assertIn(("txt_notes", False), seen)  # 文本族缺失则补下
         self.assertIn("基线已刷新:html", rep[0]["detail"])
 
     def test_present_baseline_formats(self):
         from pycbeta.fetch import _present_baseline_formats
         d = tempfile.mkdtemp()
-        with open(os.path.join(d, "T0349_001.html"), "w", encoding="utf-8") as f:
-            f.write("x")
-        with open(os.path.join(d, "T0349.epub"), "w", encoding="utf-8") as f:
-            f.write("x")
+        os.makedirs(os.path.join(d, "html"))
+        os.makedirs(os.path.join(d, "epub"))
+        os.makedirs(os.path.join(d, "txt"))
+        for p in (os.path.join(d, "html", "T0349_001.html"),
+                  os.path.join(d, "epub", "T0349.epub"),
+                  os.path.join(d, "txt", "T0349_001.txt")):
+            with open(p, "w", encoding="utf-8") as f:
+                f.write("x")
         self.assertEqual(sorted(_present_baseline_formats(d, "T0349")),
-                         ["epub", "html"])
+                         ["epub", "html", "txt_notes"])
 
     def test_check_skips_no_catalog(self):
         root = tempfile.mkdtemp()

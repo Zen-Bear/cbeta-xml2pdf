@@ -671,7 +671,7 @@ def main(argv=None):
             if getattr(_theirs_norm, "toks", ""):
                 # strip_head_no 联动：官方侧按行首精确令牌对等剥离（生成档已剥）
                 raw = _v_tstrip(raw, _theirs_norm.toks)
-            if bkind in ("txt", "txt_notes"):
+            if bkind == "txt_notes":
                 # text 族官方侧对齐（繁简通用）：版头剥离 + 注记块识别挪文末
                 raw = _v_tnorm(raw)
             return v_norm(_t2s(raw) if _t2s else raw, _rb)
@@ -722,42 +722,36 @@ def main(argv=None):
                     from .verify import work_juan_numbers
                     _juan = work_juan_numbers(w)
                 official = {}
-                for kind in ("html","txt","txt_notes","docx","epub","odt"):
+                for kind in ("html","txt_notes","docx","epub","odt"):
                     found = v_find(src, stem, kind, juan=_juan if kind in ("html", "docx", "txt_notes") else None)
                     if found: official[kind] = found
-                base_kind = {"md":"txt","docx":"docx","html":"html","epub":"epub","txt":"txt"}.get(fmt,"html")
-                bases = []
-                if base_kind in official:
-                    bases.append((base_kind, official[base_kind]))
-                if fmt != "txt":
-                    fb = official.get("html")
-                    if fb and all(p != fb for _,p in bases): bases.append(("html", fb))
-                if args.t2s and "txt_notes" in official and all(p != official["txt_notes"] for _, p in bases):
-                    # 简体统一：txt_notes 优先（传统不动；缺失时落回现有顺序）
-                    bases.insert(0, ("txt_notes", official["txt_notes"]))
-                if not bases and v_auto_fetch:
-                    # 基线缺失：按需调用 fetch 下载（docx/odt 非 T/X 等 404 静默跳过）
+                base_kind = {"md":"txt_notes","docx":"docx","html":"html","epub":"epub","txt":"txt_notes"}.get(fmt,"html")
+
+                def _cli_bases(official):
+                    b = []
+                    if base_kind in official:
+                        b.append((base_kind, official[base_kind]))
+                    if fmt != "txt":
+                        fb = official.get("html")
+                        if fb and all(p != fb for _, p in b):
+                            b.append(("html", fb))
+                    return b
+
+                bases = _cli_bases(official)
+                if base_kind not in official and v_auto_fetch:
+                    # 首选基线缺失：按需调用 fetch 下载（docx/odt 非 T/X 等 404 静默跳过）
                     from .fetch import ensure_baselines
-                    need = {"md": ["txt"], "docx": ["docx", "html"], "txt": ["txt"],
+                    need = {"md": ["txt_notes"], "docx": ["docx", "html"], "txt": ["txt_notes"],
                             "html": ["html"], "epub": ["epub"]}.get(fmt, ["html"])
-                    if args.t2s and "txt_notes" not in need:
-                        need = ["txt_notes"] + need
                     _presets_af = load_presets(args.config) if args.config else load_presets()
                     _ebook_af = ((_presets_af.get("source") or {}).get("cbeta_ebook")
                                  or "").strip() or src
                     ensure_baselines(w.id, need, _presets_af, _ebook_af)
                     official = {}
-                    for kind in ("html","txt","txt_notes","docx","epub","odt"):
+                    for kind in ("html","txt_notes","docx","epub","odt"):
                         found = v_find(src, stem, kind, juan=_juan if kind in ("html", "docx", "txt_notes") else None)
                         if found: official[kind] = found
-                    bases = []
-                    if base_kind in official:
-                        bases.append((base_kind, official[base_kind]))
-                    if fmt != "txt":
-                        fb = official.get("html")
-                        if fb and all(p != fb for _,p in bases): bases.append(("html", fb))
-                    if args.t2s and "txt_notes" in official and all(p != official["txt_notes"] for _, p in bases):
-                        bases.insert(0, ("txt_notes", official["txt_notes"]))
+                    bases = _cli_bases(official)
                 if not bases:
                     block.append(f"  [--]  {fmt:5} no baseline")
                     continue
@@ -778,7 +772,7 @@ def main(argv=None):
                 detail_lines = []
                 for bkind, bpath in bases:
                     if isinstance(bpath, list):
-                        if bkind in ("docx", "txt") and len(bpath) > 1:
+                        if bkind == "docx" and len(bpath) > 1:
                             from .verify import strip_docx_head as _sdh
                             title = t_title
                             parts = []

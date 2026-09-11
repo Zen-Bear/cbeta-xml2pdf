@@ -1380,7 +1380,7 @@ SOURCE_LABELS = [
     ("cbeta_ebook", "电子书工作根（唯一可写，平展一部一目录）"),
     ("catalog", "佛典目录 catalog（sutra_mapping.txt）"),
 ]
-DOWNLOAD_KEYS = ["xml", "html", "docx", "epub", "txt", "txt_notes", "odt"]
+DOWNLOAD_KEYS = ["xml", "html", "docx", "epub", "txt_notes", "odt"]
 
 
 def apply_source_edits(base, values):

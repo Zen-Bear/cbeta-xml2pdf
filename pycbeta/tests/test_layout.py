@@ -133,11 +133,13 @@ class TestFlatLanding(unittest.TestCase):
                              self.source_cfg, self.root)
         finally:
             fetch_mod._http_download = real_http
-        self.assertEqual(res, [os.path.join(self.flat, "T9999_001.html")])
+        self.assertEqual(res, [os.path.join(self.flat, "html",
+                                             "T9999_001.html")])
 
     def test_baseline_force_refresh_overwrites(self):
         # work 目录已有 html，force=True 仍重下并覆盖
-        want = os.path.join(self.flat, "T9999_001.html")
+        want = os.path.join(self.flat, "html", "T9999_001.html")
+        os.makedirs(os.path.dirname(want))
         with open(want, "w", encoding="utf-8") as f:
             f.write("old")
         fakezip = os.path.join(self.root, "b.zip")
@@ -160,20 +162,41 @@ class TestFlatLanding(unittest.TestCase):
         with open(want, encoding="utf-8") as f:
             self.assertEqual(f.read(), "new-content")
 
-    def test_nested_txt_notes_found_without_redownload(self):
-        # 手工整理的嵌套形态（{work}/text-with-notes/{id}.txt_notes/）
-        # 必须被认作已落盘，不重复下载、不搬动
-        nested = os.path.join(self.flat, "text-with-notes", "T9999.txt_notes")
-        os.makedirs(nested)
-        want = os.path.join(nested, "T9999_001.txt")
-        with open(want, "w", encoding="utf-8") as f:
-            f.write("x")
+    def test_txt_notes_zip_flattened_and_cached(self):
+        # zip 自带目录层次 → 平展进 txt/；再次调用命中缓存不重下
+        fakezip = os.path.join(self.root, "n.zip")
+        with zipfile.ZipFile(fakezip, "w") as z:
+            z.writestr("text-with-notes/T9999.txt_notes/T9999_001.txt", "x")
+            z.writestr("text-with-notes/T9999.txt_notes/T9999_002.txt", "y")
+        real_http = fetch_mod._http_download
+
+        def fake_zip(url, dest):
+            self.downloaded.append(url)
+            shutil.copy(fakezip, dest)
+            return True
+
         dl = dict(self.dl)
         dl["txt_notes"] = "http://example/{id}.txt.zip"
-        res = _fetch_one("T9999", "txt_notes", "T", "9999", dl,
-                         self.source_cfg, self.root)
-        self.assertEqual(res, [want])
-        self.assertEqual(self.downloaded, [])
+        fetch_mod._http_download = fake_zip
+        try:
+            res = _fetch_one("T9999", "txt_notes", "T", "9999", dl,
+                             self.source_cfg, self.root)
+        finally:
+            fetch_mod._http_download = real_http
+        want = [os.path.join(self.flat, "txt", "T9999_001.txt"),
+                os.path.join(self.flat, "txt", "T9999_002.txt")]
+        self.assertEqual(res, want)
+        self.assertFalse(os.path.exists(
+            os.path.join(self.flat, "text-with-notes")))
+        n = len(self.downloaded)
+        fetch_mod._http_download = fake_zip
+        try:
+            res2 = _fetch_one("T9999", "txt_notes", "T", "9999", dl,
+                              self.source_cfg, self.root)
+        finally:
+            fetch_mod._http_download = real_http
+        self.assertEqual(res2, want)
+        self.assertEqual(len(self.downloaded), n)  # 命中缓存，未重下
 
     def test_work_dir_reuses_existing_dir(self):
         # 已有旧名目录（不带动词书名）时复用，不再建新目录

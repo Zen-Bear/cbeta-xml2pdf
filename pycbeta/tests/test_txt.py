@@ -45,18 +45,40 @@ class TestTxtRenderer(unittest.TestCase):
         self.assertIn("甲\t乙", t)
         self.assertIn("□", t)
 
-    def test_footnotes_collected_no_marker(self):
+    def test_footnote_markers_match_endnotes(self):
         ref = NoteRef(n="n1", notes=[_note("甲本作乙", "orig"), _note("乙本作甲", "mod")])
         body = [E(tag="p", attrs={}, children=[Text(text="正文"), ref])]
         r = TxtRenderer()
         out = r.render_work(_work(body, {"n1": ref.notes}), tempfile.mkdtemp(), "t.txt")
         with open(out, encoding="utf-8") as f:
             t = f.read()
-        # mod 优先单选，文末集中，正文无 [^n] 标记
-        self.assertNotIn("[^", t)
-        self.assertIn("乙本作甲", t)
+        # mod 优先单选；正文 [1] ↔ 文末 [1] 内容一一对应
+        self.assertIn("正文[1]", t)
+        self.assertIn("[1] 乙本作甲", t)
         self.assertNotIn("甲本作乙", t)
-        self.assertLess(t.find("正文"), t.find("乙本作甲"))
+        self.assertLess(t.find("正文[1]"), t.find("[1] 乙本作甲"))
+
+    def test_show_notes_off_no_marker_no_note(self):
+        ref = NoteRef(n="n1", notes=[_note("小注", "mod")])
+        body = [E(tag="p", attrs={}, children=[Text(text="正文"), ref])]
+        out = TxtRenderer(show_notes=False).render_work(
+            _work(body, {"n1": ref.notes}), tempfile.mkdtemp(), "t.txt")
+        with open(out, encoding="utf-8") as f:
+            t = f.read()
+        self.assertNotIn("[1]", t)
+        self.assertNotIn("小注", t)
+
+    def test_rj_no_roman_uses_diamond(self):
+        # 无法表示的悉昙字（无 roman）→ 官方同款占位 ◇；有声读声
+        work = _work([E(tag="p", attrs={}, children=[
+            Gaiji(code="RJ-E046", char="X"), Gaiji(code="RJ-CCEB", char="Y")])])
+        work.metadata["charDecl"] = {"RJ-E046": {"rjchar": "誆"},
+                                     "RJ-CCEB": {"roman": "raṃ"}}
+        r = TxtRenderer()
+        r._work = work
+        t = r._render_node(work.body[0])
+        self.assertIn("\u25c7", t)
+        self.assertIn("raṃ", t)
 
     def test_inline_brackets(self):
         ref = NoteRef(n="n1", notes=[_note("小注", "mod")])

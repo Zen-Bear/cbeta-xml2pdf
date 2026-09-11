@@ -20,6 +20,10 @@ from .theme import load_presets, _PRESETS_PATH, strip_head_no
 def normalize(text: str, ruby_brackets=None) -> str:
     # 官方基线 unclear 用 ▆，本管线渲染用 □（U+25A1）：两侧归一到 □ 再比较
     text = text.replace("▆", "□")
+    # 悉昙/缺字占位：官方 txt 用 ◇（U+25C7），生成侧用私用区字（PUA）；统一为 □
+    text = text.replace("◇", "□")
+    text = re.sub(r"[\uE000-\uF8FF\U000F0000-\U000FFFFD\U00100000-\U0010FFFD]",
+                  "□", text)
     text = re.sub(r"[A-Z]{1,2}\d{1,4}[A-Za-z]?n\d+[A-Za-z]?_p[0-9a-z]+", "", text)
     text = re.sub(r"\[[^\]\[]{1,8}\]", "", text)
     # 【】见证标记剥除（【CB】/【大】等，官方与生成侧同源）；含「圖」的不剥
@@ -475,6 +479,9 @@ def _extract_xml_parts(path: str, inline_brackets: str = "fullwidth",
         if rec.get("roman") or rec.get("roman_cbeta"):
             # 悉昙缺字：官方 txt 裸读音（如 raṃ），与 TxtRenderer 同规则
             return (rec.get("roman") or rec.get("roman_cbeta")).strip()
+        if code.startswith("RJ"):
+            # 无法表示的悉昙字：官方 text-with-notes 占位 ◇，与 TxtRenderer 同规则
+            return "\u25c7"
         data = _gdb.get(code) if _gdb else None
         if data:
             for k in ("unicode", "norm_unicode"):
@@ -552,17 +559,19 @@ def _extract_xml_parts(path: str, inline_brackets: str = "fullwidth",
                         chunks(c, out, in_dharani)
                     if c.tail:
                         out.append(_WS_RE.sub("", c.tail))
+            elif t == "sg":
+                # 梵呗注音（<cb:sg>）：官方半角括号（与 render_txt 同规则）
+                out.append("(")
+                chunks(child, out, in_dharani)
+                out.append(")")
             elif t == "unclear":
                 out.append("□")
             elif t == "g":
                 code = (child.get("ref") or "").lstrip("#")
                 raw = _WS_RE.sub("", "".join(child.itertext())) or code
-                if in_dharani and not show_dharani_transliteration:
-                    rec = chard.get(code) or {}
-                    # 陀罗尼内有读音记录的悉昙缺字不显示（官方 txt 同款）；
-                    # 无读音记录的走正常解析
-                    if not (rec.get("roman") or rec.get("roman_cbeta")):
-                        out.append(resolve_gaiji(code, raw))
+                if in_dharani and not show_dharani_transliteration \
+                        and code.startswith("RJ"):
+                    pass  # 逐字咒文表悉昙整行不显示（与 TxtRenderer 同规则）
                 else:
                     out.append(resolve_gaiji(code, raw))
             else:
@@ -652,11 +661,12 @@ def find_official(source: str, stem: str, kind: str, juan: Optional[set] = None)
         stems = [stem]
     pats = []
     for s in stems:
-        if kind == "txt":
-            pats += [os.path.join(source, "**", f"{s}.txt", "*.txt"), os.path.join(source, "**", f"{s}.txt")]
-        elif kind == "txt_notes":
-            # 与 txt 同形但目录隔离（{s}.txt_notes/），两者内容不同不可混用
-            pats += [os.path.join(source, "**", f"{s}.txt_notes", "*.txt"),
+        if kind == "txt_notes":
+            # 官方 text-with-notes：新布局 `{work}/txt/{s}_NNN.txt`；
+            # 兼容旧布局 `{s}.txt_notes/` 与平铺 `{s}.txt`
+            pats += [os.path.join(source, "**", "txt", f"{s}_*.txt"),
+                     os.path.join(source, "**", "txt", f"{s}.txt"),
+                     os.path.join(source, "**", f"{s}.txt_notes", "*.txt"),
                      os.path.join(source, "**", f"{s}.txt_notes")]
         else:
             pats.append(os.path.join(source, "**", f"{s}*.{kind}"))
@@ -859,53 +869,47 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
 
     def _discover():
         out = {}
-        for k in ("html", "txt", "txt_notes", "docx", "epub", "odt"):
-            found = find_official(source, stem, k, juan=_juan if k in ("html", "docx", "txt_notes") else None)
+        for k in ("html", "txt_notes", "docx", "epub", "odt"):
+            found = find_official(source, stem, k,
+                                  juan=_juan if k in ("html", "docx", "txt_notes") else None)
             if found:
                 out[k] = found
         return out
 
+    base_kind = {"md": "txt_notes", "docx": "docx", "html": "html",
+                 "epub": "epub", "txt": "txt_notes"}.get(fmt, "html")
+
+    def _bases(official):
+        # 文本族（txt/md）只用官方 text-with-notes（plain text 已弃用）；
+        # 其余用同格式 + html 兜底；txt 不回退（无官方直接 no_baseline）
+        b = []
+        if base_kind in official:
+            b.append((base_kind, official[base_kind]))
+        if fmt != "txt":
+            fb = official.get("html")
+            if fb and all(p != fb for _, p in b):
+                b.append(("html", fb))
+        return b
+
     official = _discover()
-    base_kind = {"md":"txt","docx":"docx","html":"html","epub":"epub","txt":"txt"}.get(fmt,"html")
-    bases = []
-    if base_kind in official:
-        bases.append((base_kind, official[base_kind]))
-    # docx 无官方时回退 html 比较（用户要求）；txt 不回退——无官方 txt 直接 no_baseline
-    if fmt != "txt":
-        fb = official.get("html")
-        if fb and all(p != fb for _,p in bases):
-            bases.append(("html", fb))
-    if t2s and "txt_notes" in official and all(p != official["txt_notes"] for _, p in bases):
-        # 简体统一：txt_notes 优先（传统不动；缺失时落回现有顺序）
-        bases.insert(0, ("txt_notes", official["txt_notes"]))
-    if not bases and bool((cfg or {}).get("auto_fetch", True)):
-        # 基线缺失：按需调用 fetch 下载（docx/odt 非 T/X 等 404 静默跳过）
+    if base_kind not in official and bool((cfg or {}).get("auto_fetch", True)):
+        # 首选基线缺失：按需下载（docx/odt 非 T/X 等 404 静默跳过）
         from .fetch import ensure_baselines
         presets = load_presets(config_path) if config_path else load_presets()
-        need = {"md": ["txt"], "docx": ["docx", "html"], "txt": ["txt"],
-                "html": ["html"], "epub": ["epub"]}.get(fmt, ["html"])
-        if t2s and "txt_notes" not in need:
-            need = ["txt_notes"] + need
+        need = {"md": ["txt_notes"], "docx": ["docx", "html"],
+                "txt": ["txt_notes"], "html": ["html"], "epub": ["epub"]}.get(fmt, ["html"])
         # 材料化模型：基线落 cbeta_ebook work 目录（缺省回退 source）
         ebook = ((presets.get("source") or {}).get("cbeta_ebook") or "").strip() \
             or source
         ensure_baselines(work.id, need, presets, ebook)
         official = _discover()
-        bases = []
-        if base_kind in official:
-            bases.append((base_kind, official[base_kind]))
-        if fmt != "txt":
-            fb = official.get("html")
-            if fb and all(p != fb for _,p in bases):
-                bases.append(("html", fb))
-        if t2s and "txt_notes" in official and all(p != official["txt_notes"] for _, p in bases):
-            bases.insert(0, ("txt_notes", official["txt_notes"]))
+    bases = _bases(official)
     if not bases:
         return {"xml": xml_fn, "fmt": fmt, "status": "no_baseline", "gen": gen_path, "official": None}
     best = None
     trials = []
     for bkind, bpath in bases:
-        if isinstance(bpath, list) and bkind in ("docx", "txt") and len(bpath) > 1:
+        if isinstance(bpath, list) and bkind == "docx" and len(bpath) > 1:
             title = t_title
             if bkind == "docx":
                 # 多卷官方 docx 先合并为单个 docx，再抽取 TXT：脚注统一在文末
@@ -969,7 +973,7 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
             if not compare_infos:
                 theirs_raw = strip_infos(theirs_raw)
             bpath_disp = bpath
-        if bkind in ("txt", "txt_notes"):
+        if bkind == "txt_notes":
             # text 族官方侧对齐（繁简通用）：版头剥离 + 注记块识别挪文末，
             # 与生成侧正文+注块同构；无注记行为无操作
             theirs_raw = _norm_official_txt(theirs_raw)

@@ -2,13 +2,13 @@
 """CBETA 官方资源下载 + 编号流三源材料化。
 
 用法：python -m pycbeta.fetch T0349 [-f all] [--config ...] [--cbeta-ebook ...] [--xml-dir ...]
-格式：xml, html, docx, epub, txt（无校注）, txt_notes（含校注）, odt；-f all = 全部。
+格式：xml, html, docx, epub, txt_notes（含校注，官方 text-with-notes）, odt；-f all = 全部。
+（官方 plain text（无校注）已弃用。）
 
-模型（2026-09-10 定稿）：`xml_dir` 为只读候选源（角色同远端 URL），`cbeta_ebook`
-为唯一可写工作根；两者不得相同。落盘一律**平展**：`cbeta_ebook/{id} {书名}/`，
-XML（整文件拷贝 / 碎片按册合册）与基线同目录（html/docx/odt/epub 放根、
-txt 进 {id}.txt/、txt_notes 进 {id}.txt_notes/）。
-txt 与 txt_notes 分目录存放（同名文件内容不同，混放会覆盖）。
+模型（2026-09-11 定稿）：`xml_dir` 为只读候选源（角色同远端 URL），`cbeta_ebook`
+为唯一可写工作根；两者不得相同。落盘：`cbeta_ebook/{id} {书名}/` 下，XML 放 work 根，
+基线进**格式同名子目录平展**（html/ docx/ epub/ odt/ txt/＝text-with-notes），
+zip 解压后即删（忽略 zip 内部目录层次）。
 说明：docx/odt 目前官方仅大正藏 T 与《卍續藏》X 提供，其它藏经 404 时静默跳过。
 """
 
@@ -30,8 +30,8 @@ if ROOT not in sys.path:
 from .names import CANON, WORK_ID, get_canon_id_from_work_id  # noqa: E402
 from .theme import load_presets  # noqa: E402
 
-ALL_FORMATS = ("xml", "html", "docx", "epub", "txt", "txt_notes", "odt")
-_ZIP_FORMATS = {"html", "docx", "txt", "txt_notes", "odt"}
+ALL_FORMATS = ("xml", "html", "docx", "epub", "txt_notes", "odt")
+_ZIP_FORMATS = {"html", "docx", "txt_notes", "odt"}
 
 DEFAULT_SOURCE = {
     "xml_dir": "",
@@ -46,7 +46,6 @@ DEFAULT_DOWNLOADS = {
     "html": "https://cbdata.dila.edu.tw/stable/download/html/{id}.html.zip",
     "docx": "https://cbdata.dila.edu.tw/stable/download/docx/{canon}/{id}.zip",
     "epub": "https://cbdata.dila.edu.tw/stable/download/epub/{canon}/{id}.epub",
-    "txt": "https://cbdata.dila.edu.tw/stable/download/text/{id}.txt.zip",
     "txt_notes": "https://cbdata.dila.edu.tw/stable/download/text-with-notes/{id}.txt.zip",
     "odt": "https://cbdata.dila.edu.tw/stable/download/odt/{canon}/{id}.zip",
 }
@@ -208,21 +207,20 @@ def _http_download(url: str, dest: str, timeout: int = 90) -> bool:
     return False
 
 
-def _unzip(zip_path: str, dest_dir: str) -> None:
+def _unzip_flat(zip_path: str, dest_dir: str) -> None:
+    """平展解压：忽略 zip 自带目录层次，所有文件按 basename 写入 dest_dir。"""
     os.makedirs(dest_dir, exist_ok=True)
     with zipfile.ZipFile(zip_path) as z:
         for n in z.namelist():
-            # 防 zip-slip：仅接受相对路径且不越界
-            safe = os.path.normpath(n)
-            if safe.startswith("..") or os.path.isabs(safe):
+            if n.endswith("/") or n.endswith("\\"):
                 continue
-            target = os.path.join(dest_dir, safe)
-            if n.endswith("/"):
-                os.makedirs(target, exist_ok=True)
-            else:
-                os.makedirs(os.path.dirname(target), exist_ok=True)
-                with z.open(n) as src, open(target, "wb") as dst:
-                    dst.write(src.read())
+            base = os.path.basename(n.replace("\\", "/"))
+            if not base:
+                continue
+            # 防 zip-slip：只取 basename，天然不越界
+            target = os.path.join(dest_dir, base)
+            with z.open(n) as src, open(target, "wb") as dst:
+                dst.write(src.read())
 
 
 def _find_work_dir(root: str, work_id: str) -> Optional[str]:
@@ -276,104 +274,76 @@ def _catalog_title(presets, canon: str, no: str) -> str:
     return ""
 
 
-def _txt_subdir(fmt: str, work_id: str) -> str:
-    """txt 族整理子目录名：txt → {id}.txt/，txt_notes → {id}.txt_notes/。
-
-    两者必须隔离（同名文件内容不同，混放会互相覆盖）。"""
-    return f"{work_id}.txt_notes" if fmt == "txt_notes" else f"{work_id}.txt"
+def _fmt_dir(fmt: str) -> str:
+    """基线格式目录名：txt_notes（官方 text-with-notes）→ `txt/`；其余同名。"""
+    return "txt" if fmt == "txt_notes" else fmt
 
 
-def _collect_txt_flat(flat: str, fmt: str, work_id: str) -> List[str]:
-    """平展目录内收集 txt 族文件：父目录名须为 {id}.txt/ 或 {id}.txt_notes/，
-    递归但排除 out/（兼容 zip 自带子目录或手工整理的嵌套形态）。"""
-    out = []
-    for p in sorted(glob.glob(os.path.join(flat, "**", "*.txt"), recursive=True)):
-        if f"{os.sep}out{os.sep}" in os.path.abspath(p):
-            continue
-        if os.path.basename(os.path.dirname(p)) != _txt_subdir(fmt, work_id):
-            continue
-        out.append(p)
-    return out
+def _fmt_ext(fmt: str) -> str:
+    return ".txt" if fmt == "txt_notes" else f".{fmt}"
+
+
+def _collect_fmt(wdir: str, fmt: str, work_id: str) -> List[str]:
+    """收集某格式目录内本 work 的文件：`{wdir}/{fmt}/{id}_*{ext}`；
+    epub 为单文件 `{wdir}/epub/{id}.epub`。空文件不计。"""
+    d = os.path.join(wdir, _fmt_dir(fmt))
+    if fmt == "epub":
+        p = os.path.join(d, f"{work_id}.epub")
+        return [p] if os.path.isfile(p) and os.path.getsize(p) > 0 else []
+    ext = _fmt_ext(fmt)
+    return [p for p in sorted(glob.glob(os.path.join(d, f"{work_id}_*{ext}")))
+            if os.path.isfile(p) and os.path.getsize(p) > 0]
 
 
 def _fetch_baseline_flat(work_id: str, fmt: str, dl: Dict, canon: str,
                          wdir: str, force: bool = False) -> List[str]:
-    """基线落 work 目录（平展）：html/docx/odt/epub 放目录根下，
-    txt 进 {id}.txt、txt_notes 进 {id}.txt_notes/；递归收集时排除 out/
-    （work 目录自带 out/ 生成物）。失败静默返回 []。
-    force=True 时忽略「已有」短路，强制重下覆盖（XML 更新后刷新基线用）。"""
-    if fmt == "epub":
-        p = os.path.join(wdir, f"{work_id}.epub")
-        existing = [p] if os.path.isfile(p) else []
-    elif fmt in ("txt", "txt_notes"):
-        existing = _collect_txt_flat(wdir, fmt, work_id)
-    else:
-        existing = []
-        for p in sorted(glob.glob(os.path.join(wdir, "**", f"{work_id}_*.{fmt}"),
-                                  recursive=True)):
-            if f"{os.sep}out{os.sep}" in os.path.abspath(p):
-                continue
-            existing.append(p)
+    """基线落 `{wdir}/{格式目录}/`（html/docx/epub/odt/txt），zip 平展解压后删除。
+    失败静默返回 []。force=True 时忽略「已有」短路，强制重下覆盖。"""
+    existing = _collect_fmt(wdir, fmt, work_id)
     if existing and not force:
-        return existing  # work 目录已有，不重复下载
+        return existing  # 已落盘，不重复下载
+
+    tmpl = dl.get(fmt, DEFAULT_DOWNLOADS.get(fmt, ""))
+    if not tmpl:
+        return existing if force else []
+    dest_dir = os.path.join(wdir, _fmt_dir(fmt))
 
     if fmt == "epub":
-        url = dl.get("epub", DEFAULT_DOWNLOADS["epub"]).format(canon=canon, id=work_id)
-        dest = os.path.join(wdir, f"{work_id}.epub")
+        url = tmpl.format(canon=canon, id=work_id)
+        dest = os.path.join(dest_dir, f"{work_id}.epub")
         if force or not os.path.isfile(dest):
             if not _http_download(url, dest):
                 return existing if force else []
         return [dest]
 
-    tmpl = dl.get(fmt, DEFAULT_DOWNLOADS.get(fmt, ""))
-    if not tmpl:
-        return existing if force else []
-    if fmt in ("html", "txt", "txt_notes"):
-        url = tmpl.format(id=work_id)
-    else:  # docx / odt：需 {canon} 前缀
-        url = tmpl.format(canon=canon, id=work_id)
-    zip_path = os.path.join(wdir, f"{work_id}.{fmt}.zip")
-    if force or not os.path.isfile(zip_path):
+    url = tmpl.format(id=work_id) if fmt in ("html", "txt_notes") \
+        else tmpl.format(canon=canon, id=work_id)
+    # 下载到临时 zip → 平展解压进格式目录 → 删 zip（不留残留）
+    import tempfile
+    fd, zip_path = tempfile.mkstemp(prefix=f"{work_id}.{fmt}.", suffix=".zip")
+    os.close(fd)
+    try:
         if not _http_download(url, zip_path):
             return existing if force else []
-    try:
-        _unzip(zip_path, wdir)
-    except zipfile.BadZipFile:
-        return existing if force else []
-    if fmt in ("txt", "txt_notes"):
-        # 顶层 {id}_*.txt 整理入 {id}.txt/ 或 {id}.txt_notes/ 目录
-        #（find_official 的 {s}.txt/*.txt 与 {s}.txt_notes/*.txt 模式）
-        d = os.path.join(wdir, _txt_subdir(fmt, work_id))
-        os.makedirs(d, exist_ok=True)
-        for p in glob.glob(os.path.join(wdir, f"{work_id}_*.txt")):
-            shutil.move(p, os.path.join(d, os.path.basename(p)))
-        return _collect_txt_flat(wdir, fmt, work_id)
-    out = []
-    for p in sorted(glob.glob(os.path.join(wdir, "**", f"{work_id}_*.{fmt}"),
-                              recursive=True)):
-        if f"{os.sep}out{os.sep}" in os.path.abspath(p):
-            continue
-        out.append(p)
-    return out
+        try:
+            _unzip_flat(zip_path, dest_dir)
+        except zipfile.BadZipFile:
+            return existing if force else []
+    finally:
+        try:
+            os.remove(zip_path)
+        except OSError:
+            pass
+    return _collect_fmt(wdir, fmt, work_id)
 
 
-_BASELINE_FORMATS = ("html", "docx", "epub", "txt", "txt_notes", "odt")
+_BASELINE_FORMATS = ("html", "docx", "epub", "txt_notes", "odt")
 
 
 def _present_baseline_formats(wdir: str, work_id: str) -> List[str]:
     """work 目录内本地已有的基线格式（不会为不存在者新下载）。"""
-    out = []
-    for fmt in _BASELINE_FORMATS:
-        if fmt == "epub":
-            if os.path.isfile(os.path.join(wdir, f"{work_id}.epub")):
-                out.append(fmt)
-        elif fmt in ("txt", "txt_notes"):
-            if _collect_txt_flat(wdir, fmt, work_id):
-                out.append(fmt)
-        elif glob.glob(os.path.join(wdir, "**", f"{work_id}_*.{fmt}"),
-                       recursive=True):
-            out.append(fmt)
-    return out
+    return [fmt for fmt in _BASELINE_FORMATS
+            if _collect_fmt(wdir, fmt, work_id)]
 
 
 def _fetch_one(work_id: str, fmt: str, canon: str, no: str,
@@ -487,7 +457,7 @@ def ensure_baselines(work_id: str, kinds: List[str], presets: Optional[Dict],
     """校验按需调用：对缺失的基线格式下载（docx/odt 非 T/X 等 404 静默跳过）。
 
     xml 不是基线（由 -i/列表模式另行保证）、odt 从不参与比对，故跳过；
-    其余 html/txt/docx/epub 缺啥下啥。返回本次新获取的 {kind: [路径]}（已有的不算）。"""
+    其余 html/txt_notes/docx/epub 缺啥下啥。返回本次新获取的 {kind: [路径]}。"""
     from .verify import find_official
     fetched = {}
     canon, no = parse_work_id(work_id)
@@ -603,6 +573,10 @@ def check_ebook_updates(cbeta_ebook: str, presets: Optional[Dict] = None,
             for fmt in _present_baseline_formats(d, wid):
                 if _fetch_baseline_flat(wid, fmt, dl, canon, d, force=True):
                     refreshed.append(fmt)
+            # 文本族必备替代品（text-with-notes）：老 work 缺失则补下
+            if "txt_notes" not in _present_baseline_formats(d, wid):
+                if _fetch_baseline_flat(wid, "txt_notes", dl, canon, d):
+                    refreshed.append("txt_notes")
             if refreshed:
                 details.append("基线已刷新:" + ",".join(refreshed))
         status = "updated" if changed else ("failed" if failed else "unchanged")
@@ -633,10 +607,10 @@ def format_update_report(report) -> list:
 def main(argv=None) -> int:
     import argparse
     ap = argparse.ArgumentParser(prog="pycbeta.fetch",
-                                 description="CBETA 官方资源下载（XML / html/docx/epub/txt/odt 基线，平展落 cbeta_ebook）")
+                                 description="CBETA 官方资源下载（XML / html/docx/epub/txt_notes/odt 基线，落 cbeta_ebook 格式子目录）")
     ap.add_argument("id", help="CBETA 佛典編號，如 T0349 / T0099 / A1057 / X1271")
     ap.add_argument("-f", "--format", default="all",
-                    help="格式：xml,html,docx,epub,txt,txt_notes,odt（逗号列表）或 all")
+                    help="格式：xml,html,docx,epub,txt_notes,odt（逗号列表）或 all")
     ap.add_argument("--config", help="自定义 config.json")
     ap.add_argument("--cbeta-ebook", default=None,
                     help="电子书工作根（默认 config source.cbeta_ebook）")

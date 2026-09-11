@@ -1,12 +1,11 @@
 """Plain-text renderer: IR -> TXT.
 
 Bare text, no markup: headings stay as plain lines, verse keeps its
-ideographic indent, tables use TAB-separated cells. Footnotes/endnotes
-are collected at the end as bare paragraphs (no header, no markers) so
-that `normalize()` sees body+notes in the same order as the P3 aux track
-splits official XML (bodies/foots).
-
-Notes: inline -> （…）; footnote/endnote -> appended at end.
+ideographic indent, tables use TAB-separated cells. Notes: inline -> （…）;
+footnote/endnote -> body keeps `[n]` markers and contents are collected at
+the end as `[n] 内容` (marker and note correspond 1:1). `show_notes=False`
+drops both markers and notes. Unrepresentable Siddham (RJ gaiji without a
+roman reading) renders as the official placeholder `◇` (U+25C7).
 """
 
 import os
@@ -36,6 +35,7 @@ class TxtRenderer:
         self._ann_seen = set()  # repeat first/page 已注词集合（render_work 起始终置零；txt 单文件，page 等同 first）
         self._work = None
         self._fn_notes: List[str] = []
+        self._fn_seq = 0   # 尾注序号（正文 [n] ↔ 文末 [n] 内容一一对应）
         self._app_by_n = {}
         self._drop_sa = False  # 逐字咒文表 `<cb:tt>`（无 place="inline"）内：转写默认不显示
 
@@ -53,6 +53,7 @@ class TxtRenderer:
         self._work = work
         self._ann_seen = set()
         self._fn_notes = []
+        self._fn_seq = 0
         self._app_by_n = {}
         for n in self._iter_all(work.body):
             if isinstance(n, App) and n.key:
@@ -63,7 +64,9 @@ class TxtRenderer:
         body = self._render_body(work.body)
         text = f"{title}\n\n{author}\n\n{body}"
         if self._fn_notes:
-            text += "\n\n" + "\n\n".join(self._fn_notes)
+            notes = "\n\n".join(f"[{i}] {c}"
+                                for i, c in enumerate(self._fn_notes, 1))
+            text += "\n\n" + notes
         text = text.rstrip() + "\n"
         os.makedirs(out_dir, exist_ok=True)
         if not filename:
@@ -155,10 +158,13 @@ class TxtRenderer:
             return ""
         if isinstance(n, Gaiji):
             roman = self._gaiji_roman(n.code)
+            drop = self._drop_sa and not self.show_dharani_transliteration
+            if n.code.startswith("RJ"):
+                # 悉昙：逐字咒文表整行不显示；否则有声读声、无声用官方占位 ◇
+                if drop:
+                    return ""
+                return roman or "\u25c7"
             if roman:
-                if self._drop_sa and not self.show_dharani_transliteration:
-                    return ""  # 逐字咒文表转写不显示（官方 txt 同款）
-                # 悉昙缺字：官方 txt 裸读音（如 raṃ），无字形无括号
                 return roman
             char = self._resolve_gaiji(n.code, n.char or n.code)
             if self._annotations is not None:
@@ -188,9 +194,10 @@ class TxtRenderer:
         if self.notes == "inline":
             lb, rb = ("(", ")") if self.inline_brackets == "halfwidth" else ("（", "）")
             return f"{lb}{content}{rb}"
-        # 文末集中：正文不留标记（[^n] 会污染裸文本），内容进注块
+        # 文末集中：正文留 [n] 标记，内容进文末注块（编号一一对应）
+        self._fn_seq += 1
         self._fn_notes.append(content)
-        return ""
+        return f"[{self._fn_seq}]"
 
     def _render_app(self, app: App) -> str:
         if not self.show_notes:
@@ -204,8 +211,9 @@ class TxtRenderer:
                 if self.notes == "inline":
                     lb, rb = ("(", ")") if self.inline_brackets == "halfwidth" else ("（", "）")
                     return f"{lb}{content}{rb}"
+                self._fn_seq += 1
                 self._fn_notes.append(content)
-                return ""
+                return f"[{self._fn_seq}]"
         return ""
 
     def _render_inline_note(self, note: Note) -> str:

@@ -1,5 +1,6 @@
 import os
 import re
+import glob
 import shutil
 import sys
 import tempfile
@@ -104,9 +105,9 @@ class TestTxtNotesDiscovery(unittest.TestCase):
     def setUp(self):
         self.root = tempfile.mkdtemp()
         flat = os.path.join(self.root, "T9999 Book")
-        for sub, name in (("T9999.txt", "T9999_001.txt"),
-                          ("T9999.txt_notes", "T9999_001.txt"),
-                          ("T9999.txt_notes", "T9999_002.txt")):
+        for sub, name in (("txt", "T9999_001.txt"),
+                          ("txt", "T9999_002.txt"),
+                          ("html", "T9999_001.html")):
             d = os.path.join(flat, sub)
             os.makedirs(d, exist_ok=True)
             with open(os.path.join(d, name), "w", encoding="utf-8") as f:
@@ -115,14 +116,11 @@ class TestTxtNotesDiscovery(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.root, ignore_errors=True)
 
-    def test_txt_and_notes_isolated(self):
-        # txt 发现不受 .txt_notes 干扰，反之亦然
+    def test_txt_notes_in_txt_dir(self):
+        # text-with-notes 落 `txt/`，不混入 html 等其它格式目录
         hits = find_official(self.root, "T99n9999", "txt_notes")
         self.assertEqual(len(hits), 2)
-        self.assertTrue(all("txt_notes" in f for f in hits))
-        hits_txt = find_official(self.root, "T99n9999", "txt")
-        self.assertTrue(len(hits_txt) >= 1)
-        self.assertTrue(all("txt_notes" not in f for f in hits_txt))
+        self.assertTrue(all(f"{os.sep}txt{os.sep}" in f for f in hits))
 
     def test_scope_applies_to_notes(self):
         hits = find_official(self.root, "T99n9999", "txt_notes", juan={1})
@@ -140,9 +138,11 @@ class TestTxtNotesLanding(unittest.TestCase):
             f.write("T,99,9999,1,1,x,Test\n")
         self.source_cfg = {"catalog": catalog}
         self.dl = {"txt_notes": "http://example/{id}.txt.zip"}
+        # zip 自带目录层次 → 应平展进 txt/
         fakezip = os.path.join(self.root, "f.zip")
         with zipfile.ZipFile(fakezip, "w") as z:
-            z.writestr("T9999_001.txt", "body\n\n    [1] 注【大】\n")
+            z.writestr("text-with-notes/T9999.txt_notes/T9999_001.txt",
+                       "body\n\n    [1] 注【大】\n")
         real_http = fetch_mod._http_download
 
         def fake_zip(url, dest):
@@ -156,14 +156,17 @@ class TestTxtNotesLanding(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.root, ignore_errors=True)
 
-    def test_notes_lands_separate_dir(self):
+    def test_notes_flat_into_txt_dir_no_zip(self):
         res = _fetch_one("T9999", "txt_notes", "T", "9999", self.dl,
                          self.source_cfg, self.root)
-        want = os.path.join(self.flat, "T9999.txt_notes", "T9999_001.txt")
+        want = os.path.join(self.flat, "txt", "T9999_001.txt")
         self.assertEqual(res, [want])
         self.assertTrue(os.path.isfile(want))
-        # 不污染 txt 目录，不建仓库目录
-        self.assertFalse(os.path.exists(os.path.join(self.flat, "T9999.txt")))
+        # 不带 zip 的目录层次、work 目录不留 zip、不建仓库目录
+        self.assertFalse(os.path.exists(
+            os.path.join(self.flat, "text-with-notes")))
+        self.assertFalse(glob.glob(os.path.join(self.flat, "**", "*.zip"),
+                                   recursive=True))
         self.assertFalse(os.path.exists(os.path.join(self.root, "T")))
 
 
