@@ -1,5 +1,6 @@
 import os
 import sys
+import io
 import tempfile
 import unittest
 from unittest import mock
@@ -284,6 +285,47 @@ class TestCheckUpdates(unittest.TestCase):
             root, {"source": {"cbeta_ebook": root, "catalog": ""}},
             probe=lambda u, d: ("unchanged", ""))
         self.assertEqual(rep[0]["status"], "skipped")
+
+
+class TestInspectXmlSource(unittest.TestCase):
+    def _mk(self, d, edition):
+        p = os.path.join(d, "T99n9999.xml")
+        with io.open(p, "w", encoding="utf-8") as f:
+            f.write('<?xml version="1.0" encoding="UTF-8"?>\n'
+                    '<TEI xmlns="http://www.tei-c.org/ns/1.0"><teiHeader><fileDesc>'
+                    '<editionStmt>')
+            if edition is not None:
+                f.write(f"<edition>{edition}</edition>")
+            f.write("</editionStmt></fileDesc></teiHeader><text><body/></text></TEI>")
+        return p
+
+    def test_p5_safe(self):
+        from pycbeta.fetch import inspect_xml_source
+        d = tempfile.mkdtemp()
+        self._mk(d, "XML TEI P5")
+        info = inspect_xml_source(d)
+        self.assertTrue(info["safe"])
+        self.assertEqual(info["edition"], "XML TEI P5")
+
+    def test_p5b_unsafe(self):
+        from pycbeta.fetch import inspect_xml_source
+        d = tempfile.mkdtemp()
+        self._mk(d, "單卷版 XML TEI P5b")
+        info = inspect_xml_source(d)
+        self.assertFalse(info["safe"])
+        self.assertIn("P5b", info["edition"])
+
+    def test_missing_edition_treated_safe(self):
+        from pycbeta.fetch import inspect_xml_source
+        d = tempfile.mkdtemp()
+        self._mk(d, None)
+        self.assertTrue(inspect_xml_source(d)["safe"])
+
+    def test_empty_or_missing_dir(self):
+        from pycbeta.fetch import inspect_xml_source
+        self.assertIsNone(inspect_xml_source("")["safe"])
+        self.assertIsNone(inspect_xml_source(r"X:\nope")["safe"])
+        self.assertIsNone(inspect_xml_source(tempfile.mkdtemp())["safe"])
 
 
 if __name__ == "__main__":

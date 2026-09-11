@@ -71,6 +71,22 @@ def apply_template(template: str, work, juan=None) -> str:
     return sanitize(name)
 
 
+def default_output_name(work_id: str, title: str, title_t2s: bool = True) -> str:
+    """默认产物基名：`{workid 书名}`（与下载电子书 work 目录同款）。
+
+    `title_t2s=True` 时书名经 OpenCC 转简（`source.title_t2s`；失败原样）；
+    无书名回退 `{workid}`；最后做 Windows 净化。
+    """
+    title = (title or "").strip()
+    if title and title_t2s:
+        try:
+            from .simplify import simplify_text
+            title = simplify_text(title)
+        except Exception:
+            pass
+    return sanitize(f"{work_id} {title}".strip() if title else (work_id or "UNKNOWN"))
+
+
 def _claim(taken, emitted, out_dir, name):
     """认领一名：已登记（同轮重放/同文件重复）原样返回，不 churn taken；
     否则占用（仍撞则 _2 后缀），返回最终名。"""

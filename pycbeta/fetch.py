@@ -78,6 +78,49 @@ def title_t2s(presets=None) -> bool:
     return bool(cfg.get("title_t2s", True))
 
 
+def inspect_xml_source(xml_dir: str, sample: int = 5) -> Dict:
+    """抽检本地 XML 候选源的 TEI 版本，判断是否发布版 P5（安全）。
+
+    返回 {"safe": True|False|None, "edition": str, "sample": str, "reason": str}：
+    - 目录空/不存在/无 XML → safe=None（未判定，不告警）
+    - 抽样若干文件读文件头 <edition>：归一化 == "XML TEI P5" → safe=True
+    - P5a/P5b/其它 → safe=False（正文/校勘渲染不完整，可能致重复/丢注/校验红）
+    - 未检出 <edition> → 按 safe=True 处理（发布版恒有，避免误报）
+    """
+    xml_dir = (xml_dir or "").strip()
+    if not xml_dir or not os.path.isdir(xml_dir):
+        return {"safe": None, "edition": "", "sample": "", "reason": "目录不存在"}
+    files = []
+    for root, dirs, fns in os.walk(xml_dir):
+        dirs[:] = [d for d in dirs if d not in ("out", "__pycache__", ".git")]
+        for fn in sorted(fns):
+            if fn.lower().endswith(".xml"):
+                files.append(os.path.join(root, fn))
+        if len(files) >= sample:
+            break
+    if not files:
+        return {"safe": None, "edition": "", "sample": "", "reason": "无 XML"}
+    editions = set()
+    for p in files[:sample]:
+        try:
+            with io.open(p, encoding="utf-8-sig", errors="replace") as f:
+                head = f.read(8192)
+        except OSError:
+            continue
+        m = re.search(r"<edition[^>]*>([^<]*)</edition>", head)
+        if m:
+            editions.add(" ".join(m.group(1).split()))
+    if not editions:
+        return {"safe": True, "edition": "", "sample": files[0],
+                "reason": "未检出 <edition>（按发布版 P5 处理）"}
+    bad = sorted(e for e in editions if e.upper() != "XML TEI P5")
+    if bad:
+        return {"safe": False, "edition": bad[0], "sample": files[0],
+                "reason": f"检测到非发布版 P5 源（{bad[0]}）"}
+    return {"safe": True, "edition": "XML TEI P5", "sample": files[0],
+            "reason": "XML TEI P5"}
+
+
 def is_work_id(s: str) -> bool:
     """是否 CBETA 佛典編號（如 T0349 / T0099 / A1057 / X1271 / T0128a）。
     大小写不敏感（内部归一化为大写，下游查找/下载 URL 统一用大写）。"""

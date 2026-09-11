@@ -72,6 +72,24 @@
     1. 渲染 body-placed foot 注（parser 收编 + 六渲染器出注 + aux 镜像 + 全门禁回归；收 TX08 类注 + T01 stub，T01 25k 本体仍红——输入就没有）；
     2. T01 `_cbreader` 重合（9/5 旧版 charDecl 4/应 70，卫生；与 17k 缺失无关）；
     3. 辅轨 `No.` 令牌镜像剥离（5 行；`strip_head_no=true` 时 aux 16 缺转 0）
+- [x] **已完成** GUI 转换后校验反馈修复（2026-09-10 用户点档：结果/进度/汇总）
+  - 根因：`BatchWorker._verify_one` 仅 `log.emit`（接 statusBar 瞬时消息，被后续覆盖）；行状态不含校验；`total_units` 不含校验；无汇总/日志窗
+  - 落点：`pycbeta/gui/__main__.py` — 新增信号 `row_verify(int,level)`/`verify_result(dict)`；`_verify_one` 返回记录 dict（status/missing/extra/total/official_kind/official/gen_cmp/src_cmp，异常 `status=error`）；`run()` 校验前状态列 `校验中（fmt）…`、校验单元计入总进度、逐行 `_row_outcome` 综合「渲染+校验」终态、**校验报告追加到文件列产物列表末尾**（`*_compare_*.txt`，与 docx/txt 同列可点击打开）；`_on_verify_level` 状态列着色（通过 `#2e7d32`/失败 `#c62828`/无基线灰）；`VerifySummaryDialog`（通过/失败/无基线计数 + 逐项明细 + 打开报告目录，报告落 `out/{fmt}/`；无结果不弹、失败不强制弹）；`_start` 重置结果并接线
+  - 验收：`TestVerifyFeedback` 5 项（含 `run()` 报告入文件列）；offscreen 集成冒烟（T0349 txt）`verify_results` 完整、状态列 `完成｜校验 失败1` 红色；全量 506 OK
+- [x] **已完成** GUI 验证总报告 + xml_dir 版本抽检 + P5b 内联校勘 lem-only（2026-09-10）
+  - 背景：新版 XML `單卷版 XML TEI P5b`（CBReader 书库）把校勘内联 `body <app n><lem>已</lem><rdg>巳</rdg></app>`；泛型渲染 lem+rdg 双吐 → 「已巳又語」（发布版 P5 把 base 放正文、app 放 back，故从未触发）。放弃 CBReader 作数据源后仍保留 `xml_dir`（改指本地 `cbeta-org/xml-p5` 全仓库）
+  - A 修复：`render_docx/html/md/txt` 的 `_render_e` 内联 `app` 只渲 `<lem>`（无 lem 落空），`verify._extract_xml_parts` 镜像；`test_txt.TestInlineAppLem` 4 项 + 辅轨/四格式校验
+  - B 抽检：`fetch.inspect_xml_source(xml_dir, sample=5)`（读文件头 `<edition>`；非「XML TEI P5」→ `safe=False`）；GUI `SourceDialog.accept` 与转换首启兜底弹窗「仍使用/清除该路径/取消」（清除写回用户槽），`panel.xml_dir_warning`/`clear_xml_dir`；CLI `--xml-dir` 非 P5 打印警告后继续；`test_fetch.TestInspectXmlSource` + `test_gui` 3 项
+  - C 报告：`verify_one` 返回补 `norm_gen/norm_official`；新增 `format_verify_report(records, diff_lines, max_diff)`；GUI `run()` 每行跨 xml 累积产物、行末写 `{stem}_verify_report.txt` 并**排文件列最后**（`*_compare_*.txt` 仍在前）；`_verify_one` 保留整条返回 dict；`test_gui.TestVerifyFeedback.test_format_verify_report` + `run()` 报告断言
+  - 迁移：存量 P5b（现仅 `X59n1077.xml`）需跑数据源窗口「更新XML」或删 work XML 重材料化，验收 `edition` 回 `XML TEI P5`
+  - 未做（另议）：P5a/P5b 真兼容（`<choice>` 对齐 + body `type=add` 校勘注转脚注 + `@rend=hide`），当前仅正文 base 正确、校勘注仍缺
+- [x] **已完成** 报告/文件列/数据源文案/输出命名四项（2026-09-10 用户点档）
+  - 报告：`verify_one` 增 `trials`（每个尝试过的基线：kind/missing/extra/total/ok/ctx/norm_official）；`format_verify_report` 标签改 `({fmt}→{基线kind} 缺X/多Y ≤|>阈值N)` 并逐条列出所有尝试基线（标 [OK]/[FAIL]，失败列前 N 条差异）
+  - 文件列：验证产物 `*_compare_*.txt` **不列**（仍落盘），只列渲染产物 + `{stem}_verify_report.txt`（排最后）
+  - 数据源窗口：「检查电子书更新」→「**更新XML**」；「同时更新已有基线」→「**同时更新电子书**」（去“基线”术语）；状态文案同步
+  - 输出命名：默认由 `{id}` 改为 `{id} 书名}`（与下载电子书 work 目录同款），`filename.default_output_name` 跟随 `source.title_t2s` 转简；CLI `resolve_output` + GUI `_out_name_for` 同规则；`--name-template` 仍显式覆盖；html 仍走 renderer 内部命名
+  - 验收：`test_cli`/`TestSourceDialog`/`TestVerifyFeedback`/`TestDefaultOutputName` 更新；全量 523 OK；CLI 实测 `-i T12n0349.xml -f txt -o` 出 `T0349 弥勒菩萨所问本愿经.txt`；GUI 冒烟文件列 = [产物, 报告]（无比较文件）
+  - 附带修：GUI 子进程 stdout 强制 `PYTHONIOENCODING=utf-8`（中文产物名经 gbk 编码后 `parse_produced_paths` 认不出，致产物不列文件列）
 - [x] **已完成 P1 GUI 样式编辑器**（2026-09-06 用户点档：DOCX 所见即所得调 `pdf_docx.css` 字体参数）
   - `pycbeta/gui/css_editor.py`：`CssEditorDialog`（样式表卡按钮弹窗，publish 可复用）+ `python -m pycbeta.gui.css_editor --sample` 独立运行；左标签分组四件套+源码页（tinycss2 红字不覆盖）/右 QTextDocument 模拟预览（回读 `DocxRenderer` run 真值：字号/字体/颜色/加粗/上标，ruby/EQ 展小字灰，注文尾注归并；分页以 Word 为准）/底导出样张 DOCX+PDF（跟主窗口引擎链）+ `user.css` 落盘自动生效+恢复出厂；样张默认 `css-presets/sample.xml`（用户已定稿）
   - 附带修批量桥：`--font-set` 默认省略（保 `user.css` 字体不被 `apply_font_set` 踩；显式组合/t2s 照旧覆盖）；`build_render_cmd` 纯函数可测；单测 TestStyleEditor 8 项；全量待跑

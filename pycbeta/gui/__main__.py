@@ -1,6 +1,6 @@
 """独立转换窗：`python -m pycbeta.gui`。
 
-两种输入：目录/文件，或佛典編號列表（含自动下载缺失 XML/官方基线）。
+两种输入：目录/文件，或佛典編號列表（含自动下载缺失 XML/官方电子书）。
 批量经 QThread 执行，可取消；转换走子进程，校验走 verify_one。
 """
 import glob
@@ -10,8 +10,10 @@ import sys
 
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import (
-    QApplication, QCheckBox, QComboBox, QFileDialog, QGridLayout, QHBoxLayout,
-    QLabel, QLineEdit, QMainWindow, QMenu, QMessageBox, QProgressBar, QPushButton,
+    QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
+    QFileDialog, QGridLayout, QHBoxLayout,
+    QLabel, QLineEdit, QMainWindow, QMenu, QMessageBox, QPlainTextEdit,
+    QProgressBar, QPushButton,
     QRadioButton, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
@@ -74,11 +76,33 @@ def build_render_cmd(opts, xml, fmt, out_dir, tmpcfg, out_name=None):
     return cmd
 
 
+def _row_outcome(render_ok, row_ver, verify_on):
+    """行终态（状态列文本, 配色等级）。等级 ∈ ok/fail/none/"" 。"""
+    base = "完成" if render_ok else "失败"
+    if not verify_on or not row_ver:
+        return base, ""
+    ok = sum(1 for r in row_ver if r.get("status") == "ok")
+    fail = sum(1 for r in row_ver if r.get("status") in ("fail", "error"))
+    none = sum(1 for r in row_ver if r.get("status") == "no_baseline")
+    parts = []
+    if ok:
+        parts.append(f"OK{ok}" if (fail or none) else "OK")
+    if fail:
+        parts.append(f"失败{fail}")
+    if none:
+        parts.append(f"无对照{none}")
+    suffix = "｜校验 " + "/".join(parts) if parts else "｜校验"
+    level = "fail" if fail else ("ok" if ok else ("none" if none else ""))
+    return base + suffix, level
+
+
 class BatchWorker(QThread):
     row_status = Signal(int, str)
     row_source = Signal(int, str)
     row_title = Signal(int, str)
     row_file = Signal(int, str)
+    row_verify = Signal(int, str)      # 行校验等级 ok/fail/none（驱动状态列配色）
+    verify_result = Signal(dict)       # 单次校验详情（汇总弹窗/打开报告用）
     total_progress = Signal(int, int)
     finished_all = Signal()
     log = Signal(str)
@@ -103,8 +127,9 @@ class BatchWorker(QThread):
     def run(self):
         from pycbeta import fetch
         from pycbeta.parser import P5Parser
-        from pycbeta.verify import verify_one
+        from pycbeta.verify import verify_one, format_verify_report
         presets, out_dir = self.paths["presets"], self.paths["out"]
+        self._title_t2s = fetch.title_t2s(presets)
         run, snapshot, tmpcfg = self.paths.get("run") or {}, None, None
         import tempfile as _tf
         import shutil as _sh
@@ -113,7 +138,10 @@ class BatchWorker(QThread):
         try:
             snapshot = write_temp_presets(presets, self.opts)
             tmpcfg = write_temp_run(run, snapshot)
-            total_units = sum(len(self.opts.formats) for _j in self.jobs)
+            verify_on = bool(self.opts.verify.get("enabled"))
+            n_fmt = len(self.opts.formats)
+            # 校验与渲染各占一格进度；进度条不再在校验期间停死
+            total_units = sum(n_fmt for _j in self.jobs) * (2 if verify_on else 1)
             done_units = 0
             used_names = {}  # 本轮命名状态（多源同名统一回退，与 CLI 同规则）
             for idx, job in enumerate(self.jobs):
@@ -123,27 +151,60 @@ class BatchWorker(QThread):
                 xmls = self._resolve(job, idx, fetch, presets)
                 if not xmls:
                     continue
+                row_ver = []      # 本行校验结果
+                row_produced = []  # 本行全部产物（跨 xml 累积，行末一次发文件列）
+                render_ok = True
+                row_stem = None
                 for xml in xmls:
                     if self._cancel:
                         break
                     title, wid = self._title_of(xml, idx, P5Parser)
-                    produced, ok = [], True
+                    if row_stem is None:
+                        row_stem = wid or os.path.splitext(
+                            os.path.basename(xml))[0]
                     for fmt in self.opts.formats:
                         if self._cancel:
                             break
                         out_name = self._out_name_for(
-                            used_names, out_dir, wid,
+                            used_names, out_dir, wid, title,
                             os.path.splitext(os.path.basename(xml))[0], fmt)
                         ok, paths = self._render_one(xml, fmt, out_dir, tmpcfg,
                                                      out_name=out_name)
-                        produced += paths
+                        row_produced += paths
+                        render_ok = render_ok and ok
                         done_units += 1
                         self.total_progress.emit(done_units, max(total_units, 1))
-                        if ok and self.opts.verify.get("enabled"):
-                            self._verify_one(xml, fmt, out_dir, tmpcfg, verify_one)
-                    if produced:
-                        self.row_file.emit(idx, ";".join(dict.fromkeys(produced)))
-                    self.row_status.emit(idx, "完成" if ok else "失败")
+                        if ok and verify_on:
+                            self.row_status.emit(idx, f"校验中（{fmt}）…")
+                            vr = self._verify_one(xml, fmt, out_dir, tmpcfg,
+                                                  verify_one, wid)
+                            row_ver.append(vr)
+                            self.verify_result.emit(vr)
+                            done_units += 1
+                            self.total_progress.emit(
+                                done_units, max(total_units, 1))
+                # 验证总报告：每行一份，排文件列最后
+                if verify_on and row_ver and row_stem:
+                    report = os.path.join(
+                        out_dir, f"{row_stem}_verify_report.txt")
+                    try:
+                        vv = self.opts.verify
+                        lines = format_verify_report(
+                            row_ver,
+                            diff_lines=int(vv.get("diffLines", 5) or 5),
+                            max_diff=int(vv.get("maxDiff", 10) or 10))
+                        with open(report, "w", encoding="utf-8") as f:
+                            f.write("\n".join(lines) + "\n")
+                        if report not in row_produced:
+                            row_produced.append(report)
+                    except Exception as e:
+                        self.log.emit(f"verify report fail: {e}")
+                if row_produced:
+                    self.row_file.emit(
+                        idx, ";".join(dict.fromkeys(row_produced)))
+                text, level = _row_outcome(render_ok, row_ver, verify_on)
+                self.row_status.emit(idx, text)
+                self.row_verify.emit(idx, level)
         finally:
             for p in (tmpcfg, snapshot):
                 if p and os.path.isfile(p):
@@ -214,17 +275,19 @@ class BatchWorker(QThread):
         except Exception:
             return os.path.basename(xml), ""
 
-    def _out_name_for(self, used, out_dir, wid, stem, fmt):
-        """本轮统一命名：多源同名全组改输入基名（与 CLI 同规则，共 filename helper）。
+    def _out_name_for(self, used, out_dir, wid, title, stem, fmt):
+        """本轮统一命名：默认 `{workid 书名}`（title_t2s 跟随 source）。
+        多源同名全组改输入基名（与 CLI 同规则，共 filename helper）。
         返回最终名；None 表示沿用默认（单文件/html/无 wid）。改名执行缺失忽略。"""
         if fmt == "html" or not wid:
             return None
-        from pycbeta.filename import dedupe_run_outputs
+        from pycbeta.filename import dedupe_run_outputs, default_output_name
         from pycbeta.cli import _FORMAT_EXT
         ext = _FORMAT_EXT.get(fmt)
         if not ext:
             return None
-        default = f"{wid}{ext}"
+        default = default_output_name(
+            wid, title, getattr(self, "_title_t2s", True)) + ext
         final, renames = dedupe_run_outputs(used, out_dir, default, stem)
         for old, new in renames:
             try:
@@ -241,7 +304,8 @@ class BatchWorker(QThread):
         try:
             self._proc = subprocess.Popen(
                 cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                text=True, encoding="utf-8", errors="replace")
+                text=True, encoding="utf-8", errors="replace",
+                env={**os.environ, "PYTHONIOENCODING": "utf-8"})
             out, _ = self._proc.communicate()
             self.log.emit(out[-2000:])
             ok = self._proc.returncode == 0
@@ -252,17 +316,82 @@ class BatchWorker(QThread):
         finally:
             self._proc = None
 
-    def _verify_one(self, xml, fmt, out_dir, tmpcfg, verify_one):
+    def _verify_one(self, xml, fmt, out_dir, tmpcfg, verify_one, wid=""):
         v = self.opts.verify
+        rec = {"id": wid or os.path.basename(xml), "fmt": fmt, "xml": xml}
         try:
-            r = verify_one(xml, fmt, os.path.dirname(os.path.abspath(xml)), out_dir,
+            r = verify_one(xml, fmt, os.path.dirname(os.path.abspath(xml)),
+                           out_dir,
                            max_diff=int(v.get("maxDiff", 10) or 10),
                            diff_lines=int(v.get("diffLines", 5) or 5),
                            config_path=tmpcfg, t2s=self.opts.t2s)
-            status = r.get("status", "?")
-            self.log.emit(f"verify {os.path.basename(xml)} {fmt}: {status}")
+            if isinstance(r, dict):
+                rec.update(r)
+            rec["id"] = wid or os.path.basename(xml)
+            rec["fmt"] = fmt
+            rec["xml"] = xml
+            self.log.emit(f"verify {rec['id']} {fmt}: {rec.get('status')} "
+                          f"缺{rec.get('missing')} 多{rec.get('extra')}")
         except Exception as e:
+            rec.update({"status": "error", "detail": str(e)})
             self.log.emit(f"verify fail: {e}")
+        return rec
+
+
+class VerifySummaryDialog(QDialog):
+    """转换后校验汇总：通过/失败/无对照计数 + 逐项明细，可打开报告目录。"""
+
+    def __init__(self, results, report_dir="", parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("校验结果汇总")
+        self.resize(620, 440)
+        self._report_dir = report_dir or ""
+        ok = sum(1 for r in results if r.get("status") == "ok")
+        fail = sum(1 for r in results if r.get("status") in ("fail", "error"))
+        none = sum(1 for r in results if r.get("status") == "no_baseline")
+        layout = QVBoxLayout(self)
+        head = QLabel(f"校验 {len(results)} 项："
+                      f"<b><font color='#2e7d32'>通过 {ok}</font></b> / "
+                      f"<b><font color='#c62828'>失败 {fail}</font></b> / "
+                      f"<font color='gray'>无对照 {none}</font>")
+        head.setTextFormat(Qt.RichText)
+        layout.addWidget(head)
+        self.text = QPlainTextEdit()
+        self.text.setReadOnly(True)
+        self.text.setPlainText("\n".join(self._line(r) for r in results))
+        layout.addWidget(self.text, 1)
+        row = QHBoxLayout()
+        btn_open = QPushButton("打开报告目录")
+        btn_open.setEnabled(bool(self._report_dir))
+        btn_open.clicked.connect(self._open_report)
+        row.addWidget(btn_open)
+        row.addStretch(1)
+        layout.addLayout(row)
+        buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        buttons.rejected.connect(self.reject)
+        buttons.accepted.connect(self.accept)
+        layout.addWidget(buttons)
+
+    @staticmethod
+    def _line(r):
+        st = r.get("status")
+        if st == "ok":
+            tag = "通过"
+        elif st == "no_baseline":
+            tag = "无对照"
+        elif st == "error":
+            tag = "异常"
+        else:
+            tag = "失败"
+        miss, extra = r.get("missing"), r.get("extra")
+        cnt = (f"  缺{miss}/多{extra}" if miss is not None else
+               ("  " + str(r.get("detail", "")) if r.get("detail") else ""))
+        return f"[{tag}] {r.get('id','')} {r.get('fmt','')}{cnt}"
+
+    def _open_report(self):
+        d = self._report_dir
+        if d and os.path.isdir(d):
+            QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.abspath(d)))
 
 
 class MainWindow(QMainWindow):
@@ -408,6 +537,9 @@ class MainWindow(QMainWindow):
         os.makedirs(out_dir, exist_ok=True)
         opts = self.panel.get_options()
         _run, presets = load_run_and_presets()
+        presets = self._warn_xml_dir(presets)
+        if presets is None:
+            return
         self.table.setRowCount(len(jobs))
         for i, job in enumerate(jobs):
             self.table.setItem(i, 0, QTableWidgetItem(job.get("id", "")))
@@ -422,10 +554,14 @@ class MainWindow(QMainWindow):
                                    {"presets": presets, "run": _run,
                                     "out": out_dir},
                                    flags)
+        self._verify_results = []
+        self._out_dir = out_dir
         self.worker.row_status.connect(self._on_status)
         self.worker.row_source.connect(lambda i, v: self.table.item(i, 2).setText(v))
         self.worker.row_title.connect(lambda i, v: self.table.item(i, 1).setText(v))
         self.worker.row_file.connect(self._on_file)
+        self.worker.row_verify.connect(self._on_verify_level)
+        self.worker.verify_result.connect(self._verify_results.append)
         self.worker.total_progress.connect(
             lambda d, t: (self.progress.setMaximum(t), self.progress.setValue(d)))
         self.worker.log.connect(lambda m: self.statusBar().showMessage(m[-160:]))
@@ -438,6 +574,39 @@ class MainWindow(QMainWindow):
     def _on_status(self, i, text):
         if self.table.item(i, 3) is not None:
             self.table.item(i, 3).setText(text)
+
+    def _on_verify_level(self, i, level):
+        """状态列配色：通过绿 / 失败红 / 无基线灰。"""
+        item = self.table.item(i, 3)
+        if item is None or not level:
+            return
+        color = {"ok": "#2e7d32", "fail": "#c62828", "none": "gray"}.get(level)
+        if color:
+            item.setForeground(QColor(color))
+
+    def _warn_xml_dir(self, presets):
+        """转换前抽检 xml_dir；非发布版 P5 → 告警（仍使用/清除/取消）。
+
+        返回（可能更新的）presets；用户选「取消」返回 None（中止本轮）。"""
+        if getattr(self, "_xml_dir_checked", False):
+            return presets
+        self._xml_dir_checked = True
+        xml_dir = ((presets.get("source") or {}).get("xml_dir") or "").strip()
+        if not xml_dir:
+            return presets
+        from pycbeta.fetch import inspect_xml_source
+        from pycbeta.gui.panel import xml_dir_warning, clear_xml_dir
+        info = inspect_xml_source(xml_dir)
+        if info.get("safe") is not False:
+            return presets
+        choice = xml_dir_warning(self, xml_dir, info.get("edition"))
+        if choice is None:
+            return None
+        if choice == "clear":
+            clear_xml_dir()
+            return {**presets,
+                    "source": {**(presets.get("source") or {}), "xml_dir": ""}}
+        return presets
 
     def _on_file(self, i, paths):
         """文件列：显示 basename 链接样式，全路径存 UserRole + tooltip；单击打开。"""
@@ -483,6 +652,10 @@ class MainWindow(QMainWindow):
         self.btn_start.setEnabled(True)
         self.btn_cancel.setEnabled(False)
         self.statusBar().showMessage("批量完成")
+        results = getattr(self, "_verify_results", [])
+        if results:
+            VerifySummaryDialog(results, getattr(self, "_out_dir", ""),
+                                self).exec()
 
 
 def main(argv=None):

@@ -146,17 +146,72 @@ class TestExtractXmlParts(unittest.TestCase):
         self.assertEqual(body, "甲乙")
         self.assertEqual(foots, [])
 
-    def test_body_app_without_anchor_mirrors_render(self):
-        # body 内无 from/corresp 的 app：渲染侧泛型默认分支直吐 lem+rdg 子文本，
-        # 抽取侧镜像收子文本（TX0006 碎片形态；有锚 app 仍整棵丢）
+    def test_body_app_without_anchor_lem_only(self):
+        # body 内联 app（P5a/P5b）：base 读法只在 lem，主/辅轨只出 lem；
+        # rdg 是异读不进正文；无 lem 的 app 落 ""（有锚 app 仍整棵丢）
         text = ("<text><body><p>室可以居<app><lem>几儿</lem>"
                 "<rdg>可以</rdg></app>儱</p>"
                 "<p>乙<app from=\"#b1\" corresp=\"k9\">异文</app>丙</p></body>"
                 "<back></back></text>")
         title, author, body, foots = _extract_xml_parts(_write_tei(text))
-        self.assertIn("室可以居几儿可以儱", body)
+        self.assertIn("室可以居几儿儱", body)
+        self.assertNotIn("可以儱", body)
         self.assertNotIn("异文", body)
         self.assertEqual(foots, [])
+
+
+class TestInlineAppLem(unittest.TestCase):
+    """正文内联校勘（P5a/P5b）：只出 <lem> base 读法，rdg 变体不进正文。"""
+
+    BODY = ("<text><body>"
+            "<p>速疾。<note n=\"n1\" type=\"add\">已【CB】，巳【卍續】</note>"
+            "<app n=\"n1\"><lem wit=\"【CB】\">已</lem>"
+            "<rdg wit=\"【卍續】\">巳</rdg></app>又語一僧</p>"
+            "</body></text>")
+
+    def test_aux_lem_only(self):
+        _, _, body, _ = _extract_xml_parts(_write_tei(self.BODY))
+        self.assertIn("速疾。已又語一僧", body)
+        self.assertNotIn("巳", body)
+        self.assertNotIn("【CB】", body)
+
+    def test_txt_md_lem_only(self):
+        from pycbeta.parser import P5Parser
+        from pycbeta.render_md import MdRenderer
+        work = P5Parser().parse(_write_tei(self.BODY))
+        tmp = tempfile.mkdtemp()
+        t = open(TxtRenderer().render_work(work, tmp, "t.txt"), encoding="utf-8").read()
+        m = open(MdRenderer().render_work(work, tmp, "t.md"), encoding="utf-8").read()
+        for s in (t, m):
+            self.assertIn("速疾。已又語一僧", s)
+            self.assertNotIn("巳", s)
+
+    def test_html_lem_only(self):
+        from pycbeta.parser import P5Parser
+        from pycbeta.render_html import HtmlRenderer
+        work = P5Parser().parse(_write_tei(self.BODY))
+        tmp = tempfile.mkdtemp()
+        files = HtmlRenderer().render_work(work, tmp)
+        html = ""
+        for p in files:
+            fp = p if os.path.isabs(p) else os.path.join(tmp, p)
+            html += open(fp, encoding="utf-8").read()
+        self.assertIn("已", html)
+        self.assertNotIn("巳", html)
+
+    def test_docx_lem_only(self):
+        import re as _re
+        import zipfile
+        from pycbeta.parser import P5Parser
+        from pycbeta.render_docx import DocxRenderer
+        work = P5Parser().parse(_write_tei(self.BODY))
+        fn = DocxRenderer().render_work(work, tempfile.mkdtemp())
+        z = zipfile.ZipFile(fn)
+        doc = z.read("word/document.xml").decode("utf-8")
+        z.close()
+        txt = "".join(_re.findall(r"<w:t[^>]*>([^<]*)</w:t>", doc))
+        self.assertIn("已", txt)
+        self.assertNotIn("巳", txt)
 
 
 class TestAuxEntry(unittest.TestCase):

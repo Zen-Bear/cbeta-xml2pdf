@@ -206,6 +206,11 @@ class MdRenderer:
         return notes[0]
 
     def _render_e(self, e: E) -> str:
+        if e.tag == "app":
+            # 正文内联校勘（P5a/P5b）：base 读法只在 <lem>，只渲染 lem；rdg 是异读不进正文
+            lem = next((c for c in e.children
+                        if isinstance(c, E) and c.tag == "lem"), None)
+            return self._render_children(lem) if lem is not None else ""
         tag = e.tag
         if tag == "p":
             return self._render_children(e).strip() + "\n\n"

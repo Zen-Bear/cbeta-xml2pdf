@@ -1375,6 +1375,33 @@ def apply_source_edits(base, values):
     return data
 
 
+def xml_dir_warning(parent, xml_dir, edition=""):
+    """非发布版 P5 的 XML 候选源告警。返回 'use' / 'clear' / None（取消）。"""
+    box = QMessageBox(parent)
+    box.setIcon(QMessageBox.Warning)
+    box.setWindowTitle("XML 源版本告警")
+    box.setText(f"检测到非发布版 P5 的 XML 源：\n{xml_dir}\n编辑版本：{edition or '未知'}")
+    box.setInformativeText(
+        "P5a/P5b 与发布版 P5 的校勘编码不同，可能导致正文重复、校勘注丢失、校验失败。")
+    use_btn = box.addButton("仍使用（不保证正确）", QMessageBox.AcceptRole)
+    clear_btn = box.addButton("清除该路径", QMessageBox.DestructiveRole)
+    box.addButton("取消", QMessageBox.RejectRole)
+    box.setDefaultButton(clear_btn)
+    box.exec()
+    clicked = box.clickedButton()
+    if clicked is use_btn:
+        return "use"
+    if clicked is clear_btn:
+        return "clear"
+    return None
+
+
+def clear_xml_dir(root=None):
+    """把用户槽 source.xml_dir 清空并保存（非 P5 源经确认后清除）。"""
+    data, _actual = load_slot("user", root)
+    save_current(apply_source_edits(data, {"source": {"xml_dir": ""}}), root)
+
+
 class SourceDialog(QDialog):
     """数据源窗口：查看/编辑输入来源目录与 CBETA 官方下载 URL 模板。
     确定 = 合并进当前槽并保存（走三槽轮换）；取消 = 丢弃。"""
@@ -1425,15 +1452,15 @@ class SourceDialog(QDialog):
         self.btn_update_data.setToolTip(
             "缺字库/补充字型/目录从上游直链同步（先校验再落盘，一致跳过）")
         self.btn_update_data.clicked.connect(self._on_update_data)
-        self.btn_check_update = QPushButton("检查电子书更新")
+        self.btn_check_update = QPushButton("更新XML")
         self.btn_check_update.setToolTip(
             "逐 work 目录比对远程 XML（If-Modified-Since/字节；不改项不落盘），"
             "列出需重新生成电子书的 ID（可一键拷贝）")
         self.btn_check_update.clicked.connect(self._on_check_ebook_updates)
-        self.ebook_base_box = QCheckBox("同时更新已有基线")
+        self.ebook_base_box = QCheckBox("同时更新电子书")
         self.ebook_base_box.setChecked(True)
         self.ebook_base_box.setToolTip(
-            "XML 有更新的 work，其本地已有的官方基线（html/docx/txt 等）一并刷新；"
+            "XML 有更新的 work，其本地已有的官方电子书（html/docx/txt 等）一并刷新；"
             "只为已存在格式重下，不新增格式")
         self.update_status = QLabel("")
         self.update_status.setStyleSheet("color: gray")
@@ -1519,7 +1546,7 @@ class SourceDialog(QDialog):
         self.btn_reset_urls.setEnabled(False)
         self.ebook_base_box.setEnabled(False)
         self._buttons_box.setEnabled(False)
-        self.update_status.setText("正在检查电子书更新…")
+        self.update_status.setText("正在更新XML…")
         self._ebook_worker = EbookUpdateWorker(
             self._dialog_presets(),
             with_baselines=bool(self.ebook_base_box.isChecked()))
@@ -1533,7 +1560,7 @@ class SourceDialog(QDialog):
         self.btn_reset_urls.setEnabled(True)
         self.ebook_base_box.setEnabled(True)
         self._buttons_box.setEnabled(True)
-        self.update_status.setText("更新检查完成")
+        self.update_status.setText("XML更新完成")
 
     def _on_check_finished(self, report):
         dlg = EbookUpdateDialog(report or [], self)
@@ -1559,6 +1586,16 @@ class SourceDialog(QDialog):
             k = self.dl_table.item(i, 0).text()
             v = self.dl_table.item(i, 1).text() if self.dl_table.item(i, 1) else ""
             values["downloads"][k] = v.strip()
+        xml_dir = values["source"].get("xml_dir", "")
+        if xml_dir:
+            from pycbeta.fetch import inspect_xml_source
+            info = inspect_xml_source(xml_dir)
+            if info.get("safe") is False:
+                choice = xml_dir_warning(self, xml_dir, info.get("edition"))
+                if choice is None:
+                    return  # 取消保存
+                if choice == "clear":
+                    values["source"]["xml_dir"] = ""
         save_current(apply_source_edits(data, values))
         super().accept()
 

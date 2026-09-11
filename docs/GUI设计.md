@@ -25,7 +25,7 @@ class XmlOptions:
     font_scale: float = 1.0             # 字号等比缩放（大字版 1.33/1.5；字号不影响逐字校验）
     pagination: dict = None             # 智能分页 {enabled,duplex,juan,juan_first,mulu_level1,pb,tei}
     series_title: dict = None           # 经藏名 {enabled,font,size}
-    t2s: bool = False                 # OpenCC t2s 简体输出（正文/注释/元数据；未指定 --font-lang 时自动用简体字库；校验时官方基线同步转简体）
+    t2s: bool = False                 # OpenCC t2s 简体输出（正文/注释/元数据；未指定 --font-lang 时自动用简体字库；校验时官方文档同步转简体）
     verify: dict = None                 # 可选：转换后校验 {enabled:bool, formats:list}
 ```
 
@@ -42,7 +42,7 @@ class XmlOptions:
 | 引擎 | `engines.docx2pdf.chain` / `html2pdf` | 单选+单体下拉 | `xml_options.engine` |
 | 输出格式 | — | 多选 `pdf/epub/docx/html/md` | `xml_options.formats` |
 | | `output.font_scale` | 数字输入「字号缩放」（大字版 1.33/1.5） | `output.font_scale` |
-| | `output.t2s` | 复选「简体转换」（OpenCC t2s；未指定 --font-lang 时自动用简体字库；校验时官方基线同步转简体） | `output.t2s` |
+| | `output.t2s` | 复选「简体转换」（OpenCC t2s；未指定 --font-lang 时自动用简体字库；校验时官方文档同步转简体） | `output.t2s` |
 | 注释 | `output.show_notes` | 复选「显示注释」 | `output.show_notes` |
 | | `output.footnote_per_page` | 复选「脚注每页重新编号」 | `output.footnote_per_page` |
 | | `output.inline_brackets` | 下拉 halfwidth/fullwidth | `output.inline_brackets` |
@@ -78,7 +78,7 @@ class XmlOptions:
 ├───────────────────────────────────────────────────────────────┤
 │ 输出格式: ☐ pdf ☑ epub ☐ docx ☐ html ☐ md                     │
 │ 引擎: (•) docx2pdf  ( ) html2pdf     单体 [自动 ▼]            │
-│       ☐ 简体转换（OpenCC t2s；校验时官方基线同步转简体）             │
+│       ☐ 简体转换（OpenCC t2s；校验时官方文档同步转简体）             │
 ├───────────────────────────────────────────────────────────────┤
 │ 注释: ☑ 显示注释 ☑ 脚注每页重新编号 ☐ 压制标题注码              │
 │       inline 括号 [halfwidth ▼]                               │
@@ -92,7 +92,7 @@ class XmlOptions:
 │ 经藏名: ☑ 打印  字体 [隸書, LiSu ▼]  字号 [9]                 │
 ├───────────────────────────────────────────────────────────────┤
 │ 校验(高级): ☐ 转换后校验  阈值[10]  差异行[5]                  │
-│       ☑ 基线缺失自动下载 ☑ 按卷限定官方基线                    │
+│       ☑ 官方文档缺失自动下载 ☑ 按卷限定官方文档                │
 └───────────────────────────────────────────────────────────────┘
 ```
 
@@ -146,8 +146,8 @@ class XmlOptions:
 │ 输入来源: (•) 目录/文件  ( ) 佛典編號列表                        │
 │ 目录/文件: [cbeta_xml 目录 或 *.xml……]  [浏览]                  │
 │ 編號列表:  [T0349, X1116, TX0006, A1057…（逗号/换行分隔）]  │
-│            ☐ 自动下载缺失 XML（source.xml_dir）                 │
-│            ☐ 同时下载官方基线（html/docx/txt 供校验）           │
+│            ☐ 自动下载缺失 XML（官方源）                         │
+│            ☐ 同时下载官方电子书（html/docx/txt 供校验）         │
 │ 输出     [………………]  [浏览]                                    │
 │ 设置     [XmlOptionsPanel 嵌入]                                │
 │ ┌─ 批量列表 ────────────────────────────────────────────────┐ │
@@ -165,14 +165,15 @@ class XmlOptions:
 1. `fetch.is_work_id(id)` 校验；`parse_work_id` → `(canon, no)`
 2. **三源材料化**：`fetch.materialize_work(id, presets, xml_dir, cbeta_ebook)`
    - `cbeta_ebook/{id} {书名}/` 已有 → 直接用（来源标「本地XML」）
-   - `xml_dir`（只读候选源，如 CBReader 书库）有 → 拷贝/碎片按组合册落 work 目录（来源标「本地拷贝/合册合成」）
+   - `xml_dir`（只读候选源；**建议指向本地下载的 cbeta-org/xml-p5 全仓库副本（发布版 P5）**，勿指 CBReader）有 → 拷贝/碎片按组合册落 work 目录（来源标「本地拷贝/合册合成」）
+   - **xml_dir 版本抽检**：`fetch.inspect_xml_source(xml_dir)` 抽样读 `<edition>`；非「XML TEI P5」（P5a/P5b）→ GUI 弹窗「仍使用 / 清除该路径 / 取消」（默认高亮清除；「清除」写回用户槽 `source.xml_dir=""`），转换首次也兜底检一次；CLI 打印警告后继续
    - 勾选「自动下载缺失 XML」且前两源无 → `fetch.fetch_work(id, ["xml"], presets, cbeta_ebook)`（来源标「已下载」）
    - 全无 → 行状态标「缺 XML」跳过
-3. **（可选）官方基线**：勾选「同时下载官方基线」→ `fetch.ensure_baselines(id, ["html","docx","txt"], presets, cbeta_ebook)`（落 work 目录；docx/odt 非 T/X 静默失败）
-4. **转换**：`cli.render_one` 或子进程 `[sys.executable, "-m", "pycbeta", "-i", xml, "-f", fmt, "--page", opts.page, "-o", out_dir]`（`t2s=True` 时追加 `--t2s`）
-5. **（可选）校验**：`verify.verify_one(xml, fmt, source, out_root)`，行状态显示 `OK/缺N/多N`（简体转换开启时官方基线同步转简体后比对）
+3. **（可选）官方电子书**：勾选「同时下载官方电子书」→ `fetch.ensure_baselines(id, ["html","docx","txt"], presets, cbeta_ebook)`（落 work 目录；docx/odt 非 T/X 静默失败）
+4. **转换**：`cli.render_one` 或子进程 `[sys.executable, "-m", "pycbeta", "-i", xml, "-f", fmt, "--page", opts.page, "-o", out_dir]`（`t2s=True` 时追加 `--t2s`；子进程 stdout 强制 `PYTHONIOENCODING=utf-8`，中文产物名方可回读）。**默认产物名 = `{佛典編號 书名}`**（`filename.default_output_name`，书名跟随 `source.title_t2s` 转简；`--name-template` 显式覆盖，html 仍 renderer 内部命名）
+5. **（可选）校验**：`verify.verify_one(xml, fmt, source, out_root)`，进度条把校验计入总单元；行状态显示 `完成｜校验 OK/失败N/无对照N` 并按结果着色（通过绿 `#2e7d32` / 失败红 `#c62828` / 无对照灰）；转换期间状态列先示 `校验中（fmt）…`；文件列依次为「渲染产物 + **验证总报告 `{stem}_verify_report.txt`（排最后）**」，均可单击打开（各格式 `*_compare_*.txt` 仍落盘但**不列文件列**）；总报告由 `verify.format_verify_report(records, diff_lines, max_diff)` 生成，**逐条列出每个尝试过的对照**：`[OK]|[FAIL] ({fmt}→{对照kind} 缺X/多Y ≤|>阈值N)` + `【源】/【新】` + 失败项前 N 条【源】【新】（N=`verify.diffLines` 默认 5，落 `out/`）；全部结束弹 `VerifySummaryDialog` 汇总（通过/失败/无对照计数 + 逐项明细 + 「打开报告目录」，失败不强制弹窗）。信号：`row_verify(int, level)`、`verify_result(dict)`（简体转换开启时官方文档同步转简体后比对）
 
-批量列表列：`经号 | 经名 | 来源（本地/已下载/官方基线） | 状态 | 进度`；`QThread` + 信号更新；取消中断后续。
+批量列表列：`经号 | 经名 | 来源（本地/已下载/官方电子书） | 状态 | 进度`；`QThread` + 信号更新；取消中断后续。
 
 ### 4.3 目录/文件模式
 递归扫描 `**/*.xml`（排除 `out/`）填充批量列表；其余同流程（来源列统一「本地XML」）。

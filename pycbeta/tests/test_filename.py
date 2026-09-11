@@ -63,5 +63,28 @@ class TestDedupeRunOutputs(unittest.TestCase):
         self.assertEqual(len(r2), 1)
 
 
+class TestDefaultOutputName(unittest.TestCase):
+    def test_id_and_title(self):
+        from pycbeta.filename import default_output_name
+        self.assertEqual(default_output_name("T0349", "彌勒菩薩所問本願經", False),
+                         "T0349 彌勒菩薩所問本願經")
+
+    def test_no_title_falls_back_to_id(self):
+        from pycbeta.filename import default_output_name
+        self.assertEqual(default_output_name("T0349", "", True), "T0349")
+
+    def test_t2s_follows_switch(self):
+        import unittest.mock as mock
+        from pycbeta.filename import default_output_name
+        with mock.patch("pycbeta.simplify.simplify_text",
+                        return_value="弥勒菩萨所问本愿经"):
+            got = default_output_name("T0349", "彌勒菩薩所問本願經", True)
+        self.assertEqual(got, "T0349 弥勒菩萨所问本愿经")
+
+    def test_sanitized(self):
+        from pycbeta.filename import default_output_name
+        self.assertEqual(default_output_name("T1", "a/b:c", False), "T1 a／b：c")
+
+
 if __name__ == "__main__":
     unittest.main()

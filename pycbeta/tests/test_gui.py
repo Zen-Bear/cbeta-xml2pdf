@@ -953,6 +953,40 @@ class TestSourceDialog(unittest.TestCase):
         # base 未被污染
         self.assertEqual(base["source"]["xml_dir"], "A")
 
+    def _accept_with(self, xml_dir, warn_ret, unsafe=True):
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PySide6.QtWidgets import QApplication
+        QApplication.instance() or QApplication([])
+        from unittest import mock
+        import pycbeta.gui.panel as P
+        dlg = P.SourceDialog()
+        try:
+            dlg.path_edits["xml_dir"].setText(xml_dir)
+            saved = {}
+            with mock.patch("pycbeta.fetch.inspect_xml_source",
+                            return_value={"safe": not unsafe, "edition": "單卷版 XML TEI P5b"}):
+                with mock.patch.object(P, "xml_dir_warning", return_value=warn_ret):
+                    with mock.patch.object(P, "save_current",
+                                           side_effect=lambda d, r=None: saved.update(d)):
+                        with mock.patch.object(P, "load_slot",
+                                               return_value=({"source": {}}, None)):
+                            dlg.accept()
+            return saved
+        finally:
+            dlg.close()
+
+    def test_accept_clears_unsafe_xml_dir(self):
+        saved = self._accept_with(r"X:\p5b", "clear")
+        self.assertEqual(saved.get("source", {}).get("xml_dir"), "")
+
+    def test_accept_keeps_on_use(self):
+        saved = self._accept_with(r"X:\p5b", "use")
+        self.assertEqual(saved.get("source", {}).get("xml_dir"), r"X:\p5b")
+
+    def test_accept_cancel_does_not_save(self):
+        saved = self._accept_with(r"X:\p5b", None)
+        self.assertEqual(saved, {})
+
     def test_dialog_builds(self):
         os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
         from PySide6.QtWidgets import QApplication
@@ -960,13 +994,15 @@ class TestSourceDialog(unittest.TestCase):
         from pycbeta.gui.panel import SourceDialog
         dlg = SourceDialog()
         try:
-            self.assertTrue(dlg.path_edits["xml_dir"].text())
+            self.assertIn("xml_dir", dlg.path_edits)  # 字段存在（值随用户配置）
             self.assertGreater(dlg.dl_table.rowCount(), 0)
             self.assertEqual(dlg.dl_table.item(0, 0).text(), "xml")
             flags = dlg.dl_table.item(0, 0).flags()
             from PySide6.QtCore import Qt
             self.assertFalse(bool(flags & Qt.ItemIsEditable))
             self.assertEqual(dlg.btn_update_data.text(), "更新官方数据")
+            self.assertEqual(dlg.btn_check_update.text(), "更新XML")
+            self.assertEqual(dlg.ebook_base_box.text(), "同时更新电子书")
         finally:
             dlg.close()
 
@@ -1027,7 +1063,10 @@ class TestSourceDialog(unittest.TestCase):
                         pm, "load_slot",
                         return_value=({"source": {}, "downloads": {}},
                                       "user")):
-                    dlg.accept()
+                    with mock.patch("pycbeta.fetch.inspect_xml_source",
+                                    return_value={"safe": True,
+                                                  "edition": "XML TEI P5"}):
+                        dlg.accept()
                     m.assert_called_once()
                     saved = m.call_args.args[0]
                     self.assertEqual(
@@ -2781,9 +2820,9 @@ class TestCssEditor(unittest.TestCase):
         import pycbeta.gui.__main__ as M
         used = {}
         w = M.BatchWorker.__new__(M.BatchWorker)
-        n1 = w._out_name_for(used, "out", "TX0006", "TX07n0006", "txt")
-        n2 = w._out_name_for(used, "out", "TX0006", "TX08n0006", "txt")
-        n3 = w._out_name_for(used, "out", "TX0006", "TX09n0006", "html")
+        n1 = w._out_name_for(used, "out", "TX0006", "", "TX07n0006", "txt")
+        n2 = w._out_name_for(used, "out", "TX0006", "", "TX08n0006", "txt")
+        n3 = w._out_name_for(used, "out", "TX0006", "", "TX09n0006", "html")
         self.assertIsNone(n1)  # 首个沿用默认
         self.assertEqual(n2, "TX08n0006.txt")
         self.assertIsNone(n3)  # html 照旧默认（残留）
@@ -2868,6 +2907,165 @@ class TestFontStacks(unittest.TestCase):
             self.assertIn("SimSn", html)
         finally:
             w.close()
+
+
+class TestVerifyFeedback(unittest.TestCase):
+    """转换后校验的 GUI 反馈：行终态/状态列配色/汇总弹窗/worker 记录。"""
+
+    @classmethod
+    def setUpClass(cls):
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PySide6.QtWidgets import QApplication
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_row_outcome(self):
+        from pycbeta.gui.__main__ import _row_outcome
+        self.assertEqual(_row_outcome(True, [], False), ("完成", ""))
+        t, lv = _row_outcome(True, [{"status": "ok"}], True)
+        self.assertIn("校验 OK", t)
+        self.assertEqual(lv, "ok")
+        t, lv = _row_outcome(True, [{"status": "ok"}, {"status": "fail"}], True)
+        self.assertEqual(lv, "fail")
+        self.assertIn("失败1", t)
+        t, lv = _row_outcome(True, [{"status": "no_baseline"}], True)
+        self.assertEqual(lv, "none")
+        t, lv = _row_outcome(False, [{"status": "ok"}], True)
+        self.assertTrue(t.startswith("失败"))
+
+    def test_verify_summary_dialog(self):
+        from pycbeta.gui.__main__ import VerifySummaryDialog
+        res = [{"id": "T1", "fmt": "docx", "status": "ok",
+                "missing": 0, "extra": 0},
+               {"id": "T2", "fmt": "docx", "status": "fail",
+                "missing": 3, "extra": 1},
+               {"id": "T3", "fmt": "docx", "status": "no_baseline"}]
+        d = VerifySummaryDialog(res, "")
+        try:
+            txt = d.text.toPlainText()
+            self.assertIn("[通过] T1 docx", txt)
+            self.assertIn("[失败] T2 docx", txt)
+            self.assertIn("缺3/多1", txt)
+            self.assertIn("[无对照] T3 docx", txt)
+        finally:
+            d.close()
+
+    def test_format_verify_report(self):
+        from pycbeta.verify import format_verify_report
+        recs = [
+            {"xml": r"E:\x\T12n0349.xml", "fmt": "docx", "status": "fail",
+             "missing": 0, "extra": 15, "total": 15, "official_kind": "docx",
+             "official": r"E:\x\T0349.docx", "gen": r"E:\out\T12n0349.docx",
+             "norm_gen": "abcdefghij0123456789",
+             "trials": [
+                 {"kind": "docx", "official": r"E:\x\T0349.docx", "missing": 5,
+                  "extra": 30, "total": 35, "ok": False,
+                  "ctx": [("replace", 0, 1, 0, 1)],
+                  "norm_official": "abcdefghijXXXXXXXXXX"},
+                 {"kind": "html", "official": r"E:\x\T0349_001.html",
+                  "missing": 0, "extra": 15, "total": 15, "ok": False,
+                  "ctx": [("replace", 0, 1, 0, 1)],
+                  "norm_official": "abcdefghijYYYYYYYYYY"}]},
+            {"xml": r"E:\x\T15n0625.xml", "fmt": "txt", "status": "no_baseline"},
+        ]
+        s = "\n".join(format_verify_report(recs, diff_lines=5, max_diff=10))
+        self.assertIn("=== T12n0349.xml", s)
+        self.assertIn("[FAIL] (docx→docx 缺5/多30 >阈值10)", s)
+        self.assertIn("[FAIL] (docx→html 缺0/多15 >阈值10)", s)
+        self.assertIn("1. 【源】", s)
+        self.assertIn("[--]  txt no baseline", s)
+
+    def test_batch_verify_one_returns_rec(self):
+        import tempfile
+        from types import SimpleNamespace
+        from pycbeta.gui.__main__ import BatchWorker
+        opts = SimpleNamespace(verify={"maxDiff": 10, "diffLines": 5},
+                               t2s=False)
+        w = BatchWorker([], opts, {}, {})
+        try:
+            xml = os.path.join(tempfile.mkdtemp(), "T1.xml")
+            with open(xml, "w", encoding="utf-8") as f:
+                f.write("<TEI/>")
+
+            def fake_verify(x, fmt, source, out_root, max_diff=10,
+                            diff_lines=5, config_path=None, t2s=False):
+                return {"status": "ok", "missing": 0, "extra": 0,
+                        "official_kind": "docx", "gen_cmp": "g.txt",
+                        "src_cmp": "s.txt"}
+
+            rec = w._verify_one(xml, "docx", tempfile.mkdtemp(), "cfg.json",
+                                fake_verify, "T1")
+            self.assertEqual(rec["id"], "T1")
+            self.assertEqual(rec["status"], "ok")
+            self.assertEqual(rec["gen_cmp"], "g.txt")
+        finally:
+            w.wait(1)
+
+    def test_run_appends_verify_report_to_files(self):
+        import tempfile
+        from types import SimpleNamespace
+        import pycbeta.gui.__main__ as M
+        tmp = tempfile.mkdtemp(prefix="gverfiles-")
+        xml = os.path.join(tmp, "T12n0349.xml")
+        rendered = os.path.join(tmp, "T12n0349.txt")
+        gcmp = os.path.join(tmp, "T12n0349_compare_txt_generated.txt")
+        scmp = os.path.join(tmp, "T12n0349_compare_txt_official.txt")
+        for p in (xml, rendered, gcmp, scmp):
+            with open(p, "w", encoding="utf-8") as f:
+                f.write("x")
+        opts = SimpleNamespace(verify={"enabled": True}, formats=["txt"],
+                               t2s=False)
+        w = M.BatchWorker([{"id": "T0349"}], opts,
+                          {"presets": {}, "run": {}, "out": tmp}, {})
+        w._resolve = lambda job, idx, fetch, presets: [xml]
+        w._title_of = lambda x, i, P: ("T0349", "T0349")
+        w._out_name_for = lambda *a, **k: "T12n0349.txt"
+        w._render_one = lambda x, fmt, o, cfg, out_name=None: (True, [rendered])
+        w._verify_one = lambda x, fmt, o, cfg, vo, wid="": {
+            "id": wid, "fmt": fmt, "xml": x, "status": "fail", "missing": 0,
+            "extra": 15, "gen_cmp": gcmp, "src_cmp": scmp}
+        orig = (M.write_temp_presets, M.write_temp_run)
+        M.write_temp_presets = lambda presets, opts: os.path.join(tmp, "p.json")
+        M.write_temp_run = lambda run, snap: os.path.join(tmp, "r.json")
+        captured = {}
+        w.row_file.connect(lambda i, p: captured.__setitem__(i, p))
+        try:
+            w.run()
+        finally:
+            M.write_temp_presets, M.write_temp_run = orig
+            w.wait(1)
+        files = captured[0].split(";")
+        report = os.path.join(tmp, "T0349_verify_report.txt")
+        self.assertEqual(files[0], rendered)
+        self.assertNotIn(gcmp, files)                # 比较文件不列文件列
+        self.assertNotIn(scmp, files)
+        self.assertEqual(files[-1], report)          # 只列报告，排最后
+        self.assertTrue(os.path.isfile(report))
+        body = open(report, encoding="utf-8").read()
+        self.assertIn("=== T12n0349.xml", body)
+        self.assertIn("[FAIL]", body)
+        self.assertIn("缺0/多15", body)
+
+    def test_batch_verify_one_error_rec(self):
+        import tempfile
+        from types import SimpleNamespace
+        from pycbeta.gui.__main__ import BatchWorker
+        opts = SimpleNamespace(verify={"maxDiff": 10, "diffLines": 5},
+                               t2s=False)
+        w = BatchWorker([], opts, {}, {})
+        try:
+            xml = os.path.join(tempfile.mkdtemp(), "T1.xml")
+            with open(xml, "w", encoding="utf-8") as f:
+                f.write("<TEI/>")
+
+            def boom(*a, **k):
+                raise RuntimeError("nope")
+
+            rec = w._verify_one(xml, "docx", tempfile.mkdtemp(), "cfg.json",
+                                boom, "T2")
+            self.assertEqual(rec["status"], "error")
+            self.assertIn("nope", rec["detail"])
+        finally:
+            w.wait(1)
 
 
 if __name__ == "__main__":

@@ -404,7 +404,7 @@ PDF 专属           : --vertical  --engine{chromium,docx2pdf,prince,weasyprint}
 **输出文件名模板（`--name-template`）**：
 - 占位符：`[id]`（作品 ID）`[书名]` `[作者]` `[vol]`（册号）`[juan]`（卷号，按卷输出补零 001）
 - 例：`--name-template "[id] [书名]（[作者]）"` → `T0349 彌勒菩薩所問本願經（西晉 竺法護譯）.docx`
-- 缺省：`{id}_{juan}.html` / `{id}.{ext}`
+- 缺省：html 为 `{佛典編號 书名}_html/`（内 `{id}_{卷号:03d}.html`），其余单文件 `{佛典編號 书名}.{ext}`（书名跟随 `source.title_t2s` 转简；`filename.default_output_name`）
 
 **Windows 文件名安全化**（`filename.py`）：
 1. 非法字符 → **全角映射**（`:`→`：`、`\`→`＼`、`/`→`／`、`*`→`＊`、`?`→`？`、`"`→`＂`、`<`→`＜`、`>`→`＞`、`|`→`｜`）
@@ -422,7 +422,7 @@ PDF 专属           : --vertical  --engine{chromium,docx2pdf,prince,weasyprint}
 
 输出规则：
 - 单文件输入、无 `-o`：源目录生成**同名文件+扩展名**（html 生成 `<同名>_html/` 目录）
-- `-o` 以格式扩展名结尾：视为输出文件；`-o` 为目录：视为输出目录，文件名 = 作品 id + 扩展名
+- `-o` 以格式扩展名结尾：视为输出文件；`-o` 为目录：视为输出目录，文件名 = `{佛典編號 书名}.{ext}`（书名跟随 `source.title_t2s`）
 - 目录输入：`os.walk` 逐文件处理
 
 `--page` 同时作用于 docx（`w:pgSz` twips）与 pdf（`@page`）；docx 支持脚注/尾注双模式（OOXML 脚注 or 文末「注释」节）。

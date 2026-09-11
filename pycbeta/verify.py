@@ -510,12 +510,14 @@ def _extract_xml_parts(path: str, inline_brackets: str = "fullwidth"):
                     chunks(child, out)
                     out.append(rb)
                 # 非行内注整棵丢弃（body 内注生成侧恒 ""；back 注走注池）
-            elif t == "app" and not child.get("from") and not child.get("corresp"):
-                # body 内无锚 app（lem/rdg 直挂正文，如 TX0006 碎片）：parser 不进
-                # _parse_app（仅 back 的进），渲染侧泛型默认分支直吐子文本，此处镜像
-                # 收子文本。有 from/corresp 的仍整棵丢（渲染侧行内恒空；其注池归并只走
-                # anchor 序，未覆盖——残留已知局限）。
-                chunks(child, out)
+            elif t == "app":
+                # 正文内联校勘（P5a/P5b，如 CBReader 書庫）：base 读法只在 <lem>，
+                # 渲染侧只出 lem（见 render_*.py _render_e），此处镜像只收 lem 子文本；
+                # rdg 是异读不进正文。back 内的 app 不走此分支（anchor 序另处理）。
+                lem = next((c for c in child
+                            if isinstance(c.tag, str) and ln(c) == "lem"), None)
+                if lem is not None:
+                    chunks(lem, out)
             elif t in _XML_DROP_TAGS:
                 pass
             elif t == "unclear":
@@ -810,7 +812,8 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
         return {"xml": xml_fn, "fmt": fmt, "status": status, "gen": gen_path,
                 "official": xml_fn, "official_kind": "xml", "matched": m,
                 "missing": mi, "extra": ex, "total": total, "ctx": ctx,
-                "src_cmp": src_cmp, "gen_cmp": gen_cmp}
+                "src_cmp": src_cmp, "gen_cmp": gen_cmp,
+                "norm_gen": ours, "norm_official": theirs}
     scope_juan = bool((cfg or {}).get("scope_juan", True))
     _juan = work_juan_numbers(work) if scope_juan else None
 
@@ -860,6 +863,7 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
     if not bases:
         return {"xml": xml_fn, "fmt": fmt, "status": "no_baseline", "gen": gen_path, "official": None}
     best = None
+    trials = []
     for bkind, bpath in bases:
         if isinstance(bpath, list) and bkind in ("docx", "txt") and len(bpath) > 1:
             title = t_title
@@ -955,10 +959,66 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
             src_cmp = gen_cmp = ""
         m, mi, ex, ctx = diff_stats(ours, theirs)
         total = mi + ex
-        cur = (bkind, bpath_disp, m, mi, ex, ctx, total, src_cmp, gen_cmp)
+        trials.append({"kind": bkind, "official": bpath_disp, "missing": mi,
+                       "extra": ex, "total": total, "ok": total <= max_diff,
+                       "ctx": ctx, "norm_official": theirs,
+                       "src_cmp": src_cmp, "gen_cmp": gen_cmp})
+        cur = (bkind, bpath_disp, m, mi, ex, ctx, total, src_cmp, gen_cmp, theirs)
         if best is None or total < best[6]:
             best = cur
         if total <= max_diff:
-            return {"xml": xml_fn, "fmt": fmt, "status": "ok", "gen": gen_path, "official": bpath_disp, "official_kind": bkind, "matched": m, "missing": mi, "extra": ex, "total": total, "ctx": ctx, "src_cmp": src_cmp, "gen_cmp": gen_cmp}
-    bkind, bpath, m, mi, ex, ctx, total, src_cmp, gen_cmp = best
-    return {"xml": xml_fn, "fmt": fmt, "status": "fail", "gen": gen_path, "official": bpath, "official_kind": bkind, "matched": m, "missing": mi, "extra": ex, "total": total, "ctx": ctx, "src_cmp": src_cmp, "gen_cmp": gen_cmp}
+            return {"xml": xml_fn, "fmt": fmt, "status": "ok", "gen": gen_path, "official": bpath_disp, "official_kind": bkind, "matched": m, "missing": mi, "extra": ex, "total": total, "ctx": ctx, "src_cmp": src_cmp, "gen_cmp": gen_cmp, "norm_gen": ours, "norm_official": theirs, "trials": trials}
+    bkind, bpath, m, mi, ex, ctx, total, src_cmp, gen_cmp, best_theirs = best
+    return {"xml": xml_fn, "fmt": fmt, "status": "fail", "gen": gen_path, "official": bpath, "official_kind": bkind, "matched": m, "missing": mi, "extra": ex, "total": total, "ctx": ctx, "src_cmp": src_cmp, "gen_cmp": gen_cmp, "norm_gen": ours, "norm_official": best_theirs, "trials": trials}
+
+
+def format_verify_report(records, diff_lines: int = 5, max_diff: int = 10):
+    """verify_one 记录列表 → 验证总报告行（对齐 report.txt 风格，含前 N 条差异片段）。
+
+    记录须为 verify_one 返回 dict；每个 XML 一段，逐条列出**每个尝试过的基线**
+    （`trials`）并标 [OK]/[FAIL]，失败项列前 diff_lines 条【源】【新】差异。
+    无 `trials` 的记录（如 P3 辅轨 baseline=xml）退化为单条，标签 `{fmt}→{kind}`。
+    """
+    lines = []
+    for r in records or []:
+        name = os.path.basename(r.get("xml") or r.get("id") or "")
+        fmt = r.get("fmt", "")
+        st = r.get("status")
+        lines.append(f"=== {name}")
+        if st == "no_baseline":
+            lines.append(f"  [--]  {fmt} no baseline")
+            continue
+        if st == "error":
+            lines.append(f"  [FAIL] {fmt} 校验异常: {r.get('detail', '')}")
+            continue
+        ours = r.get("norm_gen") or ""
+        gen = r.get("gen")
+        if isinstance(gen, list):
+            gen = gen[0] if gen else ""
+        trials = r.get("trials")
+        if not trials:
+            trials = [{"kind": r.get("official_kind") or "?",
+                       "official": r.get("official"),
+                       "missing": r.get("missing"), "extra": r.get("extra"),
+                       "total": r.get("total"), "ok": st == "ok",
+                       "ctx": r.get("ctx"),
+                       "norm_official": r.get("norm_official")}]
+        for t in trials:
+            ok = bool(t.get("ok"))
+            mark = "[OK]" if ok else "[FAIL]"
+            op = "≤" if ok else ">"
+            lines.append(f"  {mark} ({fmt}→{t.get('kind')} 缺{t.get('missing')}/"
+                         f"多{t.get('extra')} {op}阈值{max_diff})")
+            if t.get("official"):
+                lines.append(f"  {fmt} 【源】{t['official']}")
+            if gen:
+                lines.append(f"  {fmt} 【新】{gen}")
+            if not ok:
+                theirs = t.get("norm_official") or ""
+                for idx, (_tag, i1, _i2, j1, _j2) in enumerate(
+                        (t.get("ctx") or [])[:diff_lines], 1):
+                    a_snip = ours[max(0, i1 - 10):i1 + 40].replace("\n", "")
+                    b_snip = theirs[max(0, j1 - 10):j1 + 40].replace("\n", "")
+                    lines.append(
+                        f"      {idx}. 【源】{b_snip}\n         【新】{a_snip}")
+    return lines

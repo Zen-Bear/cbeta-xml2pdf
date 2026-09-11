@@ -21,7 +21,7 @@ from .theme import Theme, PAGE_PRESETS, OUTPUT_PRESETS, ENGINE_PRESETS, load_pre
 from .theme import (load_run_config, resolve_pdf_docx_css,
                     resolve_html_base_css, default_run_path, check_run_placeholders,
                     resolve_effective_config, apply_page_typography)
-from .filename import apply_template
+from .filename import apply_template, default_output_name
 
 _ALL_FORMATS = ["html", "pdf", "docx", "md", "epub", "txt"]
 _FORMAT_EXT = {"html": "", "pdf": ".pdf", "docx": ".docx", "md": ".md", "epub": ".epub", "txt": ".txt"}
@@ -236,7 +236,8 @@ def render_one(w, fmt, out_dir, out_name, args, theme, html_base=None):
 
 
 def resolve_output(xml_fn, fmt, args, work, _used=None):
-    """输出目录与文件名。默认 `{work.id}{ext}`（单文件行为逐字节不变）；
+    """输出目录与文件名。默认 `{id 书名}.{ext}`（`filename.default_output_name`，
+    书名跟随 source.title_t2s）；
     _used 为本轮共享 dict 时：多输入同名全组统一改输入基名
     （`filename.dedupe_run_outputs`；首文件已落盘输出预先改名，缺失/锁定忽略）。
     html 与显式 -o 文件走旧路径（前者 renderer 内部命名，后者用户强制）。"""
@@ -247,13 +248,17 @@ def resolve_output(xml_fn, fmt, args, work, _used=None):
         out = args.output
         if fmt != "html" and out.lower().endswith(ext) and not os.path.isdir(out):
             return os.path.dirname(os.path.abspath(out)), os.path.basename(out)
-        out_name = apply_template(args.name_template, work) + ext if args.name_template else f"{work.id}{ext}"
+        out_name = apply_template(args.name_template, work) + ext if args.name_template else \
+            default_output_name(work.id, work.metadata.get("title"),
+                                getattr(args, "title_t2s", True)) + ext
         out_dir = out
     elif fmt == "html":
         return os.path.join(src_dir, base + "_html"), None
     else:
         out_dir = src_dir
-        out_name = apply_template(args.name_template, work) + ext if args.name_template else f"{work.id}{ext}"
+        out_name = apply_template(args.name_template, work) + ext if args.name_template else \
+            default_output_name(work.id, work.metadata.get("title"),
+                                getattr(args, "title_t2s", True)) + ext
     if _used is not None and fmt != "html":
         from .filename import dedupe_run_outputs
         out_name, renames = dedupe_run_outputs(_used, out_dir, out_name, base)
@@ -494,6 +499,7 @@ def main(argv=None):
         else os.path.dirname(os.path.abspath(default_run_path()))
     check_run_placeholders(run)
     presets = resolve_effective_config(run, run_dir)  # 出厂 ← base 文件按鍵合并
+    args.title_t2s = bool((presets.get("source") or {}).get("title_t2s", True))
     args.page = resolve_default_page(args.page, presets)
     args.page_presets = presets.get("pages") or PAGE_PRESETS
     out_defaults = presets.get("output") or {}
@@ -598,9 +604,15 @@ def main(argv=None):
         process_file(args.input, formats, args, theme, html_base=html_base)
     else:
         # -i 佛典編號：三源材料化（cbeta_ebook → 本地候选源 → 官方下载）
-        from .fetch import is_work_id, materialize_work
+        from .fetch import is_work_id, materialize_work, inspect_xml_source
         if not is_work_id(args.input):
             ap.error(f"input not found: {args.input}")
+        if args.xml_dir:
+            info = inspect_xml_source(args.xml_dir)
+            if info.get("safe") is False:
+                print(f"警告：--xml-dir {args.xml_dir} 检测到非发布版 P5"
+                      f"（{info.get('edition') or '未知'}）：P5a/P5b 可能导致正文重复、"
+                      f"校勘注丢失、校验失败，继续使用。", file=sys.stderr)
         try:
             xmls, label = materialize_work(
                 args.input, presets, xml_dir=args.xml_dir,

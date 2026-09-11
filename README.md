@@ -41,7 +41,7 @@ python -m pycbeta -i 经文.xml -f docx,pdf --presets-file my.json
 | `-i` / `-o` / `-f` | 输入、输出、格式（docx,pdf,html,epub,md,all）|
 | `--theme` | 自定义主题 CSS/JSON（替换 pdf_docx.css）|
 | `--font-set 组合:语言` | 字体方案，如 `zh-Hans` 一键简体字库（只换字库，不转文字） |
-| `--t2s` / `--no-t2s` | 简体输出（OpenCC t2s 正文/注释/元数据；未指定 `--font-set` 时自动套 `default:zh-Hans` 字体；校验时官方基线同步转简体后比对）|
+| `--t2s` / `--no-t2s` | 简体输出（OpenCC t2s 正文/注释/元数据；未指定 `--font-set` 时自动套 `default:zh-Hans` 字体；校验时官方文档同步转简体后比对）|
 | `--font-scale 1.5` | 字号等比缩放（重排式大字，老人版推荐 1.33/1.5；字号不影响逐字校验）|
 | `--config` | 自定义全局配置 JSON（别名 --presets-file）|
 | `--page` | 页面方案名（a4/a5/book…或 config.json 的 pages；pdf/docx 适用）|
@@ -49,8 +49,8 @@ python -m pycbeta -i 经文.xml -f docx,pdf --presets-file my.json
 | `--engine 管线[:单体]` | PDF 输出选择，见下节 |
 | `--engine-tag` | PDF 文件名追加实际引擎名（如 `X60n1116_wps.pdf`）|
 | `--vertical` | 竖排 PDF（走 HTML 管线）|
-| `--xml-dir` / `--cbeta-ebook` | 本地 XML 候选源（只读）/ 电子书工作根（可写，平展一部一目录，XML+基线同目录）|
-| `--name-template` | 输出文件名模板（`[id]`/`[书名]`/`[作者]`/`[vol]`/`[juan]`）|
+| `--xml-dir` / `--cbeta-ebook` | 本地 XML 候选源（只读，建议指向本地 cbeta-org/xml-p5 全仓库副本） / 电子书工作根（可写，平展一部一目录，XML+官方电子书同目录）|
+| `--name-template` | 输出文件名模板（`[id]`/`[书名]`/`[作者]`/`[vol]`/`[juan]`）；缺省 `{佛典編號 书名}.{ext}`（书名跟随 `source.title_t2s` 转简）|
 | `--list-fonts [关键词]` | 列出本机字体（家族名\|路径），仅列表不渲染 |
 | `--verify` | 生成后逐字校验（对比官方文档；`--verify-max-diff` 阈值默认 10，`--verify-diff-lines` 默认 5）|
 | `--font-check` | 豆腐字检测（逐字覆盖率报告，不中断渲染）|
