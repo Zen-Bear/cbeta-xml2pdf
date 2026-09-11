@@ -232,6 +232,11 @@ class P5Parser:
                 elif ln == "rjchar":
                     # 悉昙字显示用字（常规汉字，如 RJ-CCBA→屇；官方 docx 用它+Ranjana 字体，不用 PUA）
                     rec["rjchar"] = val or ""
+                elif ln == "Romanized form in Unicode transcription":
+                    # 悉昙读音（官方 docx 正文/注释均附，如 RJ-CCEB→raṃ）；docx 渲染用
+                    rec["roman"] = val or ""
+                elif ln == "Romanized form in CBETA transcription":
+                    rec["roman_cbeta"] = val or ""
                 elif ln == "normalized form":
                     rec["normal"] = val or ""
             for m in ch.iter("mapping"):

@@ -19,6 +19,10 @@
       text-align: right;
     }
     .cbeta { color: red; }
+    /* 悉昙缺字（<g> RJ）：官方同款空元素，读音走 roman 属性显示；文本抽取为空 */
+    span.ranja::after { content: attr(roman); }
+    /* 转写行（<cb:tt> sa-x-rj 行）：官方朱砂色 */
+    .transliteration { color: #FF4400; }
     .doube-line-note {
       color: purple;
       font-size: 0.8em;

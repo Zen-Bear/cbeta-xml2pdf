@@ -224,6 +224,10 @@ span.interlinear-note {
   font-size: 0.8em;
   color: #800080;
 }
+/* 转写行（<cb:tt> 内 sa-x-rj 行）：官方朱砂色；DOCX 经 transliteration 标签并入 run。 */
+span.transliteration {
+  color: #FF4400;
+}
 /* 校勘注锚（正文中的 [n] 链接）：默认蓝色；按校勘类型着色——
    .add 新增（红）、.mod 改字（橙）、.orig 原文（紫灰）、.star 星号（红）。
    DOCX 侧注码字号/颜色另由 sup.note-ref 控制（见下）。 */

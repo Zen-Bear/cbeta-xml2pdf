@@ -16,13 +16,14 @@ from .theme import Theme, strip_head_no
 
 class MdRenderer:
     def __init__(self, gaiji_db=None, theme=None, notes="endnote", show_notes=True, inline_brackets="fullwidth",
-                 annotations=None, strip_head_no=False):
+                 annotations=None, strip_head_no=False, show_dharani_transliteration=False):
         self.gaiji_db = gaiji_db if gaiji_db is not None else GaijiDb()
         self.theme = theme if theme is not None else Theme()
         self.notes = notes  # 'footnote' | 'endnote' | 'inline'
         self.show_notes = show_notes
         self.inline_brackets = inline_brackets  # halfwidth="()" / fullwidth="（）"（默认全角）
         self.strip_head_no = strip_head_no  # 去 head/jhead 行首 No. 令牌（默认 false 保留）
+        self.show_dharani_transliteration = show_dharani_transliteration  # 逐字咒文表（无 place="inline"）转写（默认 false 去掉，官方 txt 一致）
         # 难字注音（P6）：None 或 {"table", "scheme"}；md 无 ruby，用〔注音〕括注
         # （不用（），避免与校勘记 inline 括号混淆；verify 侧 normalize 已剥除〔〕）
         self._annotations = _ann_active(annotations)
@@ -31,6 +32,7 @@ class MdRenderer:
         self._fn_seq = 0
         self._fn_notes: List[str] = []
         self._div_depth = 0
+        self._drop_sa = False  # 逐字咒文表 `<cb:tt>`（无 place="inline"）内：转写默认不显示
 
     @contextmanager
     def _no_ann(self):
@@ -118,6 +120,12 @@ class MdRenderer:
             return simplify_text(char)
         return char
 
+    def _gaiji_roman(self, code: str) -> str:
+        """悉昙读音（charDecl Romanized form，Unicode 式优先），无则 ""。"""
+        chard = (self._work.metadata.get("charDecl") or {}) if self._work else {}
+        rec = chard.get(code) or {}
+        return (rec.get("roman") or rec.get("roman_cbeta") or "").strip()
+
     def _render_body(self, body) -> str:
         return "".join(self._render_node(n) for n in body)
 
@@ -143,6 +151,12 @@ class MdRenderer:
         if isinstance(n, Lb) or isinstance(n, Pb):
             return ""
         if isinstance(n, Gaiji):
+            roman = self._gaiji_roman(n.code)
+            if roman:
+                if self._drop_sa and not self.show_dharani_transliteration:
+                    return ""  # 逐字咒文表转写不显示（官方 txt 同款）
+                # 悉昙缺字：官方 txt 系裸读音（如 raṃ），md 同口径，无字形无括号
+                return roman
             char = self._resolve_gaiji(n.code, n.char or n.code)
             if self._annotations is not None:
                 return self._ann_text(char)
@@ -214,6 +228,14 @@ class MdRenderer:
         tag = e.tag
         if tag == "p":
             return self._render_children(e).strip() + "\n\n"
+        if tag == "tt":
+            # 逐字咒文表（无 place="inline"）内转写默认不显示
+            prev = self._drop_sa
+            self._drop_sa = (e.attrs.get("place") or "") != "inline"
+            try:
+                return self._render_children(e)
+            finally:
+                self._drop_sa = prev
         if tag == "head":
             level = min(self._div_depth + 1, 6)
             kids = strip_head_no(e.children)[0] if self.strip_head_no else None
@@ -253,6 +275,19 @@ class MdRenderer:
             return out
         if tag == "table":
             return self._render_table(e)
+        if tag == "graphic":
+            return self._figure_mark(e)
+        if tag == "figure":
+            out = []
+            for c in e.children:
+                if isinstance(c, E) and c.tag == "graphic":
+                    out.append(self._figure_mark(c))
+                else:
+                    out.append(self._render_node(c))
+            return "".join(out)
+        if tag == "sg":
+            # 梵呗注音（<cb:sg>）：官方半角括号，如 (音𫬠)
+            return "(" + self._render_children(e) + ")"
         return self._render_children(e)
 
     def _render_lg(self, e: E) -> str:
@@ -289,6 +324,12 @@ class MdRenderer:
         elif pending:
             lines.append("".join(self._render_node(p) for p in pending))
         return "\n".join("　　" + ln for ln in lines) + "\n\n" if lines else ""
+
+    def _figure_mark(self, e) -> str:
+        """图注标记（官方 txt 同款，md 比对官方 txt）：【圖：<文件名>】；无 url 落空。"""
+        url = (e.attrs.get("url") or "").replace("\\", "/")
+        base = url.split("/")[-1] if url else ""
+        return f"【圖：{base}】" if base else ""
 
     def _render_table(self, e: E) -> str:
         rows = []

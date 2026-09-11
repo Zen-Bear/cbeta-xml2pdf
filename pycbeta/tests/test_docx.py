@@ -830,5 +830,206 @@ class TestVerticalMarkers(unittest.TestCase):
         marks = re.findall(r"<w:t[^>]*>\[(\d+)\]", xml)
         self.assertTrue(len(marks) >= 2)  # 正文注码 + 文末校注区序号都在
         self.assertIn('<w:textDirection w:val="tbRl"/>', xml)  # 纵排本身不受影响
+class TestSiddhamReading(unittest.TestCase):
+    """悉昙读音（官方 docx 同款）：正文/脚注 `<g>` RJ 均附 `(roman)`。
+
+    官方 html/txt 无读音，故仅 docx 出读音；unicode 转写优先（raṃ），CBETA 式兜底。
+    """
+
+    TEI = """<TEI xmlns="http://www.tei-c.org/ns/1.0" xmlns:cb="http://www.cbeta.org/ns/1.0">
+<teiHeader><fileDesc><titleStmt>
+<title level="m" xml:lang="zh-Hant">測試經</title>
+<author>譯者</author>
+</titleStmt></fileDesc>
+<encodingDesc><charDecl>
+<char xml:id="RJ-CCEB">
+<charProp><localName>rjchar</localName><value>歾</value></charProp>
+<charProp><localName>Romanized form in CBETA transcription</localName><value>ra.m</value></charProp>
+<charProp><localName>Romanized form in Unicode transcription</localName><value>raṃ</value></charProp>
+<mapping cb:dec="1101035" type="PUA">U+10CCEB</mapping>
+</char>
+</charDecl></encodingDesc></teiHeader>
+<text><body>
+<p>淨法界<g ref="#RJ-CCEB">X</g>字<anchor xml:id="nkr_note_1" n="k1"/>觀</p>
+</body><back>
+<note n="k1" type="mod">注<g ref="#RJ-CCEB">X</g>文</note>
+</back></text></TEI>"""
+
+    def _work(self):
+        import tempfile
+        d = tempfile.mkdtemp()
+        p = os.path.join(d, "T9999.xml")
+        with open(p, "w", encoding="utf-8") as f:
+            f.write(self.TEI)
+        self.addCleanup(__import__("shutil").rmtree, d, True)
+        return P5Parser().parse(p)
+
+    def test_chardecl_captures_roman(self):
+        w = self._work()
+        rec = (w.metadata.get("charDecl") or {}).get("RJ-CCEB") or {}
+        self.assertEqual(rec.get("roman"), "raṃ")
+        self.assertEqual(rec.get("roman_cbeta"), "ra.m")
+        self.assertEqual(rec.get("rjchar"), "歾")
+
+    def test_gaiji_roman_lookup(self):
+        import types
+        r = DocxRenderer()
+        r._work = types.SimpleNamespace(
+            metadata={"charDecl": {"RJ-A": {"roman": "raṃ"}}}, simplified=False)
+        self.assertEqual(r._gaiji_roman("RJ-A"), "raṃ")
+        r._work.metadata["charDecl"] = {"RJ-A": {"roman_cbeta": "ra.m"}}
+        self.assertEqual(r._gaiji_roman("RJ-A"), "ra.m")
+        r._work.metadata["charDecl"] = {"RJ-A": {"rjchar": "歾"}}
+        self.assertEqual(r._gaiji_roman("RJ-A"), "")
+        self.assertEqual(r._gaiji_roman("CB-X"), "")
+
+    def test_docx_body_and_footnote_have_reading(self):
+        import re as _re
+        import zipfile
+        import tempfile
+        w = self._work()
+        fn = DocxRenderer().render_work(w, tempfile.mkdtemp())
+        z = zipfile.ZipFile(fn)
+        try:
+            body = "".join(_re.findall(
+                r"<w:t[^>]*>([^<]*)</w:t>",
+                z.read("word/document.xml").decode("utf-8")))
+            self.assertIn("歾(raṃ)", body)
+            names = z.namelist()
+            self.assertIn("word/footnotes.xml", names)
+            foot = "".join(_re.findall(
+                r"<w:t[^>]*>([^<]*)</w:t>",
+                z.read("word/footnotes.xml").decode("utf-8")))
+            self.assertIn("歾(raṃ)", foot)
+        finally:
+            z.close()
+
+    def test_sg_parens(self):
+        import re as _re
+        import zipfile
+        import tempfile
+        from pycbeta.parser import P5Parser
+        from pycbeta.render_docx import DocxRenderer
+        tei = self.TEI.replace(
+            "<p>淨法界<g ref=\"#RJ-CCEB\">X</g>字<anchor xml:id=\"nkr_note_1\" n=\"k1\"/>觀</p>",
+            "<p>唵<cb:yin><cb:zi>㘕</cb:zi><cb:sg>音注</cb:sg></cb:yin>抮</p>")
+        d = tempfile.mkdtemp()
+        p = os.path.join(d, "T9999.xml")
+        with open(p, "w", encoding="utf-8") as f:
+            f.write(tei)
+        self.addCleanup(__import__("shutil").rmtree, d, True)
+        w = P5Parser().parse(p)
+        fn = DocxRenderer().render_work(w, tempfile.mkdtemp())
+        z = zipfile.ZipFile(fn)
+        try:
+            txt = "".join(_re.findall(
+                r"<w:t[^>]*>([^<]*)</w:t>",
+                z.read("word/document.xml").decode("utf-8")))
+            self.assertIn("唵㘕(音注)抮", txt)
+        finally:
+            z.close()
+
+    def test_hide_body_siddham(self):
+        import re as _re
+        import zipfile
+        import tempfile
+        from pycbeta.parser import P5Parser
+        from pycbeta.render_docx import DocxRenderer
+        w = P5Parser().parse(self._work_path())
+        fn = DocxRenderer(show_body_siddham=False).render_work(
+            w, tempfile.mkdtemp())
+        z = zipfile.ZipFile(fn)
+        try:
+            body = "".join(_re.findall(
+                r"<w:t[^>]*>([^<]*)</w:t>",
+                z.read("word/document.xml").decode("utf-8")))
+            # 正文：字和读音都不显示
+            self.assertNotIn("歾", body)
+            self.assertNotIn("raṃ", body)
+            # 脚注：不受影响，照常出字和读音
+            foot = "".join(_re.findall(
+                r"<w:t[^>]*>([^<]*)</w:t>",
+                z.read("word/footnotes.xml").decode("utf-8")))
+            self.assertIn("歾(raṃ)", foot)
+        finally:
+            z.close()
+
+    def test_reading_uses_latin_font(self):
+        import re as _re
+        import zipfile
+        import tempfile
+        from pycbeta.parser import P5Parser
+        from pycbeta.render_docx import DocxRenderer
+        w = P5Parser().parse(self._work_path())
+        fn = DocxRenderer().render_work(w, tempfile.mkdtemp())
+        z = zipfile.ZipFile(fn)
+        try:
+            doc = z.read("word/document.xml").decode("utf-8")
+            runs = doc.split("<w:r>")
+            hit = [s for s in runs if "(raṃ)" in s]
+            self.assertTrue(hit)
+            self.assertIn('w:ascii="Calibri"', hit[0])
+        finally:
+            z.close()
+
+    def test_tt_transliteration_red(self):
+        import re as _re
+        import zipfile
+        import tempfile
+        from pycbeta.parser import P5Parser
+        from pycbeta.render_docx import DocxRenderer
+        tei = self.TEI.replace(
+            "<p>淨法界<g ref=\"#RJ-CCEB\">X</g>字<anchor xml:id=\"nkr_note_1\" n=\"k1\"/>觀</p>",
+            "<p><cb:tt place=\"inline\">"
+            "<cb:t xml:lang=\"sa-x-rj\">a<g ref=\"#RJ-CCEB\">X</g></cb:t>"
+            "<cb:t xml:lang=\"zh-Hant\">乙</cb:t></cb:tt>尾</p>")
+        d = tempfile.mkdtemp()
+        p = os.path.join(d, "T9999.xml")
+        with open(p, "w", encoding="utf-8") as f:
+            f.write(tei)
+        self.addCleanup(__import__("shutil").rmtree, d, True)
+        w = P5Parser().parse(p)
+        fn = DocxRenderer().render_work(w, tempfile.mkdtemp())
+        z = zipfile.ZipFile(fn)
+        try:
+            doc = z.read("word/document.xml").decode("utf-8")
+            self.assertIn('w:val="FF4400"', doc)
+            txt = "".join(_re.findall(
+                r"<w:t[^>]*>([^<]*)</w:t>", doc))
+            # 两行直连无分隔（官方同款），不插全角空格
+            self.assertIn("a歾(raṃ)乙", txt)
+        finally:
+            z.close()
+
+    def _work_path(self):
+        import tempfile
+        d = tempfile.mkdtemp()
+        p = os.path.join(d, "T9999.xml")
+        with open(p, "w", encoding="utf-8") as f:
+            f.write(self.TEI)
+        self.addCleanup(__import__("shutil").rmtree, d, True)
+        return p
+
+    def test_html_md_txt_have_no_reading(self):
+        import tempfile
+        from pycbeta.render_html import HtmlRenderer
+        from pycbeta.render_md import MdRenderer
+        from pycbeta.render_txt import TxtRenderer
+        w = self._work()
+        tmp = tempfile.mkdtemp()
+        files = HtmlRenderer().render_work(w, tmp)
+        html = ""
+        for p in files:
+            fp = p if os.path.isabs(p) else os.path.join(tmp, p)
+            html += open(fp, encoding="utf-8").read()
+        self.assertNotIn("(ra", html)
+        md = open(MdRenderer().render_work(w, tmp, "t.md"),
+                  encoding="utf-8").read()
+        self.assertNotIn("(ra", md)
+        txt = open(TxtRenderer().render_work(w, tmp, "t.txt"),
+                   encoding="utf-8").read()
+        self.assertNotIn("(ra", txt)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

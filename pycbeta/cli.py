@@ -109,7 +109,9 @@ def render_one(w, fmt, out_dir, out_name, args, theme, html_base=None):
                            notes_marker_font=getattr(args, "notes_marker_font",
                                getattr(args, "marker_font", None)),
                            annotations=ann,
-                           strip_head_no=getattr(args, "strip_head_no", False)) \
+                           strip_head_no=getattr(args, "strip_head_no", False),
+                           show_body_siddham=getattr(
+                               args, "show_body_siddham", True)) \
                .render_work(w, out_dir, filename=out_name)
         if isinstance(res, list):
             print(f"{w.id}: docx({note_mode}, split) -> {len(res)} file(s)")
@@ -121,7 +123,9 @@ def render_one(w, fmt, out_dir, out_name, args, theme, html_base=None):
                         show_notes=args.show_notes,
                         inline_brackets=args.inline_brackets,
                         annotations=ann,
-                        strip_head_no=getattr(args, "strip_head_no", False)).render_work(w, out_dir, filename=out_name)
+                        strip_head_no=getattr(args, "strip_head_no", False),
+                        show_dharani_transliteration=getattr(
+                            args, "show_dharani_transliteration", False)).render_work(w, out_dir, filename=out_name)
         print(f"{w.id}: md({note_mode}) -> {fn}")
 
     elif fmt == "txt":
@@ -129,7 +133,9 @@ def render_one(w, fmt, out_dir, out_name, args, theme, html_base=None):
                          show_notes=args.show_notes,
                          inline_brackets=args.inline_brackets,
                          annotations=ann,
-                         strip_head_no=getattr(args, "strip_head_no", False)).render_work(w, out_dir, filename=out_name)
+                         strip_head_no=getattr(args, "strip_head_no", False),
+                         show_dharani_transliteration=getattr(
+                             args, "show_dharani_transliteration", False)).render_work(w, out_dir, filename=out_name)
         print(f"{w.id}: txt({note_mode}) -> {fn}")
 
     elif fmt == "epub":
@@ -179,7 +185,9 @@ def render_one(w, fmt, out_dir, out_name, args, theme, html_base=None):
                                     notes_marker_font=getattr(args, "notes_marker_font",
                                         getattr(args, "marker_font", None)),
                                     annotations=ann,
-                                    strip_head_no=getattr(args, "strip_head_no", False)) \
+                                    strip_head_no=getattr(args, "strip_head_no", False),
+                                    show_body_siddham=getattr(
+                                        args, "show_body_siddham", True)) \
                 .render_work(w, out_dir, filename=base + ".docx")
 
             def emit(pdf, backend):
@@ -518,6 +526,8 @@ def main(argv=None):
     args.inline_brackets = out_defaults.get("inline_brackets", "fullwidth")
     args.footnote_per_page = out_defaults.get("footnote_per_page", True)
     args.show_notes = out_defaults.get("show_notes", True)
+    args.show_body_siddham = bool(out_defaults.get("show_body_siddham", True))
+    args.show_dharani_transliteration = bool(out_defaults.get("show_dharani_transliteration", False))
     args.print_mode = bool(out_defaults.get("print_mode"))
     args.pagination = out_defaults.get("pagination") or {}
     if not args.pagination and args.print_mode:

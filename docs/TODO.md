@@ -90,6 +90,28 @@
   - 输出命名：默认由 `{id}` 改为 `{id} 书名}`（与下载电子书 work 目录同款），`filename.default_output_name` 跟随 `source.title_t2s` 转简；CLI `resolve_output` + GUI `_out_name_for` 同规则；`--name-template` 仍显式覆盖；html 仍走 renderer 内部命名
   - 验收：`test_cli`/`TestSourceDialog`/`TestVerifyFeedback`/`TestDefaultOutputName` 更新；全量 523 OK；CLI 实测 `-i T12n0349.xml -f txt -o` 出 `T0349 弥勒菩萨所问本愿经.txt`；GUI 冒烟文件列 = [产物, 报告]（无比较文件）
   - 附带修：GUI 子进程 stdout 强制 `PYTHONIOENCODING=utf-8`（中文产物名经 gbk 编码后 `parse_produced_paths` 认不出，致产物不列文件列）
+- [x] **已完成** docx 悉昙读音（2026-09-11 用户点档：官方 docx 正文/注释均附 `(raṃ)`）
+  - 落点：`parser._parse_chardecl` 增收 `roman`（Unicode 转写）/`roman_cbeta`；`render_docx._render_node` 的 `Gaiji` 分支在字形后拼 `({roman})`（读音走 `latin_font`、纯文本通道不进 ruby、t2s 只转简字形）；`output.show_body_siddham=false` 则正文不显示悉昙字和读音（脚注不受影响，`_footnote_content` 进出挂 `_in_note` 豁免；GUI 注释卡复选「正文显示悉昙字和读音」默认勾，落 `output` 可持久化；CLI 主链/docx2pdf 中间档/校验 `generate_formal` 三处透传）；仅 RJ/有 roman 记录的 `<g>` 触发，普通缺字不动；html 出官方同款 `<span class='ranja' roman code char/>` 空元素 + CSS 显示（文本零影响），md/txt 出官方同款裸读音（`raṃ`，P3 辅轨同步镜像）；html/md/txt 不出括号读音
+  - 转写行：主题新增 `transliteration` 标签（`pdf_docx.css`/`cbeta_golden.css` 默认朱砂 `#FF4400`，CSS 编辑器「转写」行可调；docx/html `cb:tt` 的 `sa-x-rj` 行包裹）
+  - `<cb:sg>`：四渲染器统一半角括号（如 `(音𫬠)`，官方三端一致）
+  - 验收：`test_docx.TestSiddhamReading` 8 项 + `test_txt.TestSgAndSiddhamTxt` 3 项；X59 实测生成侧 `(ra` 0→**36**（与官方 36 对齐），主轨 `docx→docx` **缺12/多0**→`sg` 修后 **0/0 通过**；txt 主轨残差系注音表/尾注结构差（官方无注音 `南na…`、无校注尾注），与本次无关
+  - 附带修：`_render_tt` 两行间不再插全角空格（官方直连如 `歾(raṃ)㘕`；裸 U+3000 run 无 `w:rPr` 在部分 Word 回退缺字形显示方框）
+- [x] **已完成** 图注对齐 + `【】`收窄 + 〔〕注音剥离确认（2026-09-11 用户点档：官方 txt 有 `【圖：X59p0224_01.gif】` 而我方缺，报告却缺0）
+  - 根因有二且互相掩护：`normalize` 的 `【】`≤20 字剥除把官方图注也剥了（两侧都没了）；我方 txt/md 根本不吐图（`figure`/`graphic` 无分支，泛型剩空）
+  - 落点：`normalize` 改 `【(?![^】]*圖)[^】]{1,20}】`（见证标记照剥，含圖保留）；txt/md `figure`/`graphic` 出 `【圖：<basename>】`（md 比官方 txt，口径一致；docx/html 保持丢弃，官方亦无文字）；P3 辅轨 `chunks()` 同镜像
+  - 〔〕：实测我方注音 `涅槃〔niè pán〕` 等 5 处经 `normalize` 全剥（5→0），比对输入干净；用户配置默认括号走既有规则，无需改。残留 display 文件（`*_compare_*.txt` 原样落盘）属展示用途
+  - 验收：`test_txt.TestFigureMark` 4 项（txt/md/aux 标记、见证照剥图注保留、注音剥除）；X59 实测我方 txt 4 标记齐（官方 2+2+0），txt 缺0/多579 不变（注音表/尾注结构差，既有）
+- [x] **已完成** txt/md 逐字咒文表转写参数（2026-09-11 用户点档：官方 txt 无 `南na無mo…`）
+  - 现象：官方 txt 的逐字咒文表（`南無颯哆喃`）不显示梵文罗马字母，我方 txt 显示 `南na無mo颯sa…`
+  - 规则（实证）：`<cb:tt>` **无 `place="inline"`**（逐字咒文表，全库 26 个）官方丢转写；`place="inline"`（68 个）与散文读音保留。非“dharani 段落”一刀切（首版误用导致缺32）
+  - 落点：`output.show_dharani_transliteration`（默认 false）；txt/md `_render_e` 的 `tt` 分支按 `place` 置 `_drop_sa`，Gaiji 读音在该上下文丢弃；`verify._extract_xml_parts` 的 `chunks` 同镜像；CLI/`generate_formal` 透传
+  - 验收：`test_txt.TestDharaniTransliteration` 4 项；X59 txt `缺0/多457`（579→457，余为注音表/尾注结构差）；docx `0/0` 不变
+- [x] **已完成** 还原出厂确认 + 校验参数持久化默认开 + 报告差异行数改名（2026-09-11 用户点档）
+  - 还原出厂：`panel._on_reset` 执行前弹警告确认（「当前配置会被还原为出厂配置」，确定/取消；取消不动作）
+  - 校验持久化：出厂 `config.json` verify 块补 `enabled: true`（默认打开）；`set_options` 缺键默认亦 True；`get_options`/`_presets_merged` 本就 roundtrip 开关/阈值/差异行数/自动下载/卷限定
+  - 改名：校验卡「差异行数」→「**报告差异行数**」
+  - 验收：`TestConfigBar` 新增 2 项（默认开+开关/阈值持久化回读；还原确认/取消）；注意本机 `config.user.json` 若仍 `enabled:false` 以用户文件为准（出厂默认只影响新配置）
+  - 防呆（2026-09-11）：`config.user.json` 的 `source` 曾被清空致批量报“未配置”；已恢复 `cbeta_ebook`（`xml_dir` 保持空，等本地 P5 仓库）；`SourceDialog.accept` 在 `cbeta_ebook` 为空时弹确认（确定保存/取消），避免再次误清空
 - [x] **已完成 P1 GUI 样式编辑器**（2026-09-06 用户点档：DOCX 所见即所得调 `pdf_docx.css` 字体参数）
   - `pycbeta/gui/css_editor.py`：`CssEditorDialog`（样式表卡按钮弹窗，publish 可复用）+ `python -m pycbeta.gui.css_editor --sample` 独立运行；左标签分组四件套+源码页（tinycss2 红字不覆盖）/右 QTextDocument 模拟预览（回读 `DocxRenderer` run 真值：字号/字体/颜色/加粗/上标，ruby/EQ 展小字灰，注文尾注归并；分页以 Word 为准）/底导出样张 DOCX+PDF（跟主窗口引擎链）+ `user.css` 落盘自动生效+恢复出厂；样张默认 `css-presets/sample.xml`（用户已定稿）
   - 附带修批量桥：`--font-set` 默认省略（保 `user.css` 字体不被 `apply_font_set` 踩；显式组合/t2s 照旧覆盖）；`build_render_cmd` 纯函数可测；单测 TestStyleEditor 8 项；全量待跑

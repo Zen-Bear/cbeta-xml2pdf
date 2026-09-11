@@ -311,6 +311,70 @@ class TestConfigBar(unittest.TestCase):
         finally:
             panel.close()
 
+    def test_verify_defaults_on_and_persisted(self):
+        import unittest.mock as mock
+        import pycbeta.gui.panel as pm
+        from PySide6.QtWidgets import QLabel
+        panel = pm.XmlOptionsPanel({"output": {}})
+        try:
+            # 缺 verify 块默认打开
+            self.assertTrue(panel.verify_on.isChecked())
+            self.assertEqual(panel.maxdiff_spin.value(), 10)
+            self.assertEqual(panel.difflines_spin.value(), 5)
+            texts = [w.text() for w in panel.findChildren(QLabel)]
+            self.assertIn("报告差异行数", texts)
+            self.assertNotIn("差异行数", texts)
+            # 开关/阈值持久化
+            panel.verify_on.setChecked(True)
+            panel.maxdiff_spin.setValue(3)
+            panel.difflines_spin.setValue(7)
+            panel.autofetch_box.setChecked(False)
+            panel.scope_box.setChecked(False)
+            saved = {}
+            with mock.patch.object(pm, "load_slot",
+                                   return_value=({"output": {}}, "user")), \
+                 mock.patch.object(pm, "save_current",
+                                   side_effect=lambda d, root=None: saved.update(
+                                       data=d)), \
+                 mock.patch("os.path.isfile", return_value=True):
+                panel._on_save()
+            v = saved["data"]["verify"]
+            self.assertTrue(v["enabled"])
+            self.assertEqual(v["maxDiff"], 3)
+            self.assertEqual(v["diffLines"], 7)
+            self.assertFalse(v["auto_fetch"])
+            self.assertFalse(v["scope_juan"])
+            # 回读恢复
+            o = pm.options_from_presets(saved["data"])
+            panel.set_options(o)
+            self.assertTrue(panel.verify_on.isChecked())
+            self.assertEqual(panel.maxdiff_spin.value(), 3)
+            self.assertEqual(panel.difflines_spin.value(), 7)
+        finally:
+            panel.close()
+
+    def test_reset_requires_confirm(self):
+        import unittest.mock as mock
+        import pycbeta.gui.panel as pm
+        panel = pm.XmlOptionsPanel({"output": {}})
+        try:
+            with mock.patch.object(pm, "reset_factory") as m_reset, \
+                 mock.patch.object(pm, "load_slot",
+                                   return_value=({"output": {}}, "user")), \
+                 mock.patch.object(pm, "QMessageBox") as m_box:
+                box = m_box.return_value
+                ok_btn, cancel_btn = mock.Mock(), mock.Mock()
+                box.addButton.side_effect = (
+                    lambda text, role: ok_btn if text == "确定" else cancel_btn)
+                box.clickedButton.return_value = cancel_btn
+                panel._on_reset()
+                m_reset.assert_not_called()
+                box.clickedButton.return_value = ok_btn
+                panel._on_reset()
+                m_reset.assert_called_once()
+        finally:
+            panel.close()
+
     def test_save_persists_margins_custom(self):
         import unittest.mock as mock
         import pycbeta.gui.panel as pm
@@ -937,6 +1001,69 @@ class TestBatchMergeResolve(unittest.TestCase):
             shutil.rmtree(tmp, ignore_errors=True)
 
 
+class TestNotesTab(unittest.TestCase):
+    """注释卡：悉昙开关 + inline 括号下拉收窄。"""
+
+    @classmethod
+    def setUpClass(cls):
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PySide6.QtWidgets import QApplication
+        cls.app = QApplication.instance() or QApplication([])
+
+    def _panel(self):
+        from pycbeta.gui.panel import XmlOptionsPanel
+        from pycbeta.theme import load_presets
+        return XmlOptionsPanel(load_presets())
+
+    def test_siddham_box_default_on(self):
+        panel = self._panel()
+        try:
+            self.assertEqual(panel.siddham_box.text(), "正文显示悉昙字和读音")
+            self.assertTrue(panel.siddham_box.isChecked())
+            self.assertTrue(panel.get_options().output["show_body_siddham"])
+            tip = panel.siddham_box.toolTip()
+            self.assertIn("种子字(raṃ)", tip)
+            self.assertIn("Ranjana", tip)
+            self.assertIn("脚注不受影响", tip)
+        finally:
+            panel.close()
+
+    def test_siddham_box_roundtrip(self):
+        from pycbeta.gui.panel import XmlOptions
+        panel = self._panel()
+        try:
+            panel.siddham_box.setChecked(False)
+            self.assertFalse(panel.get_options().output["show_body_siddham"])
+            panel.set_options(XmlOptions(
+                page="a4", output={"show_body_siddham": True}))
+            self.assertTrue(panel.siddham_box.isChecked())
+            panel.set_options(XmlOptions(page="a4", output={}))
+            self.assertTrue(panel.siddham_box.isChecked())  # 缺键默认开
+        finally:
+            panel.close()
+
+    def test_brackets_box_narrow(self):
+        from PySide6.QtWidgets import QFormLayout, QHBoxLayout
+        panel = self._panel()
+        try:
+            tab = next(panel.tabs.widget(i)
+                       for i in range(panel.tabs.count())
+                       if panel.tabs.tabText(i) == "注释")
+            fl = tab.layout()
+            self.assertIsInstance(fl, QFormLayout)
+            found = False
+            for i in range(fl.rowCount()):
+                lab = fl.itemAt(i, QFormLayout.LabelRole)
+                if lab is not None and lab.widget() is not None \
+                        and lab.widget().text() == "inline 括号":
+                    field = fl.itemAt(i, QFormLayout.FieldRole)
+                    self.assertIsInstance(field.layout(), QHBoxLayout)
+                    found = True
+            self.assertTrue(found)
+        finally:
+            panel.close()
+
+
 class TestSourceDialog(unittest.TestCase):
     def test_apply_merge(self):
         base = {"source": {"xml_dir": "A", "cbeta_ebook": "B", "catalog": "C"},
@@ -986,6 +1113,35 @@ class TestSourceDialog(unittest.TestCase):
     def test_accept_cancel_does_not_save(self):
         saved = self._accept_with(r"X:\p5b", None)
         self.assertEqual(saved, {})
+
+    def test_accept_empty_ebook_warns(self):
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PySide6.QtWidgets import QApplication
+        QApplication.instance() or QApplication([])
+        from unittest import mock
+        import pycbeta.gui.panel as P
+        dlg = P.SourceDialog()
+        try:
+            dlg.path_edits["cbeta_ebook"].setText("")
+            dlg.path_edits["xml_dir"].setText("")
+            with mock.patch.object(P, "load_slot",
+                                   return_value=({"source": {}}, "user")), \
+                 mock.patch.object(P, "save_current") as m_save, \
+                 mock.patch.object(P, "QMessageBox") as m_box:
+                box = m_box.return_value
+                ok_btn, cancel_btn = mock.Mock(), mock.Mock()
+                box.addButton.side_effect = (
+                    lambda text, role: ok_btn if "确定" in text else cancel_btn)
+                box.clickedButton.return_value = cancel_btn
+                dlg.accept()
+                m_save.assert_not_called()
+                box.clickedButton.return_value = ok_btn
+                dlg.accept()
+                m_save.assert_called_once()
+                saved = m_save.call_args.args[0]
+                self.assertEqual(saved["source"]["cbeta_ebook"], "")
+        finally:
+            dlg.close()
 
     def test_dialog_builds(self):
         os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")

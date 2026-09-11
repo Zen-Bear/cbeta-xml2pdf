@@ -1003,12 +1003,21 @@ class XmlOptionsPanel(QWidget):
         self.per_page_box.setToolTip("勾选后注释序号每页从 [1] 重排；不勾选则全文连续编号")
         self.title_notes_box = self._check("压制卷名/品名校勘注码")
         self.title_notes_box.setToolTip("勾选后卷名/品名标题后的上标注释序号隐藏，正文注码不受影响")
+        self.siddham_box = self._check("正文显示悉昙字和读音", checked=True)
+        self.siddham_box.setToolTip(
+            "勾选后正文显示悉昙字和读音（如 种子字(raṃ)）；"
+            "未安装悉昙字体Ranjana时显示替代字形（如歾）。"
+            "不勾选则正文不显示，脚注不受影响")
         form.addRow("", self.notes_on)
         form.addRow("", self.per_page_box)
         form.addRow("", self.title_notes_box)
+        form.addRow("", self.siddham_box)
         self.brackets_box = self._combo([("全角（）", "fullwidth"), ("半角()", "halfwidth")],
                                         "fullwidth")
-        form.addRow("inline 括号", self.brackets_box)
+        brow = QHBoxLayout()
+        brow.addWidget(self.brackets_box)
+        brow.addStretch(1)
+        form.addRow("inline 括号", brow)
         return w
 
     def _tab_ann(self):
@@ -1084,7 +1093,7 @@ class XmlOptionsPanel(QWidget):
         self.difflines_spin.setRange(0, 50)
         self.difflines_spin.setValue(5)
         self.difflines_spin.valueChanged.connect(lambda _v: self._changed())
-        form.addRow("差异行数", self.difflines_spin)
+        form.addRow("报告差异行数", self.difflines_spin)
         self.autofetch_box = self._check("官方文档缺失自动下载", checked=True)
         self.scope_box = self._check("按卷限定官方文档", checked=True)
         form.addRow("", self.autofetch_box)
@@ -1160,6 +1169,16 @@ class XmlOptionsPanel(QWidget):
         return data
 
     def _on_reset(self):
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Warning)
+        box.setWindowTitle("还原出厂")
+        box.setText("当前配置会被还原为出厂配置。")
+        ok_btn = box.addButton("确定", QMessageBox.AcceptRole)
+        box.addButton("取消", QMessageBox.RejectRole)
+        box.setDefaultButton(ok_btn)
+        box.exec()
+        if box.clickedButton() is not ok_btn:
+            return
         reset_factory()
         self.set_options(options_from_presets(load_slot("user")[0]))
         self.refresh_slot_label("（已还原）")
@@ -1228,6 +1247,7 @@ class XmlOptionsPanel(QWidget):
                 "show_notes": self.notes_on.isChecked(),
                 "footnote_per_page": self.per_page_box.isChecked(),
                 "suppress_title_notes": self.title_notes_box.isChecked(),
+                "show_body_siddham": self.siddham_box.isChecked(),
                 "inline_brackets": self.brackets_box.currentData(),
                 "split_juan": self.split_box.isChecked(),
                 "show_close_juan": self.close_juan_box.isChecked(),
@@ -1326,6 +1346,7 @@ class XmlOptionsPanel(QWidget):
             self.notes_on.setChecked(bool(o.get("show_notes", True)))
             self.per_page_box.setChecked(bool(o.get("footnote_per_page", True)))
             self.title_notes_box.setChecked(bool(o.get("suppress_title_notes", False)))
+            self.siddham_box.setChecked(bool(o.get("show_body_siddham", True)))
             i = self.brackets_box.findData(o.get("inline_brackets", "fullwidth"))
             if i >= 0:
                 self.brackets_box.setCurrentIndex(i)
@@ -1344,7 +1365,7 @@ class XmlOptionsPanel(QWidget):
                     break
             self.ann_file.setText(str(an.get("file", "")))
             vf = opts.verify or {}
-            self.verify_on.setChecked(bool(vf.get("enabled", False)))
+            self.verify_on.setChecked(bool(vf.get("enabled", True)))
             self.maxdiff_spin.setValue(int(vf.get("maxDiff", 10) or 10))
             self.difflines_spin.setValue(int(vf.get("diffLines", 5) or 5))
             self.autofetch_box.setChecked(bool(vf.get("auto_fetch", True)))
@@ -1587,6 +1608,18 @@ class SourceDialog(QDialog):
             v = self.dl_table.item(i, 1).text() if self.dl_table.item(i, 1) else ""
             values["downloads"][k] = v.strip()
         xml_dir = values["source"].get("xml_dir", "")
+        if not values["source"].get("cbeta_ebook", ""):
+            box = QMessageBox(self)
+            box.setIcon(QMessageBox.Warning)
+            box.setWindowTitle("电子书工作根未配置")
+            box.setText("电子书工作根（source.cbeta_ebook）是必填项，"
+                        "清空后将无法按編號转换。")
+            ok_btn = box.addButton("确定保存", QMessageBox.AcceptRole)
+            box.addButton("取消", QMessageBox.RejectRole)
+            box.setDefaultButton(ok_btn)
+            box.exec()
+            if box.clickedButton() is not ok_btn:
+                return
         if xml_dir:
             from pycbeta.fetch import inspect_xml_source
             info = inspect_xml_source(xml_dir)

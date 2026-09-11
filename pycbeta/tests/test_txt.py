@@ -294,5 +294,170 @@ class TestOfficialTxtAlign(unittest.TestCase):
         self.assertEqual(_strip_md_marks("正文\n"), "正文\n")
 
 
+class TestSgAndSiddhamTxt(unittest.TestCase):
+    """<cb:sg> 半角括号 + 悉昙裸读音（官方 txt 同款）。"""
+
+    TEI = """<TEI xmlns="http://www.tei-c.org/ns/1.0" xmlns:cb="http://www.cbeta.org/ns/1.0">
+<teiHeader><fileDesc><titleStmt>
+<title level="m" xml:lang="zh-Hant">測試經</title>
+<author>譯者</author>
+</titleStmt></fileDesc>
+<encodingDesc><charDecl>
+<char xml:id="RJ-CCEB">
+<charProp><localName>rjchar</localName><value>歾</value></charProp>
+<charProp><localName>Romanized form in Unicode transcription</localName><value>raṃ</value></charProp>
+<mapping cb:dec="1101035" type="PUA">U+10CCEB</mapping>
+</char>
+</charDecl></encodingDesc></teiHeader>
+<text><body>
+<p>唵<cb:yin><cb:zi>㘕</cb:zi><cb:sg>音注</cb:sg></cb:yin>抮</p>
+<p>淨法界<g ref="#RJ-CCEB">X</g>字</p>
+</body></text></TEI>"""
+
+    def _work(self):
+        from pycbeta.parser import P5Parser
+        d = tempfile.mkdtemp()
+        p = os.path.join(d, "T9999.xml")
+        with open(p, "w", encoding="utf-8") as f:
+            f.write(self.TEI)
+        self.addCleanup(__import__("shutil").rmtree, d, True)
+        return P5Parser().parse(p), p
+
+    def test_sg_parens(self):
+        from pycbeta.render_md import MdRenderer
+        work, _ = self._work()
+        tmp = tempfile.mkdtemp()
+        t = open(TxtRenderer().render_work(work, tmp, "t.txt"),
+                 encoding="utf-8").read()
+        m = open(MdRenderer().render_work(work, tmp, "t.md"),
+                 encoding="utf-8").read()
+        for s in (t, m):
+            self.assertIn("唵㘕(音注)抮", s)
+
+    def test_bare_reading(self):
+        from pycbeta.render_md import MdRenderer
+        work, _ = self._work()
+        tmp = tempfile.mkdtemp()
+        t = open(TxtRenderer().render_work(work, tmp, "t.txt"),
+                 encoding="utf-8").read()
+        m = open(MdRenderer().render_work(work, tmp, "t.md"),
+                 encoding="utf-8").read()
+        for s in (t, m):
+            self.assertIn("淨法界raṃ字", s)
+            self.assertNotIn("歾", s)
+
+    def test_aux_bare_reading(self):
+        _, xml = self._work()
+        _, _, body, _ = _extract_xml_parts(xml)
+        self.assertIn("淨法界raṃ字", body)
+        self.assertNotIn("歾", body)
+
+
+class TestFigureMark(unittest.TestCase):
+    """图注：txt/md 出官方同款【圖：<文件名>】；docx/html 不出文字；aux 镜像。"""
+
+    BODY = ("<text><body>"
+            "<p>文前</p>"
+            "<figure><graphic url=\"../figures/X/X59p01.gif\"/></figure>"
+            "<p>文後</p>"
+            "</body></text>")
+
+    def test_txt_md_mark(self):
+        from pycbeta.parser import P5Parser
+        from pycbeta.render_md import MdRenderer
+        work = P5Parser().parse(_write_tei(self.BODY))
+        tmp = tempfile.mkdtemp()
+        t = open(TxtRenderer().render_work(work, tmp, "t.txt"),
+                 encoding="utf-8").read()
+        m = open(MdRenderer().render_work(work, tmp, "t.md"),
+                 encoding="utf-8").read()
+        for s in (t, m):
+            self.assertIn("【圖：X59p01.gif】", s)
+            self.assertLess(s.find("文前"), s.find("【圖"))
+            self.assertLess(s.find("【圖"), s.find("文後"))
+
+    def test_aux_mark(self):
+        _, _, body, _ = _extract_xml_parts(_write_tei(self.BODY))
+        self.assertIn("【圖：X59p01.gif】", body)
+
+    def test_normalize_keeps_figure_drops_witness(self):
+        from pycbeta.verify import normalize
+        s = normalize("甲【CB】乙【圖：X59p0224_01.gif】丙")
+        self.assertNotIn("【CB】", s)
+        self.assertIn("【圖：X59p0224_01.gif】", s)
+
+    def test_normalize_strips_own_annotations(self):
+        # 我方注音〔〕（注音表/自动注音所加）参与比对前剥除
+        from pycbeta.verify import normalize
+        s = normalize("涅槃〔niè pán〕入三昧")
+        self.assertNotIn("〔", s)
+        self.assertIn("涅槃入三昧", s)
+
+
+class TestDharaniTransliteration(unittest.TestCase):
+    """逐字咒文表（无 place="inline"）转写默认不显示；place="inline" 与散文照常。"""
+
+    TEI = """<TEI xmlns="http://www.tei-c.org/ns/1.0" xmlns:cb="http://www.cbeta.org/ns/1.0">
+<teiHeader><fileDesc><titleStmt>
+<title level="m" xml:lang="zh-Hant">測試經</title>
+<author>譯者</author>
+</titleStmt></fileDesc>
+<encodingDesc><charDecl>
+<char xml:id="RJ-CCEB">
+<charProp><localName>rjchar</localName><value>歾</value></charProp>
+<charProp><localName>Romanized form in Unicode transcription</localName><value>raṃ</value></charProp>
+<mapping cb:dec="1101035" type="PUA">U+10CCEB</mapping>
+</char>
+</charDecl></encodingDesc></teiHeader>
+<text><body>
+<p cb:type="dharani"><cb:tt><cb:t xml:lang="zh-Hant">南</cb:t><cb:t xml:lang="sa-x-rj"><g ref="#RJ-CCEB">X</g></cb:t></cb:tt></p>
+<p cb:type="dharani"><cb:tt place="inline"><cb:t xml:lang="zh-Hant">唵</cb:t><cb:t xml:lang="sa-x-rj"><g ref="#RJ-CCEB">X</g></cb:t></cb:tt></p>
+<p>散文<g ref="#RJ-CCEB">X</g>末</p>
+</body></text></TEI>"""
+
+    def _work(self):
+        from pycbeta.parser import P5Parser
+        d = tempfile.mkdtemp()
+        p = os.path.join(d, "T9999.xml")
+        with open(p, "w", encoding="utf-8") as f:
+            f.write(self.TEI)
+        self.addCleanup(__import__("shutil").rmtree, d, True)
+        return P5Parser().parse(p), p
+
+    def test_txt_drops_plain_keeps_inline(self):
+        work, _ = self._work()
+        t = open(TxtRenderer().render_work(work, tempfile.mkdtemp(), "t.txt"),
+                 encoding="utf-8").read()
+        self.assertIn("南", t)             # 逐字表中文行保留
+        self.assertNotIn("南raṃ", t)       # 逐字表转写丢弃
+        self.assertIn("唵raṃ", t)          # place=inline 转写保留
+        self.assertIn("散文raṃ末", t)      # 散文缺字读音保留
+
+    def test_txt_shows_when_enabled(self):
+        work, _ = self._work()
+        t = open(TxtRenderer(show_dharani_transliteration=True).render_work(
+            work, tempfile.mkdtemp(), "t.txt"), encoding="utf-8").read()
+        self.assertIn("南raṃ", t)
+
+    def test_md_matches_txt(self):
+        from pycbeta.render_md import MdRenderer
+        work, _ = self._work()
+        m = open(MdRenderer().render_work(work, tempfile.mkdtemp(), "t.md"),
+                 encoding="utf-8").read()
+        self.assertIn("南", m)
+        self.assertNotIn("南raṃ", m)
+        self.assertIn("唵raṃ", m)
+
+    def test_aux_matches_txt(self):
+        _, xml = self._work()
+        _, _, body, _ = _extract_xml_parts(xml)
+        self.assertIn("南", body)
+        self.assertNotIn("南raṃ", body)
+        self.assertIn("唵raṃ", body)
+        _, _, body2, _ = _extract_xml_parts(
+            xml, show_dharani_transliteration=True)
+        self.assertIn("南raṃ", body2)
+
+
 if __name__ == "__main__":
     unittest.main()

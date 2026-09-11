@@ -378,8 +378,23 @@ class HtmlRenderer:
             else f"<ruby>{_esc(seg)}<rt>{_esc(reading)}</rt></ruby>"
             for seg, reading in segs)
 
+    def _gaiji_roman(self, code: str) -> str:
+        """悉昙读音（charDecl Romanized form，Unicode 式优先），无则 ""。"""
+        chard = (self._work.metadata.get("charDecl") or {}) if self._work else {}
+        rec = chard.get(code) or {}
+        return (rec.get("roman") or rec.get("roman_cbeta") or "").strip()
+
     def _render_gaiji(self, node: Gaiji) -> str:
         raw = node.char or node.code
+        roman = self._gaiji_roman(node.code)
+        if roman:
+            # 悉昙缺字：官方同款 ranja 空元素（读音走 roman 属性 + CSS 显示；
+            # 文本抽取为空，与官方 html 一致，不污染逐字校验）
+            chard = (self._work.metadata.get("charDecl") or {}) if self._work else {}
+            glyph = ((chard.get(node.code) or {}).get("rjchar")
+                     or self._resolve_gaiji(node.code, raw))
+            return (f"<span class='ranja' roman='{_esc(roman)}' "
+                    f"code='{_esc(node.code)}' char='{_esc(glyph)}'/>")
         if raw and ord(raw[0]) >= 0x2A700:
             char = self._resolve_gaiji(node.code, raw)
             if self._annotations is not None:
@@ -480,6 +495,19 @@ class HtmlRenderer:
             cls = ' class=""'
         s = f' style="{_esc(style)}"' if style else ""
         return f"<p{cls}{s}>{self._line_info(e)}{self._render_nodes(e.children)}</p>"
+
+    def _render_tt(self, e: E) -> str:
+        """对照块：转写行（sa-x-rj）包 transliteration span（官方朱砂色）；
+        文本与泛型扁平渲染一致，不影响逐字校验。"""
+        out = []
+        for c in e.children:
+            if isinstance(c, E) and c.tag == "t" and \
+                    (c.attrs.get("xml:lang") or "").startswith("sa"):
+                out.append("<span class='transliteration'>"
+                           + self._render_nodes(c.children) + "</span>")
+            else:
+                out.append(self._render_node(c))
+        return "".join(out)
 
     def _render_lg(self, e: E) -> str:
         a = e.attrs
@@ -618,6 +646,11 @@ class HtmlRenderer:
             return self._render_table(e)
         if tag == "sic":
             return ""
+        if tag == "sg":
+            # 梵呗注音（<cb:sg>）：官方半角括号，如 (音𫬠)
+            return "(" + self._render_nodes(e.children) + ")"
+        if tag == "tt":
+            return self._render_tt(e)
         if tag == "choice":
             return self._render_nodes(e.children)
         if tag == "corr":

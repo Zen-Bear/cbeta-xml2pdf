@@ -60,6 +60,7 @@ EDITABLE_ROWS = (
     ("cb:def", "释义"),
     ("span.doube-line-note", "双行夹注"),
     ("span.interlinear-note", "单行夹注"),
+    ("span.transliteration", "转写"),
     ("span.note-inline", "括号夹注"),
     ("sup.note-ref", "注释序号"),
     (".footnote", "脚注文字"),

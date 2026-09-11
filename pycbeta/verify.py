@@ -22,7 +22,9 @@ def normalize(text: str, ruby_brackets=None) -> str:
     text = text.replace("▆", "□")
     text = re.sub(r"[A-Z]{1,2}\d{1,4}[A-Za-z]?n\d+[A-Za-z]?_p[0-9a-z]+", "", text)
     text = re.sub(r"\[[^\]\[]{1,8}\]", "", text)
-    text = re.sub(r"\u3010[^\u3011]{1,20}\u3011", "", text)
+    # 【】见证标记剥除（【CB】/【大】等，官方与生成侧同源）；含「圖」的不剥
+    #（官方 txt 图注如 【圖：X59p0224_01.gif】，须保留参与比对）
+    text = re.sub(r"\u3010(?![^\u3011]*\u5716)[^\u3011]{1,20}\u3011", "", text)
     # 〔〕上限 40（原 20）：官方基线内仅 〔－〕类短标记，注音括注 〔bō rě〕等多音节可超 20 字
     text = re.sub(r"\u3014[^\u3015]{1,40}\u3015", "", text)
     if ruby_brackets:
@@ -367,7 +369,8 @@ _XML_DROP_TAGS = ("app", "anchor", "mulu")
 _WS_RE = re.compile(r"[\s　]+")
 
 
-def _extract_xml_parts(path: str, inline_brackets: str = "fullwidth"):
+def _extract_xml_parts(path: str, inline_brackets: str = "fullwidth",
+                       show_dharani_transliteration: bool = False):
     """P3 辅轨：官方 XML 直抽为 (title, author, body, foots)。
 
     异构实现（lxml 直读，不走 P5Parser；规则镜像 parser/render_txt 的可观测行为，
@@ -447,6 +450,10 @@ def _extract_xml_parts(path: str, inline_brackets: str = "fullwidth"):
                         rec["composition"] = val
                     elif name == "normalized form":
                         rec["normal"] = val
+                    elif name == "Romanized form in Unicode transcription":
+                        rec["roman"] = val
+                    elif name == "Romanized form in CBETA transcription":
+                        rec["roman_cbeta"] = val
                 for mp in ch.iter():
                     if ln(mp) != "mapping":
                         continue
@@ -464,6 +471,10 @@ def _extract_xml_parts(path: str, inline_brackets: str = "fullwidth"):
         _gdb = None
 
     def resolve_gaiji(code, raw):
+        rec = chard.get(code) or {}
+        if rec.get("roman") or rec.get("roman_cbeta"):
+            # 悉昙缺字：官方 txt 裸读音（如 raṃ），与 TxtRenderer 同规则
+            return (rec.get("roman") or rec.get("roman_cbeta")).strip()
         data = _gdb.get(code) if _gdb else None
         if data:
             for k in ("unicode", "norm_unicode"):
@@ -492,7 +503,7 @@ def _extract_xml_parts(path: str, inline_brackets: str = "fullwidth"):
             return rec["composition"]
         return raw
 
-    def chunks(el, out):
+    def chunks(el, out, in_dharani=False):
         """子树文本走查（镜像 _render_node 可观测行为），结果 append 到 out。"""
         if el.text:
             out.append(_WS_RE.sub("", el.text))
@@ -507,9 +518,13 @@ def _extract_xml_parts(path: str, inline_brackets: str = "fullwidth"):
                 if child.get("place") in _XML_INLINE_NOTE_PLACES:
                     lb, rb = ("(", ")") if inline_brackets == "halfwidth" else ("（", "）")
                     out.append(lb)
-                    chunks(child, out)
+                    chunks(child, out, in_dharani)
                     out.append(rb)
                 # 非行内注整棵丢弃（body 内注生成侧恒 ""；back 注走注池）
+            elif t == "tt" and (child.get("place") or "") != "inline" \
+                    and not show_dharani_transliteration:
+                # 逐字咒文表（无 place="inline"）内转写默认不显示（镜像 render_txt/md）
+                chunks(child, out, in_dharani=True)
             elif t == "app":
                 # 正文内联校勘（P5a/P5b，如 CBReader 書庫）：base 读法只在 <lem>，
                 # 渲染侧只出 lem（见 render_*.py _render_e），此处镜像只收 lem 子文本；
@@ -517,17 +532,41 @@ def _extract_xml_parts(path: str, inline_brackets: str = "fullwidth"):
                 lem = next((c for c in child
                             if isinstance(c.tag, str) and ln(c) == "lem"), None)
                 if lem is not None:
-                    chunks(lem, out)
+                    chunks(lem, out, in_dharani)
             elif t in _XML_DROP_TAGS:
                 pass
+            elif t == "graphic":
+                # 图注标记（官方 txt 同款），与 TxtRenderer._figure_mark 同规则
+                url = (child.get("url") or "").replace("\\", "/")
+                base = url.split("/")[-1] if url else ""
+                if base:
+                    out.append(f"【圖：{base}】")
+            elif t == "figure":
+                for c in child:
+                    if isinstance(c.tag, str) and ln(c) == "graphic":
+                        url = (c.get("url") or "").replace("\\", "/")
+                        base = url.split("/")[-1] if url else ""
+                        if base:
+                            out.append(f"【圖：{base}】")
+                    else:
+                        chunks(c, out, in_dharani)
+                    if c.tail:
+                        out.append(_WS_RE.sub("", c.tail))
             elif t == "unclear":
                 out.append("□")
             elif t == "g":
                 code = (child.get("ref") or "").lstrip("#")
                 raw = _WS_RE.sub("", "".join(child.itertext())) or code
-                out.append(resolve_gaiji(code, raw))
+                if in_dharani and not show_dharani_transliteration:
+                    rec = chard.get(code) or {}
+                    # 陀罗尼内有读音记录的悉昙缺字不显示（官方 txt 同款）；
+                    # 无读音记录的走正常解析
+                    if not (rec.get("roman") or rec.get("roman_cbeta")):
+                        out.append(resolve_gaiji(code, raw))
+                else:
+                    out.append(resolve_gaiji(code, raw))
             else:
-                chunks(child, out)
+                chunks(child, out, in_dharani)
             if child.tail:
                 out.append(_WS_RE.sub("", child.tail))
 
@@ -704,13 +743,13 @@ def generate_formal(xml_fn: str, work, fmt: str, outdir: str, config_path: Optio
         files = HtmlRenderer(theme=theme, notes="endnote", ignore_xml_style=bool(p("ignore_xml_style")), ignore_xml_space=bool(p("ignore_xml_space")), show_notes=p("show_notes", True), inline_brackets=p("inline_brackets", "fullwidth"), annotations=_ann, strip_head_no=_shn).render_work(work, out_dir=outdir)
         return [os.path.join(outdir, f) for f in files]
     if fmt == "docx":
-        return [os.path.join(outdir, DocxRenderer(theme=theme, notes="footnote", ignore_xml_style=bool(p("ignore_xml_style")), ignore_xml_space=bool(p("ignore_xml_space")), show_notes=p("show_notes", True), suppress_jhead_dup=p("suppress_jhead_dup", True), show_close_juan=bool(p("show_close_juan", False)), inline_brackets=p("inline_brackets", "fullwidth"), series_title=p("series_title", {}), annotations=_ann, strip_head_no=_shn).render_work(work, out_dir=outdir, filename=f"{stem}.docx"))]
+        return [os.path.join(outdir, DocxRenderer(theme=theme, notes="footnote", ignore_xml_style=bool(p("ignore_xml_style")), ignore_xml_space=bool(p("ignore_xml_space")), show_notes=p("show_notes", True), suppress_jhead_dup=p("suppress_jhead_dup", True), show_close_juan=bool(p("show_close_juan", False)), inline_brackets=p("inline_brackets", "fullwidth"), series_title=p("series_title", {}), annotations=_ann, strip_head_no=_shn, show_body_siddham=bool(p("show_body_siddham", True))).render_work(work, out_dir=outdir, filename=f"{stem}.docx"))]
     if fmt == "epub":
         return [os.path.join(outdir, EpubRenderer(theme=theme, notes="endnote", ignore_xml_style=bool(p("ignore_xml_style")), ignore_xml_space=bool(p("ignore_xml_space")), show_notes=p("show_notes", True), annotations=_ann, strip_head_no=_shn).render_work(work, out_dir=outdir, filename=f"{stem}.epub"))]
     if fmt == "md":
-        return [os.path.join(outdir, MdRenderer(theme=theme, notes="footnote", show_notes=p("show_notes", True), inline_brackets=p("inline_brackets", "fullwidth"), annotations=_ann, strip_head_no=_shn).render_work(work, out_dir=outdir, filename=f"{stem}.md"))]
+        return [os.path.join(outdir, MdRenderer(theme=theme, notes="footnote", show_notes=p("show_notes", True), inline_brackets=p("inline_brackets", "fullwidth"), annotations=_ann, strip_head_no=_shn, show_dharani_transliteration=bool(p("show_dharani_transliteration", False))).render_work(work, out_dir=outdir, filename=f"{stem}.md"))]
     if fmt == "txt":
-        return [os.path.join(outdir, TxtRenderer(theme=theme, notes="footnote", show_notes=p("show_notes", True), inline_brackets=p("inline_brackets", "fullwidth"), annotations=_ann, strip_head_no=_shn).render_work(work, out_dir=outdir, filename=f"{stem}.txt"))]
+        return [os.path.join(outdir, TxtRenderer(theme=theme, notes="footnote", show_notes=p("show_notes", True), inline_brackets=p("inline_brackets", "fullwidth"), annotations=_ann, strip_head_no=_shn, show_dharani_transliteration=bool(p("show_dharani_transliteration", False))).render_work(work, out_dir=outdir, filename=f"{stem}.txt"))]
     raise ValueError(f"unknown format {fmt}")
 
 def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int = 10, diff_lines: int = 5, config_path: Optional[str] = None, t2s: bool = False, baseline: str = "render") -> Dict:
@@ -777,7 +816,8 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
         except Exception:
             pass
         title_x, author_x, body_x, foots_x = _extract_xml_parts(
-            xml_fn, _ib_defaults.get("inline_brackets", "fullwidth"))
+            xml_fn, _ib_defaults.get("inline_brackets", "fullwidth"),
+            bool(_ib_defaults.get("show_dharani_transliteration", False)))
         if not title_x:
             title_x = work.id  # 与生成侧 `md.get("title") or work.id` 对齐
         theirs_raw = f"{title_x}\n\n{author_x}\n\n{body_x}"

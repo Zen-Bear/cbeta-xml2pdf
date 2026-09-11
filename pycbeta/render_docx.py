@@ -175,8 +175,9 @@ class DocxRenderer:
                  bookmarks=True, split=False, show_close_juan=False,
                  suppress_jhead_dup=True,
                  inline_brackets="fullwidth",
-                 footnote_per_page=True, show_notes=True,
+                   footnote_per_page=True, show_notes=True,
                    suppress_title_notes=False, footnote_separator=None, strip_head_no=False,
+                   show_body_siddham=True,
                    series_title=None, pagination=None, latin_font: Optional[str] = None,
                    annotations=None, gaiji_fonts=None, gaiji_lang: str = "zh-Hant",
                    fallback_fonts=None, siddham_fonts=None,
@@ -196,6 +197,7 @@ class DocxRenderer:
         self.footnote_per_page = footnote_per_page  # 脚注每页重新编号（默认 true）
         self.footnote_separator = footnote_separator  # 脚注分隔线 {thicknessPt,lengthPercent,spaceTwips}
         self.show_notes = show_notes                # 关闭注释（默认 true 显示）
+        self.show_body_siddham = show_body_siddham  # 正文悉昙字和读音（默认 true 显示；false 则正文不显示，脚注不受影响）
         self.suppress_title_notes = suppress_title_notes  # 压制卷名/品名校勘注码（默认 false 保留）
         self.strip_head_no = strip_head_no  # 去 head/jhead 行首 No. 令牌（默认 false 保留）
         self.series_title = series_title or {}         # 经藏名（title level="s"）首页左上角配置 {enabled,font,size}
@@ -218,6 +220,7 @@ class DocxRenderer:
         self._annotations = _ann_active(annotations)
         self._ann_seen = set()  # repeat first/page 已注词集合（_reset_state 起始终置零）
         self._suppress_note_ref = False             # 标题渲染时的临时压制开关
+        self._in_note = False                     # 脚注/尾注内容渲染中（悉昙开关只作用正文）
         self._pending_mulu = None                 # 待附到下一 head/jhead 的 mulu 书签 {level,text}
         self.split = split                        # 按卷输出多个文档
         self._body_para_count = 0                 # 正文已渲染段落数（决定 juan 是否换页）
@@ -740,6 +743,14 @@ class DocxRenderer:
             return simplify_text(char)
         return char
 
+    def _gaiji_roman(self, code: str) -> str:
+        """悉昙读音（charDecl Romanized form，Unicode 式优先）。
+        官方 docx 正文/脚注均附读音（如 歾(raṃ)）；html/md/txt 官方无，故仅 docx 用。
+        无记录返回 ""。"""
+        chard = (self._work.metadata.get("charDecl") or {}) if self._work else {}
+        rec = chard.get(code) or {}
+        return (rec.get("roman") or rec.get("roman_cbeta") or "").strip()
+
     def _ranjana_font_for(self, ch):
         """RJ 悉昙字形：首个已装且覆盖该字者（配置 output.docx.siddhamFonts，
         缺省 ["Ranjana","Siddam"]）；无则 None。
@@ -790,6 +801,10 @@ class DocxRenderer:
         if isinstance(n, Lb) or isinstance(n, Pb):
             return ""
         if isinstance(n, Gaiji):
+            roman = self._gaiji_roman(n.code)
+            if roman and not getattr(self, "_in_note", False) \
+                    and not self.show_body_siddham:
+                return ""  # 正文隐藏悉昙字（含读音）；脚注/尾注不受影响
             char = self._resolve_gaiji(n.code, n.char or n.code)
             fonts = None
             if n.code.startswith("RJ"):
@@ -799,7 +814,16 @@ class DocxRenderer:
                 fonts = self._gaiji_font()
             kw = {"fonts": fonts} if fonts else {}
             if self._annotations is not None:
-                return self._run_annotated(char, *self._current_tag(), **kw)
+                # 读音走纯文本通道（拉丁不过注音），避免进 ruby
+                out = self._run_annotated(char, *self._current_tag(), **kw)
+                if roman:
+                    out += self._run(f"({roman})", *self._current_tag(),
+                                     fonts=self.latin_font)
+                return out
+            if roman:
+                return (self._run(char, *self._current_tag(), **kw)
+                        + self._run(f"({roman})", *self._current_tag(),
+                                    fonts=self.latin_font))
             return self._run(char, *self._current_tag(), **kw)
         if isinstance(n, NoteRef):
             return self._render_noteref(n)
@@ -837,10 +861,13 @@ class DocxRenderer:
         """脚注内容在正文 div 上下文之外渲染（不继承正文 div 的粗体/颜色）。"""
         prev = self._div_stack
         self._div_stack = []
+        prev_note = getattr(self, "_in_note", False)
+        self._in_note = True
         try:
             return self._render_children(note, "footnote")
         finally:
             self._div_stack = prev
+            self._in_note = prev_note
 
     def _render_noteref(self, ref: NoteRef) -> str:
         if not self.show_notes or self._suppress_note_ref:
@@ -1095,6 +1122,11 @@ class DocxRenderer:
                 return "".join(out)
             finally:
                 self._tag_stack.pop()
+        if tag == "sg":
+            # 梵呗注音（<cb:sg>）：官方半角括号，如 (音𫬠)；yin/zi 不动
+            return (self._run("(", *self._current_tag())
+                    + self._render_children(e)
+                    + self._run(")", *self._current_tag()))
         return self._render_children(e)
 
     def _render_def_p(self, p):
@@ -1183,10 +1215,19 @@ class DocxRenderer:
         if e.attrs.get("type") == "app":
             main = [t for t in ts if (t.attrs.get("place") or "") != "foot"]
             return self._render_nodes(main) if main else ""
+
+        def _row(t):
+            # 转写行（sa-x-rj）：主题 transliteration 标签（官方朱砂色）
+            if (t.attrs.get("xml:lang") or "").startswith("sa"):
+                return self._render_tagged(t.children, "transliteration")
+            return self._render_nodes(t.children)
+
         if len(ts) >= 2 and e.attrs.get("type") not in ("app", "single-line"):
-            return (self._render_nodes(ts[0].children) + self._run("　")
-                    + self._render_nodes(ts[1].children))
-        return self._render_nodes(e.children)
+            # 官方 docx 两行直连无分隔（如 歾(raṃ)㘕）；不插全角空格
+            #（裸 U+3000 run 无 rPr 时部分 Word 回退缺字形显示方框）
+            return _row(ts[0]) + _row(ts[1])
+        return "".join(_row(c) if isinstance(c, E) and c.tag == "t"
+                       else self._render_node(c) for c in e.children)
 
     def _render_nodes(self, nodes) -> str:
         return "".join(self._render_node(n) for n in nodes)
