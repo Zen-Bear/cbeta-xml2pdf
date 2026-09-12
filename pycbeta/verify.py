@@ -15,7 +15,7 @@ from .render_docx import DocxRenderer
 from .render_epub import EpubRenderer
 from .render_md import MdRenderer
 from .render_txt import TxtRenderer
-from .theme import load_presets, _PRESETS_PATH, strip_head_no
+from .theme import load_presets, load_effective_presets, _PRESETS_PATH, strip_head_no
 
 def normalize(text: str, ruby_brackets=None) -> str:
     # 官方基线 unclear 用 ▆，本管线渲染用 □（U+25A1）：两侧归一到 □ 再比较
@@ -338,11 +338,13 @@ def _head_no_tokens(work) -> list:
 
 def _strip_official_no(text: str, tokens) -> str:
     """官方侧对等剥离：行首精确令牌逐个移除（与生成侧逐 head/jhead 剥离同构）。
-    全串转义 + 行首锚定（非行首的正文 No. 不动）；空表时原样返回。"""
+    允许行首横向空白并保留（官方 html 提取行常带前导空格）；连带 token 后的
+    横向空白一起吃掉，使官方侧余部与生成侧形状一致。空表时原样返回。"""
     if not tokens:
         return text
     for token in tokens:
-        text = re.sub(r"(?m)^" + re.escape(token), "", text)
+        text = re.sub(r"(?m)^([ \t\u3000]*)" + re.escape(token) + r"[ \t\u3000]*",
+                      r"\1", text)
     return text
 
 
@@ -763,6 +765,10 @@ def generate_formal(xml_fn: str, work, fmt: str, outdir: str, config_path: Optio
     raise ValueError(f"unknown format {fmt}")
 
 def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int = 10, diff_lines: int = 5, config_path: Optional[str] = None, t2s: bool = False, baseline: str = "render") -> Dict:
+    if fmt == "pdf":
+        # 官方无 PDF 基线：PDF 由 docx（docx2pdf）或 html（html2pdf）派生，正文已由该格式校验覆盖
+        return {"xml": xml_fn, "fmt": fmt, "status": "no_baseline", "gen": [],
+                "detail": "PDF 无官方基线（正文由 docx/html 校验覆盖）"}
     work = P5Parser().parse(xml_fn)
     # 繁体剥离键：官方基线恒为繁体，官方侧 strip_docx_head 必须用繁体键
     t_title = (work.metadata.get("title") or "").strip()
@@ -775,11 +781,11 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
     gen_path = generate_formal(xml_fn, work, fmt, outdir, config_path=config_path)
     ours_raw = "".join(extract_text(p) for p in gen_path)
     try:
-        cfg = load_presets(config_path).get("verify") if config_path else load_presets().get("verify")
+        cfg = (load_effective_presets(config_path).get("verify") or {})
     except Exception:
         cfg = {}
     try:
-        _presets_full = load_presets(config_path) if config_path else load_presets()
+        _presets_full = load_effective_presets(config_path)
     except Exception:
         _presets_full = {}
     ruby_brackets = _ann_brackets_from(_presets_full)
@@ -815,13 +821,11 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
             _ib_defaults = {**(resolve_effective_config(_run, _rdir).get("output") or {})}
         except Exception:
             try:
-                _ib_defaults = dict(load_presets(config_path).get("output")
-                                    if config_path else load_presets().get("output") or {})
+                _ib_defaults = dict(load_effective_presets(config_path).get("output") or {})
             except Exception:
                 _ib_defaults = {}
         try:
-            _v = load_presets(config_path).get("verify") if config_path \
-                else load_presets().get("verify")
+            _v = load_effective_presets(config_path).get("verify")
             _ib_defaults.update(_v or {})
         except Exception:
             pass
@@ -895,7 +899,7 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
     if base_kind not in official and bool((cfg or {}).get("auto_fetch", True)):
         # 首选基线缺失：按需下载（docx/odt 非 T/X 等 404 静默跳过）
         from .fetch import ensure_baselines
-        presets = load_presets(config_path) if config_path else load_presets()
+        presets = load_effective_presets(config_path)
         need = {"md": ["txt_notes"], "docx": ["docx", "html"],
                 "txt": ["txt_notes"], "html": ["html"], "epub": ["epub"]}.get(fmt, ["html"])
         # 材料化模型：基线落 cbeta_ebook work 目录（缺省回退 source）
@@ -1030,7 +1034,12 @@ def format_verify_report(records, diff_lines: int = 5, max_diff: int = 10):
         st = r.get("status")
         lines.append(f"=== {name}")
         if st == "no_baseline":
-            lines.append(f"  [--]  {fmt} no baseline")
+            detail = r.get("detail")
+            lines.append(f"  [--]  {fmt} no baseline"
+                         + (f"（{detail}）" if detail else ""))
+            continue
+        if st == "covered":
+            lines.append(f"  [--]  {fmt} {r.get('detail') or '已覆盖'}")
             continue
         if st == "error":
             lines.append(f"  [FAIL] {fmt} 校验异常: {r.get('detail', '')}")

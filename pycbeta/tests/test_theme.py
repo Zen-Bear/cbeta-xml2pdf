@@ -1,5 +1,7 @@
 import os
+import json
 import sys
+import tempfile
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -757,6 +759,35 @@ class TestBracketPair(unittest.TestCase):
         self.assertEqual(bracket_pair(None), ("（", "）"))
         self.assertEqual(bracket_pair(""), ("（", "）"))
         self.assertEqual(bracket_pair("bogus"), ("（", "）"))
+
+
+class TestLoadEffectivePresets(unittest.TestCase):
+    def test_run_json_resolved(self):
+        from pycbeta.theme import load_effective_presets
+        d = tempfile.mkdtemp()
+        cfg = os.path.join(d, "presets.json")
+        with open(cfg, "w", encoding="utf-8") as f:
+            json.dump({"source": {"cbeta_ebook": r"E:\ebook"},
+                       "output": {"notes": "endnote"}}, f)
+        run = os.path.join(d, "run.json")
+        with open(run, "w", encoding="utf-8") as f:
+            json.dump({"config-json": cfg, "html-epub-theme": "cbeta_golden.css",
+                       "html-epub-user-theme": "", "pdf-docx-theme": "pdf_docx.css",
+                       "pdf-docx-user-theme": ""}, f)
+        p = load_effective_presets(run)
+        self.assertEqual(p.get("source", {}).get("cbeta_ebook"), r"E:\ebook")
+        self.assertEqual((p.get("output") or {}).get("notes"), "endnote")
+
+    def test_plain_presets_passthrough(self):
+        from pycbeta.theme import load_effective_presets
+        d = tempfile.mkdtemp()
+        cfg = os.path.join(d, "p.json")
+        with open(cfg, "w", encoding="utf-8") as f:
+            json.dump({"output": {"notes": "inline"}}, f)
+        p = load_effective_presets(cfg)
+        self.assertEqual((p.get("output") or {}).get("notes"), "inline")
+        self.assertEqual(load_effective_presets(None).get("output", {}).get("notes"),
+                         "footnote")
 
 
 if __name__ == "__main__":

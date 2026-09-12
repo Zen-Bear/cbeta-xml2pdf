@@ -34,6 +34,13 @@ class TestStripOfficialNo(unittest.TestCase):
         self.assertIn("\n序\n", out)  # 多令牌逐个剥
         self.assertEqual(_strip_official_no(s, []), s)
 
+    def test_official_leading_ws_kept(self):
+        # 官方 html 提取行常带前导空格：保留空白、剥 token+其后空白（与生成侧同形）
+        s = "  No. 1077-A 重刻准提淨業序\nNo. 1077准提淨業卷之一\n"
+        out = _strip_official_no(s, ["No. 1077-A"])
+        self.assertTrue(out.startswith("  重刻准提淨業序"))
+        self.assertIn("No. 1077准提淨業卷之一", out)  # docNumber 不在令牌表，不动
+
     def test_strip_no_from_dual_shape(self):
         import json
         import tempfile
@@ -168,6 +175,14 @@ class TestTxtNotesLanding(unittest.TestCase):
         self.assertFalse(glob.glob(os.path.join(self.flat, "**", "*.zip"),
                                    recursive=True))
         self.assertFalse(os.path.exists(os.path.join(self.root, "T")))
+
+
+class TestPdfNoBaseline(unittest.TestCase):
+    def test_pdf_skipped(self):
+        from pycbeta.verify import verify_one
+        r = verify_one("nonexistent.xml", "pdf", "", tempfile.mkdtemp())
+        self.assertEqual(r["status"], "no_baseline")
+        self.assertIn("PDF", r["detail"])
 
 
 if __name__ == "__main__":

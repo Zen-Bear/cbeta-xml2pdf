@@ -75,6 +75,8 @@ class TestEpub(unittest.TestCase):
         xhtml = z.read(ch[0]).decode("utf-8")
         self.assertIn("<body>", xhtml)
         self.assertIn("彌勒", xhtml)
+        # 中间 HTML 目录 _epub_tmp 生成后清理，不留残余
+        self.assertFalse(os.path.isdir(os.path.join(self.tmp, "_epub_tmp")))
 
 
 if __name__ == "__main__":

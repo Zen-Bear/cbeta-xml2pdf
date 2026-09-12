@@ -8,6 +8,7 @@ then packaged as EPUB3 (OPF + nav + NCX). Notes default to endnotes
 import io
 import os
 import re
+import shutil
 import zipfile
 import xml.sax.saxutils as sax
 from typing import List, Optional
@@ -43,32 +44,36 @@ class EpubRenderer:
 
     def render_work(self, work: Work, out_dir: str, filename: str = "") -> str:
         tmp = os.path.join(out_dir, "_epub_tmp")
-        html_files = HtmlRenderer(theme=self.theme, notes=self.notes,
-                                  base_css=self.base_css,
-                                  ignore_xml_style=self.ignore_xml_style,
-                                  ignore_xml_space=self.ignore_xml_space,
-                                  show_notes=self.show_notes,
-                                  annotations=self._annotations,
-                                  strip_head_no=self.strip_head_no,
-                                  inline_brackets=self.inline_brackets,
-                                  note_inline_brackets=self.note_inline_brackets) \
-            .render_work(work, tmp)
-        md = work.metadata
-        title = md.get("title") or work.id
-        author = md.get("author") or ""
-        lang = "zh-Hans" if getattr(work, "simplified", False) else "zh-Hant"
-        chapters = self._build_chapters(tmp, html_files, title)
-        opf = self._build_opf(work, title, author, chapters, lang)
-        nav = self._build_nav(title, chapters, lang)
-        ncx = self._build_ncx(title, chapters)
-        data = self._zip(work.id, chapters, opf, nav, ncx, lang)
-        os.makedirs(out_dir, exist_ok=True)
-        if not filename:
-            filename = f"{work.id}.epub"
-        fn = os.path.join(out_dir, filename)
-        with open(fn, "wb") as f:
-            f.write(data)
-        return fn
+        try:
+            html_files = HtmlRenderer(theme=self.theme, notes=self.notes,
+                                      base_css=self.base_css,
+                                      ignore_xml_style=self.ignore_xml_style,
+                                      ignore_xml_space=self.ignore_xml_space,
+                                      show_notes=self.show_notes,
+                                      annotations=self._annotations,
+                                      strip_head_no=self.strip_head_no,
+                                      inline_brackets=self.inline_brackets,
+                                      note_inline_brackets=self.note_inline_brackets) \
+                .render_work(work, tmp)
+            md = work.metadata
+            title = md.get("title") or work.id
+            author = md.get("author") or ""
+            lang = "zh-Hans" if getattr(work, "simplified", False) else "zh-Hant"
+            chapters = self._build_chapters(tmp, html_files, title)
+            opf = self._build_opf(work, title, author, chapters, lang)
+            nav = self._build_nav(title, chapters, lang)
+            ncx = self._build_ncx(title, chapters)
+            data = self._zip(work.id, chapters, opf, nav, ncx, lang)
+            os.makedirs(out_dir, exist_ok=True)
+            if not filename:
+                filename = f"{work.id}.epub"
+            fn = os.path.join(out_dir, filename)
+            with open(fn, "wb") as f:
+                f.write(data)
+            return fn
+        finally:
+            # 中间 HTML 目录随包生成后清理（成功/失败都清，避免污染输出/校验目录）
+            shutil.rmtree(tmp, ignore_errors=True)
 
     def _build_chapters(self, tmp: str, html_files: List[str], title: str) -> List[dict]:
         chapters = []

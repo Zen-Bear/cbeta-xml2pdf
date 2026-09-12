@@ -8,6 +8,7 @@ import os
 import re
 import subprocess
 import sys
+from html import escape
 
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import (
@@ -15,7 +16,8 @@ from PySide6.QtWidgets import (
     QFileDialog, QGridLayout, QHBoxLayout,
     QLabel, QLineEdit, QMainWindow, QMenu, QMessageBox, QPlainTextEdit,
     QProgressBar, QPushButton,
-    QRadioButton, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
+    QRadioButton, QTableWidget, QTableWidgetItem, QTextEdit, QVBoxLayout,
+    QWidget,
 )
 
 from pycbeta.gui.panel import (
@@ -99,6 +101,33 @@ def _last_error_line(text):
         if l and not l[0].isspace():
             return l.strip()[:300]
     return lines[-1].strip()[:300]
+
+
+def parse_work_ids_file(path):
+    """从 ID 列表文本解析佛典编号：逐行取 `is_work_id` 命中的 token（去重保序）。
+
+    兼容 `test/mini-test.txt` 形态（`T0349 彌勒菩薩所問本願經`）、逗号/分号/顿号
+    分隔、行首序号与 `#` 注释；无命中返回 []。"""
+    from pycbeta.fetch import is_work_id
+    try:
+        with open(path, encoding="utf-8-sig") as f:
+            text = f.read()
+    except (OSError, UnicodeDecodeError):
+        try:
+            with open(path, encoding="gbk", errors="replace") as f:
+                text = f.read()
+        except OSError:
+            return []
+    out = []
+    for line in text.splitlines():
+        line = line.split("#", 1)[0]
+        for tok in re.split(r"[\s,;，；、]+", line):
+            tok = tok.strip().strip(".").strip()
+            if tok and is_work_id(tok):
+                up = tok.upper()
+                if up not in out:
+                    out.append(up)
+    return out
 
 
 def _row_outcome(render_ok, row_ver, verify_on, render_errors=None):
@@ -210,6 +239,7 @@ class BatchWorker(QThread):
                         ok, paths = self._render_one(xml, fmt, out_dir, tmpcfg,
                                                      out_name=out_name)
                         row_produced += paths
+                        gen_name = os.path.basename(paths[0]) if paths else ""
                         render_ok = render_ok and ok
                         if not ok:
                             render_errors.append(
@@ -219,7 +249,8 @@ class BatchWorker(QThread):
                         if ok and verify_on:
                             self.row_status.emit(idx, f"校验中（{fmt}）…")
                             vr = self._verify_one(xml, fmt, verify_dir or out_dir,
-                                                  tmpcfg, verify_one, wid)
+                                                  tmpcfg, verify_one, wid,
+                                                  gen_name=gen_name)
                             row_ver.append(vr)
                             self.verify_result.emit(vr)
                             done_units += 1
@@ -377,11 +408,24 @@ class BatchWorker(QThread):
         finally:
             self._proc = None
 
-    def _verify_one(self, xml, fmt, out_dir, tmpcfg, verify_one, wid=""):
+    def _verify_one(self, xml, fmt, out_dir, tmpcfg, verify_one, wid="", gen_name=""):
         v = self.opts.verify
-        rec = {"id": wid or os.path.basename(xml), "fmt": fmt, "xml": xml}
+        rec = {"id": wid or os.path.basename(xml), "fmt": fmt, "xml": xml,
+               "gen_name": gen_name}
         try:
-            r = verify_one(xml, fmt, os.path.dirname(os.path.abspath(xml)),
+            eff, disp = fmt, fmt
+            if fmt == "pdf":
+                # PDF 无官方基线：委托管线源格式（docx2pdf→docx / html2pdf→html）
+                from pycbeta.render_pdf import pdf_source_fmt
+                src = pdf_source_fmt(getattr(self.opts, "engine", None),
+                                     getattr(self.opts, "vertical", False))
+                if src in self.opts.formats:
+                    rec.update({"status": "covered",
+                                "detail": f"已由 {src} 校验覆盖（未重复）"})
+                    self.log.emit(f"verify {rec['id']} pdf: covered by {src}")
+                    return rec
+                eff, disp = src, f"pdf→{src}"
+            r = verify_one(xml, eff, os.path.dirname(os.path.abspath(xml)),
                            out_dir,
                            max_diff=int(v.get("maxDiff", 10) or 10),
                            diff_lines=int(v.get("diffLines", 5) or 5),
@@ -389,9 +433,9 @@ class BatchWorker(QThread):
             if isinstance(r, dict):
                 rec.update(r)
             rec["id"] = wid or os.path.basename(xml)
-            rec["fmt"] = fmt
+            rec["fmt"] = disp
             rec["xml"] = xml
-            self.log.emit(f"verify {rec['id']} {fmt}: {rec.get('status')} "
+            self.log.emit(f"verify {rec['id']} {disp}: {rec.get('status')} "
                           f"缺{rec.get('missing')} 多{rec.get('extra')}")
         except Exception as e:
             rec.update({"status": "error", "detail": str(e)})
@@ -400,26 +444,39 @@ class BatchWorker(QThread):
 
 
 class VerifySummaryDialog(QDialog):
-    """转换后校验汇总：通过/失败/无对照计数 + 逐项明细，可打开报告目录。"""
+    """转换后校验汇总：通过（0/0 绿、有差警告色）/失败（红）/无对照（灰）+ 明细。"""
+
+    _KIND = {
+        "ok0": ("通过", "#2e7d32"),
+        "okw": ("通过(有差)", "#1565c0"),
+        "none": ("无对照", "gray"),
+        "covered": ("已覆盖", "gray"),
+        "error": ("异常", "#c62828"),
+        "fail": ("失败", "#c62828"),
+    }
 
     def __init__(self, results, report_dir="", parent=None):
         super().__init__(parent)
         self.setWindowTitle("校验结果汇总")
         self.resize(620, 440)
         self._report_dir = report_dir or ""
-        ok = sum(1 for r in results if r.get("status") == "ok")
-        fail = sum(1 for r in results if r.get("status") in ("fail", "error"))
-        none = sum(1 for r in results if r.get("status") == "no_baseline")
+        counts = {"ok0": 0, "okw": 0, "fail": 0, "none": 0, "covered": 0}
+        for r in results:
+            k = self._rec_kind(r)
+            key = "fail" if k == "error" else k
+            counts[key] = counts.get(key, 0) + 1
         layout = QVBoxLayout(self)
         head = QLabel(f"校验 {len(results)} 项："
-                      f"<b><font color='#2e7d32'>通过 {ok}</font></b> / "
-                      f"<b><font color='#c62828'>失败 {fail}</font></b> / "
-                      f"<font color='gray'>无对照 {none}</font>")
+                      f"<b><font color='#2e7d32'>通过 {counts['ok0']}</font></b> / "
+                      f"<b><font color='#1565c0'>通过(有差) {counts['okw']}</font></b> / "
+                      f"<b><font color='#c62828'>失败 {counts['fail']}</font></b> / "
+                      f"<font color='gray'>无对照 {counts['none']}</font> / "
+                      f"<font color='gray'>已覆盖 {counts['covered']}</font>")
         head.setTextFormat(Qt.RichText)
         layout.addWidget(head)
-        self.text = QPlainTextEdit()
+        self.text = QTextEdit()
         self.text.setReadOnly(True)
-        self.text.setPlainText("\n".join(self._line(r) for r in results))
+        self.text.setHtml("<br>".join(self._line(r) for r in results))
         layout.addWidget(self.text, 1)
         row = QHBoxLayout()
         btn_open = QPushButton("打开报告目录")
@@ -434,20 +491,30 @@ class VerifySummaryDialog(QDialog):
         layout.addWidget(buttons)
 
     @staticmethod
-    def _line(r):
+    def _rec_kind(r):
         st = r.get("status")
+        if st == "no_baseline":
+            return "none"
+        if st == "covered":
+            return "covered"
+        if st == "error":
+            return "error"
         if st == "ok":
-            tag = "通过"
-        elif st == "no_baseline":
-            tag = "无对照"
-        elif st == "error":
-            tag = "异常"
-        else:
-            tag = "失败"
+            return "ok0" if not (r.get("missing") or 0) and not (r.get("extra") or 0) \
+                else "okw"
+        return "fail"
+
+    @classmethod
+    def _line(cls, r):
+        kind = cls._rec_kind(r)
+        tag, color = cls._KIND[kind]
         miss, extra = r.get("missing"), r.get("extra")
         cnt = (f"  缺{miss}/多{extra}" if miss is not None else
                ("  " + str(r.get("detail", "")) if r.get("detail") else ""))
-        return f"[{tag}] {r.get('id','')} {r.get('fmt','')}{cnt}"
+        # 名称优先用生成的目标文件名（gen_name），回退「编号 格式」
+        name = r.get("gen_name") or f"{r.get('id','')} {r.get('fmt','')}".strip()
+        body = escape(f"[{tag}] {name}{cnt}")
+        return f"<span style='color:{color}'>{body}</span>"
 
     def _open_report(self):
         d = self._report_dir
@@ -481,12 +548,18 @@ class MainWindow(QMainWindow):
         src.addWidget(QLabel("输入来源"), 0, 0)
         src.addLayout(mode_row, 0, 1, 1, 3)
         self.path_edit = QLineEdit()
+        self.path_edit.setPlaceholderText("XML 目录 / 单个 .xml / ID 列表 .txt（如 test/mini-test.txt）")
         self.path_edit.textChanged.connect(lambda _t: self.mode_file.setChecked(True))
-        browse = QPushButton("浏览…")
+        browse = QPushButton("目录…")
+        browse.setToolTip("选择 XML 目录（递归扫描其中的 .xml）")
         browse.clicked.connect(self._browse)
+        browse_file = QPushButton("文件…")
+        browse_file.setToolTip("选择单个 .xml，或 ID 列表 .txt（逐行取佛典編號批量转换）")
+        browse_file.clicked.connect(self._browse_file)
         src.addWidget(QLabel("目录/文件"), 1, 0)
-        src.addWidget(self.path_edit, 1, 1, 1, 2)
-        src.addWidget(browse, 1, 3)
+        src.addWidget(self.path_edit, 1, 1)
+        src.addWidget(browse, 1, 2)
+        src.addWidget(browse_file, 1, 3)
         self.ids_edit = QLineEdit()
         self.ids_edit.setPlaceholderText("T0349, X1116, TX0006（逗号/空格分隔）")
         self.ids_edit.textChanged.connect(lambda _t: self.mode_ids.setChecked(True))
@@ -545,6 +618,14 @@ class MainWindow(QMainWindow):
             self.path_edit.setText(d)
             self.mode_file.setChecked(True)
 
+    def _browse_file(self):
+        f, _ = QFileDialog.getOpenFileName(
+            self, "选择 XML 文件或 ID 列表文件", "",
+            "XML 与 ID 列表 (*.xml *.txt);;XML (*.xml);;ID 列表 (*.txt);;所有文件 (*)")
+        if f:
+            self.path_edit.setText(f)
+            self.mode_file.setChecked(True)
+
     def _browse_out(self):
         d = QFileDialog.getExistingDirectory(self, "选择输出目录")
         if d:
@@ -571,8 +652,13 @@ class MainWindow(QMainWindow):
                     jobs.append({"kind": "id", "id": tok})
         else:
             src = self.path_edit.text().strip()
-            if os.path.isfile(src) and src.lower().endswith(".xml"):
-                jobs.append({"kind": "file", "id": os.path.basename(src), "xml": src})
+            if os.path.isfile(src):
+                if src.lower().endswith(".xml"):
+                    jobs.append({"kind": "file", "id": os.path.basename(src), "xml": src})
+                else:
+                    # ID 列表文本（如 test/mini-test.txt）：逐行取佛典編號批量转换
+                    for wid in parse_work_ids_file(src):
+                        jobs.append({"kind": "id", "id": wid})
             elif os.path.isdir(src):
                 from pycbeta.merge import split_paths
                 walked = []

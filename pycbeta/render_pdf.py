@@ -195,6 +195,14 @@ _DOCX_BACKENDS = {
 }
 
 
+def pdf_source_fmt(engine=None, vertical: bool = False) -> str:
+    """PDF 管线的源格式：docx2pdf→'docx'，html2pdf→'html'（与 render_one pdf 分支一致）。"""
+    pipeline = (engine or "").partition(":")[0]
+    if not pipeline:
+        pipeline = "html2pdf" if vertical else "docx2pdf"
+    return "docx" if pipeline == "docx2pdf" else "html"
+
+
 def docx_to_pdf(docx_fn: str, pdf_fn: str, chain=None, used: dict = None) -> str:
     """Convert a .docx (real OOXML footnotes) to PDF.
     chain: 后端链（按序尝试），如 ["word","wps","libreoffice"]；

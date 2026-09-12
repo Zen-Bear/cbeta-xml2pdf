@@ -254,6 +254,10 @@ def work_dir(root: str, work_id: str, title: str = "", presets=None,
              create: bool = False) -> Optional[str]:
     """work 目录解析：已有 `{id}*` 复用；无则 create=True 时建 `{id} {书名}`。
     书名取 catalog（经 source.title_t2s 转换 + 文件名净化）。"""
+    # 防嵌套：root 本身已是该 work 目录（如 GUI/CLI 兜底把 work 目录当根传入）
+    if root and _work_id_from_dirname(
+            os.path.basename(os.path.normpath(root))) == work_id:
+        return root
     hit = _find_work_dir(root, work_id)
     if hit or not create:
         return hit

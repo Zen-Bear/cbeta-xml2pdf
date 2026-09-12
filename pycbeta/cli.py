@@ -12,12 +12,12 @@ import sys
 
 from .parser import P5Parser
 from .render_html import HtmlRenderer
-from .render_pdf import PdfRenderer, docx_to_pdf, DOCX_PDF_CHAIN
+from .render_pdf import PdfRenderer, docx_to_pdf, DOCX_PDF_CHAIN, pdf_source_fmt
 from .render_docx import DocxRenderer
 from .render_md import MdRenderer
 from .render_txt import TxtRenderer
 from .render_epub import EpubRenderer
-from .theme import Theme, PAGE_PRESETS, OUTPUT_PRESETS, ENGINE_PRESETS, load_presets, _PRESETS_PATH
+from .theme import Theme, PAGE_PRESETS, OUTPUT_PRESETS, ENGINE_PRESETS, load_presets, _PRESETS_PATH, load_effective_presets
 from .theme import (load_run_config, resolve_pdf_docx_css,
                     resolve_html_base_css, default_run_path, check_run_placeholders,
                     resolve_effective_config, apply_page_typography)
@@ -661,7 +661,7 @@ def main(argv=None):
         from .verify import normalize as v_norm, extract_text as v_extract, diff_stats as v_diff, find_official as v_find, strip_infos as v_strip_infos, _extract_html_parts as _v_hparts, _norm_official_txt as _v_tnorm, _ann_brackets_from as _v_rb, _head_no_tokens as _v_htoks, _strip_official_no as _v_tstrip
         import datetime, glob as _glob
         try:
-            _presets_full = load_presets(args.config) if args.config else load_presets()
+            _presets_full = load_effective_presets(args.config)
             _vp = _presets_full.get("verify") or {}
         except Exception:
             _presets_full = {}
@@ -730,19 +730,43 @@ def main(argv=None):
             _vname = _default_out_name(
                 w.id, w.metadata.get("title"), getattr(args, "title_t2s", True))
             verify_dir = os.path.join(verify_root, f"{_vname}（验证）")
-            for fmt in formats:
-                # 计算生成档路径（复用 resolve_output；与 render 同一 _used 重放得终态名）
-                out_dir, out_name = resolve_output(xml_fn, fmt, args, w,
-                                                   _used=_used_names)
-                if fmt == "html":
-                    # html 为多文件 Txxx_001.html，全部卷参与比较
-                    gen_paths = sorted(_glob.glob(os.path.join(out_dir, "*.html")))
-                    gen_path = gen_paths[0] if gen_paths else os.path.join(out_dir, f"{w.id}_001.html")
+            for fmt_raw in formats:
+                disp = fmt_raw
+                if fmt_raw == "pdf":
+                    # PDF 无官方基线：委托其管线源格式（docx2pdf→docx / html2pdf→html）
+                    _src = pdf_source_fmt(getattr(args, "engine", None),
+                                          getattr(args, "vertical", False))
+                    if _src in formats:
+                        block.append(f"  [--]  pdf 已覆盖（已由 {_src} 校验）")
+                        continue
+                    # 定位渲染时留下的中间件（与 render 同 _used 重放）
+                    _p_out, _p_name = resolve_output(xml_fn, "pdf", args, w,
+                                                     _used=_used_names)
+                    _p_base = os.path.splitext(_p_name)[0] if _p_name else w.id
+                    fmt = _src
+                    disp = f"pdf→{_src}"
+                    if _src == "docx":
+                        _gp = os.path.join(_p_out, _p_base + ".docx")
+                        gen_paths = [_gp] if os.path.isfile(_gp) else []
+                        gen_path = _gp
+                    else:
+                        gen_paths = sorted(_glob.glob(
+                            os.path.join(_p_out, _p_base + "*.html")))
+                        gen_path = gen_paths[0] if gen_paths else ""
                 else:
-                    gen_path = os.path.join(out_dir, out_name) if out_name else ""
-                    gen_paths = [gen_path] if gen_path else []
+                    fmt = fmt_raw
+                    # 计算生成档路径（复用 resolve_output；与 render 同一 _used 重放得终态名）
+                    out_dir, out_name = resolve_output(xml_fn, fmt, args, w,
+                                                       _used=_used_names)
+                    if fmt == "html":
+                        # html 为多文件 Txxx_001.html，全部卷参与比较
+                        gen_paths = sorted(_glob.glob(os.path.join(out_dir, "*.html")))
+                        gen_path = gen_paths[0] if gen_paths else os.path.join(out_dir, f"{w.id}_001.html")
+                    else:
+                        gen_path = os.path.join(out_dir, out_name) if out_name else ""
+                        gen_paths = [gen_path] if gen_path else []
                 if not gen_path or not os.path.isfile(gen_path):
-                    block.append(f"  [--]  {fmt:5} gen not found: {gen_path}")
+                    block.append(f"  [--]  {disp} gen not found: {gen_path}")
                     continue
                 # 找官方
                 stem = os.path.splitext(name)[0]
@@ -773,7 +797,7 @@ def main(argv=None):
                     from .fetch import ensure_baselines
                     need = {"md": ["txt_notes"], "docx": ["docx", "html"], "txt": ["txt_notes"],
                             "html": ["html"], "epub": ["epub"]}.get(fmt, ["html"])
-                    _presets_af = load_presets(args.config) if args.config else load_presets()
+                    _presets_af = load_effective_presets(args.config)
                     _ebook_af = ((_presets_af.get("source") or {}).get("cbeta_ebook")
                                  or "").strip() or src
                     ensure_baselines(w.id, need, _presets_af, _ebook_af)
@@ -783,7 +807,7 @@ def main(argv=None):
                         if found: official[kind] = found
                     bases = _cli_bases(official)
                 if not bases:
-                    block.append(f"  [--]  {fmt:5} no baseline")
+                    block.append(f"  [--]  {disp} no baseline")
                     continue
                 ours_raw_all = "".join(v_extract(p) for p in gen_paths)
                 docnumber = (w.metadata.get("docNumber") or "").strip()
@@ -912,8 +936,8 @@ def main(argv=None):
                 mark = "[OK]" if ok_any else "[FAIL]"
                 op = "≤" if ok_any else ">"
                 block.append(f"  {mark} (缺{best_mi}/多{best_ex} {op}阈值{args.verify_max_diff})")
-                block.append(f"  {fmt} 【源】{bpath}")
-                block.append(f"  {fmt} 【新】{gen_path}")
+                block.append(f"  {disp} 【源】{bpath}")
+                block.append(f"  {disp} 【新】{gen_path}")
                 block.extend(detail_lines)
             results.append((block_failed, name, block))
             # 每经书独立报告：{输出}/{id 书名}（验证）/report.txt

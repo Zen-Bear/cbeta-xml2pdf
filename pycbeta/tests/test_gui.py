@@ -727,6 +727,26 @@ class TestProducedPaths(unittest.TestCase):
         self.assertEqual(parse_produced_paths(None), [])
 
 
+class TestParseWorkIdsFile(unittest.TestCase):
+    def test_mini_test_like(self):
+        from pycbeta.gui.__main__ import parse_work_ids_file
+        d = tempfile.mkdtemp()
+        p = os.path.join(d, "ids.txt")
+        with open(p, "w", encoding="utf-8-sig") as f:
+            f.write("# comment\n"
+                    "T0349 彌勒菩薩所問本願經\n"
+                    "1. X1116 毗尼日用切要香乳記\n"
+                    "TX0006, YP0019、YP0021\n"
+                    "not-an-id 标题\n"
+                    "T0349\n")
+        self.assertEqual(parse_work_ids_file(p),
+                         ["T0349", "X1116", "TX0006", "YP0019", "YP0021"])
+
+    def test_missing_file(self):
+        from pycbeta.gui.__main__ import parse_work_ids_file
+        self.assertEqual(parse_work_ids_file("nope.txt"), [])
+
+
 class TestLayoutRegroup(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -1060,8 +1080,28 @@ class TestNotesTab(unittest.TestCase):
         finally:
             panel.close()
 
+    def test_note_inline_brackets_enabled_only_inline(self):
+        panel = self._panel()
+        try:
+            self.assertFalse(panel.note_brackets_box.isEnabled())  # 默认 footnote
+            panel.notes_mode.setCurrentIndex(panel.notes_mode.findData("inline"))
+            self.assertTrue(panel.note_brackets_box.isEnabled())
+            panel.notes_mode.setCurrentIndex(panel.notes_mode.findData("endnote"))
+            self.assertFalse(panel.note_brackets_box.isEnabled())
+        finally:
+            panel.close()
+
+    def test_notes_tooltips_wrapped(self):
+        panel = self._panel()
+        try:
+            for box in (panel.notes_mode, panel.brackets_box,
+                        panel.note_brackets_box):
+                self.assertIn("\n", box.toolTip())
+        finally:
+            panel.close()
+
     def test_notes_on_label_and_row(self):
-        from PySide6.QtWidgets import QFormLayout, QHBoxLayout, QLabel
+        from PySide6.QtWidgets import QFormLayout
         panel = self._panel()
         try:
             tab = next(panel.tabs.widget(i)
@@ -1069,24 +1109,38 @@ class TestNotesTab(unittest.TestCase):
                        if panel.tabs.tabText(i) == "注释")
             fl = tab.layout()
             self.assertIsInstance(fl, QFormLayout)
-            # 「注释总开关」标签在显示注释 checkbox 前
-            labels = [fl.itemAt(i, QFormLayout.LabelRole).widget().text()
-                      for i in range(fl.rowCount())
-                      if fl.itemAt(i, QFormLayout.LabelRole) is not None
-                      and fl.itemAt(i, QFormLayout.LabelRole).widget() is not None]
-            self.assertIn("注释总开关", labels)
-            # 注释方式与 inline 括号同一行，且注释方式在左
-            found = False
+
+            def field_widget(fld):
+                if fld is None:
+                    return None
+                if fld.layout() is not None:
+                    lay = fld.layout()
+                    for j in range(lay.count()):
+                        w = lay.itemAt(j).widget()
+                        if w is not None:
+                            return w
+                    return None
+                return fld.widget()
+
+            rows = []
             for i in range(fl.rowCount()):
-                field = fl.itemAt(i, QFormLayout.FieldRole)
-                if field is not None and isinstance(field.layout(), QHBoxLayout):
-                    lay = field.layout()
-                    ws = [lay.itemAt(j).widget() for j in range(lay.count())]
-                    if panel.notes_mode in ws and panel.brackets_box in ws:
-                        found = True
-                        self.assertLess(ws.index(panel.notes_mode),
-                                        ws.index(panel.brackets_box))
-            self.assertTrue(found)
+                lab = fl.itemAt(i, QFormLayout.LabelRole)
+                label = lab.widget().text() if lab and lab.widget() else None
+                rows.append((label, field_widget(fl.itemAt(i, QFormLayout.FieldRole))))
+            labels = [l for l, _ in rows if l]
+            for t in ("正文夹注", "注释总开关", "注释方式", "校注内联括号"):
+                self.assertIn(t, labels)
+            fields = [w for _, w in rows]
+            i_br = fields.index(panel.brackets_box)
+            i_si = fields.index(panel.siddham_box)
+            i_ms = fields.index(panel.notes_on)
+            i_nm = fields.index(panel.notes_mode)
+            i_nb = fields.index(panel.note_brackets_box)
+            # 正文设置（正文夹注/悉昙）排在「注释总开关」之前；悉昙在正文夹注之后
+            self.assertLess(i_br, i_si)
+            self.assertLess(i_si, i_ms)
+            self.assertLess(i_ms, i_nm)
+            self.assertLess(i_nm, i_nb)
             # 注释方式下拉收窄
             self.assertLessEqual(panel.notes_mode.maximumWidth(), 120)
         finally:
@@ -3123,6 +3177,13 @@ class TestVerifyFeedback(unittest.TestCase):
         self.assertEqual(lv, "fail")
         self.assertIn("docx: PermissionError: denied", t)
 
+    def test_format_verify_report_covered(self):
+        from pycbeta.verify import format_verify_report
+        recs = [{"xml": "x.xml", "fmt": "pdf", "status": "covered",
+                 "detail": "已由 docx 校验覆盖（未重复）"}]
+        s = "\n".join(format_verify_report(recs))
+        self.assertIn("pdf 已由 docx 校验覆盖", s)
+
     def test_last_error_line(self):
         from pycbeta.gui.__main__ import _last_error_line
         self.assertEqual(_last_error_line(""), "未知错误")
@@ -3166,16 +3227,32 @@ class TestVerifyFeedback(unittest.TestCase):
         from pycbeta.gui.__main__ import VerifySummaryDialog
         res = [{"id": "T1", "fmt": "docx", "status": "ok",
                 "missing": 0, "extra": 0},
+               {"id": "T4", "fmt": "docx", "status": "ok",
+                "missing": 0, "extra": 2},
                {"id": "T2", "fmt": "docx", "status": "fail",
                 "missing": 3, "extra": 1},
-               {"id": "T3", "fmt": "docx", "status": "no_baseline"}]
+               {"id": "T3", "fmt": "docx", "status": "no_baseline"},
+               {"id": "T5", "fmt": "pdf", "status": "covered",
+                "detail": "已由 docx 校验覆盖（未重复）"},
+               {"id": "TX0006", "fmt": "docx", "status": "ok",
+                "missing": 0, "extra": 0,
+                "gen_name": "TX0006 太虚大师全书．第六编　法相唯识学(第1卷-第6卷).docx"}]
         d = VerifySummaryDialog(res, "")
         try:
             txt = d.text.toPlainText()
             self.assertIn("[通过] T1 docx", txt)
+            self.assertIn("[通过(有差)] T4 docx", txt)
             self.assertIn("[失败] T2 docx", txt)
             self.assertIn("缺3/多1", txt)
             self.assertIn("[无对照] T3 docx", txt)
+            self.assertIn("[已覆盖] T5 pdf", txt)
+            # 有 gen_name 时显示生成的目标文件名
+            self.assertIn("[通过] TX0006 太虚大师全书", txt)
+            # 0/0 绿 / 有差警告 / 失败红
+            html = d.text.toHtml()
+            self.assertIn("#2e7d32", html)
+            self.assertIn("#1565c0", html)
+            self.assertIn("#c62828", html)
         finally:
             d.close()
 
@@ -3250,7 +3327,7 @@ class TestVerifyFeedback(unittest.TestCase):
         w._title_of = lambda x, i, P: ("T0349", "T0349")
         w._out_name_for = lambda *a, **k: "T12n0349.txt"
         w._render_one = lambda x, fmt, o, cfg, out_name=None: (True, [rendered])
-        w._verify_one = lambda x, fmt, o, cfg, vo, wid="": {
+        w._verify_one = lambda x, fmt, o, cfg, vo, wid="", gen_name="": {
             "id": wid, "fmt": fmt, "xml": x, "status": "fail", "missing": 0,
             "extra": 15, "gen_cmp": gcmp, "src_cmp": scmp}
         orig = (M.write_temp_presets, M.write_temp_run)
@@ -3277,6 +3354,37 @@ class TestVerifyFeedback(unittest.TestCase):
         self.assertIn("=== T12n0349.xml", body)
         self.assertIn("[FAIL]", body)
         self.assertIn("缺0/多15", body)
+
+    def test_verify_one_pdf_delegates_to_source(self):
+        from types import SimpleNamespace
+        from pycbeta.gui.__main__ import BatchWorker
+        opts = SimpleNamespace(verify={}, t2s=False, engine="docx2pdf",
+                               vertical=False, formats=["pdf"])
+        w = BatchWorker([], opts, {}, {})
+        calls = {}
+
+        def fake(x, fmt, src, out, **kw):
+            calls["fmt"] = fmt
+            return {"status": "ok", "missing": 0, "extra": 0}
+
+        rec = w._verify_one("x.xml", "pdf", "d", "cfg", fake, "T1")
+        self.assertEqual(calls["fmt"], "docx")          # 委托 docx2pdf 源
+        self.assertEqual(rec["fmt"], "pdf→docx")        # 显示标签
+        self.assertEqual(rec["status"], "ok")
+
+    def test_verify_one_pdf_covered_when_source_selected(self):
+        from types import SimpleNamespace
+        from pycbeta.gui.__main__ import BatchWorker
+        opts = SimpleNamespace(verify={}, t2s=False, engine="docx2pdf",
+                               vertical=False, formats=["pdf", "docx"])
+        w = BatchWorker([], opts, {}, {})
+
+        def fake(*a, **k):
+            raise AssertionError("源码格式已选，不应再调 verify_one")
+
+        rec = w._verify_one("x.xml", "pdf", "d", "cfg", fake, "T1")
+        self.assertEqual(rec["status"], "covered")
+        self.assertIn("docx", rec["detail"])
 
     def test_verify_dir_naming(self):
         from types import SimpleNamespace

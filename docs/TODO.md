@@ -148,6 +148,45 @@
   - CLI 失败：`process_file` 捕获 `OSError` → stderr `{id}: {fmt} 生成失败：{e}`、**继续其余格式**、返回失败计数；`main` 末 `return 1 if render_failed else 0`
   - GUI 解析：`_render_one` stdout/stderr 分流，`_last_error_line` 优先 traceback 异常行 / 关键词行（避免被缓冲的正常 stdout 行顶掉）
   - 验收：`test_cli.TestProcessFileErrors` + `test_gui` 4 项；CLI 实测锁 docx 后 `-f docx,txt` 出 `X1077: docx 生成失败：[Errno 13]...`、txt 仍生成、`EXIT=1`；`--verify` 实测出 `{id 书名}（验证）/report.txt`
+- [x] **已完成** 注释卡布局/提示打磨 + 校验汇总弹窗分级配色（2026-09-11 用户点档）
+  - 对齐：「注释方式」提升为 form 行标签，其 combo 与「校注内联括号」combo 左对齐；「正文夹注」仍在注释方式行右侧
+  - 置灰：`_sync_note_brackets_enabled()`——注释方式≠括号内联时「校注内联括号」禁用；`notes_mode` 变更联动 + `set_options` 回填后同步
+  - tooltip：注释方式/正文夹注/校注内联三条精简为 2 行（显式 `\n`，规避 CJK 单行超宽不折行）；正文夹注补「属原文、不受显示注释总开关控制」
+  - 校验汇总弹窗：汇总计数与逐项明细分级配色——0/0 通过绿 `#2e7d32`、通过但缺/多≠0 蓝 `#1565c0`（标签「通过(有差)」）、失败/异常红 `#c62828`、无对照灰；明细由 `QPlainTextEdit` 改 `QTextEdit`(HTML)
+  - 验收：`test_gui.TestNotesTab` 2 项 + `test_verify_summary_dialog` 扩展
+- [x] **已完成** PDF 校验跳过 + EPUB 临时目录清理 + 汇总弹窗有差改蓝（2026-09-11 用户点档）
+  - PDF：官方无 PDF 基线，`verify_one(fmt="pdf")` 直接返回 `status="no_baseline"`（`detail` 说明正文由 docx/html 覆盖）；CLI `--verify` 同步跳过（原来会把二进制 PDF 当文本读、且会走到 `generate_formal` 抛 `unknown format` 标异常）；报告 `[--] pdf no baseline`
+  - `_epub_tmp`：`render_epub.render_work` 加 `try/finally` + `shutil.rmtree(tmp, ignore_errors=True)`，中间 HTML 目录生成后即清（成功/失败都清），不再污染输出根与校验目录
+  - 汇总弹窗「通过(有差)」色由橙 `#ef6c00` 改蓝 `#1565c0`
+  - 验收：`test_verify.TestPdfNoBaseline` + `test_md_epub.test_epub` 断言无 `_epub_tmp` 残余
+- [x] **已完成** PDF 校验委托管线源格式 + 「已覆盖」态（2026-09-11 用户点档：A + 灰提示 + 保留中间件）
+  - `render_pdf.pdf_source_fmt(engine, vertical)`：docx2pdf→docx / html2pdf→html（与 render_one pdf 分支判定一致）
+  - GUI `_verify_one`：pdf 且源格式未选中 → 委托 `verify_one(源格式)`，显示 `pdf→docx|html`；源格式已选中 → `status="covered"`（灰「已覆盖」，不重复）
+  - CLI `--verify`：pdf 未选中源格式 → 用渲染留下的中间件（`{id 书名}.docx` / `{id 书名}*.html`）按源格式比对，列 `pdf→docx`；已选中 → `[--] pdf 已覆盖（已由 docx 校验）`
+  - `VerifySummaryDialog`：新增 `covered` 灰态与「已覆盖 N」计数，不计入「无对照」；`format_verify_report` 增 covered 行
+  - 中间件保留现状（不清理）：`{id 书名}.docx` / `{id 书名}.html` 留在输出根
+  - 验收：`test_gui.TestVerifyFeedback` 3 项（委托/已覆盖/报告 covered）+ 对话框 covered 项；CLI 实测 `-f pdf --verify` 出 `pdf→docx`、`-f pdf,docx --verify` 出 `[--] pdf 已覆盖`
+- [x] **已完成** epub 基线落错目录修复 + 注释卡分组重排（2026-09-11 用户点档）
+  - 根因：GUI 校验把 `tmpcfg`（run.json）传给 `verify_one`，而 `verify_one` 用 `load_presets(config_path)` 直读 → run.json 无 `source` → `ebook` 回退 `source`（=work 目录）→ `work_dir(workdir,…)` 嵌套建 `{work}/{id}/epub/`
+  - 修：`theme.load_effective_presets(path)`（run.json 含 RUN_KEYS → `load_run_config`+`resolve_effective_config` 解算；否则 presets 直读）；`verify_one` 的 cfg/annotations/inline_brackets/auto_fetch 取值全部改用它（顺带修好 run.json 下 annotations/verify 配置不被读取）
+  - 防呆：`fetch.work_dir` 若 `root` 本身即该 work 目录（basename 的 work id 匹配）直接返回，杜绝 `{work}/{id}` 嵌套
+  - 手工迁移已落错的一份：`X1077 准提净业\X1077\epub\X1077.epub` → `X1077 准提净业\epub\X1077.epub`
+  - 注释卡重排（与「注释总开关」解耦）：`正文夹注`（第1行）→ `正文显示悉昙字和读音`（第2行）→ `注释总开关`（第3行）→ 脚注每页/压制标题 → 注释方式 → 校注内联括号；三 combo 用 `label+_wrap(combo)` 左对齐
+  - 验收：`test_fetch.TestWorkDir.test_root_is_workdir_no_nesting` + `test_theme.TestLoadEffectivePresets` 2 项 + `test_gui.TestNotesTab.test_notes_on_label_and_row` 重写
+- [x] **已完成** html 校验两处修复：官方 head No. 空白锚定 + `<cb:sg>` 括号（2026-09-11 用户点档）
+  - issue1：`verify._strip_official_no` 原 `^token` 无空白锚定，官方 html 提取行前导空格（`"  No. 1077-A …"`）→ head 令牌剥不掉。改 `^([ \t\u3000]*)token[ \t\u3000]*` 替换为 `\1`（保留前导空白、连带 token 后空白），与生成侧 `strip_head_no` 同形；CLI 校验同源修复
+  - issue2：`render_html._render_e` 的 `_render_misc` 标签清单缺 `"sg"`，`<cb:sg>音<g>𫬠</g></cb:sg>` 落到默认分支丢括号（`㘕音𫬠`）。清单加 `"sg"` → `㘕(音𫬠)`，与 docx/txt/md 及官方半角一致；epub/pdf(html2pdf) 复用同渲染器一并修好
+  - 验收：`test_verify.TestStripOfficialNo.test_official_leading_ws_kept` + `test_render.TestSgParens` 2 项；实测 `verify_one('html', config_path='run.json')` 官方 compare 不含 `No. 1077-A`、生成 compare 含 `(音`
+- [x] **已完成** GUI 目录/文件：支持选 ID 列表文件批量（2026-09-11 用户点档）
+  - 新增 `文件…` 按钮（`QFileDialog.getOpenFileName`，过滤 `*.xml *.txt`）；`目录…` 保留目录选择
+  - `gui.__main__.parse_work_ids_file(path)`：逐行取 `is_work_id` 命中的 token（去重保序），兼容 `test/mini-test.txt`（`T0349 彌勒…`）、逗号/分号/顿号、行首序号、`#` 注释；utf-8 失败回退 gbk
+  - `_collect_jobs`：输入为 `.xml` → 单文件；为其他文件 → 按 ID 列表生成 `kind="id"` 批量（材料化/自动下载）；`path_edit` placeholder/按钮 tooltip 更新
+  - 验收：`test_gui.TestParseWorkIdsFile` 2 项
+- [x] **已完成** 校验汇总弹窗显示生成目标文件名（2026-09-11 用户点档）
+  - `BatchWorker.run` 取本格式实际产物 `paths[0]` 的 basename 作 `gen_name` 传入 `_verify_one`（pdf 委托时即 pdf 产物名）
+  - `VerifySummaryDialog._line`：`[{tag}] {gen_name}{cnt}`，无 `gen_name` 回退「{id} {fmt}」；例 `[通过] TX0006 太虚大师全书…docx 缺0/多0`
+  - 验收：`test_verify_summary_dialog` 增 gen_name 断言
+  - 顺带：`TestRenderYP0019` 输入 XML 兼容官方名（`YP13n0019.xml`）且官方 html 基线随新布局在 `{work}/html/`、缺失则 skip（外部数据重材料化，非代码回归）
 - [x] **已完成** 还原出厂确认 + 校验参数持久化默认开 + 报告差异行数改名（2026-09-11 用户点档）
   - 还原出厂：`panel._on_reset` 执行前弹警告确认（「当前配置会被还原为出厂配置」，确定/取消；取消不动作）
   - 校验持久化：出厂 `config.json` verify 块补 `enabled: true`（默认打开）；`set_options` 缺键默认亦 True；`get_options`/`_presets_merged` 本就 roundtrip 开关/阈值/差异行数/自动下载/卷限定

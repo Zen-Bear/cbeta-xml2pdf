@@ -180,10 +180,27 @@ def _strip_json_comments(text: str) -> str:
 
 
 def load_presets(path: str = _PRESETS_PATH) -> Dict[str, dict]:
-    """Load presets JSON (支持 // 和 /* */ 注释): {"pages": {...}, ...}."""
+    """Load presets JSON (支持 // 与 /* */ 注释): {"pages": {...}, ...}."""
     with open(path, encoding="utf-8") as f:
         text = f.read()
     return json.loads(_strip_json_comments(text))
+
+
+def load_effective_presets(path: Optional[str] = None) -> Dict[str, dict]:
+    """宽容读取配置：run.json（含任一 RUN_KEYS 槽）→ 按 5 槽合并后的 presets；
+    否则按 presets JSON 直读。path=None → 出厂 config.json。
+
+    供既可能收到 run.json 又可能收到 presets 文件的调用方（如 verify_one）。"""
+    if not path:
+        return load_presets()
+    try:
+        raw = load_presets(path)
+    except (OSError, ValueError):
+        return load_presets()
+    if isinstance(raw, dict) and any(k in raw for k in RUN_KEYS):
+        run = load_run_config(path)
+        return resolve_effective_config(run, os.path.dirname(os.path.abspath(path)))
+    return raw
 
 
 try:

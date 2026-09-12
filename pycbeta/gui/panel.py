@@ -998,49 +998,60 @@ class XmlOptionsPanel(QWidget):
     def _tab_notes(self):
         w = QWidget()
         form = QFormLayout(w)
+
+        def _wrap(widget):
+            h = QHBoxLayout()
+            h.addWidget(widget)
+            h.addStretch(1)
+            return h
+
+        # 正文设置（与「注释总开关」无关，排在前面）
+        self.brackets_box = self._combo([("全角（）", "fullwidth"), ("半角()", "halfwidth")],
+                                        "fullwidth")
+        self.brackets_box.setToolTip(
+            "正文夹注（<note place=\"inline\">，属原文）：括号形态\n"
+            "与校注内联、注音括号独立；不受「显示注释」总开关控制")
+        form.addRow("正文夹注", _wrap(self.brackets_box))
+        self.siddham_box = self._check("正文显示悉昙字和读音", checked=True)
+        self.siddham_box.setToolTip(
+            "勾选后正文显示悉昙字和读音（如 种子字(raṃ)）；"
+            "未安装悉昙字体Ranjana时显示替代字形（如歾）。"
+            "不勾选则正文不显示，脚注不受影响")
+        form.addRow("", self.siddham_box)
+
+        # 注释总开关及其从属项
         self.notes_on = self._check("显示注释", checked=True)
         form.addRow("注释总开关", self.notes_on)
         self.per_page_box = self._check("脚注每页重新编号", checked=True)
         self.per_page_box.setToolTip("勾选后注释序号每页从 [1] 重排；不勾选则全文连续编号")
         self.title_notes_box = self._check("压制卷名/品名校勘注码")
         self.title_notes_box.setToolTip("勾选后卷名/品名标题后的上标注释序号隐藏，正文注码不受影响")
-        self.siddham_box = self._check("正文显示悉昙字和读音", checked=True)
-        self.siddham_box.setToolTip(
-            "勾选后正文显示悉昙字和读音（如 种子字(raṃ)）；"
-            "未安装悉昙字体Ranjana时显示替代字形（如歾）。"
-            "不勾选则正文不显示，脚注不受影响")
         form.addRow("", self.per_page_box)
         form.addRow("", self.title_notes_box)
-        form.addRow("", self.siddham_box)
         self.notes_mode = self._combo(
             [("页底脚注", "footnote"), ("文末尾注", "endnote"), ("括号内联", "inline")],
             "footnote")
         self.notes_mode.setToolTip(
-            "注释方式（output.notes）：footnote=页底脚注（docx/pdf），"
-            "endnote=文末尾注，inline=括号内联；html/epub/md/txt 仅区分 inline 与否")
+            "注释方式：页底脚注（docx/pdf）/ 文末尾注 / 括号内联\n"
+            "html/epub/md/txt 只区分“是否括号内联”；校验固定用脚注/尾注，不受此影响")
         self.notes_mode.setMaximumWidth(110)
-        self.brackets_box = self._combo([("全角（）", "fullwidth"), ("半角()", "halfwidth")],
-                                        "fullwidth")
-        self.brackets_box.setToolTip("正文夹注（<note place=\"inline\">，原文）括号形态，与校注内联独立")
+        form.addRow("注释方式", _wrap(self.notes_mode))
         self.note_brackets_box = self._combo(
             [("〔〕", "corner"), ("[]", "square"),
              ("全角（）", "fullwidth"), ("半角()", "halfwidth")], "fullwidth")
         self.note_brackets_box.setToolTip(
-            "校注内联（注释方式=括号内联 时的脚注/校勘）括号形态，与正文夹注独立；"
-            "〔〕/[] 可与正文夹注（）明显区分")
-        row = QHBoxLayout()
-        row.addWidget(QLabel("注释方式"))
-        row.addWidget(self.notes_mode)
-        row.addSpacing(12)
-        row.addWidget(QLabel("正文夹注"))
-        row.addWidget(self.brackets_box)
-        row.addStretch(1)
-        form.addRow("", row)
-        nb = QHBoxLayout()
-        nb.addWidget(self.note_brackets_box)
-        nb.addStretch(1)
-        form.addRow("校注内联括号", nb)
+            "注释方式=“括号内联”时校注的括号（默认全角）\n"
+            "〔〕/[] 用于与正文夹注（）区分")
+        form.addRow("校注内联括号", _wrap(self.note_brackets_box))
+        self.notes_mode.currentIndexChanged.connect(
+            lambda _i: self._sync_note_brackets_enabled())
+        self._sync_note_brackets_enabled()
         return w
+
+    def _sync_note_brackets_enabled(self):
+        """仅注释方式=括号内联时「校注内联括号」可编辑。"""
+        self.note_brackets_box.setEnabled(
+            self.notes_mode.currentData() == "inline")
 
     def _tab_ann(self):
         w = QWidget()
@@ -1380,6 +1391,7 @@ class XmlOptionsPanel(QWidget):
                 o.get("note_inline_brackets") or o.get("inline_brackets", "fullwidth"))
             if j >= 0:
                 self.note_brackets_box.setCurrentIndex(j)
+            self._sync_note_brackets_enabled()
             an = opts.annotations or {}
             self.ann_on.setChecked(bool(an.get("enabled", False)))
             for box, key, default in ((self.ann_scheme, "scheme", "pinyin"),

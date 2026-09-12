@@ -70,6 +70,14 @@ class TestWorkDir(unittest.TestCase):
         os.makedirs(old)
         self.assertEqual(work_dir(d, "T0349", "新书名", _presets()), old)
 
+    def test_root_is_workdir_no_nesting(self):
+        # root 本身已是该 work 目录时直接返回，避免基线落到 {work}/{id}/... 嵌套
+        d = tempfile.mkdtemp()
+        wd = os.path.join(d, "T0349 測試經")
+        os.makedirs(wd)
+        self.assertEqual(work_dir(wd, "T0349", "測試經", _presets()), wd)
+        self.assertFalse(os.path.isdir(os.path.join(wd, "T0349")))
+
     def test_not_confuse_longer_id(self):
         d = tempfile.mkdtemp()
         os.makedirs(os.path.join(d, "T0349a 他经"))

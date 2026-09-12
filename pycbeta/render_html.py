@@ -461,7 +461,7 @@ class HtmlRenderer:
         if tag == "form":
             return f'<p class="form">{self._render_nodes(e.children)}</p>\n'
         if tag in ("entry", "def", "term", "foreign", "hi", "seg", "quote", "ref", "title",
-                   "yin", "zi", "unclear", "choice", "corr", "sic", "reg", "table", "row", "cell",
+                   "yin", "zi", "sg", "unclear", "choice", "corr", "sic", "reg", "table", "row", "cell",
                    "figure", "graphic", "anchor", "bibl", "biblScope", "sp", "event", "date", "idno",
                    "space", "pb", "lb", "mulu", "milestone"):
             return self._render_misc(e)
