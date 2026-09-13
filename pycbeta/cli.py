@@ -688,7 +688,7 @@ def main(argv=None):
 
     # --verify：复用 pycbeta/verify.py 模块化能力，供 GUI 调用同一入口
     if args.verify:
-        from .verify import normalize as v_norm, extract_text as v_extract, diff_stats as v_diff, find_official as v_find, strip_infos as v_strip_infos, _extract_html_parts as _v_hparts, _norm_official_txt as _v_tnorm, _ann_brackets_from as _v_rb, _head_no_tokens as _v_htoks, _strip_official_no as _v_tstrip
+        from .verify import normalize as v_norm, extract_text as v_extract, diff_stats as v_diff, find_official as v_find, strip_infos as v_strip_infos, _extract_html_parts as _v_hparts, _norm_official_txt as _v_tnorm, _ann_brackets_from as _v_rb, _head_no_tokens as _v_htoks, _strip_official_no as _v_tstrip, _mark_span as _v_mark
         import datetime, glob as _glob
         try:
             _presets_full = load_effective_presets(args.config)
@@ -943,16 +943,16 @@ def main(argv=None):
                         detail = f"      → {bkind} 通过: {why}"
                         if total>0 and ctx:
                             for idx,(tag,i1,i2,j1,j2) in enumerate(ctx[:args.verify_diff_lines],1):
-                                a_snip = ours[max(0,i1-10):i1+40].replace("\n","")
-                                b_snip = theirs_n[max(0,j1-10):j1+40].replace("\n","")
+                                a_snip = _v_mark(ours, i1, i2)
+                                b_snip = _v_mark(theirs_n, j1, j2)
                                 detail += f"\n      {idx}. 【源】{b_snip}\n         【新】{a_snip}"
                         detail_lines = [detail]
                         break
                     else:
                         lines=[]
                         for idx,(tag,i1,i2,j1,j2) in enumerate(ctx[:args.verify_diff_lines],1):
-                            a_snip = ours[max(0,i1-10):i1+40].replace("\n","")
-                            b_snip = theirs_n[max(0,j1-10):j1+40].replace("\n","")
+                            a_snip = _v_mark(ours, i1, i2)
+                            b_snip = _v_mark(theirs_n, j1, j2)
                             lines.append(f"      {idx}. 【源】{b_snip}\n         【新】{a_snip}")
                         snippet = "\n".join(lines) if lines else ""
                         detail = f"      → {bkind} 失败: 缺{mi}字(生成档缺失) / 多{ex}字(生成档多出) 合计{total} >阈值{args.verify_max_diff}"

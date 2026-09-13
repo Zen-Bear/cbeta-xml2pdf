@@ -188,6 +188,19 @@
   - 另答疑：CSS 删键≠继承 body——`DEFAULT_THEME` 先打底（`p: 1.8`，`theme.py:120`），删键只是不覆盖；继承分支只对无默认值的标签生效；`apply_page_typography` 另有"p 没亲笔写过跟页 body 走"的页级跟随（有 body_line_height 的纸才触发，verify 路径不调）。结论：行距保持显式写法
   - 验收：`test_docx.TestDivExtraLineHeight` 3 项；X59 实证壇法段落只剩样式引用、无内联 line；出厂值契约测试同步新值（p 1.5→1.4、head 上边距 1em→0.5em）后全量 629 green
   - 后续（2026-09-12 用户调参）：`div.div-xu` margin-bottom 0.3em→1em；`test_body_rhythm_uniform` 的 `w:after` 断言 72→240 同步，全量回绿
+- [x] **已完成** 注释补 cf（confer 参考）+ 西文字体（--font-latin）进 run rFonts（2026-09-12 用户点档）
+  - cf 取证：官方三格式不同——html/txt 只为 add 型注追加 `(cf. a; b)`（无前导空格），docx 为全注型追加 ` (cf. a; b)`（前导空格）；我们此前 docx/txt/md 全缺
+  - docx：`_reset_state` 建 `_app_by_n`（+ `_iter_all`）；`_cf_run` 追加 ` (cf. a; b)`（`; ` 连接；inline 模式随 note-inline 标签，否则 footnote）；`_render_noteref`/`_render_app` 接入
+  - txt/md：`_cf_suffix` 仅 add 型注追加 `(cf. a; b)`（对齐官方 text-with-notes；mod/orig 不加）
+  - 西文：`theme.docx_run(..., latin=)`——`w:ascii/hAnsi` 走 latin（`--font-latin`，cli 已解析），`w:eastAsia` 仍首个中文名；`render_docx` 三处（`_run_rpr`/`_rt_rpr`/`_style`）传 `self.latin_font`；修掉「脚注样式西文字体=使用中文字体」
+  - 追修（2026-09-12 用户反馈 `舍衛【大】，～Sāvatthī` 的 ā/ī 未转西文）：`w:hint="eastAsia"` 会把 **East Asian Width=A 的拉丁字母**（ā U+0101/ī U+012B 等带附加符号者）判给 eastAsia 中文字体；已去掉 hint（`docx_run` 不再输出），按 Unicode script 走 hAnsi=西文字体，CJK 全角标点（EAW=W/F）仍走 eastAsia。显式字体 run（gaiji/读音 `ascii=eastAsia`）与 WPS EQ 域 rPr 的 hint 无视觉影响，未动
+  - 校验无影响：`normalize` 已剥 `\(cf\.[^)]*\)`，cf 增减不改缺/多
+  - 验收：`test_docx.TestNoteCf` 4 + `TestLatinFont` 2 + `test_txt.TestNoteCfTxtMd` 3；T01 真实数据内存断言 `0006001`（两 cf ` (cf. 楊郁文…; K17n0647_p0820a22)`）、`0001b0201`（` (cf. Q17_p0302a30)`）；X59 docx 实测 3 处 cf + footnote 样式 ascii=Calibri；全量 638 green
+- [x] **已完成** EQ 域继承上下文样式 + docx 注音按原书页重注（2026-09-12 用户点档）
+  - Q3 根因：`_eq_field` 的 begin/instr/end 只带最小 rPr（rFonts+lang），WPS/Word 用域 run 格式渲染域结果 → 夹注内「般若」（X59 `第九手持般若經卷`）等注音掉成正文样式；修法 `_eq_field(..., base_rpr)` 注入 `_run_rpr(tags)`（去 `<w:rPr>` 壳）+ 原 `w:lang`，`Font:`/`hps` 不动。`ruby`/`inline` 模式本就带 tags，无需改
+  - Q2：`repeat=page` docx 专属改为**按原书页 `<pb>` 重置已注集合**（`_render_node` Pb 分支 `_page_repeat → _ann_seen=set()`），翻页重注；html/epub（每卷文件）、md/txt（整篇）维持现状；无 `<pb>` 回退到智能分页单元/按卷（split）。GUI 第三项改「每页只注首次」+ tooltip；`config.json annotations.repeat` 注释同步
+  - Q1：段前/段后**保持磅**（`w:before`，与 PDF/HTML 的 em 语义一致），不改行；官方 styles.xml 虽用 `beforeLines`，但官方 document.xml 也用磅，且行换算受 line-height 影响会偏离
+  - 验收：`test_annotate.TestRender.test_docx_field_inherits_context_style` + `test_docx.TestAnnotationPerPage` 3 项；全量 642 green
 - [x] **已完成** 竖排取消居中（title/head/juan/pin），横排居中（2026-09-11 用户点档；byline 已另做）
   - 机制：CSS 文件即事实来源——`pdf_docx.css` 加 `body.vertical-rl h1.title/p.head/p.juan/p.pin {text-align:left}` 块（横排无该 class 恒惰性；整套替换主题需自带）；`theme.VERTICAL_UNCENTER` 名单 docx/pdf 共用；docx `_para` 三分支内联 `<w:jc left/>` 覆盖（竖排 left 即顶部）；pdf `_wrap` 竖排加 body class
   - 探针实证（Chromium）：vertical-rl 下 `left`==`start`==顶部（y=1），`center` 居中，`end` 落底——无需 fallback
@@ -383,11 +396,40 @@
   - 验收：新 `test_figures.py` 17 项（含 docx 包内 media/rels/drawing + 三部件 lxml 良构断言——曾抓到漏 `</a:xfrm>` 致 Word 打不开）；X59 实测 html 4 张 base64 零占位、docx 4 media 良构、raw 下载 6557B 与基线一致；缺图策略=警告+占位不中断（用户确认）
   - 追修（2026-09-11 用户反馈 X1077 docx/pdf 无图）：根因是 `<figure>` 在 CBETA 里常**内联于 `<p>`**，而 `_render_graphic` 恒包 `<w:p>` → 非法嵌套，WPS 静默丢弃段内图片（最小顶层用例正常，故对照实验才暴露）。修法：`_in_para` 上下文（`_render_para_children` + `_render_tagged` 内统一标记，覆盖 p/pre/head/byline/pin/form/def/verse/cell/脚注/夹注），段内只出 run 级 drawing，块级才包段。实测 X59 pdf（WPS）94 页 4 图；另发现卷名/mulu 区 8 处既有 `title` 嵌套（文字完整，与图片无关，未动）
   - 追修2（2026-09-11）：折叠按钮改绿底白字（各态 stylesheet 同色 + `ButtonText` 调色板设白，箭头靠方向区分；像素级单测锁定）；图片 100% 上限（审计确认只缩小不放大 + `jpeg_size` SOF 解析 + 1x1 原生/2000px 等比压单测锁定）
+- [ ] **CBETA 校改字标红 `corr`（2026-09-12 用户点档：先记录不修改）**
+  - 现象/取证：官方**同一颗字**在 docx 用字符样式 `corr` 红 `FF0000`（`<w:rStyle w:val="corr"/>`，T0001_001.docx 全文 12 处；styles.xml `corr` → color FF0000）；官方 **epub** 用 `<span class='corr'>` + `cbeta.css` 的 `.corr{color:red}`；官方 **html 不标红**（全库扫描 0 处 `corr`/`cbeta` span）；txt 无颜色
+  - 判定规则：正文所采用的读法 `app/lem` 的 `@wit` 含 **`#wit.cbeta`**（IR 解析为 `app.lem.wit` 含 `【CB】`/`【CB-…】`）→ 该校改字标红；lem 为 `#wit.orig`（如 `['【大】']`）不标。例：`0005009` lem `['【CB】','【宮-CB】']` → 官方红；`0006002` lem `['【大】']` → 不红。T01 lem 含 `【CB` 213 处，juan1 与官方 12 处量级吻合
+  - 我方现状：判定信息已具备（`app.lem.wit`），但正文夹在 `<anchor beg.../>…<anchor end.../>` 之间，parser 丢弃 `end` 锚点且不记区间 → IR 无法定位校改字；三渲染器均无 `corr`，golden 只有未用的 `.cbeta`、无 `.corr`
+  - 拟定实施（范围待定，未做）：parser `_traverse` 维护 corr 区间栈（`beg` 且 lem 含 `#wit.cbeta` 开，匹配 `end` 闭），包合成 IR 节点 `E(tag="corr", children=[…])`（App 一并包入、正文渲染为空无害；建议按**原始 `#wit.cbeta` id** 判，不依赖 label）；docx → 红字（官方字符样式或主题色内联）；epub → `span.corr` + golden `.corr{color:red}`；html/md/txt → 只渲染子节点不产生 span（与官方 html/txt 一致、保 golden 对照）；死命令三件套：`TAG_SELECTOR["corr"]="span.corr"` + `EDITABLE_ROWS ("span.corr","CBETA校改")` + CSS 规则
+  - 待用户定：实现范围（docx+epub 对齐官方 / 六格式全标红(html 偏离官方) / 暂不做）与判定键（原始 `wit.cbeta` id（推荐）/ 解析后 `【CB` label）
 - [ ] **元素覆盖扫描（2026-09-10 三项并查，决议：都不加行，只记录）**
   - test XML 19 文件 body 普查：左栏缺失但可见 = `l`（13/4819）/`caesura`（11/4747）/`cb:t/tt`（T01/X59n1077）/`list/item`（3 文件）/正文内 `title`（6/126）/`hi/seg[border]/note[hide]`/`space`（4/430）/`yin/zi/sg+entry/term`（X59/X60）/`figure/graphic`（3/74）/`g`（12/947）+`app/lem/rdg`/`div@type=orig/commentary/jing/pin/fen/w/other`（other 1808，左栏仅 xu/note）；`rend` 四行 19 文件零命中无样张；结构性无需调 = lb(70125)/pb/milestone/cb:juan/jhead/docNumber/mulu(2087)/anchor(9837)
   - schema（cbeta-p5.rnc）对照：唯一值得加的是 `table/row/cell`（走 bip-table，左栏无行）——本次不加；`list` 低优先级；其余透传/功能性不值得单列；header 无行系正确忽略
 - [ ] **字体扫描（2026-09-10，决议：只记录不动链）**
   - 真非系统：`cbetarc`（golden 网络字体，离线失效）/`CBETA Supplement`（随仓，缺则回退失效）/`Ranjana`/`Siddam`（随仓）/`Songti TC`（macOS）/`朝华标题B/ZhaohuaMinB`（my.css 用户预设，**免费商用**（用户提供知乎链接，本机随 WPS 已装），非系统自带，他机需自装）；回退链已有覆盖
-  - 本机缺但属系统字（本机简体 Win 环境问题）：`新細明體/PMingLiU`/`標楷體/DFKaiShu`/`隸書/LiSu`——繁体首选链本机悬空，靠 Word 自身回退；根治须手动装字（语言包/繁体机拷贝），不动 CSS（铁律）
+  - 本机缺但属系统字（本机简体 Win 环境）：`新細明體/PMingLiU`/`標楷體/DFKaiShu`/`隸書/LiSu`——繁体首选链本机悬空，靠 Word 自身回退；根治须手动装字（语言包/繁体机拷贝），不动 CSS（铁律）
   - 系统自带已装：Calibri/Times/Arial/宋体/SimSun/黑体/楷体/仿宋/微軟正黑體/YaHei/ExtB/ExtG（简体链全绿）
   - 落盘（2026-09-10）：`docs/安装说明.md` §3 后追加 §3.1 清单 + §3.2 三档指引（纯文档，零代码）
+- [x] **已完成** 验证报告差异定位：`〖…〗` 精确标记 + 源/生成档行号（2026-09-13 用户点档：缺0/多69 怎么理解、差异难定位）
+  - 口径答疑：`缺=官方有而生成档缺失`（`missing`）/ `多=生成档有而官方没有`（`extra`）；`缺0/多69` 即生成档多出 69 字、无缺失
+  - 旧显示只给变更点前后 10/40 字窗口、不标变更段、无位置信息；新：`_mark_span` 用 opcode 实际区间 `i1:i2/j1:j2` 标出 `〖…〗`（插入/删除侧空括号），上下文前后各 18 字
+  - 行号：`normalize_with_lines` 逐行归一 + 字符→行号映射（跨行括号等罕见不一致回退空映射），`_display_text` 统一 compare 落盘文本与映射基准（剥 `[..]`/页码令牌 + 压缩空行），故行号即 `*_compare_*.txt` 的 TXT 行号；报告每条差异先出 `N.（源比较第X行，新比较第Y行）`，源/新路径下各带 `【源比较】/【新比较】行号对齐 <cmp 文件名>`（2026-09-13 用户点档：行号非 DOCX 行、去末行提示）
+  - 双入口同步：`format_verify_report`（GUI 报告/GUI 汇总）与 CLI `--verify` 片段（CLI 无落盘行号，仅 `〖〗` 标记）
+  - 验收：`test_verify.TestNormalizeWithLines` 2 + `TestReportCtxLocation` 3；全量 647 OK（skipped=1）
+- [x] **已完成** 修复 docx/md/txt 校勘注重复：`star_removed` app 不在自身锚点重渲 corresp 注（2026-09-13 用户点档）
+  - 现象：`nkr_note_add_0021b2101` + `beg0021b2101` 同处出现两条注——add 注 `琉璃【CB】【麗-CB】，瑠璃【大】，流離【聖】 (cf. …)` 与 `琉璃【大】＊，流離【聖】＊ (cf. …)`（后者为 `corresp="#0021019"` 的 `star_removed` app 重渲了别处注 0021019）
+  - 取证（官方 T0001_003.docx）：正文 `[FN89]琉璃城水精門，水精城[FN90]琉璃門` 仅两条；FN89=`琉璃【大】＊，流離【聖】＊`（注 0021019 原位）、FN90=add 注 + cf；`star_removed` app 只贡献 cf 给对应 add 注，不在自身锚点出注（T0001_012 FN73/FN74 同构）
+  - 修法：`_render_app` 首判 `app.atype == "star_removed"` → 返回 `""`；docx/txt/md 三渲染器同改（html/epub 本就忽略 App 节点，无重复）
+  - 保留：普通 `corresp` app（`beg_N` 重出机制）照旧渲染；cf 仍由 `_cf_run(note)` 从 `_app_by_n[n]` 取 star_removed 的 lem 追加
+  - 验收：`test_docx.TestAppStarRemoved` 2 + `test_txt.TestAppStarRemoved` 2；T01 实渲 `水精城[FN509]琉璃門` 仅一条 add 注（含 cf），FN508 为注原位；全量 651 OK（skipped=1）
+- [x] **已完成** 拆分校勘：整体 orig 注被 mod(a/b) 取代，docx/txt/md 不再单出（2026-09-13 用户点档：`0028009` 我们 2 条、官方 1 条）
+  - 现象：`nkr_note_orig_0028009`（整体）+ `nkr_note_mod_0028009a/b`（拆分）同处；我们按精确 n 各自生成 NoteRef，`_pick_note` 只在同 n 内 mod>orig，故整体 orig 未被取代、`其積` 处多出一条脚注
+  - 官方依据：`https://archive2.cbeta.org/en/format/jk_help.php`「小寫的 a、b，是指 CBETA 將一個校勘條目拆成二組」（大寫 A、B 為內文兩處相同編號，不合併）
+  - 取证：官方 `T0001_004.docx` 正文 `燃[FN120]其積，[FN121]火又`（仅 mod a/b）、官方 txt `[9a]/[9b]`；官方 html `T0001_004.html` 仍列 `n0028009`+`a`+`b`（三條）；孤立 orig（`0001001` 此序）官方 docx FN1 仍出
+  - 修法：`model.suppressed_orig_notes(notes_by_n)`（base=去尾部小写 a/b；该 n 无 mod 且 base 有 mod → 抑制）；`render_docx/txt/md` 缓存 `_orig_suppressed`，`_render_noteref` 与 `_render_app` corresp 分支对 orig 命中即返回空；html/epub/pdf（html 管线）不调用，保持官方 html 全列
+  - 验证：`test_docx.TestSplitLemmaOrig` 2 + `TestSuppressedOrigNotes` 3、`test_txt.TestSplitLemmaOrig` 4（txt/md 抑制、html 保留）；T01 实渲 `燃[FN696]其積，[FN697]火又`（orig 不再单出）、FN1 `此序依宋元明…` 仍在；全量 660 OK（skipped=1）
+- [x] **已完成** docx2pdf 用 WPS/Word 转 PDF 不再干扰已打开实例（2026-09-13 用户点档：窗口偶尔被激活 + 弹「是否保存修改」）
+  - 根因：`render_pdf._com_convert` 原用 `Dispatch` —— WPS/Word 已开时会**附着用户实例**；`app.Visible=False` 会隐藏/激活用户窗口，`app.Quit()` 会退出用户实例（对未保存文档按默认走 → 弹「是否保存修改」），`d.Close(False)` 语义不如显式 `Close(0)`
+  - 修法：检测已运行（`GetActiveObject`）→ 安全附着（不动 Visible、不 Quit、`Open(ReadOnly/AddToRecentFiles=False)`、`Close(0)`、`DisplayAlerts=0`/`ScreenUpdating=False`/`Options.SaveInterval=0` 用后恢复）；未运行 → `DispatchEx` 独立隐藏实例 + `Quit(0)`；失败逐级回退（`DispatchEx`→`Open` 参数退化→`ExportAsFixedFormat`→`SaveAs`）
+  - 加固：始终从**临时副本**转换（`_prep_open_path`）——WPS/Word 对同一路径 `Documents.Open` 会返回既有 Document，安全附着会误关用户同名文档；转换后删副本
+  - 验证：`test_pdf.TestComConvert` 7 项（独立实例隐藏/Quit(0)/只读/Close(0)；附着不改 Visible/不 Quit/设置恢复；DispatchEx 失败回退；SaveAs 回退；失败清理；临时副本不碰原文件、用后即删）；真实 WPS 实测：无实例 → 独立转出 721KB PDF；预置可见实例 → `GetActiveObject` 命中、安全附着转出 PDF 且用户文档仍在（Count 保持 1）、不退出；全量 667 OK（skipped=1）

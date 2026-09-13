@@ -210,8 +210,9 @@
                                          // 亦可写绝对值如 "7pt"；html 写成 ruby rt CSS，docx 写 w:rt 字号 + w:hps
     "rt_font": "",                       // 注音字体：空=继承正文字体；如 "楷体"（html 写 font-family，docx 写 w:rFonts）
     "ruby_up": "100%",                   // EQ 域抬升量（field 模式）：默认 100% 正文字号（整字高，不与正文相交）；WPS 原生约 60%，字框高时不够可改大，如 "120%" 或 "14pt"
-    "repeat": "page",                     // 注音频率：all=每次都注（默认）；first=全文只注首次；page=每分页单元首次
-                                         //   （docx 按智能分页分节重置，html/epub 按卷文件重置；md 无分页等同 first）
+    "repeat": "page",                     // 注音频率：all=每次都注（默认）；first=全文只注首次；page=每页只注首次
+                                         //   （docx=按原书页 <pb> 翻页重注；html/epub=按卷文件；md/txt=整篇，无分页）
+                                         //   无 <pb> 的典籍 docx 回退到每个智能分页单元 / 按卷（split 时）
     "rare_zones": [],                    // 生僻字自动注音分区：空=关闭；如 ["G","H"]（Ext G/H），全扩展 ["A","B","C","D","E","F","G","H","I"]；
                                          // 需 pypinyin，未收录字跳过；词表优先（full_text 除外），多音字取最常用读音（可能不准，需人工校对）
     "full_text": false,                   // 全文注音：true=词表优先整词注音、其余逐字注音（忽略 rare_zones/repeat；专音以词表为准）

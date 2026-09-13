@@ -48,6 +48,54 @@ def normalize(text: str, ruby_brackets=None) -> str:
     text = re.sub(r"\(cf\.[^)]*\)", "", text)
     return re.sub(r"[\s\u3000]+", "", text)
 
+
+def normalize_with_lines(text: str, ruby_brackets=None):
+    """normalize 的逐行版：返回 (norm, line_of, raw_lines)。
+
+    line_of[i] = norm[i] 对应的原始行号（0-based，行号即可与 *_compare_*.txt 对齐）。
+    逐行归一与整体归一的罕见不一致（括号跨行等）时返回空 line_of（调用方退回无行号显示）。
+    """
+    norm_all = normalize(text, ruby_brackets)
+    raw_lines = (text or "").split("\n")
+    parts, line_of = [], []
+    for li, ln in enumerate(raw_lines):
+        n = normalize(ln, ruby_brackets)
+        parts.append(n)
+        line_of.extend([li] * len(n))
+    norm = "".join(parts)
+    if norm != norm_all:
+        return norm_all, [], raw_lines
+    return norm, line_of, raw_lines
+
+
+def ctx_locations(ctx, ours_line, theirs_line) -> list:
+    """ctx（diff opcodes）→ 每条差异的原始行定位（1-based；行不可得为 None）。"""
+    out = []
+    for _tag, i1, _i2, j1, _j2 in ctx or []:
+        o_li = ours_line[min(i1, len(ours_line) - 1)] if ours_line else None
+        t_li = theirs_line[min(j1, len(theirs_line) - 1)] if theirs_line else None
+        out.append({"gen_line": (o_li + 1) if o_li is not None else None,
+                    "src_line": (t_li + 1) if t_li is not None else None})
+    return out
+
+
+def _mark_span(text: str, a: int, b: int, before: int = 18, after: int = 18) -> str:
+    """归一文本差异段标记：前文…〖差异〗…后文（差异为空时显示空括号）。"""
+    a = max(0, min(a, len(text)))
+    b = max(a, min(b, len(text)))
+    pre = text[max(0, a - before):a]
+    mid = text[a:b]
+    post = text[b:b + after]
+    return f"{pre}〖{mid}〗{post}"
+
+
+def _display_text(raw: str) -> str:
+    """*_compare_*.txt 落盘文本：剥 [..]/页码令牌、压缩 3+ 空行；
+    报告行号即以此文本为准（normalize 后内容与 raw 同）。"""
+    txt = re.sub(r"\[[^\]\[]{1,8}\]", "", raw)
+    txt = re.sub(r"[A-Z]{1,2}\d{1,4}[A-Za-z]?n\d+[A-Za-z]?_p[0-9a-z]+", "", txt)
+    return re.sub(r"\n{3,}", "\n\n", txt).strip() + "\n"
+
 _TAG_RE = re.compile(r"<[^>]+>")
 _STYLE_RE = re.compile(r"<(style|script)[^>]*>.*?</\1>", re.S | re.I)
 
@@ -807,7 +855,8 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
         ours_raw = _strip_md_marks(ours_raw)
     if not compare_infos:
         ours_raw = strip_infos(ours_raw)
-    ours = normalize(ours_raw, ruby_brackets)
+    ours_disp = _display_text(ours_raw)
+    ours, ours_line, _ours_lines = normalize_with_lines(ours_disp, ruby_brackets)
     # strip_head_no 联动：生成侧已剥 head/jhead 行首 No. 令牌；官方侧求同一令牌表对等剥离
     _strip_no = _strip_no_from(config_path)
     strip_tokens = _head_no_tokens(work) if _strip_no else []
@@ -850,17 +899,12 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
             theirs_raw = _strip_official_no(theirs_raw, strip_tokens)
         if t2s:
             theirs_raw = t2s_baseline(theirs_raw)
-        theirs = normalize(theirs_raw, ruby_brackets)
+        theirs_disp = _display_text(theirs_raw)
+        theirs, theirs_line, _theirs_lines = normalize_with_lines(theirs_disp, ruby_brackets)
         try:
             os.makedirs(outdir, exist_ok=True)
             src_cmp = os.path.join(outdir, f"{stem}_compare_xml_official.txt")
             gen_cmp = os.path.join(outdir, f"{stem}_compare_txt_generated.txt")
-            theirs_disp = re.sub(r"\[[^\]\[]{1,8}\]", "", theirs_raw)
-            ours_disp = re.sub(r"\[[^\]\[]{1,8}\]", "", ours_raw)
-            theirs_disp = re.sub(r"[A-Z]{1,2}\d{1,4}[A-Za-z]?n\d+[A-Za-z]?_p[0-9a-z]+", "", theirs_disp)
-            ours_disp = re.sub(r"[A-Z]{1,2}\d{1,4}[A-Za-z]?n\d+[A-Za-z]?_p[0-9a-z]+", "", ours_disp)
-            theirs_disp = re.sub(r"\n{3,}", "\n\n", theirs_disp).strip() + "\n"
-            ours_disp = re.sub(r"\n{3,}", "\n\n", ours_disp).strip() + "\n"
             with open(src_cmp, "w", encoding="utf-8") as f:
                 f.write(theirs_disp)
             with open(gen_cmp, "w", encoding="utf-8") as f:
@@ -873,6 +917,7 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
         return {"xml": xml_fn, "fmt": fmt, "status": status, "gen": gen_path,
                 "official": xml_fn, "official_kind": "xml", "matched": m,
                 "missing": mi, "extra": ex, "total": total, "ctx": ctx,
+                "ctx_loc": ctx_locations(ctx, ours_line, theirs_line),
                 "src_cmp": src_cmp, "gen_cmp": gen_cmp,
                 "norm_gen": ours, "norm_official": theirs}
     scope_juan = bool((cfg or {}).get("scope_juan", True))
@@ -994,18 +1039,12 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
             # 简体校验：官方基线（繁体）经同一 t2s 管线转简体后再比对；
             # 作用于剥离后的纯文本，落盘 _compare 文件与比对输入一致
             theirs_raw = t2s_baseline(theirs_raw)
-        theirs = normalize(theirs_raw, ruby_brackets)
+        theirs_disp = _display_text(theirs_raw)
+        theirs, theirs_line, _theirs_lines = normalize_with_lines(theirs_disp, ruby_brackets)
         try:
             os.makedirs(outdir, exist_ok=True)
             src_cmp = os.path.join(outdir, f"{stem}_compare_{bkind}_official.txt")
             gen_cmp = os.path.join(outdir, f"{stem}_compare_{fmt}_generated.txt")
-            theirs_disp = re.sub(r"\[[^\]\[]{1,8}\]", "", theirs_raw)
-            ours_disp = re.sub(r"\[[^\]\[]{1,8}\]", "", ours_raw)
-            theirs_disp = re.sub(r"[A-Z]{1,2}\d{1,4}[A-Za-z]?n\d+[A-Za-z]?_p[0-9a-z]+", "", theirs_disp)
-            ours_disp = re.sub(r"[A-Z]{1,2}\d{1,4}[A-Za-z]?n\d+[A-Za-z]?_p[0-9a-z]+", "", ours_disp)
-            # 比较文件可读性：压缩多余空行（html 抽取每段落加换行导致大量空白行）
-            theirs_disp = re.sub(r"\n{3,}", "\n\n", theirs_disp).strip() + "\n"
-            ours_disp = re.sub(r"\n{3,}", "\n\n", ours_disp).strip() + "\n"
             with open(src_cmp, "w", encoding="utf-8") as f:
                 f.write(theirs_disp)
             with open(gen_cmp, "w", encoding="utf-8") as f:
@@ -1017,14 +1056,16 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
         trials.append({"kind": bkind, "official": bpath_disp, "missing": mi,
                        "extra": ex, "total": total, "ok": total <= max_diff,
                        "ctx": ctx, "norm_official": theirs,
+                       "ctx_loc": ctx_locations(ctx, ours_line, theirs_line),
                        "src_cmp": src_cmp, "gen_cmp": gen_cmp})
-        cur = (bkind, bpath_disp, m, mi, ex, ctx, total, src_cmp, gen_cmp, theirs)
+        cur = (bkind, bpath_disp, m, mi, ex, ctx, total, src_cmp, gen_cmp, theirs,
+               ctx_locations(ctx, ours_line, theirs_line))
         if best is None or total < best[6]:
             best = cur
         if total <= max_diff:
             return {"xml": xml_fn, "fmt": fmt, "status": "ok", "gen": gen_path, "official": bpath_disp, "official_kind": bkind, "matched": m, "missing": mi, "extra": ex, "total": total, "ctx": ctx, "src_cmp": src_cmp, "gen_cmp": gen_cmp, "norm_gen": ours, "norm_official": theirs, "trials": trials}
-    bkind, bpath, m, mi, ex, ctx, total, src_cmp, gen_cmp, best_theirs = best
-    return {"xml": xml_fn, "fmt": fmt, "status": "fail", "gen": gen_path, "official": bpath, "official_kind": bkind, "matched": m, "missing": mi, "extra": ex, "total": total, "ctx": ctx, "src_cmp": src_cmp, "gen_cmp": gen_cmp, "norm_gen": ours, "norm_official": best_theirs, "trials": trials}
+    bkind, bpath, m, mi, ex, ctx, total, src_cmp, gen_cmp, best_theirs, best_loc = best
+    return {"xml": xml_fn, "fmt": fmt, "status": "fail", "gen": gen_path, "official": bpath, "official_kind": bkind, "matched": m, "missing": mi, "extra": ex, "total": total, "ctx": ctx, "ctx_loc": best_loc, "src_cmp": src_cmp, "gen_cmp": gen_cmp, "norm_gen": ours, "norm_official": best_theirs, "trials": trials}
 
 
 def format_verify_report(records, diff_lines: int = 5, max_diff: int = 10):
@@ -1061,7 +1102,8 @@ def format_verify_report(records, diff_lines: int = 5, max_diff: int = 10):
                        "official": r.get("official"),
                        "missing": r.get("missing"), "extra": r.get("extra"),
                        "total": r.get("total"), "ok": st == "ok",
-                       "ctx": r.get("ctx"),
+                       "ctx": r.get("ctx"), "ctx_loc": r.get("ctx_loc"),
+                       "src_cmp": r.get("src_cmp"), "gen_cmp": r.get("gen_cmp"),
                        "norm_official": r.get("norm_official")}]
         for t in trials:
             ok = bool(t.get("ok"))
@@ -1071,15 +1113,28 @@ def format_verify_report(records, diff_lines: int = 5, max_diff: int = 10):
                          f"多{t.get('extra')} {op}阈值{max_diff})")
             if t.get("official"):
                 lines.append(f"  {fmt} 【源】{t['official']}")
+                if t.get("src_cmp"):
+                    lines.append("       【源比较】行号对齐 "
+                                 + os.path.basename(t["src_cmp"]))
             if gen:
                 lines.append(f"  {fmt} 【新】{gen}")
+                if t.get("gen_cmp"):
+                    lines.append("       【新比较】行号对齐 "
+                                 + os.path.basename(t["gen_cmp"]))
             # 有差异就列前 diff_lines 条（含绿灯但非 缺0/多0 的情况）
             if not ok or (t.get("missing") or 0) + (t.get("extra") or 0) > 0:
                 theirs = t.get("norm_official") or ""
-                for idx, (_tag, i1, _i2, j1, _j2) in enumerate(
+                locs = t.get("ctx_loc") or []
+                for idx, (_tag, i1, i2, j1, j2) in enumerate(
                         (t.get("ctx") or [])[:diff_lines], 1):
-                    a_snip = ours[max(0, i1 - 10):i1 + 40].replace("\n", "")
-                    b_snip = theirs[max(0, j1 - 10):j1 + 40].replace("\n", "")
-                    lines.append(
-                        f"      {idx}. 【源】{b_snip}\n         【新】{a_snip}")
+                    loc = locs[idx - 1] if idx - 1 < len(locs) else {}
+                    parts = []
+                    if loc.get("src_line"):
+                        parts.append(f"源比较第{loc['src_line']}行")
+                    if loc.get("gen_line"):
+                        parts.append(f"新比较第{loc['gen_line']}行")
+                    where = f"（{'，'.join(parts)}）" if parts else ""
+                    lines.append(f"      {idx}.{where}")
+                    lines.append(f"         【源】{_mark_span(theirs, j1, j2)}")
+                    lines.append(f"         【新】{_mark_span(ours, i1, i2)}")
     return lines

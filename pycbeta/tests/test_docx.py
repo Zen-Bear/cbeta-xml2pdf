@@ -1161,5 +1161,248 @@ class TestDivExtraLineHeight(unittest.TestCase):
         self.assertIn('w:line="336"', out)
 
 
+class TestNoteCf(unittest.TestCase):
+    """cf（confer 参考）：docx 全注型追加 ` (cf. a; b)`（前导空格，对齐官方 docx）。"""
+
+    def _work(self, ntype="mod"):
+        from pycbeta.model import App, AppRead, Note, NoteRef, Work
+        note = Note(tag="note", attrs={}, n="0006001", ntype=ntype,
+                    children=[Text(text="傳抱【CB】")])
+        cf1 = Note(tag="note", attrs={}, n="", ntype="cf1", children=[Text(text="A17")])
+        cf2 = Note(tag="note", attrs={}, n="", ntype="cf2", children=[Text(text="B42")])
+        lem = AppRead(tag="lem", attrs={}, role="lem", children=[cf1, cf2])
+        app = App(tag="app", attrs={}, key="beg0006001", lem=lem)
+        ref = NoteRef(n="0006001", notes=[note])
+        return Work(id="T", source_file="", metadata={"title": "t", "author": ""},
+                    body=[app, E(tag="p", attrs={}, children=[Text(text="文"), ref])],
+                    notes_by_n={"0006001": [note]}, apps=[app], simplified=False)
+
+    def _render(self, notes):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(__import__("shutil").rmtree, tmp, True)
+        fn = DocxRenderer(notes=notes).render_work(self._work(), tmp, "cf.docx")
+        z = zipfile.ZipFile(fn)
+        try:
+            out = {}
+            for part in ("word/document.xml", "word/footnotes.xml"):
+                try:
+                    out[part] = z.read(part).decode("utf-8")
+                except KeyError:
+                    pass
+            return fn, out
+        finally:
+            z.close()
+
+    def test_footnote_cf(self):
+        _fn, out = self._render("footnote")
+        self.assertIn(" (cf. A17; B42)", out["word/footnotes.xml"])
+
+    def test_endnote_cf(self):
+        _fn, out = self._render("endnote")
+        self.assertIn(" (cf. A17; B42)", out["word/document.xml"])
+
+    def test_inline_cf(self):
+        _fn, out = self._render("inline")
+        self.assertIn(" (cf. A17; B42)", out["word/document.xml"])
+        self.assertIn("（", out["word/document.xml"])  # inline 括号
+
+    def test_cf_all_note_types(self):
+        for ntype in ("mod", "orig", "add"):
+            r = DocxRenderer(notes="endnote")
+            w = self._work(ntype)
+            r._reset_state(w)
+            ref = w.body[1].children[1]
+            self.assertIn(" (cf. A17; B42)", r._cf_run(ref.notes[0]))
+
+
+class TestAppStarRemoved(unittest.TestCase):
+    """star_removed app（corresp 指向他处注）：不在自身锚点重渲该注（官方只在注原位出注），
+    lem 内 cf 仍由对应 add 注追加；普通 corresp app（beg_N 重出）保持渲染。"""
+
+    def _work(self, app_type):
+        from pycbeta.model import App, AppRead, Note, NoteRef, Work
+        note1 = Note(tag="note", attrs={}, n="0001004", ntype="mod",
+                     children=[Text(text="甲【大】＊，乙【聖】＊")])
+        note2 = Note(tag="note", attrs={}, n="0001a01", ntype="add",
+                     children=[Text(text="甲【CB】，丙【大】")])
+        cf = Note(tag="note", attrs={}, n="", ntype="cf1", children=[Text(text="Z99")])
+        lem = AppRead(tag="lem", attrs={}, role="lem", children=[cf])
+        app = App(tag="app", attrs={"corresp": "#0001004"}, key="beg0001a01",
+                  atype=app_type, lem=lem)
+        ref1 = NoteRef(n="0001004", notes=[note1])
+        ref2 = NoteRef(n="0001a01", notes=[note2])
+        body = [ref1, E(tag="p", attrs={}, children=[
+            Text(text="甲"), ref2, app, Text(text="乙")])]
+        return Work(id="T", source_file="", metadata={"title": "t", "author": ""},
+                    body=body, notes_by_n={"0001004": [note1], "0001a01": [note2]},
+                    apps=[app], simplified=False)
+
+    def _xml(self, app_type):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(__import__("shutil").rmtree, tmp, True)
+        fn = DocxRenderer(notes="footnote").render_work(
+            self._work(app_type), tmp, "x.docx")
+        z = zipfile.ZipFile(fn)
+        try:
+            return (z.read("word/document.xml").decode("utf-8"),
+                    z.read("word/footnotes.xml").decode("utf-8"))
+        finally:
+            z.close()
+
+    def test_star_removed_not_rerendered(self):
+        doc, fns = self._xml("star_removed")
+        self.assertEqual(doc.count("w:footnoteReference"), 2)
+        self.assertEqual(fns.count("Z99"), 1)
+        self.assertEqual(fns.count("甲【大】＊，乙【聖】＊"), 1)
+
+    def test_plain_corresp_kept(self):
+        doc, fns = self._xml(None)
+        self.assertEqual(doc.count("w:footnoteReference"), 3)
+
+
+class TestSplitLemmaOrig(unittest.TestCase):
+    """整体 orig 注 + 拆分 mod(a/b)：docx 只出 a/b（官方口径，小写 a/b = 一個校勘
+    條目拆成二組，见 model.suppressed_orig_notes）。孤立 orig（无 base-mod）仍出。"""
+
+    def _work(self, with_mod=True):
+        from pycbeta.model import Note, NoteRef, Work
+        orig = Note(tag="note", attrs={}, n="0028009", ntype="orig",
+                    children=[Text(text="其積又火＝𧂐火又【三】")])
+        byn = {"0028009": [orig]}
+        kids = [Text(text="燃"), NoteRef(n="0028009", notes=[orig])]
+        if with_mod:
+            ma = Note(tag="note", attrs={}, n="0028009a", ntype="mod",
+                      children=[Text(text="其積【大】")])
+            mb = Note(tag="note", attrs={}, n="0028009b", ntype="mod",
+                      children=[Text(text="火又【CB】")])
+            byn.update({"0028009a": [ma], "0028009b": [mb]})
+            kids += [NoteRef(n="0028009a", notes=[ma]),
+                     NoteRef(n="0028009b", notes=[mb])]
+        kids.append(Text(text="其積，火又不燃"))
+        return Work(id="T", source_file="", metadata={"title": "t", "author": ""},
+                    body=[E(tag="p", attrs={}, children=kids)],
+                    notes_by_n=byn, apps=[], simplified=False)
+
+    def _xml(self, with_mod):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(__import__("shutil").rmtree, tmp, True)
+        fn = DocxRenderer(notes="footnote").render_work(
+            self._work(with_mod), tmp, "s.docx")
+        z = zipfile.ZipFile(fn)
+        try:
+            return (z.read("word/document.xml").decode("utf-8"),
+                    z.read("word/footnotes.xml").decode("utf-8"))
+        finally:
+            z.close()
+
+    def test_split_orig_suppressed(self):
+        doc, fns = self._xml(True)
+        self.assertEqual(doc.count("w:footnoteReference"), 2)
+        self.assertNotIn("＝", fns)
+        self.assertIn("其積【大】", fns)
+        self.assertIn("火又【CB】", fns)
+
+    def test_standalone_orig_kept(self):
+        doc, fns = self._xml(False)
+        self.assertEqual(doc.count("w:footnoteReference"), 1)
+        self.assertIn("＝", fns)
+
+
+class TestSuppressedOrigNotes(unittest.TestCase):
+    """model.suppressed_orig_notes：小写 a/b 视为同一条目拆组；大写 A/B 不合并。"""
+
+    def test_lowercase_grouped(self):
+        from pycbeta.model import Note, suppressed_orig_notes
+        def N(n, t):
+            return Note(tag="note", attrs={}, n=n, ntype=t)
+        out = suppressed_orig_notes({
+            "0028009": [N("0028009", "orig")],
+            "0028009a": [N("0028009a", "mod")],
+            "0028009b": [N("0028009b", "mod")],
+        })
+        self.assertEqual(out, {"0028009"})
+
+    def test_uppercase_not_grouped(self):
+        from pycbeta.model import Note, suppressed_orig_notes
+        def N(n, t):
+            return Note(tag="note", attrs={}, n=n, ntype=t)
+        self.assertEqual(
+            suppressed_orig_notes({"0001A": [N("0001A", "orig")],
+                                   "0001a": [N("0001a", "mod")]}),
+            set())
+
+    def test_standalone_orig_kept(self):
+        from pycbeta.model import Note, suppressed_orig_notes
+        n = Note(tag="note", attrs={}, n="0001001", ntype="orig")
+        self.assertEqual(suppressed_orig_notes({"0001001": [n]}), set())
+
+
+class TestLatinFont(unittest.TestCase):
+    """西文字体（--font-latin）落到 run 的 w:ascii/hAnsi；eastAsia 仍中文名。
+
+    不加 w:hint="eastAsia"：带附加符号的拉丁字母（ā ī 等 EAW=A 模糊字符）
+    会因 hint 被判给 eastAsia 而落中文字体（如 舍衛【大】，～Sāvatthī）。
+    """
+
+    def test_run_rfonts(self):
+        r = DocxRenderer(latin_font="Calibri")
+        out = r._run("Sāvatthī K17n abc", "footnote")
+        self.assertIn('w:ascii="Calibri"', out)
+        self.assertIn('w:eastAsia="新細明體"', out)
+        self.assertIn('w:hAnsi="Calibri"', out)
+        self.assertNotIn("w:hint", out)  # 有 hint 时 ā/ī 落中文字体
+        out_p = r._run("K17n abc", "p")
+        self.assertIn('w:ascii="Calibri"', out_p)
+        self.assertIn('w:eastAsia="新細明體"', out_p)
+        self.assertNotIn("w:hint", out_p)
+
+    def test_styles_footnote_rfonts(self):
+        from pycbeta.model import Work
+        w = Work(id="T", source_file="", metadata={"title": "t", "author": ""},
+                 body=[], notes_by_n={}, apps=[], simplified=False)
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(__import__("shutil").rmtree, tmp, True)
+        fn = DocxRenderer(latin_font="Calibri").render_work(w, tmp, "f.docx")
+        st = zipfile.ZipFile(fn).read("word/styles.xml").decode("utf-8")
+        m = re.search(r'<w:style[^>]*w:styleId="footnote".*?</w:style>', st, re.S)
+        self.assertIsNotNone(m)
+        self.assertIn('w:ascii="Calibri"', m.group(0))
+        self.assertIn('w:eastAsia="新細明體"', m.group(0))
+        self.assertNotIn("w:hint", m.group(0))
+
+
+class TestAnnotationPerPage(unittest.TestCase):
+    """repeat=page（docx 专属）：按原书页 <pb> 清空已注集合，翻页重注。"""
+
+    def _work(self, pb=True):
+        from pycbeta.model import Pb, Work
+        kids = [Text(text="般若")]
+        if pb:
+            kids.append(Pb(n="1"))
+        kids.append(Text(text="般若"))
+        body = [E(tag="p", attrs={}, children=kids)]
+        return Work(id="T", source_file="", metadata={"title": "t", "author": ""},
+                    body=body, notes_by_n={}, apps=[], simplified=False)
+
+    def _count(self, work, repeat):
+        from pycbeta.annotate import resolve_annotations
+        ann = resolve_annotations({"enabled": True, "scheme": "pinyin",
+                                   "style": "inline", "repeat": repeat})
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(__import__("shutil").rmtree, tmp, True)
+        fn = DocxRenderer(annotations=ann).render_work(work, tmp, "pp.docx")
+        xml = zipfile.ZipFile(fn).read("word/document.xml").decode("utf-8")
+        return xml.count("〔bō rě〕")
+
+    def test_pb_repages(self):
+        self.assertEqual(self._count(self._work(True), "page"), 2)
+
+    def test_first_single(self):
+        self.assertEqual(self._count(self._work(True), "first"), 1)
+
+    def test_no_pb_falls_back_single(self):
+        self.assertEqual(self._count(self._work(False), "page"), 1)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

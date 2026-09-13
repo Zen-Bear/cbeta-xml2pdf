@@ -3271,7 +3271,7 @@ class TestVerifyFeedback(unittest.TestCase):
                  "norm_official": "abcdefghijXXXX"}]}]
         s = "\n".join(format_verify_report(recs, diff_lines=5, max_diff=10))
         self.assertIn("[OK] (txt→txt_notes 缺0/多2 ≤阈值10)", s)
-        self.assertIn("1. 【源】", s)
+        self.assertIn("【源】", s)
 
     def test_verify_summary_dialog(self):
         from pycbeta.gui.__main__ import VerifySummaryDialog
@@ -3328,7 +3328,7 @@ class TestVerifyFeedback(unittest.TestCase):
         self.assertIn("=== T12n0349.xml", s)
         self.assertIn("[FAIL] (docx→docx 缺5/多30 >阈值10)", s)
         self.assertIn("[FAIL] (docx→html 缺0/多15 >阈值10)", s)
-        self.assertIn("1. 【源】", s)
+        self.assertIn("【源】", s)
         self.assertIn("[--]  txt no baseline", s)
 
     def test_batch_verify_one_returns_rec(self):

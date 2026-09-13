@@ -6,7 +6,9 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from pycbeta.parser import P5Parser
-from pycbeta.render_pdf import PdfRenderer, _draw_page_borders, _add_pdf_bookmarks
+from pycbeta.render_pdf import PdfRenderer, _draw_page_borders, _add_pdf_bookmarks, \
+    _com_convert
+from types import SimpleNamespace
 
 CBETA = r"E:\dev\cbeta\cbeta_ebook"
 
@@ -145,6 +147,165 @@ class TestVerticalWrap(unittest.TestCase):
         out = r._wrap("<p>x</p>", self._work())
         self.assertIn("<body>", out)
         self.assertNotIn("vertical-rl", out)
+
+
+class TestComConvert(unittest.TestCase):
+    """COM 转换安全策略：无用户实例→DispatchEx 独立实例（隐藏/只读/Quit(0)）；
+    用户已开→安全附着（不改 Visible、不 Quit、只读、Close(0)、设置后恢复）。"""
+
+    class _Doc:
+        def __init__(self, can_export=True, can_saveas=True):
+            self.closed = None
+            self.saved = None
+            self.calls = []
+            self._can_export = can_export
+            self._can_saveas = can_saveas
+
+        def ExportAsFixedFormat(self, out, fmt):
+            if not self._can_export:
+                raise RuntimeError("no ExportAsFixedFormat")
+            self.calls.append(("export", out, fmt))
+
+        def SaveAs(self, out, FileFormat=None):
+            if not self._can_saveas:
+                raise RuntimeError("no SaveAs")
+            self.calls.append(("saveas", out, FileFormat))
+
+        def Close(self, save):
+            self.closed = save
+
+    class _App:
+        def __init__(self, display_alerts=5, screen_updating=True,
+                     save_interval=10, doc=None):
+            self.DisplayAlerts = display_alerts
+            self.ScreenUpdating = screen_updating
+            self.Options = SimpleNamespace(SaveInterval=save_interval)
+            self.doc = doc or TestComConvert._Doc()
+            self.Documents = self
+            self.quit_calls = []
+            self.open_kwargs = None
+            self.open_args = None
+
+        def Open(self, *a, **k):
+            self.open_args = a
+            self.open_kwargs = k
+            return self.doc
+
+        def Quit(self, *a):
+            self.quit_calls.append(a)
+
+    @staticmethod
+    def _no_active(progid):
+        raise RuntimeError("not running")
+
+    def test_new_instance_hidden_quit(self):
+        apps = []
+
+        def dex(progid):
+            a = self._App()
+            apps.append(a)
+            return a
+
+        def dsp(progid):
+            raise AssertionError("不应附着")
+
+        r = _com_convert("x.docx", os.path.abspath("out.pdf"),
+                         ("KWPS.Application",),
+                         dispatch=dsp, dispatch_ex=dex,
+                         get_active=self._no_active)
+        self.assertTrue(r.endswith("out.pdf"))
+        a = apps[0]
+        self.assertIs(a.Visible, False)          # 自建隐藏
+        self.assertEqual(a.quit_calls, [(0,)])   # Quit(0) 不保存
+        self.assertEqual(a.doc.closed, 0)        # Close(0)
+        self.assertIs(a.doc.Saved, True)
+        self.assertEqual(a.DisplayAlerts, 0)
+        self.assertEqual(a.open_kwargs.get("ReadOnly"), True)
+        self.assertEqual(a.open_kwargs.get("AddToRecentFiles"), False)
+
+    def test_running_instance_safe_attach(self):
+        a = self._App(display_alerts=5, screen_updating=True, save_interval=30)
+
+        def dex(progid):
+            raise AssertionError("用户已开，不应新建")
+
+        def dsp(progid):
+            return a
+
+        r = _com_convert("x.docx", os.path.abspath("out.pdf"),
+                         ("KWPS.Application",),
+                         dispatch=dsp, dispatch_ex=dex,
+                         get_active=lambda progid: object())
+        self.assertTrue(r.endswith("out.pdf"))
+        self.assertEqual(a.quit_calls, [])            # 不退出用户实例
+        self.assertIsNone(getattr(a, "Visible", None))  # 不动 Visible
+        self.assertEqual(a.doc.closed, 0)
+        self.assertEqual(a.DisplayAlerts, 5)            # 恢复
+        self.assertEqual(a.ScreenUpdating, True)        # 恢复
+        self.assertEqual(a.Options.SaveInterval, 30)    # 恢复
+
+    def test_dispatchex_failure_attaches_safely(self):
+        a = self._App()
+
+        def dex(progid):
+            raise RuntimeError("no DispatchEx")
+
+        r = _com_convert("x.docx", os.path.abspath("out.pdf"),
+                         ("KWPS.Application",),
+                         dispatch=lambda progid: a, dispatch_ex=dex,
+                         get_active=self._no_active)
+        self.assertTrue(r.endswith("out.pdf"))
+        self.assertEqual(a.quit_calls, [])
+        self.assertIsNone(getattr(a, "Visible", None))
+        self.assertEqual(a.doc.closed, 0)
+
+    def test_saveas_fallback(self):
+        a = self._App(doc=self._Doc(can_export=False))
+        r = _com_convert("x.docx", os.path.abspath("out.pdf"),
+                         ("KWPS.Application",),
+                         dispatch=lambda progid: a,
+                         dispatch_ex=self._no_active,
+                         get_active=self._no_active)
+        self.assertTrue(r.endswith("out.pdf"))
+        self.assertEqual(a.doc.calls[0][0], "saveas")
+
+    def test_failure_cleans_up_owned_and_returns_none(self):
+        a = self._App(doc=self._Doc(can_export=False, can_saveas=False))
+
+        def dex(progid):
+            return a
+
+        r = _com_convert("x.docx", os.path.abspath("out.pdf"),
+                         ("KWPS.Application",),
+                         dispatch=lambda progid: a, dispatch_ex=dex,
+                         get_active=self._no_active)
+        self.assertIsNone(r)
+        self.assertEqual(a.quit_calls, [(0,)])   # 自建实例失败也退出
+        self.assertEqual(a.doc.closed, 0)
+
+    def test_opens_temp_copy_not_original(self):
+        import shutil
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        src = os.path.join(d, "in.docx")
+        with open(src, "wb") as f:
+            f.write(b"PK\x03\x04dummy")
+        app = self._App()
+        r = _com_convert(src, os.path.join(d, "o.pdf"), ("WPS",),
+                         dispatch=lambda p: app, dispatch_ex=self._no_active,
+                         get_active=self._no_active)
+        self.assertTrue(r)
+        self.assertNotEqual(os.path.abspath(app.open_args[0]), os.path.abspath(src))
+        self.assertTrue(os.path.isfile(src))          # 原文件未被动
+        self.assertFalse(os.path.exists(app.open_args[0]))  # 临时副本已清
+
+    def test_all_backends_fail_returns_none(self):
+        def bad(progid):
+            raise RuntimeError("unavailable")
+
+        self.assertIsNone(_com_convert(
+            "x.docx", os.path.abspath("out.pdf"), ("A", "B"),
+            dispatch=bad, dispatch_ex=bad, get_active=self._no_active))
 
 
 if __name__ == "__main__":

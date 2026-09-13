@@ -8,7 +8,8 @@ import re
 from contextlib import contextmanager
 from typing import List, Optional
 
-from .model import App, E, Gaiji, Lb, Note, NoteRef, Pb, Text, Work
+from .model import App, E, Gaiji, Lb, Note, NoteRef, Pb, Text, Work, \
+    suppressed_orig_notes
 from .annotate import active as _ann_active, split_annotated as _split_ann, track_seen as _track_seen
 from .gaiji import GaijiDb
 from .theme import Theme, strip_head_no, bracket_pair
@@ -55,6 +56,7 @@ class MdRenderer:
         for n in self._iter_all(work.body):
             if isinstance(n, App) and n.key:
                 self._app_by_n[n.key[3:]] = n
+        self._orig_suppressed = suppressed_orig_notes(work.notes_by_n)
         md = work.metadata
         title = md.get("title") or work.id
         author = md.get("author") or ""
@@ -185,6 +187,23 @@ class MdRenderer:
         finally:
             self._drop_sa = prev
 
+    def _cf_suffix(self, note, app=None) -> str:
+        """cf（confer 参考）：官方 text-with-notes 只为 add 型注追加 `(cf. a; b)`，
+        多个以 `; ` 连接（html/txt 同规则；mod/orig 不加）。"""
+        if note.ntype != "add":
+            return ""
+        if app is None:
+            app = self._app_by_n.get(note.n or "")
+        if app is None or app.lem is None:
+            return ""
+        cfs = [c for c in app.lem.children
+               if isinstance(c, Note) and (c.ntype or "").startswith("cf")]
+        if not cfs:
+            return ""
+        refs = "; ".join("".join(t.text for t in c.children
+                                 if isinstance(t, Text)) for c in cfs)
+        return f"(cf. {refs})"
+
     def _render_noteref(self, ref: NoteRef) -> str:
         if not self.show_notes:
             return ""
@@ -192,7 +211,9 @@ class MdRenderer:
         if not notes:
             return ""
         note = self._pick_note(notes)
-        content = self._render_note_content(note)
+        if note.ntype == "orig" and (note.n or "") in self._orig_suppressed:
+            return ""
+        content = self._render_note_content(note) + self._cf_suffix(note)
         if self.notes == "inline":
             lb, rb = bracket_pair(self.note_inline_brackets)
             return f"{lb}{content}{rb}"
@@ -203,12 +224,17 @@ class MdRenderer:
     def _render_app(self, app: App) -> str:
         if not self.show_notes:
             return ""
+        # star_removed（去校勘星）：读法已由 corresp 指向的注在其位置渲染，避免重复
+        if app.atype == "star_removed":
+            return ""
         if app.attrs.get("corresp"):
             n = app.attrs["corresp"].lstrip("#")
             notes = (self._work.notes_by_n or {}).get(n) if self._work else None
             if notes:
                 note = self._pick_note(notes)
-                content = self._render_note_content(note)
+                if note.ntype == "orig" and (note.n or "") in self._orig_suppressed:
+                    return ""
+                content = self._render_note_content(note) + self._cf_suffix(note, app=app)
                 if self.notes == "inline":
                     lb, rb = bracket_pair(self.note_inline_brackets)
                     return f"{lb}{content}{rb}"

@@ -558,6 +558,27 @@ class TestRender(unittest.TestCase):
         from pycbeta.verify import _EQ_RE
         self.assertIn("PAGE", _EQ_RE.sub(_eq_base, m.group(0)))
 
+    def test_docx_field_inherits_context_style(self):
+        # note place=inline 内注音：EQ 域 run 继承夹注（0.8em 紫色）样式，不再掉正文
+        import re as _re5
+        from pycbeta.annotate import resolve_annotations as _res
+        from pycbeta.model import E, Note, Text, Work
+        ann = _res({"enabled": True, "scheme": "pinyin", "style": "field",
+                    "file": self.table_fn})
+        note = Note(tag="note", attrs={}, n="", ntype="", place="inline",
+                    children=[Text(text="菩薩")])
+        body = [E(tag="p", attrs={}, children=[Text(text="文"), note])]
+        w = Work(id="T", source_file="", metadata={"title": "t", "author": ""},
+                 body=body, notes_by_n={}, apps=[], simplified=False)
+        fn = DocxRenderer(annotations=ann).render_work(w, self.tmp, "ctx.docx")
+        xml = zipfile.ZipFile(fn).read("word/document.xml").decode("utf-8")
+        m = _re5.search(r'<w:r><w:rPr>.*?</w:rPr><w:fldChar w:fldCharType="begin"/>',
+                        xml, _re5.S)
+        self.assertIsNotNone(m)
+        self.assertIn('w:sz w:val="19"', m.group(0))       # 夹注 0.8em@12pt
+        self.assertIn('w:color w:val="800080"', m.group(0))  # 夹注紫
+        self.assertIn('w:sz w:val="24"', xml)               # 正文注音仍 12pt
+
     def test_epub_ruby(self):
         fn = EpubRenderer(annotations=self.ann).render_work(self.work, self.tmp, "ann.epub")
         self.assertTrue(zipfile.is_zipfile(fn))

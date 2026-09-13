@@ -187,7 +187,7 @@ BRACKET_PRESETS = {
     "[]": ["[", "]"],
 }
 STYLE_ITEMS = [("汉字上方 ruby", "ruby"), ("汉字右侧行内", "inline"), ("汉字上方 WPS 域", "field")]
-REPEAT_ITEMS = [("每次都注", "all"), ("全文只注首次", "first"), ("每单元只注首次", "page")]
+REPEAT_ITEMS = [("每次都注", "all"), ("全文只注首次", "first"), ("每页只注首次", "page")]
 SCHEME_ITEMS = [("拼音", "pinyin"), ("注音符号", "zhuyin")]
 BRACKET_NAMES = list(BRACKET_PRESETS.keys())
 
@@ -1065,6 +1065,9 @@ class XmlOptionsPanel(QWidget):
         self.ann_brackets = self._combo([(k, k) for k in BRACKET_NAMES], "〔〕")
         form.addRow("括号", self.ann_brackets)
         self.ann_repeat = self._combo(REPEAT_ITEMS, "all")
+        self.ann_repeat.setToolTip(
+            "注音频率。每页只注首次：docx 按原书页（<pb>）翻页重注；"
+            "html/epub 按卷文件；md/txt 整篇（无分页）")
         form.addRow("频率", self.ann_repeat)
         row = QHBoxLayout()
         self.ann_file = QLineEdit()

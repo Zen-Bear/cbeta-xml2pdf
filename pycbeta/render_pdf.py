@@ -44,33 +44,158 @@ _COM_WORD = ("Word.Application",)
 _COM_WPS = ("KWPS.Application", "wps.Application")
 
 
-def _com_convert(docx_fn: str, pdf_fn: str, progids) -> Optional[str]:
-    """用指定 ProgID 的 office COM（Word/WPS）导出 PDF。失败返回 None。"""
+def _prep_open_path(docx_fn: str):
+    """返回 (用于打开的路径, 清理回调)。
+
+    WPS/Word 对**同一路径**的文件 `Documents.Open` 会返回既有 Document 对象；
+    若用户已打开同名文件，安全附着时 Close 会误关用户文档。故复制一份到临时目录，
+    用副本转换（字节一致），转换完删副本。复制失败则退回原路径。
+    """
     try:
-        import win32com.client
-    except ImportError:
-        return None
-    for progid in progids:
-        app = None
-        d = None
+        d = tempfile.mkdtemp(prefix="pycbeta_com_")
+        p = os.path.join(d, os.path.basename(docx_fn) or "in.docx")
+        shutil.copy2(docx_fn, p)
+        return p, (lambda: shutil.rmtree(d, ignore_errors=True))
+    except Exception:
+        return os.path.abspath(docx_fn), (lambda: None)
+
+
+def _com_convert(docx_fn: str, pdf_fn: str, progids, dispatch=None,
+                 dispatch_ex=None, get_active=None) -> Optional[str]:
+    """用指定 ProgID 的 office COM（Word/WPS）导出 PDF。失败返回 None。
+
+    用户未开 Word/WPS 时优先 DispatchEx 新建**独立实例**（安全：隐藏、只读、Quit(0)）。
+    若检测到用户已开着该程序，则**安全附着**（不动 Visible、不 Quit、只读打开、
+    Close(0)、DisplayAlerts=0 后恢复），避免弹出「是否保存修改」或退出用户进程。
+    始终从临时副本转换，避免误关用户已打开的同名文档。
+    dispatch/dispatch_ex/get_active 可注入（测试用）。
+    """
+    if dispatch is None or dispatch_ex is None or get_active is None:
         try:
-            app = win32com.client.Dispatch(progid)
-            app.Visible = False
-            d = app.Documents.Open(os.path.abspath(docx_fn))
+            import win32com.client
+        except ImportError:
+            return None
+        if dispatch is None:
+            dispatch = win32com.client.Dispatch
+        if dispatch_ex is None:
+            dispatch_ex = getattr(win32com.client, "DispatchEx", None)
+        if get_active is None:
+            get_active = getattr(win32com.client, "GetActiveObject", None)
+    work_docx, cleanup = _prep_open_path(docx_fn)
+    try:
+        for progid in progids:
+            app = d = None
+            owned = False
+            prev = {}
             try:
-                d.ExportAsFixedFormat(os.path.abspath(pdf_fn), 17)  # 17 = PDF
-            except Exception:
-                d.SaveAs(os.path.abspath(pdf_fn), FileFormat=17)
-            d.Close(False)
-            app.Quit()
-            return os.path.abspath(pdf_fn)
-        except Exception:  # 该 ProgID 不可用或转换失败，尝试下一个
-            for obj in (d, app):
+                running = False
+                if get_active is not None:
+                    try:
+                        get_active(progid)   # 用户在用 → 附着，不抢实例
+                        running = True
+                    except Exception:
+                        running = False
+                if not running and dispatch_ex is not None:
+                    try:
+                        app = dispatch_ex(progid)
+                        owned = True
+                    except Exception:
+                        app = None
+                if app is None:
+                    app = dispatch(progid)  # 安全附着既有实例
+                for k in ("DisplayAlerts", "ScreenUpdating"):
+                    try:
+                        prev[k] = getattr(app, k)
+                    except Exception:
+                        prev[k] = None
+                prev["SaveInterval"] = None
                 try:
-                    obj.Close(False) if obj is d else obj.Quit()
+                    app.DisplayAlerts = 0        # wdAlertsNone
                 except Exception:
                     pass
-    return None
+                try:
+                    app.ScreenUpdating = False
+                except Exception:
+                    pass
+                try:
+                    prev["SaveInterval"] = app.Options.SaveInterval
+                    app.Options.SaveInterval = 0  # 关自动备份/恢复弹窗
+                except Exception:
+                    prev["SaveInterval"] = None
+                if owned:
+                    try:
+                        app.Visible = False
+                    except Exception:
+                        pass
+                try:
+                    d = app.Documents.Open(work_docx, ReadOnly=True,
+                                           AddToRecentFiles=False, Visible=False)
+                except Exception:
+                    try:
+                        d = app.Documents.Open(work_docx, ReadOnly=True,
+                                               AddToRecentFiles=False)
+                    except Exception:
+                        d = app.Documents.Open(work_docx)
+                try:
+                    d.ExportAsFixedFormat(os.path.abspath(pdf_fn), 17)  # 17 = PDF
+                except Exception:
+                    d.SaveAs(os.path.abspath(pdf_fn), FileFormat=17)
+                try:
+                    d.Saved = True
+                except Exception:
+                    pass
+                d.Close(0)  # wdDoNotSaveChanges：绝不弹保存框
+                d = None
+                if owned:
+                    _com_quit(app)
+                else:
+                    _com_restore(app, prev)
+                app = None
+                return os.path.abspath(pdf_fn)
+            except Exception:  # 该 ProgID 不可用或转换失败，尝试下一个
+                if d is not None:
+                    try:
+                        d.Close(0)
+                    except Exception:
+                        pass
+                if owned:
+                    _com_quit(app)
+                else:
+                    _com_restore(app, prev)
+        return None
+    finally:
+        cleanup()
+
+
+def _com_quit(app) -> None:
+    """退出我们创建的实例：显式 Quit(0)（不保存），失败退回 Quit()。"""
+    if app is None:
+        return
+    try:
+        app.Quit(0)
+    except Exception:
+        try:
+            app.Quit()
+        except Exception:
+            pass
+
+
+def _com_restore(app, prev: dict) -> None:
+    """安全附着后恢复用户实例的 DisplayAlerts / ScreenUpdating / SaveInterval。"""
+    if app is None:
+        return
+    for k in ("DisplayAlerts", "ScreenUpdating"):
+        if prev.get(k) is not None:
+            try:
+                setattr(app, k, prev[k])
+            except Exception:
+                pass
+    if prev.get("SaveInterval") is not None:
+        try:
+            app.Options.SaveInterval = prev["SaveInterval"]
+        except Exception:
+            pass
+
 
 
 def _pdf_via_word(docx_fn: str, pdf_fn: str) -> Optional[str]:

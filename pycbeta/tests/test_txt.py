@@ -527,5 +527,142 @@ class TestDharaniTransliteration(unittest.TestCase):
         self.assertIn("南raṃ", body2)
 
 
+class TestNoteCfTxtMd(unittest.TestCase):
+    """cf（confer 参考）：txt/md 只为 add 型注追加 `(cf. a; b)`（对齐官方 text-with-notes）。"""
+
+    def _work(self, ntype):
+        from pycbeta.model import App, AppRead, NoteRef
+        note = Note(tag="note", attrs={}, n="n1", ntype=ntype,
+                    children=[Text(text="正文注")])
+        cf1 = Note(tag="note", attrs={}, n="", ntype="cf1", children=[Text(text="A1")])
+        cf2 = Note(tag="note", attrs={}, n="", ntype="cf2", children=[Text(text="B2")])
+        lem = AppRead(tag="lem", attrs={}, role="lem", children=[cf1, cf2])
+        app = App(tag="app", attrs={}, key="begn1", lem=lem)
+        ref = NoteRef(n="n1", notes=[note])
+        return _work([app, E(tag="p", attrs={}, children=[Text(text="文"), ref])],
+                     {"n1": [note]})
+
+    def test_txt_add_cf(self):
+        out = TxtRenderer().render_work(self._work("add"), tempfile.mkdtemp(), "t.txt")
+        with open(out, encoding="utf-8") as f:
+            t = f.read()
+        self.assertIn("正文注(cf. A1; B2)", t)
+
+    def test_txt_mod_no_cf(self):
+        out = TxtRenderer().render_work(self._work("mod"), tempfile.mkdtemp(), "t.txt")
+        with open(out, encoding="utf-8") as f:
+            t = f.read()
+        self.assertIn("正文注", t)
+        self.assertNotIn("(cf.", t)
+
+    def test_md_add_cf(self):
+        from pycbeta.render_md import MdRenderer
+        out = MdRenderer().render_work(self._work("add"), tempfile.mkdtemp(), "t.md")
+        with open(out, encoding="utf-8") as f:
+            t = f.read()
+        self.assertIn("正文注(cf. A1; B2)", t)
+
+
+class TestAppStarRemoved(unittest.TestCase):
+    """txt/md：star_removed app 不在自身锚点重渲 corresp 注（与 docx 同口径）。"""
+
+    def _mk(self, app_type):
+        from pycbeta.model import App, AppRead, NoteRef
+        note1 = Note(tag="note", attrs={}, n="n1", ntype="mod",
+                     children=[Text(text="甲【大】＊，乙【聖】＊")])
+        note2 = Note(tag="note", attrs={}, n="n2", ntype="add",
+                     children=[Text(text="甲【CB】")])
+        cf = Note(tag="note", attrs={}, n="", ntype="cf1", children=[Text(text="Z99")])
+        lem = AppRead(tag="lem", attrs={}, role="lem", children=[cf])
+        app = App(tag="app", attrs={"corresp": "#n1"}, key="begn2",
+                  atype=app_type, lem=lem)
+        body = [NoteRef(n="n1", notes=[note1]),
+                E(tag="p", attrs={}, children=[
+                    Text(text="甲"), NoteRef(n="n2", notes=[note2]), app,
+                    Text(text="乙")])]
+        return Work(id="T", source_file="", metadata={"title": "t", "author": ""},
+                    body=body, notes_by_n={"n1": [note1], "n2": [note2]},
+                    apps=[app], simplified=False)
+
+    def test_txt_star_removed_not_rerendered(self):
+        import re
+        out = TxtRenderer().render_work(self._mk("star_removed"),
+                                        tempfile.mkdtemp(), "t.txt")
+        with open(out, encoding="utf-8") as f:
+            t = f.read()
+        self.assertEqual(sorted(set(re.findall(r"\[(\d+)\]", t))), ["1", "2"])
+        self.assertEqual(t.count("Z99"), 1)
+
+    def test_md_star_removed_not_rerendered(self):
+        import re
+        from pycbeta.render_md import MdRenderer
+        out = MdRenderer().render_work(self._mk("star_removed"),
+                                       tempfile.mkdtemp(), "t.md")
+        with open(out, encoding="utf-8") as f:
+            t = f.read()
+        self.assertEqual(sorted(set(re.findall(r"\[\^(\d+)\]", t))), ["1", "2"])
+        self.assertEqual(t.count("Z99"), 1)
+
+
+class TestSplitLemmaOrig(unittest.TestCase):
+    """整体 orig 注 + 拆分 mod(a/b)：txt/md 只出 a/b（官方口径）；html 保留 orig。"""
+
+    def _tmp(self):
+        d = tempfile.mkdtemp()
+        self.addCleanup(__import__("shutil").rmtree, d, True)
+        return d
+
+    def _mk(self, with_mod=True):
+        orig = Note(tag="note", attrs={}, n="0028009", ntype="orig",
+                    children=[Text(text="其積又火＝𧂐火又【三】")])
+        byn = {"0028009": [orig]}
+        kids = [Text(text="燃"), NoteRef(n="0028009", notes=[orig])]
+        if with_mod:
+            ma = Note(tag="note", attrs={}, n="0028009a", ntype="mod",
+                      children=[Text(text="其積【大】")])
+            mb = Note(tag="note", attrs={}, n="0028009b", ntype="mod",
+                      children=[Text(text="火又【CB】")])
+            byn.update({"0028009a": [ma], "0028009b": [mb]})
+            kids += [NoteRef(n="0028009a", notes=[ma]),
+                     NoteRef(n="0028009b", notes=[mb])]
+        kids.append(Text(text="其積，火又不燃"))
+        return Work(id="T", source_file="", metadata={"title": "t", "author": ""},
+                    body=[E(tag="p", attrs={}, children=kids)],
+                    notes_by_n=byn, apps=[], simplified=False)
+
+    def test_txt_split_orig_suppressed(self):
+        out = TxtRenderer().render_work(self._mk(True), self._tmp(), "s.txt")
+        with open(out, encoding="utf-8") as f:
+            t = f.read()
+        self.assertNotIn("＝", t)
+        self.assertIn("其積【大】", t)
+        self.assertIn("火又【CB】", t)
+
+    def test_txt_standalone_orig_kept(self):
+        out = TxtRenderer().render_work(self._mk(False), self._tmp(), "s.txt")
+        with open(out, encoding="utf-8") as f:
+            t = f.read()
+        self.assertIn("＝", t)
+
+    def test_md_split_orig_suppressed(self):
+        from pycbeta.render_md import MdRenderer
+        out = MdRenderer().render_work(self._mk(True), self._tmp(), "s.md")
+        with open(out, encoding="utf-8") as f:
+            t = f.read()
+        self.assertNotIn("＝", t)
+        self.assertIn("其積【大】", t)
+
+    def test_html_split_orig_kept(self):
+        from pycbeta.render_html import HtmlRenderer
+        d = self._tmp()
+        files = HtmlRenderer().render_work(self._mk(True), d)
+        blob = ""
+        for fp in files:
+            with open(os.path.join(d, fp), encoding="utf-8") as f:
+                blob += f.read()
+        self.assertIn("＝", blob)          # html 保留 orig（官方 html 口径）
+        self.assertIn("其積【大】", blob)
+
+
 if __name__ == "__main__":
     unittest.main()

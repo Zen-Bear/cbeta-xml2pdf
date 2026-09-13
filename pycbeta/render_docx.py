@@ -12,7 +12,8 @@ import zipfile
 from contextlib import contextmanager
 from typing import List, Optional
 
-from .model import App, E, Gaiji, Lb, Note, NoteRef, Pb, Text, Work
+from .model import App, E, Gaiji, Lb, Note, NoteRef, Pb, Text, Work, \
+    suppressed_orig_notes
 from .gaiji import GaijiDb
 from .theme import (Theme, resolve_page, _hex6, strip_head_no, bracket_pair,
                     VERTICAL_UNCENTER)
@@ -290,7 +291,8 @@ class DocxRenderer:
     def _run_rpr(self, tags, props) -> str:
         """run 属性（含 <w:rPr> 包裹）：_run 与 _run_annotated 共用，保证注音 run 样式一致。"""
         tags = tags or (self._current_tag(),)
-        rpr = self.theme.docx_run(*tags, base_pt=self._tag_base_pt(tags))
+        rpr = self.theme.docx_run(*tags, base_pt=self._tag_base_pt(tags),
+                                  latin=self.latin_font)
         if props.get("bold"):
             rpr += "<w:b/>"
         if props.get("sz"):
@@ -391,7 +393,8 @@ class DocxRenderer:
     def _rt_rpr(self, tags, props, hps: int, rt_font: str) -> str:
         """注音 rt run 属性：字号=注音字号（hps 半磅），字体=rt_font 或正文字体；
         先去掉主题带来的段落字号/字体再追加，避免 w:sz/w:rFonts 重复。"""
-        rpr = self.theme.docx_run(*tags, base_pt=self._tag_base_pt(tags))
+        rpr = self.theme.docx_run(*tags, base_pt=self._tag_base_pt(tags),
+                                  latin=self.latin_font)
         rpr = re.sub(r"<w:sz[^>]*/>", "", rpr)
         rpr = re.sub(r"<w:szCs[^>]*/>", "", rpr)
         rpr = re.sub(r"<w:rFonts[^>]*/>", "", rpr)
@@ -411,19 +414,28 @@ class DocxRenderer:
         """普通文本 run（注音未匹配片段共用；含按字回退）。"""
         return self._fb_emit(seg.replace(chr(10), ""), rpr)
 
-    def _eq_field(self, base: str, reading: str, hps: int, up: int, font: str) -> str:
+    def _eq_field(self, base: str, reading: str, hps: int, up: int, font: str,
+                  base_rpr: str = "") -> str:
         """单个 EQ 拼音指南域（WPS 原生模板字节级复刻）：
         ``{ EQ \\* jc0 \\* "Font:F" \\* hpsN \\o \\ad(\\s \\up U(RD),BASE) }``。
-        begin 裸 run（WPS 原生即无 rPr），instr/end 带 rFonts+lang（WPS 原生同款）。"""
+
+        base_rpr：所在上下文的 run 属性（去 <w:rPr> 壳），注入 begin/instr/end
+        三个 field run，使域结果（BASE 原文，如夹注内「般若」）继承本段样式
+        （字号/颜色/字体）；为空时退回旧的最小 rPr（`w:rFonts hint` + `w:lang`）。
+        """
         from xml.sax.saxutils import escape as _esc_q
         font_s = _esc_q(font.replace('"', ""), {'"': "&quot;"})
         rd_s = _esc_q(reading, {'"': "&quot;"})
         base_s = _esc_q(base, {'"': "&quot;"})
-        fld_rpr = ('<w:rPr><w:rFonts w:hint="eastAsia"/>'
-                   '<w:lang w:val="en-US" w:eastAsia="zh-CN"/></w:rPr>')
+        if base_rpr:
+            fld_rpr = (f'<w:rPr>{base_rpr}'
+                       '<w:lang w:val="en-US" w:eastAsia="zh-CN"/></w:rPr>')
+        else:
+            fld_rpr = ('<w:rPr><w:rFonts w:hint="eastAsia"/>'
+                       '<w:lang w:val="en-US" w:eastAsia="zh-CN"/></w:rPr>')
         code = (f" EQ \\* jc0 \\* &quot;Font:{font_s}&quot; \\* hps{hps} "
                 f"\\o \\ad(\\s \\up {up}({rd_s}),{base_s})")
-        return (f"<w:r><w:fldChar w:fldCharType=\"begin\"/></w:r>"
+        return (f"<w:r>{fld_rpr}<w:fldChar w:fldCharType=\"begin\"/></w:r>"
                 f"<w:r>{fld_rpr}<w:instrText xml:space=\"preserve\">{code}</w:instrText></w:r>"
                 f"<w:r>{fld_rpr}<w:fldChar w:fldCharType=\"end\"/></w:r>")
 
@@ -468,6 +480,9 @@ class DocxRenderer:
             up = max(1, int(round(up)))
             font = (ann.get("rt_font") or "").strip() if isinstance(ann.get("rt_font"), str) else ""
             font = font or "宋体"  # WPS 拼音指南默认字体
+            # 上下文 rPr（去 <w:rPr> 壳）注入 field run，令域结果继承本段样式
+            base_rpr = rpr[len("<w:rPr>"):-len("</w:rPr>")] \
+                if rpr.startswith("<w:rPr>") and rpr.endswith("</w:rPr>") else rpr
             out = []
             for seg, reading in segs:
                 if not seg:
@@ -476,7 +491,7 @@ class DocxRenderer:
                     out.append(self._plain_run(seg, rpr))
                 else:
                     out.append("".join(
-                        self._eq_field(b, r, hps, up, font)
+                        self._eq_field(b, r, hps, up, font, base_rpr)
                         for b, r in _split_eq(seg, reading)))
             return "".join(out)
         # 上方 ruby：rubyPr 补完（hps/hpsRaise/hpsBaseText/lid，Word 拼音指南完整结构；
@@ -687,6 +702,25 @@ class DocxRenderer:
         self._media = []              # 内嵌图片 [{path, ext, rid, name}]（_build_docx 落盘）
         self._media_seq = 0
         self.missing_figures = []
+        # 注（note.n）→ app：追加 cf（confer 参考，见 _cf_run）；与 html/txt/md 同构
+        self._app_by_n = {}
+        for n in self._iter_all(work.body):
+            if isinstance(n, App) and n.key:
+                self._app_by_n[n.key[3:]] = n
+        # 整体 orig 注被拆分 mod（a/b）取代：docx 不单出（见 model.suppressed_orig_notes）
+        self._orig_suppressed = suppressed_orig_notes(work.notes_by_n)
+
+    @staticmethod
+    def _iter_all(nodes):
+        """DFS 全节点（含 App 的 lem/rdgs），供 _app_by_n 建索引。"""
+        for n in nodes:
+            yield n
+            if isinstance(n, App):
+                if n.lem is not None:
+                    yield from DocxRenderer._iter_all([n.lem])
+                yield from DocxRenderer._iter_all(n.rdgs)
+            if getattr(n, "children", None):
+                yield from DocxRenderer._iter_all(n.children)
 
     def _render_split(self, work: Work, out_dir: str, filename: str = "") -> List[str]:
         """按卷输出：每卷一个独立文档（书名页 + 本卷正文 + teiHeader 尾页）。"""
@@ -826,7 +860,12 @@ class DocxRenderer:
             if self._annotations is not None:
                 return self._run_annotated(text, *self._current_tag())
             return self._run(text, *self._current_tag())
-        if isinstance(n, Lb) or isinstance(n, Pb):
+        if isinstance(n, Lb):
+            return ""
+        if isinstance(n, Pb):
+            # repeat=page（docx 专属）：原书页（<pb>）边界清空已注集合，翻页重注
+            if _page_repeat(self._annotations):
+                self._ann_seen = set()
             return ""
         if isinstance(n, Gaiji):
             roman = self._gaiji_roman(n.code)
@@ -908,6 +947,21 @@ class DocxRenderer:
             self._div_stack = prev
             self._in_note = prev_note
 
+    def _cf_run(self, note, app=None) -> str:
+        """cf（confer 参考）run：官方 docx 对全部注型追加 ` (cf. a; b)`（前导空格），
+        多个 cf 以 `; ` 连接；inline 模式随 note-inline 标签，其余随 footnote。"""
+        if app is None:
+            app = self._app_by_n.get(note.n or "")
+        if app is None or app.lem is None:
+            return ""
+        cfs = [c for c in app.lem.children
+               if isinstance(c, Note) and (c.ntype or "").startswith("cf")]
+        if not cfs:
+            return ""
+        refs = "; ".join(self._render_text(c) for c in cfs)
+        tag = "note-inline" if self.notes == "inline" else "footnote"
+        return self._run(f" (cf. {refs})", tag)
+
     def _render_noteref(self, ref: NoteRef) -> str:
         if not self.show_notes or self._suppress_note_ref:
             return ""
@@ -915,7 +969,9 @@ class DocxRenderer:
         if not notes:
             return ""
         note = self._pick_note(notes)
-        content = self._footnote_content(note)
+        if note.ntype == "orig" and (note.n or "") in self._orig_suppressed:
+            return ""
+        content = self._footnote_content(note) + self._cf_run(note)
         if self.notes == "inline":
             return self._render_inline_mode(content)
         self._fn_seq += 1
@@ -929,12 +985,18 @@ class DocxRenderer:
     def _render_app(self, app: App) -> str:
         if not self.show_notes or self._suppress_note_ref:
             return ""
+        # star_removed（去校勘星）：其读法已由 corresp 指向的注在各自位置渲染，
+        # 此处再渲会与正文注重复（官方仅在该注位置出注，本 app 仅贡献 cf）
+        if app.atype == "star_removed":
+            return ""
         if app.attrs.get("corresp"):
             n = app.attrs["corresp"].lstrip("#")
             notes = (self._work.notes_by_n or {}).get(n) if self._work else None
             if notes:
                 note = self._pick_note(notes)
-                content = self._footnote_content(note)
+                if note.ntype == "orig" and (note.n or "") in self._orig_suppressed:
+                    return ""
+                content = self._footnote_content(note) + self._cf_run(note, app=app)
                 if self.notes == "inline":
                     return self._render_inline_mode(content)
                 self._fn_seq += 1
@@ -1643,7 +1705,7 @@ class DocxRenderer:
             elif self.bookmarks and tag == "pin":
                 # 品名 = 第二级目录（挂在卷之下）
                 ppr += '<w:outlineLvl w:val="1"/>'
-            rpr = self.theme.docx_run(*base)
+            rpr = self.theme.docx_run(*base, latin=self.latin_font)
             ppr_x = f"<w:pPr>{ppr}</w:pPr>" if ppr else ""
             rpr_x = f"<w:rPr>{rpr}</w:rPr>" if rpr else ""
             return (f'<w:style w:type="paragraph" w:styleId="{tag}">'

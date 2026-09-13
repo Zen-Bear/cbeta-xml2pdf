@@ -185,5 +185,65 @@ class TestPdfNoBaseline(unittest.TestCase):
         self.assertIn("PDF", r["detail"])
 
 
+class TestNormalizeWithLines(unittest.TestCase):
+    def test_line_map_aligns(self):
+        from pycbeta.verify import normalize_with_lines, normalize
+        raw = "第一行\n\n第二行 [01-02]\n第三行"
+        norm, line_of, raw_lines = normalize_with_lines(raw)
+        self.assertEqual(norm, normalize(raw))
+        self.assertEqual(len(norm), len(line_of))
+        self.assertEqual(raw_lines[line_of[norm.index("二")]], "第二行 [01-02]")
+
+    def test_cross_line_bracket_fallback(self):
+        from pycbeta.verify import normalize_with_lines
+        norm, line_of, _ = normalize_with_lines("a〔b\nc〕d")
+        self.assertEqual(norm, "ad")
+        self.assertEqual(line_of, [])
+
+
+class TestReportCtxLocation(unittest.TestCase):
+    def test_report_marks_span_and_line(self):
+        from pycbeta.verify import format_verify_report
+        recs = [{
+            "xml": "T01n0001.xml", "fmt": "docx", "status": "fail",
+            "gen": "T01n0001.docx", "official_kind": "docx",
+            "official": "official.docx", "matched": 100,
+            "missing": 0, "extra": 1, "total": 1,
+            "ctx": [("insert", 1, 2, 1, 1)],
+            "ctx_loc": [{"gen_line": 12, "src_line": 12}],
+            "src_cmp": "T01n0001_compare_docx_official.txt",
+            "gen_cmp": "T01n0001_compare_docx_generated.txt",
+            "norm_gen": "甲X乙", "norm_official": "甲乙",
+        }]
+        s = "\n".join(format_verify_report(recs))
+        self.assertIn("【源比较】行号对齐 T01n0001_compare_docx_official.txt", s)
+        self.assertIn("【新比较】行号对齐 T01n0001_compare_docx_generated.txt", s)
+        self.assertIn("1.（源比较第12行，新比较第12行）", s)
+        self.assertIn("【源】甲〖〗乙", s)
+        self.assertIn("【新】甲〖X〗乙", s)
+        self.assertNotIn("标出差异位置", s)
+
+    def test_report_without_loc_falls_back(self):
+        from pycbeta.verify import format_verify_report
+        recs = [{
+            "xml": "T01n0001.xml", "fmt": "docx", "status": "fail",
+            "gen": "T01n0001.docx", "official_kind": "docx",
+            "official": "official.docx", "matched": 100,
+            "missing": 0, "extra": 1, "total": 1,
+            "ctx": [("insert", 1, 2, 1, 1)],
+            "norm_gen": "甲X乙", "norm_official": "甲乙",
+        }]
+        s = "\n".join(format_verify_report(recs))
+        self.assertIn("1.\n", s)
+        self.assertIn("【源】甲〖〗乙", s)
+        self.assertNotIn("标出差异位置", s)
+
+    def test_mark_span(self):
+        from pycbeta.verify import _mark_span
+        self.assertEqual(_mark_span("甲乙", 1, 1), "甲〖〗乙")
+        self.assertEqual(_mark_span("甲X乙", 1, 2), "甲〖X〗乙")
+        self.assertEqual(_mark_span("", 0, 0), "〖〗")
+
+
 if __name__ == "__main__":
     unittest.main()

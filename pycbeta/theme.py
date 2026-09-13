@@ -1061,10 +1061,17 @@ class Theme:
                 props.update(cprops)
         return props
 
-    def docx_run(self, *tags: str, base_pt: Optional[float] = None) -> str:
+    def docx_run(self, *tags: str, base_pt: Optional[float] = None,
+                 latin: Optional[str] = None) -> str:
         """Inner run-level properties (no <w:rPr> wrapper), merging across tags.
 
         base_pt: 所在段落字号，用于把 em 字号换算成 pt（1em == base_pt）。
+        latin: 西文字体（w:ascii/w:hAnsi，默认 --font-latin）；缺省回落首个
+        font-family 名（旧行为，供不经渲染器的调用方）。eastAsia 恒取首个中文字体名，
+        与 pdf_docx.css 头注释「DOCX 只取首个中文字体作 eastAsia，西文另走 --font-latin」
+        一致。不加 w:hint="eastAsia"：带附加符号的拉丁字母（ā ī 等 EAW=A，
+        见「舍衛【大】，～Sāvatthī」）会因 hint 被判给 eastAsia 而落中文字体；
+        不带 hint 时按 Unicode script 走 hAnsi=西文字体（CJK 全角标点仍是 eastAsia）。
         """
         props = self._props(*tags)
         out = []
@@ -1085,8 +1092,9 @@ class Theme:
             names = [n.strip().strip('"').strip("'") for n in font.split(",")]
             names = [n for n in names if n]
             if names:
-                out.append(f'<w:rFonts w:ascii="{names[0]}" w:eastAsia="{names[0]}" '
-                           f'w:hAnsi="{names[0]}"/>')
+                latin_name = (latin or "").strip().strip('"').strip("'") or names[0]
+                out.append(f'<w:rFonts w:ascii="{latin_name}" w:eastAsia="{names[0]}" '
+                           f'w:hAnsi="{latin_name}"/>')
         return "".join(out)
 
     def _em_to_twips(self, em: float, font_pt: float) -> int:
