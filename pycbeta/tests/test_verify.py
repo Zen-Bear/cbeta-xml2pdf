@@ -245,5 +245,35 @@ class TestReportCtxLocation(unittest.TestCase):
         self.assertEqual(_mark_span("", 0, 0), "〖〗")
 
 
+class TestVerifyAlwaysComparesNotes(unittest.TestCase):
+    """校验恒比注：generate_formal 强制 show_notes=True（忽略 output.show_notes=false）。"""
+
+    def _capture(self, fmt, renderer_name):
+        from unittest import mock
+        import pycbeta.verify as V
+        from pycbeta.model import Work
+        captured = {}
+
+        class Fake:
+            def __init__(self, **kw):
+                captured.update(kw)
+
+            def render_work(self, work, out_dir, filename=""):
+                return os.path.join(out_dir, filename or "out")
+
+        w = Work(id="T", source_file="", metadata={}, body=[],
+                 notes_by_n={}, apps=[])
+        out = tempfile.mkdtemp()
+        with mock.patch.object(V, renderer_name, Fake):
+            V.generate_formal("T1.xml", w, fmt, out, overrides={"show_notes": False})
+        return captured
+
+    def test_docx_notes_forced(self):
+        self.assertTrue(self._capture("docx", "DocxRenderer")["show_notes"])
+
+    def test_txt_notes_forced(self):
+        self.assertTrue(self._capture("txt", "TxtRenderer")["show_notes"])
+
+
 if __name__ == "__main__":
     unittest.main()

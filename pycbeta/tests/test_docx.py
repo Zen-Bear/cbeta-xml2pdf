@@ -1337,6 +1337,67 @@ class TestSuppressedOrigNotes(unittest.TestCase):
         self.assertEqual(suppressed_orig_notes({"0001001": [n]}), set())
 
 
+class TestAncestorInheritance(unittest.TestCase):
+    """run 级逐层继承（外→内，属性各自最近优先，body 兜底）：并列标签同时生效、
+    非 div 祖先字号可继承、body 颜色可继承、三段后代选择器生效。"""
+
+    def _rpr(self, css, body, needle):
+        import shutil, zipfile, re as _re
+        from pycbeta.theme import Theme
+        from pycbeta.model import Work
+        w = Work(id="T", source_file="", metadata={"title": "t", "author": ""},
+                 body=body, notes_by_n={}, apps=[], simplified=False)
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
+        fn = DocxRenderer(theme=Theme.from_css(css)).render_work(w, tmp, "a.docx")
+        with zipfile.ZipFile(fn) as z:
+            xml = z.read("word/document.xml").decode("utf-8")
+        for m in _re.finditer(r"<w:r>(.*?)</w:r>", xml, _re.S):
+            if needle in m.group(1):
+                rpr = _re.search(r"<w:rPr>.*?</w:rPr>", m.group(1), _re.S)
+                return rpr.group(0) if rpr else ""
+        return ""
+
+    def test_parallel_tags_both_apply(self):
+        # 偈颂 + 楷体：字号/绿色来自 verse，字体来自 kaiti（CSS 逐属性层叠）
+        from pycbeta.model import E, Text
+        body = [E(tag="lg", attrs={"rend": "kaiti"},
+                  children=[E(tag="l", attrs={}, children=[Text("偈文")])])]
+        rpr = self._rpr("", body, "偈文")
+        self.assertIn('w:sz w:val="24"', rpr)      # verse 12pt
+        self.assertIn("008040", rpr)               # verse 绿
+        self.assertIn("標楷體", rpr)                # kaiti 字体
+
+    def test_non_div_ancestor_size_inherited(self):
+        # li 字号 → 内层 p run（CSS 继承；此前 item 不在 run 祖先链）
+        from pycbeta.theme import Theme
+        from pycbeta.model import E, Text
+        css = Theme().raw_css + "\nli { font-size: 20pt; }\n"
+        body = [E(tag="list", attrs={}, children=[
+            E(tag="item", attrs={}, children=[
+                E(tag="p", attrs={}, children=[Text("項目文")])])])]
+        rpr = self._rpr(css, body, "項目文")
+        self.assertIn('w:sz w:val="40"', rpr)      # 20pt
+
+    def test_body_color_propagates(self):
+        from pycbeta.model import E, Text
+        body = [E(tag="p", attrs={}, children=[Text("正文")])]
+        rpr = self._rpr("body { color: #ff0000; font-size: 14pt; }\n", body, "正文")
+        self.assertIn('w:sz w:val="28"', rpr)      # 14pt 来自 body
+        self.assertIn("ff0000", rpr)
+
+    def test_deep_descendant_applies(self):
+        from pycbeta.theme import Theme
+        from pycbeta.model import E, Text
+        css = (Theme().raw_css
+               + "\ndiv.div-xu div.div-other p.head { color: #123456; }\n")
+        body = [E(tag="div", attrs={"type": "xu"}, children=[
+            E(tag="div", attrs={"type": "other"}, children=[
+                E(tag="head", attrs={}, children=[Text("深層標題")])])])]
+        rpr = self._rpr(css, body, "深層標題")
+        self.assertIn("123456", rpr)
+
+
 class TestLatinFont(unittest.TestCase):
     """西文字体（--font-latin）落到 run 的 w:ascii/hAnsi；eastAsia 仍中文名。
 

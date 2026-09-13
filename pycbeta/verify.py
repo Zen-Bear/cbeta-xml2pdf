@@ -806,17 +806,19 @@ def generate_formal(xml_fn: str, work, fmt: str, outdir: str, config_path: Optio
         _fig_dirs = work_figure_dirs(_ebook, work.id, xml_fn)
     except Exception:
         _fig_dirs = []
+    # 校验恒比注：忽略 output.show_notes（转换时取消「显示注释」不改变校验内容；
+    # 官方基线含注，若生成档不带注会误报大量差异）
     if fmt == "html":
-        files = HtmlRenderer(theme=theme, notes="endnote", ignore_xml_style=bool(p("ignore_xml_style")), ignore_xml_space=bool(p("ignore_xml_space")), show_notes=p("show_notes", True), inline_brackets=p("inline_brackets", "fullwidth"), annotations=_ann, strip_head_no=_shn, figure_base=_fig_dirs or None).render_work(work, out_dir=outdir)
+        files = HtmlRenderer(theme=theme, notes="endnote", ignore_xml_style=bool(p("ignore_xml_style")), ignore_xml_space=bool(p("ignore_xml_space")), show_notes=True, inline_brackets=p("inline_brackets", "fullwidth"), annotations=_ann, strip_head_no=_shn, figure_base=_fig_dirs or None).render_work(work, out_dir=outdir)
         return [os.path.join(outdir, f) for f in files]
     if fmt == "docx":
-        return [os.path.join(outdir, DocxRenderer(theme=theme, notes="footnote", ignore_xml_style=bool(p("ignore_xml_style")), ignore_xml_space=bool(p("ignore_xml_space")), show_notes=p("show_notes", True), suppress_jhead_dup=p("suppress_jhead_dup", True), show_close_juan=bool(p("show_close_juan", False)), inline_brackets=p("inline_brackets", "fullwidth"), series_title=p("series_title", {}), annotations=_ann, strip_head_no=_shn, show_body_siddham=bool(p("show_body_siddham", True)), figure_base=_fig_dirs or None).render_work(work, out_dir=outdir, filename=f"{stem}.docx"))]
+        return [os.path.join(outdir, DocxRenderer(theme=theme, notes="footnote", ignore_xml_style=bool(p("ignore_xml_style")), ignore_xml_space=bool(p("ignore_xml_space")), show_notes=True, suppress_jhead_dup=p("suppress_jhead_dup", True), show_close_juan=bool(p("show_close_juan", False)), inline_brackets=p("inline_brackets", "fullwidth"), series_title=p("series_title", {}), annotations=_ann, strip_head_no=_shn, show_body_siddham=bool(p("show_body_siddham", True)), figure_base=_fig_dirs or None).render_work(work, out_dir=outdir, filename=f"{stem}.docx"))]
     if fmt == "epub":
-        return [os.path.join(outdir, EpubRenderer(theme=theme, notes="endnote", ignore_xml_style=bool(p("ignore_xml_style")), ignore_xml_space=bool(p("ignore_xml_space")), show_notes=p("show_notes", True), annotations=_ann, strip_head_no=_shn, figure_base=_fig_dirs or None).render_work(work, out_dir=outdir, filename=f"{stem}.epub"))]
+        return [os.path.join(outdir, EpubRenderer(theme=theme, notes="endnote", ignore_xml_style=bool(p("ignore_xml_style")), ignore_xml_space=bool(p("ignore_xml_space")), show_notes=True, annotations=_ann, strip_head_no=_shn, figure_base=_fig_dirs or None).render_work(work, out_dir=outdir, filename=f"{stem}.epub"))]
     if fmt == "md":
-        return [os.path.join(outdir, MdRenderer(theme=theme, notes="footnote", show_notes=p("show_notes", True), inline_brackets=p("inline_brackets", "fullwidth"), annotations=_ann, strip_head_no=_shn, show_dharani_transliteration=bool(p("show_dharani_transliteration", False))).render_work(work, out_dir=outdir, filename=f"{stem}.md"))]
+        return [os.path.join(outdir, MdRenderer(theme=theme, notes="footnote", show_notes=True, inline_brackets=p("inline_brackets", "fullwidth"), annotations=_ann, strip_head_no=_shn, show_dharani_transliteration=bool(p("show_dharani_transliteration", False))).render_work(work, out_dir=outdir, filename=f"{stem}.md"))]
     if fmt == "txt":
-        return [os.path.join(outdir, TxtRenderer(theme=theme, notes="footnote", show_notes=p("show_notes", True), inline_brackets=p("inline_brackets", "fullwidth"), annotations=_ann, strip_head_no=_shn, show_dharani_transliteration=bool(p("show_dharani_transliteration", False))).render_work(work, out_dir=outdir, filename=f"{stem}.txt"))]
+        return [os.path.join(outdir, TxtRenderer(theme=theme, notes="footnote", show_notes=True, inline_brackets=p("inline_brackets", "fullwidth"), annotations=_ann, strip_head_no=_shn, show_dharani_transliteration=bool(p("show_dharani_transliteration", False))).render_work(work, out_dir=outdir, filename=f"{stem}.txt"))]
     raise ValueError(f"unknown format {fmt}")
 
 def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int = 10, diff_lines: int = 5, config_path: Optional[str] = None, t2s: bool = False, baseline: str = "render") -> Dict:

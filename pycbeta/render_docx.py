@@ -851,8 +851,15 @@ class DocxRenderer:
         return "".join(self._render_node(n) for n in body)
 
     def _current_tag(self) -> tuple:
-        para = self._tag_stack[-1] if self._tag_stack else "p"
-        return tuple(self._div_stack) + (para,)
+        """run 的继承链（外→内）：body → div-* 祖先 → 当前标签栈全部。
+
+        CSS 语义：逐属性从最里层往外找，最里层写了用它、没写往外层、最后 body。
+        `docx_run` 按此顺序逐 tag `update`，后写（更里层）覆盖，等效实现。
+        之前只取 `_tag_stack[-1]`，会丢掉并列标签（verse+kaiti）与中间祖先
+        （li>p 的 li、note-inline 外的 verse）。
+        """
+        inner = tuple(self._tag_stack) if self._tag_stack else ("p",)
+        return ("body",) + tuple(self._div_stack) + inner
 
     def _render_node(self, n) -> str:
         if isinstance(n, Text):

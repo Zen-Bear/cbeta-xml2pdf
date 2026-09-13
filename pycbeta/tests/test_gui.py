@@ -2722,8 +2722,9 @@ class TestCssEditor(unittest.TestCase):
             with open(fn, "w", encoding="utf-8") as f:
                 f.write("p.head { font-size: 99pt; }\n")
             t = load_theme(fn)
-            # 部分文件：出厂打底（正文 12pt）+ 覆盖生效
-            self.assertEqual((t.tags.get("p") or {}).get("font-size"), "12pt")
+            # 部分文件：出厂打底（正文基准在 body 12pt；p 无字号跟随 body）+ 覆盖生效
+            self.assertEqual((t.tags.get("body") or {}).get("font-size"), "12pt")
+            self.assertIsNone((t.tags.get("p") or {}).get("font-size"))
             self.assertEqual((t.tags.get("head") or {}).get("font-size"),
                              "99pt")
         finally:

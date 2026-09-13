@@ -18,7 +18,7 @@
   --font-pin: 新細明體, PMingLiU;
   --font-div-xu-head: 標楷體, DFKaiShu;
   --font-p: 新細明體, PMingLiU;
-  --font-verse: 標楷體, DFKaiShu;
+  --font-verse: 新細明體, PMingLiU; /* 偈颂 */
   --font-form: 新細明體, PMingLiU;
   --font-dharani: 新細明體, PMingLiU;
   --font-footnote: 新細明體, PMingLiU;
@@ -41,7 +41,7 @@ html[lang="zh-Hans"] {
   --font-pin: 宋体, SimSun;
   --font-div-xu-head: 楷体, KaiTi;
   --font-p: 宋体, SimSun;
-  --font-verse: 楷体, KaiTi;
+  --font-verse: 宋体, SimSun;  /* 偈颂 */
   --font-form: 宋体, SimSun;
   --font-dharani: 宋体, SimSun;
   --font-footnote: 宋体, SimSun;
@@ -112,13 +112,14 @@ p.head[data-head-level="3"] { margin-left: 2em;  font-size: 16pt; font-weight: b
 p.head[data-head-level="4"] { margin-left: 3em;  font-size: 14pt; font-weight: bold; }
 p.head[data-head-level="5"] { margin-left: 4em;  font-size: 12pt; font-weight: bold; }
 p.head[data-head-level="6"] { margin-left: 5em;  font-size: 12pt; font-weight: bold; }
-/* 以下 4 处（head/juan/verse/list）的值来自 theme.py 的 DEFAULT_THEME（Python 兜底）。
-   想覆盖请【改这里的值】，不要删除整条——删除会回退到兜底。 */
+/* 本文件是默认值**唯一定义处**（Python DEFAULT_THEME 已移除）：想覆盖改这里。
+   必需元素/关键属性由 theme.REQUIRED_THEME_TAGS + test_theme.TestRequiredThemeTags
+   守护；误删会在测试里报出选择器并提示补回。 */
 
 p.head {
-  font-size: 20pt;        /* 兜底值；想覆盖改这里（勿删） */
-  font-weight: bold;      /* 兜底值；想覆盖改这里（勿删） */
-  color: #0000a0;         /* 兜底值；想覆盖改这里（勿删） */
+  font-size: 20pt;        /* 想覆盖改这里 */
+  font-weight: bold;      /* 想覆盖改这里 */
+  color: #0000a0;         /* 想覆盖改这里 */
   text-align: center;     /* 标题居中（含品名等 head） */
   margin-top: 0.5em;        /* 标题段前（2026-09-06 补：此前紧贴上文，如字義） */
   margin-bottom: 0.5em;   /* 标题段后 */
@@ -132,7 +133,7 @@ p.juan {
   font-size: 20pt;
   font-weight: bold;
   text-align: center;
-  color: #0000ff;        /* #0000ff 兜底值；想覆盖改这里（勿删） */
+  color: #0000ff;        /* #0000ff 想覆盖改这里 */
   margin-top: 0.5em;       /* 卷名段前 1 行 */
   margin-bottom: 0.5em;  /* 卷名段后 1 行 */
   line-height: 1;
@@ -143,7 +144,7 @@ p.pin {
   font-size: 16pt;
   font-weight: bold;
   text-align: center;
-  color: #0000a0;        /* #0000a0 兜底值；想覆盖改这里（勿删） */
+  color: #0000a0;        /* #0000a0 想覆盖改这里 */
   margin: 1em 0;         /* 品名段前/段后 1em */
   line-height: 1;
 }
@@ -190,7 +191,7 @@ pre {
 /* 偈颂块（<lg>）：楷体绿色，左缩进 2em；用 table 布局实现偈句对齐
    （lg-row=行，lg-cell=格，见下）。 */
 div.lg {
-  font-size: 12pt;         /* 兜底值；想覆盖改这里（勿删） */
+  font-size: 12pt;         /* 想覆盖改这里 */
   display: table;
   color: #008040;
   margin-left: 2em;
@@ -287,11 +288,11 @@ p.byline {
 div.bip-table { margin-left: 1em; }
 div.bip-table-row { display: table-row; }
 div.bip-table-cell { padding: 0 0.5em; }
-/* 列表：左缩进 1em；默认无标记（list-style-type 兜底 none，DOCX 无编号；
-   PDF 想显示项目符号改 disc，勿删整条）。 */
+/* 列表：左缩进 1em；默认无标记（list-style-type 默认 none，DOCX 无编号；
+   PDF 想显示项目符号改 disc；勿删整条规则，由完整性测试守护）。 */
 ul, ol { margin-left: 1em; list-style-type: none; }   /* 列表（DOCX 按 list-style-type 映射编号）。
-                                                           list-style-type 兜底值 none（DOCX 无标记）；
-                                                           PDF 想显示项目符号改 disc，勿删 */
+                                                           list-style-type 默认 none（DOCX 无标记）；
+                                                           PDF 想显示项目符号改 disc；勿删整条规则，由完整性测试守护 */
 ul.no-marker { list-style-type: none; }   /* 无标记列表（对齐官方格式） */
 li { text-indent: 0; }                     /* 列表项不缩进（覆盖 p 的 2em 首行缩进） */
 li > p { text-indent: 0; }     /* 列表内段落不缩进（对齐官方格式） */

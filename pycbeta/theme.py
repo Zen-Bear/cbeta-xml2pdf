@@ -25,7 +25,7 @@ _DEFAULT_CSS = os.path.join(os.path.dirname(__file__), "styles", "pdf_docx.css")
 TRANSLATABLE = {
     "font-size", "font-weight", "color", "font-family",
     "text-align", "text-indent", "line-height", "margin", "margin-left",
-    "margin-top", "margin-bottom",
+    "margin-top", "margin-bottom", "list-style-type",
 }
 
 TAG_SELECTOR = {
@@ -109,36 +109,58 @@ for _dt in _DIV_TYPES:
     TAG_SELECTOR.setdefault(f"div-{_dt}", f"div.div-{_dt}")
 
 
-DEFAULT_THEME: Dict[str, Dict[str, str]] = {
-    "title": {"font-size": "24pt", "text-align": "center", "font-weight": "bold"},
-    "author": {"font-size": "12pt", "text-align": "center"},
-    "translator": {"font-size": "12pt", "text-align": "center"},
-    "byline": {"font-size": "12pt", "text-align": "right"},
-    "head": {"font-size": "14pt", "font-weight": "bold", "color": "#0000a0"},
-    "juan": {"font-size": "16pt", "font-weight": "bold", "color": "#0000ff"},
-    "pin": {"font-size": "14pt", "font-weight": "bold", "text-align": "center"},
-    "p": {"font-size": "12pt", "text-indent": "2em", "line-height": "1.8", "text-align": "justify"},
-    "pre": {"text-indent": "0"},
-    "verse": {"font-size": "12pt"},
-    "form": {"font-weight": "bold"},
-    "dharani": {},
-    "footnote": {"font-size": "9pt"},
-    "note-ref": {"font-size": "0.7em"},
-    "note-inline": {"font-size": "0.9em"},
-    "doube-line-note": {"font-size": "0.8em"},
-    "interlinear-note": {"font-size": "0.8em"},
-    "list": {"list-style-type": "none", "margin-left": "1em"},
-    "item": {},
-    "kaiti": {},
-    "heiti": {},
-    "fangsong": {},
-    "mingti": {},
+# 主题默认值唯一定义处 = `styles/pdf_docx.css`（不再有 Python DEFAULT_THEME，
+# 避免"删 CSS 键仍被 Python 兜底"造成 DOCX/HTML 不一致）。
+# 必需元素由 REQUIRED_THEME_TAGS 声明、test_theme.TestRequiredThemeTags 守护；
+# 缺失时提示往 pdf_docx.css 补对应选择器/属性。
+#
+# 约定：`p` 不写 font-size（跟随 `body`，DOCX 经 docDefaults 继承）；字号相对处用 em。
+REQUIRED_THEME_TAGS: Dict[str, tuple] = {
+    "body": ("font-size", "line-height"),
+    "title": ("font-size", "font-weight"),
+    "author": ("font-size",),
+    "translator": ("font-size",),
+    "byline": ("font-size",),
+    "head": ("font-size", "font-weight"),
+    "juan": ("font-size", "font-weight"),
+    "pin": ("font-size", "font-weight"),
+    "p": ("text-indent", "line-height"),      # 刻意不要求 font-size：跟随 body
+    "pre": ("text-indent",),
+    "verse": ("font-size",),
+    "form": ("font-weight",),
+    "dharani": (),
+    "footnote": ("font-size",),
+    "note-ref": ("font-size",),
+    "note-inline": ("font-size",),
+    "doube-line-note": ("font-size",),
+    "interlinear-note": ("font-size",),
+    "list": ("list-style-type",),
+    "item": (),
+    "kaiti": ("font-family",),
+    "heiti": ("font-family",),
+    "fangsong": ("font-family",),
+    "mingti": ("font-family",),
+    "div-orig": ("font-weight",),
 }
 
-# 说明：颜色不再写进 DEFAULT_THEME（byline/verse/note-ref/note-inline/
-# doube-line-note/interlinear-note 的颜色由 pdf_docx.css 定义），否则 CSS
-# 无法通过注释"删除"颜色（DEFAULT_THEME 兜底仍在）。head/juan 颜色仍在此处
-# （pdf_docx.css 未定义）。
+
+def missing_required_theme(theme: "Theme") -> list:
+    """检查主题是否缺少 REQUIRED_THEME_TAGS 的元素/属性；返回人类可读缺失项。
+
+    空列表 = 齐全。文案含应加的选择器，便于直接补进 pdf_docx.css。
+    """
+    tags = getattr(theme, "tags", None) or {}
+    missing = []
+    for tag, props in REQUIRED_THEME_TAGS.items():
+        if tag not in tags:
+            sel = TAG_SELECTOR.get(tag, tag)
+            missing.append(f"元素 {tag}（选择器 {sel}）整体缺失")
+            continue
+        for p in props:
+            if not (tags.get(tag) or {}).get(p):
+                sel = TAG_SELECTOR.get(tag, tag)
+                missing.append(f"元素 {tag}（{sel}）缺少属性 {p}")
+    return missing
 
 # 预设（字体方案 + 页面设置）：外部 JSON 配置，见 styles/presets.json，
 # 用户可直接改或复制后用 --presets-file 指定。
@@ -849,13 +871,6 @@ def resolve_page(name: str, page_presets: Optional[Dict] = None) -> Dict:
         "latin_font": p.get("latin_font", "Calibri"),
     }
 
-# div/@type default styles (div-orig = bold, etc.)
-for _dt in ["orig", "commentary", "xu", "jing", "pin", "fen", "hui", "w",
-            "note", "other", "di", "mu", "jie", "she", "shi", "toc",
-            "xiang", "zhang", "廣釋", "續補", "chu", "lg"]:
-    DEFAULT_THEME.setdefault(f"div-{_dt}", {})
-DEFAULT_THEME["div-orig"]["font-weight"] = "bold"
-
 _ALIGN_MAP = {"center": "center", "left": "left", "right": "right", "justify": "both"}
 
 
@@ -863,10 +878,8 @@ class Theme:
     def __init__(self, tags: Optional[Dict[str, Dict[str, str]]] = None,
                  raw_css: str = "", lang: str = "zh-Hant"):
         self.lang = lang if lang in ("zh-Hant", "zh-Hans") else "zh-Hant"
-        merged: Dict[str, Dict[str, str]] = {}
-        for tag, props in DEFAULT_THEME.items():
-            merged[tag] = dict(props)
-        # official default stylesheet (semantic type hooks); parsed for DOCX
+        # 默认值唯一定义处 = pdf_docx.css（无 Python DEFAULT_THEME 兜底）。
+        # 缺省读出厂 CSS；CSS 规则即 tags（DOCX）+ raw_css（HTML/PDF）。
         if not raw_css and os.path.isfile(_DEFAULT_CSS):
             try:
                 with open(_DEFAULT_CSS, encoding="utf-8") as f:
@@ -875,19 +888,18 @@ class Theme:
                 raw_css = ""
         if raw_css:
             parsed, compounds = self._parse_css_tags(raw_css, self.lang)
-            for tag, props in parsed.items():
-                merged.setdefault(tag, {}).update(props)
         else:
-            compounds = []
+            parsed, compounds = {}, []
+        merged: Dict[str, Dict[str, str]] = \
+            {tag: dict(props) for tag, props in parsed.items()}
         if tags:
             for tag, props in tags.items():
                 merged.setdefault(tag, {}).update(props)
         self.tags = merged
         self.compounds = compounds
-        # 显式来源：CSS 解析出的 (tag, prop) + 构造参数（DEFAULT_THEME 不算）。
+        # 显式来源：CSS 解析出的 (tag, prop) + 构造参数（默认值即 CSS，不再区分）。
         # 供 apply_page_typography 判定 p 是否"亲笔写过"（写过则纸张不覆盖它）。
-        explicit = {(t, k) for t, props in parsed.items() for k in props} \
-            if raw_css else set()
+        explicit = {(t, k) for t, props in parsed.items() for k in props}
         if tags:
             explicit |= {(t, k) for t, props in tags.items() for k in props}
         self._explicit = explicit
@@ -975,13 +987,18 @@ class Theme:
                 if tag:
                     tags.setdefault(tag, {}).update(decls)
                     continue
-                # 两段后代：祖先与目标都须可解析
+                # 后代选择器：全段可解析时记录（祖先按序，供 CSS 式逐层继承）
                 bits = part.split()
                 if len(bits) == 2:
                     anc = _SELECTOR_TAGS.get(bits[0])
                     tgt = _SELECTOR_TAGS.get(bits[1])
                     if anc and tgt:
                         compounds.append((anc, tgt, dict(decls), part))
+                elif len(bits) > 2:
+                    anc_tags = [_SELECTOR_TAGS.get(b) for b in bits[:-1]]
+                    tgt = _SELECTOR_TAGS.get(bits[-1])
+                    if tgt and all(anc_tags):
+                        compounds.append((tuple(anc_tags), tgt, dict(decls), part))
         return tags, compounds
 
     @classmethod
@@ -1050,14 +1067,31 @@ class Theme:
         return self._apply_compounds(out, tags)
 
     def _apply_compounds(self, props: Dict[str, str], tags) -> Dict[str, str]:
-        """后代选择器（仅两段 `A B`）：B==栈顶标签且 A 在祖先栈中时覆盖。
-        后定义的规则后应用（CSS 顺序优先）。tags 即调用方传入的完整标签栈。"""
+        """后代选择器：target = 栈顶标签。
+        - 两段 `A B`：A 在祖先中出现即生效（anc 为 str）。
+        - 三段+ `A B C`：祖先按序出现（anc 为 tuple；CSS 后代语义）。
+        后定义的规则后应用（CSS 顺序优先）。"""
         if not self.compounds or not tags:
             return props
         target = tags[-1]
         ancestors = set(tags[:-1])
         for anc, tgt, cprops, _sel in self.compounds:
-            if tgt == target and anc in ancestors:
+            if tgt != target:
+                continue
+            if isinstance(anc, tuple):
+                seq = list(tags[:-1])
+                i = 0
+                ok = True
+                for a in anc:
+                    while i < len(seq) and seq[i] != a:
+                        i += 1
+                    if i >= len(seq):
+                        ok = False
+                        break
+                    i += 1
+                if ok:
+                    props.update(cprops)
+            elif anc in ancestors:
                 props.update(cprops)
         return props
 

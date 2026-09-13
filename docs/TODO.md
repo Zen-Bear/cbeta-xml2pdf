@@ -186,6 +186,7 @@
   - 根因：`_para` 的 `div_extra`（本意只带 div 边距）含 `docx_para(div)` 经 body 回退带入的 `w:line=336`，以内联 pPr 覆盖命名样式（实证：壇法段落 `pStyle=head` + 内联 336）
   - 修法：段落标签自身有 line-height 时，从 div_extra 只摘 `w:line`/`w:lineRule`（留 before/after；全文件无 div-* 写行距，去掉的恒为回退值）；无自身值（verse 等）继续拿回退，零回归
   - 另答疑：CSS 删键≠继承 body——`DEFAULT_THEME` 先打底（`p: 1.8`，`theme.py:120`），删键只是不覆盖；继承分支只对无默认值的标签生效；`apply_page_typography` 另有"p 没亲笔写过跟页 body 走"的页级跟随（有 body_line_height 的纸才触发，verify 路径不调）。结论：行距保持显式写法
+    - **2026-09-13 更新**：`DEFAULT_THEME` 已删除（方案 B，见文末），上述"删键不覆盖"已不成立——CSS 现在是唯一定义处，删键即回退继承/出厂缺失由完整性测试报错。
   - 验收：`test_docx.TestDivExtraLineHeight` 3 项；X59 实证壇法段落只剩样式引用、无内联 line；出厂值契约测试同步新值（p 1.5→1.4、head 上边距 1em→0.5em）后全量 629 green
   - 后续（2026-09-12 用户调参）：`div.div-xu` margin-bottom 0.3em→1em；`test_body_rhythm_uniform` 的 `w:after` 断言 72→240 同步，全量回绿
 - [x] **已完成** 注释补 cf（confer 参考）+ 西文字体（--font-latin）进 run rFonts（2026-09-12 用户点档）
@@ -433,3 +434,21 @@
   - 修法：检测已运行（`GetActiveObject`）→ 安全附着（不动 Visible、不 Quit、`Open(ReadOnly/AddToRecentFiles=False)`、`Close(0)`、`DisplayAlerts=0`/`ScreenUpdating=False`/`Options.SaveInterval=0` 用后恢复）；未运行 → `DispatchEx` 独立隐藏实例 + `Quit(0)`；失败逐级回退（`DispatchEx`→`Open` 参数退化→`ExportAsFixedFormat`→`SaveAs`）
   - 加固：始终从**临时副本**转换（`_prep_open_path`）——WPS/Word 对同一路径 `Documents.Open` 会返回既有 Document，安全附着会误关用户同名文档；转换后删副本
   - 验证：`test_pdf.TestComConvert` 7 项（独立实例隐藏/Quit(0)/只读/Close(0)；附着不改 Visible/不 Quit/设置恢复；DispatchEx 失败回退；SaveAs 回退；失败清理；临时副本不碰原文件、用后即删）；真实 WPS 实测：无实例 → 独立转出 721KB PDF；预置可见实例 → `GetActiveObject` 命中、安全附着转出 PDF 且用户文档仍在（Count 保持 1）、不退出；全量 667 OK（skipped=1）
+- [x] **已完成** 校验恒比注：`generate_formal` 忽略 `output.show_notes`（2026-09-13 用户点档）
+  - 现象：转换时取消「显示注释」，校验重生成档也去注，而官方基线含注 → 误报大量「缺」
+  - 修法：`verify.generate_formal` 五个格式构造器一律 `show_notes=True`（仅校验用；生产 CLI/GUI 仍按开关）
+  - 验证：`test_verify.TestVerifyAlwaysComparesNotes` 2 项（docx/txt 用 `overrides={"show_notes": False}` 仍传 True）；全量 669 OK（skipped=1）
+  - 附：偈颂（`<lg>`）字体已在样式编辑器「偈颂」行（`div.lg`，docx 主题 tag `verse`）可调，实测 `div.lg` CSS → run rFonts/字号生效
+- [x] **已完成** 方案 B：删除 `DEFAULT_THEME`，`pdf_docx.css` 成为默认值唯一定义处（2026-09-13 用户立项）
+  - 根因：`Theme.__init__` 先铺 Python `DEFAULT_THEME` 再叠 CSS → 删 CSS 键不生效（露出旧默认）、body 改字号传不到 p/verse；`DEFAULT_THEME` 多数值还与 CSS 重复且更旧（title 24 vs 26、head 14 vs 20、juan 16 vs 20、pin 14 vs 16、note-ref 0.7em vs 0.75em）
+  - 实施：`theme.py` 删 `DEFAULT_THEME` 与 div-* `setdefault`/`div-orig bold`（CSS 已有）；`Theme.__init__` 直接从 CSS 解析起（`tags=merged`）；`TRANSLATABLE` 增 `list-style-type`（此前 DOCX 列表样式只来自 DEFAULT，CSS 未解析）
+  - 契约：新增 `theme.REQUIRED_THEME_TAGS`（元素→关键属性；`p` 刻意不含 font-size）+ `missing_required_theme(theme)`；`test_theme.TestRequiredThemeTags` 5 项（出厂齐全/缺 div.lg 报出选择器/防 DEFAULT_THEME 复现/p 跟随 body/body 字号传播）
+  - 语义结果：`p` 不再写 `w:sz`，DOCX 靠 `docDefaults=body` 继承；删 CSS 键两端一致；`font_scale` 由 body 缩放带动 p（视觉等价）
+  - 测试更新：`test_theme` 缩放/`test_gui` 工厂合并/`test_annotate` 正文 12pt 断言改 docDefaults；其余不变
+  - 文档：`主题与样式.md` 字号单源节补「DEFAULT_THEME 已移除 + 完整性守护」；`pdf_docx.css` 头部/各行注释由「Python 兜底·勿删」改为「唯一定义处」
+  - 验证：全量 674 OK（skipped=1）；出厂 CSS 下 T01/X59 docx 改前后对照——去除 `w:sz/w:szCs` 后**逐部件字节一致**，仅少 T01 20497 / X59 4504 处 `w:sz val=24`（正文 12pt 改由 `docDefaults`（=body）继承，视觉等价、单源达成）
+- [x] **已完成** DOCX run 祖先继承补全：从"仅 div+栈顶"改为"body→div→整栈逐层、属性各自最近优先"（2026-09-13 用户点档）
+  - 现象（旧）：并列标签只取栈顶（`<lg rend="kaiti">` 楷体生效但偈颂绿丢）、非 div 祖先字号传不进（`li{font-size}` 内层 p 不跟）、`body{color}` 进不了 run、三段后代选择器 DOCX 忽略
+  - 修法：`render_docx._current_tag` 返回 `("body",)+div_stack+全部 tag_stack`（外→内），`docx_run` 逐 tag `update` 即"逐属性最近优先、逐层往外、body 兜底"；`theme._parse_css_tags` 支持三段+后代选择器（祖先按序存 tuple），`_apply_compounds` 按序匹配
+  - 影响：纯"增加"——T01 20765 / X59 4589 处 run 补回 `w:sz=24`（=body，视觉等价）；X59 548/T01 15 处内联夹注补回 `rFonts`（继承 body 字体）；X59 27 处无 rPr 的注文补回正文 12pt+字体（此前掉 Word 默认 11pt）；文本零变化、无属性被移除
+  - 测试：`test_docx.TestAncestorInheritance` 4（并列标签双生效/li 字号下传/body 颜色下传/三段选择器）+ `test_theme.TestDescendantSelector` 扩展 2；全量 680 OK（skipped=1）

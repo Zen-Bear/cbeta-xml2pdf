@@ -577,7 +577,9 @@ class TestRender(unittest.TestCase):
         self.assertIsNotNone(m)
         self.assertIn('w:sz w:val="19"', m.group(0))       # 夹注 0.8em@12pt
         self.assertIn('w:color w:val="800080"', m.group(0))  # 夹注紫
-        self.assertIn('w:sz w:val="24"', xml)               # 正文注音仍 12pt
+        # 正文注音 12pt 由 docDefaults 承载（p 不写字号，跟随 body 单源）
+        styles = zipfile.ZipFile(fn).read("word/styles.xml").decode("utf-8")
+        self.assertIn('w:sz w:val="24"', styles)
 
     def test_epub_ruby(self):
         fn = EpubRenderer(annotations=self.ann).render_work(self.work, self.tmp, "ann.epub")

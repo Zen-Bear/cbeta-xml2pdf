@@ -76,8 +76,9 @@ class TestScaleFontSizes(unittest.TestCase):
     def test_tags_scaled(self):
         t = Theme().scale_font_sizes(1.5)
         # 注意：title 取 CSS 合并后的有效值（h1.title 26pt）；
-        # note-ref 取用户 CSS 值（现为 0.75em，随资源走，旧 9pt 已作废）
-        self.assertEqual(t.tags["p"]["font-size"], "18pt")
+        # p 无 font-size（跟随 body，单源），body 缩放带动正文
+        self.assertEqual(t.tags["body"]["font-size"], "18pt")
+        self.assertIsNone((t.tags.get("p") or {}).get("font-size"))
         self.assertEqual(t.tags["title"]["font-size"], "39pt")
         # footnote 出厂已是 0.75em：字符串不动，有效值随放大的 base 走
         self.assertEqual(t.tags["footnote"]["font-size"], "0.75em")
@@ -92,7 +93,7 @@ class TestScaleFontSizes(unittest.TestCase):
 
     def test_raw_css_override_appended(self):
         t = Theme().scale_font_sizes(1.5)
-        self.assertIn("p { font-size: 18pt; }", t.raw_css)
+        self.assertIn("body { font-size: 18pt; }", t.raw_css)
         self.assertIn("div.lg { font-size: 18pt; }", t.raw_css)
 
     def test_noop(self):
@@ -100,7 +101,7 @@ class TestScaleFontSizes(unittest.TestCase):
         before = t.raw_css
         t.scale_font_sizes(1.0)
         self.assertEqual(t.raw_css, before)
-        self.assertEqual(t.tags["p"]["font-size"], "12pt")
+        self.assertEqual(t.tags["body"]["font-size"], "12pt")
 
     def test_invalid(self):
         for bad in (0, -1, "x"):
@@ -110,7 +111,7 @@ class TestScaleFontSizes(unittest.TestCase):
     def test_hans_then_scale(self):
         t = Theme(lang="zh-Hans")
         t.scale_font_sizes(1.5)
-        self.assertEqual(t.tags["p"]["font-size"], "18pt")
+        self.assertEqual(t.tags["body"]["font-size"], "18pt")
         self.assertIn("SimSun", t.tags["p"]["font-family"])
 
     def test_compounds_scaled(self):
@@ -229,12 +230,12 @@ class TestBasePtSingleSource(unittest.TestCase):
         t2 = Theme.from_css("p { font-size: 12pt; }\n")
         self.assertEqual(t2.base_pt(), 12.0)
         t3 = Theme.from_css("p { color: #000; }\n")
-        self.assertEqual(t3.base_pt(), 12.0)  # DEFAULT p 兜底
-        self.assertEqual(t3.base_pt(fallback=11), 12.0)
+        self.assertEqual(t3.base_pt(), 12.0)          # 无 body/p 字号 → 默认 fallback 12
+        self.assertEqual(t3.base_pt(fallback=11), 11.0)
         # doc 默认跟 base（未知回 11，保持旧 pages 默认行为）
         from pycbeta.render_docx import DocxRenderer
         self.assertEqual(DocxRenderer(theme=t).doc_size, 14.0)
-        self.assertEqual(DocxRenderer(theme=t3).doc_size, 12.0)
+        self.assertEqual(DocxRenderer(theme=t3).doc_size, 11.0)
 
     def test_apply_page_typography(self):
         from pycbeta.theme import Theme, apply_page_typography
@@ -310,13 +311,29 @@ class TestDescendantSelector(unittest.TestCase):
     def test_parse_compounds(self):
         t = Theme.from_css(self.CSS)
         self.assertEqual(t.tags["head"]["color"], "#0000a0")
-        self.assertEqual(len(t.compounds), 1)
-        anc, tgt, props, sel = t.compounds[0]
-        self.assertEqual((anc, tgt), ("div-xu", "head"))
-        # 片段无 :root 变量 → 不填充字体（变量填充只认同文件 :root 双栏）
-        self.assertEqual(props, {"color": "#000"})
-        # 三段及以上、属性选择器不进 tags 也不进 compounds（HTML 靠原文 CSS）
-        self.assertNotIn("span.note-inline", [c[1] for c in t.compounds])
+        # 两段 + 三段后代各一条（三段现支持：CSS 后代语义，祖先按序）
+        self.assertEqual(len(t.compounds), 2)
+        two = [c for c in t.compounds if c[0] == "div-xu" and c[1] == "head"]
+        self.assertEqual(len(two), 1)
+        self.assertEqual(two[0][2], {"color": "#000"})
+        deep = [c for c in t.compounds if c[1] == "note-inline"]
+        self.assertEqual(len(deep), 1)
+        self.assertEqual(deep[0][0], ("div-xu", "head"))
+        self.assertEqual(deep[0][2], {"color": "#111"})
+        # 属性选择器不进 compounds（HTML 靠原文 CSS）
+        self.assertNotIn('p.head[data-head-level="1"]',
+                         [c[3] for c in t.compounds])
+
+    def test_deep_descendant_applies(self):
+        t = Theme.from_css(self.CSS)
+        rpr = t.docx_run("div-xu", "head", "note-inline", base_pt=14.0)
+        self.assertIn("111111", rpr)
+
+    def test_deep_descendant_requires_ancestors(self):
+        t = Theme.from_css(self.CSS)
+        # 缺 div-xu 祖先 → 三段规则不生效（层叠到 head 的 #000 或 p.head 蓝）
+        rpr = t.docx_run("head", "note-inline", base_pt=14.0)
+        self.assertNotIn("111111", rpr)
 
     def test_run_override(self):
         t = Theme.from_css(self.CSS)
@@ -332,7 +349,7 @@ class TestDescendantSelector(unittest.TestCase):
         t = Theme.from_css("div.div-xu { margin-top: 1em; }\n"
                            "div.div-xu p.head { margin-top: 3em; }\n")
         ppr = t.docx_para("div-xu", "head")
-        self.assertIn('w:before="840"', ppr)  # 3em × 14pt × 20（head 默认字号 14pt）
+        self.assertIn('w:before="720"', ppr)  # 3em × 12pt × 20（head 无字号 → 跟随 body 12pt）
 
     def test_css_roundtrip(self):
         t = Theme.from_css(self.CSS)
@@ -804,6 +821,46 @@ class TestVerticalUncenter(unittest.TestCase):
         self.assertIn("body.vertical-rl h1.title", raw)
         self.assertIn("body.vertical-rl p.head", raw)
         self.assertIn("body.vertical-rl p.pin", raw)
+
+
+class TestRequiredThemeTags(unittest.TestCase):
+    """pdf_docx.css 是默认值唯一来源（DEFAULT_THEME 已移除）：必需元素缺失即失败并
+    提示往 CSS 补上。"""
+
+    def test_factory_css_complete(self):
+        import pycbeta.theme as _t
+        missing = _t.missing_required_theme(_t.Theme())
+        self.assertEqual(
+            missing, [],
+            "pdf_docx.css 缺少必要主题元素/属性（请补上）：\n  - "
+            + "\n  - ".join(missing))
+
+    def test_missing_is_reported_with_selector(self):
+        import pycbeta.theme as _t
+        css = _t.Theme().raw_css.replace("div.lg", "x-lg")  # 模拟 verse 规则丢了
+        missing = _t.missing_required_theme(_t.Theme.from_css(css))
+        self.assertTrue(any("verse" in m and "div.lg" in m for m in missing),
+                        f"应报出 verse（选择器 div.lg），实际：{missing}")
+
+    def test_default_theme_removed(self):
+        # 防回归：默认值不得再写回 Python（否则"DEFAULT 兜底"问题复现）
+        import pycbeta.theme as _t
+        self.assertFalse(hasattr(_t, "DEFAULT_THEME"))
+
+    def test_p_follows_body_single_source(self):
+        import pycbeta.theme as _t
+        t = _t.Theme()
+        self.assertIsNone((t.tags.get("p") or {}).get("font-size"))
+        self.assertEqual(t.tags["body"]["font-size"], "12pt")
+        # p 不写 w:sz，靠 docDefaults 继承 body
+        self.assertNotIn("w:sz", t.docx_run("p"))
+
+    def test_body_size_propagates_to_p(self):
+        from pycbeta.theme import Theme
+        from pycbeta.render_docx import DocxRenderer
+        t = Theme.from_css("body { font-size: 14pt; }\n")
+        self.assertNotIn("w:sz", t.docx_run("p"))     # p 无显式字号
+        self.assertEqual(DocxRenderer(theme=t).doc_size, 14.0)
 
 
 if __name__ == "__main__":
