@@ -361,6 +361,7 @@ class PdfRenderer(HtmlRenderer):
     def render_work(self, work: Work, out_dir: str, filename: str = "main.html") -> str:
         """默认返回单个 html 路径；split=True 时返回按卷切分的 html 路径列表。"""
         self._work = work
+        self.missing_figures = []
         self._app_by_n = {}
         for n in self._iter_all(work.body):
             if isinstance(n, App) and n.key:
@@ -481,8 +482,8 @@ class PdfRenderer(HtmlRenderer):
             f"<title>{_esc(title)}</title>\n"
             f"<style>{css}</style>\n"
             f"{script}"
-            "</head><body>\n"
-            f"{head}{meta}\n"
+            + ("</head><body class=\"vertical-rl\">\n" if self.vertical else "</head><body>\n")
+            + f"{head}{meta}\n"
             f'<div class="content">{body}</div>\n'
             f"{end}\n"
             f"{tei_page}\n"

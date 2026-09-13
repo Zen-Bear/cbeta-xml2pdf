@@ -26,7 +26,7 @@ class EpubRenderer:
     def __init__(self, gaiji_db=None, theme=None, notes="endnote", base_css=None,
                  ignore_xml_style=False, ignore_xml_space=False, show_notes=True,
                  annotations=None, strip_head_no=False, inline_brackets="fullwidth",
-                 note_inline_brackets=None):
+                 note_inline_brackets=None, figure_base=None):
         # theme=None → 纯基底（golden 默认）；pdf_docx 主题不再进 epub
         #（render_html 章节与 style.css 同源 base_css）。
         self.theme = theme
@@ -41,20 +41,25 @@ class EpubRenderer:
         self.strip_head_no = strip_head_no  # 去 head/jhead 行首 No. 令牌（转内部 HtmlRenderer）
         self.inline_brackets = inline_brackets
         self.note_inline_brackets = note_inline_brackets or inline_brackets
+        self.figure_base = figure_base
+        self.missing_figures = []
 
     def render_work(self, work: Work, out_dir: str, filename: str = "") -> str:
         tmp = os.path.join(out_dir, "_epub_tmp")
+        self.missing_figures = []
         try:
-            html_files = HtmlRenderer(theme=self.theme, notes=self.notes,
-                                      base_css=self.base_css,
-                                      ignore_xml_style=self.ignore_xml_style,
-                                      ignore_xml_space=self.ignore_xml_space,
-                                      show_notes=self.show_notes,
-                                      annotations=self._annotations,
-                                      strip_head_no=self.strip_head_no,
-                                      inline_brackets=self.inline_brackets,
-                                      note_inline_brackets=self.note_inline_brackets) \
-                .render_work(work, tmp)
+            inner = HtmlRenderer(theme=self.theme, notes=self.notes,
+                                 base_css=self.base_css,
+                                 ignore_xml_style=self.ignore_xml_style,
+                                 ignore_xml_space=self.ignore_xml_space,
+                                 show_notes=self.show_notes,
+                                 annotations=self._annotations,
+                                 strip_head_no=self.strip_head_no,
+                                 inline_brackets=self.inline_brackets,
+                                 note_inline_brackets=self.note_inline_brackets,
+                                 figure_base=self.figure_base)
+            html_files = inner.render_work(work, tmp)
+            self.missing_figures = list(inner.missing_figures)
             md = work.metadata
             title = md.get("title") or work.id
             author = md.get("author") or ""

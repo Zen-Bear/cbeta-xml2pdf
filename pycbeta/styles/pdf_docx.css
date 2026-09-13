@@ -79,6 +79,8 @@ h1.title {
   font-size: 26pt;
   font-weight: bold;
   text-align: center;
+  line-height: 1.0;
+  margin-top: 0.5em;       /* 卷名段前 1 行 */
   margin-bottom: 1em;        /* 书名段后 1 行 */
 }
 /* 经藏名（<title level="s">，如「卍新纂大日本續藏經」）：仅首页左上角一行。
@@ -89,21 +91,19 @@ p.series-title {
   font-size: 9pt;
   text-align: left;
 }
-/* 署名行（<byline cb:type="author"> / cb:type="Translator">）：灰色小字居中，
+/* 署名行（<byline cb:type="author"> / cb:type="translator"，大小写不敏感）：
+   灰色小字右对齐（对齐官方 golden `.byline`；此前 center 规则实际极少命中），
    段前 0.5em、段后 2em，与书名拉开距离。逗号分组共享（译者特有覆盖写在下块，顺序勿换）。 */
 p.author, p.translator {
   font-size: 12pt;
-  text-align: center;
+  text-align: right;
   /*color: #444444;*/
   /*margin: 0.5em 0;*/        /* 段前/段后 0.5em 段前段后不一样需要 4 值或 margin-top/margin-bottom。）*/
   margin-top: 0.5em;
   margin-bottom: 2em;
 }
-/* 译者署名特有覆盖（示例，默认空）：如译者改右对齐，取消下行注释即可。
+/* 译者署名特有覆盖（示例，默认空）：
    独立标签以便分别换字体（font_sets author/translator）。 */
-/* p.translator {
-  text-align: right;
-} */
 
 /* 标题层级缩进（数据出自 head 的 data-head-level） */
 p.head[data-head-level="1"] { margin-left: 0em; font-size: 20pt; font-weight: bold; }
@@ -120,8 +120,9 @@ p.head {
   font-weight: bold;      /* 兜底值；想覆盖改这里（勿删） */
   color: #0000a0;         /* 兜底值；想覆盖改这里（勿删） */
   text-align: center;     /* 标题居中（含品名等 head） */
-  margin-top: 1em;        /* 标题段前（2026-09-06 补：此前紧贴上文，如字義） */
+  margin-top: 0.5em;        /* 标题段前（2026-09-06 补：此前紧贴上文，如字義） */
   margin-bottom: 0.5em;   /* 标题段后 */
+  line-height: 1;
 }
 
 /* ============ 卷 / 品 ============ */
@@ -132,8 +133,9 @@ p.juan {
   font-weight: bold;
   text-align: center;
   color: #0000ff;        /* #0000ff 兜底值；想覆盖改这里（勿删） */
-  margin-top: 1em;       /* 卷名段前 1 行 */
-  margin-bottom: 1em;       /* 卷名段前 1 行 */
+  margin-top: 0.5em;       /* 卷名段前 1 行 */
+  margin-bottom: 0.5em;  /* 卷名段后 1 行 */
+  line-height: 1;
 }
 /* 品名（<cb:jhead type="pin">，如“方便品第二”）：深蓝加粗居中，上下各空 2em；
    DOCX 同时挂 outlineLvl=1（导航窗格二级目录，挂在卷之下）。 */
@@ -142,17 +144,24 @@ p.pin {
   font-weight: bold;
   text-align: center;
   color: #0000a0;        /* #0000a0 兜底值；想覆盖改这里（勿删） */
-  margin: 2em 0;         /* 品名段前/段后 1em */
+  margin: 1em 0;         /* 品名段前/段后 1em */
+  line-height: 1;
 }
+/* 竖排取消居中（body.vertical-rl 作用域）：title/head/juan/pin 横排居中、
+   竖排默认对齐（竖排 left 即顶部）。整套替换主题（user.css）需自行带上本块；
+   css 编辑器预览为横排，本块恒惰性。 */
+body.vertical-rl h1.title, body.vertical-rl p.head,
+body.vertical-rl p.juan, body.vertical-rl p.pin { text-align: left; }
 
 /* ============ 段落 ============ */
-/* 正文（<p>）：两端对齐，首行缩进 2 字符，段前 0.5em、段后 0.3em，行距 1.5（与 body 全局一致）。 */
+/* 正文（<p>）：两端对齐，首行缩进 2 字符，段前 0.5em、段后 0.3em，行距 1.4（与 body 全局一致）。 */
 p {
   text-indent: 2em;          /* 段前缩进（首行 2 字符） */
-  line-height: 1.5;          /* 行距（1.5倍，与 body 全局一致；Word 映射为 w:lineRule="auto"） */
+  /*line-height: 1.5;*/          /* 行距（1.5倍，与 body 全局一致；Word 映射为 w:lineRule="auto"） */
   margin-top: 0.5em;         /* 正文段前 0.5 */
   margin-bottom: 0.3em;      /* 段后 */
   text-align: justify;
+  line-height: 1.4;
 }
 /* 咒语（<p type="dharani">，如陀罗尼）：继承正文字号，不加粗；
    不居中：对齐官方 HTML（golden 无 p.dharani 规则，咒语不居中） */
@@ -164,6 +173,13 @@ p.form {
   font-weight: bold;
   text-indent: 0;
   font-size: 1em;          /* 与正文对齐（恒等于正文；OOXML run 无继承，不写会掉到文档默认 11pt） */
+}
+/* 图片段（仅含 <figure> 的 <p>）：居中、无首行缩进（超出官方：官方 docx 用 default 样式无居中）。 */
+p.figure {
+  text-align: center;
+  text-indent: 0;
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
 }
 /* 预排段（<pre>）：保留源换行，不缩进（DOCX 拆成多 run + <w:br/>）。 */
 pre {
@@ -198,7 +214,7 @@ div.lg.note2 {
    （见 theme.py docx_para：div 标签靠前合并优先）。 */
 div.div-orig { font-weight: bold; }         /* 原文（官方 golden 同样加粗） */
 div.div-commentary { font-weight: normal; } /* 解釋 */
-div.div-xu { color: #000000; margin-top: 0.5em; margin-bottom: 0.3em; } /* 序：与正文同节奏（2026-09-06 前 1em/1em，序内每段大间距、正文忽宽忽挤；块分隔靠标题边距与分页）。PDF 按块生效；DOCX 对序内每个段落生效（命名样式不含 div 上下文，见 render_docx._para 内联追加） */
+div.div-xu { color: #000000; margin-top: 0.5em; margin-bottom: 1em; } /* 序：与正文同节奏（2026-09-06 前 1em/1em，序内每段大间距、正文忽宽忽挤；块分隔靠标题边距与分页）。PDF 按块生效；DOCX 对序内每个段落生效（命名样式不含 div 上下文，见 render_docx._para 内联追加） */
 /* 序内标题（<head> 在 div-xu 内，如"新譯大乘入楞伽經序"）：颜色覆盖 p.head 的蓝色；
    font-family 换序标题字体（改这一行即可，如换宋体写 宋体, SimSun, serif）。
    font-size 序标题字号（属性选择器 p.head[data-head-level] DOCX 不认，序标题走这行四格式通吃）。

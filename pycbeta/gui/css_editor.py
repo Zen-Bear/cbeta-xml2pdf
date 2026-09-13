@@ -54,6 +54,7 @@ EDITABLE_ROWS = (
     ("p", "正文"),
     ("p.dharani", "咒语"),
     ("p.form", "格式段"),
+    ("p.figure", "图片"),
     ("pre", "预排"),
     ("div.lg", "偈颂"),
     ("div.div-note", "字义"),

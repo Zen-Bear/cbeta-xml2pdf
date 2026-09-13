@@ -48,6 +48,7 @@ DEFAULT_DOWNLOADS = {
     "epub": "https://cbdata.dila.edu.tw/stable/download/epub/{canon}/{id}.epub",
     "txt_notes": "https://cbdata.dila.edu.tw/stable/download/text-with-notes/{id}.txt.zip",
     "odt": "https://cbdata.dila.edu.tw/stable/download/odt/{canon}/{id}.zip",
+    "figures": "https://raw.githubusercontent.com/cbeta-git/CBR2X-figures/master/{canon}/{file}",
 }
 
 _EBOOK_HINT = ("电子书工作根未配置：在 config.user.json 的 source.cbeta_ebook 填写 "
@@ -414,15 +415,18 @@ def materialize_work(work_id: str, presets: Optional[Dict] = None,
             have = find_local_xml(wdir, canon, no)
             if not quiet and changed:
                 print(f"{work_id}: 本地源拷贝 → {len(have)} 文件（{wdir}）")
+            _ensure_work_figures(work_id, presets, cbeta_ebook)
             return have, "xml_copy"
         merge_groups_to_dir(frags, wdir, quiet=quiet)
         have = find_local_xml(wdir, canon, no)
         if not quiet:
             n = sum(len(v) for v in frags.values())
             print(f"{work_id}: 碎片合册 → {len(have)} 册（{n} 碎片，{wdir}）")
+        _ensure_work_figures(work_id, presets, cbeta_ebook)
         return have, "xml_merge"
 
     if have:
+        _ensure_work_figures(work_id, presets, cbeta_ebook)
         return have, "cbeta_ebook"
     if not download:
         return [], ""
@@ -431,6 +435,7 @@ def materialize_work(work_id: str, presets: Optional[Dict] = None,
     have = find_local_xml(wdir, canon, no) if wdir else []
     if have and not quiet:
         print(f"{work_id}: 官方下载 → {len(have)} 文件（{wdir}）")
+    _ensure_work_figures(work_id, presets, cbeta_ebook)
     return have, ("downloaded" if have else "")
 
 
@@ -477,7 +482,96 @@ def ensure_baselines(work_id: str, kinds: List[str], presets: Optional[Dict],
         if res.get(kind):
             fetched[kind] = res[kind]
             print(f"  {work_id}: 官方基线缺失，已下载 {kind}（{len(res[kind])} 文件）")
+    _ensure_work_figures(work_id, presets, cbeta_ebook, wdir=wdir)
     return fetched
+
+
+def _ensure_work_figures(work_id: str, presets, cbeta_ebook, wdir=None) -> None:
+    """work 内 XML 含 <graphic> 时预取缺失图片（失败只打印，不中断）。"""
+    try:
+        from .figures import graphic_urls_in_text
+        if wdir is None:
+            try:
+                canon0, no0 = parse_work_id(work_id)
+            except ValueError:
+                return
+            title0 = _catalog_title(presets or {}, canon0, no0)
+            wdir = work_dir(cbeta_ebook, work_id, title0, presets, create=False)
+        if not wdir:
+            return
+        urls = []
+        for xp in find_local_xml(wdir, *parse_work_id(work_id)):
+            try:
+                with open(xp, encoding="utf-8", errors="replace") as f:
+                    urls += graphic_urls_in_text(f.read())
+            except OSError:
+                continue
+        urls = list(dict.fromkeys(urls))
+        if urls:
+            ensure_figures(work_id, urls, presets, cbeta_ebook, wdir=wdir)
+    except Exception as e:
+        print(f"  {work_id}: 图片预取跳过（{e}）")
+
+
+def ensure_figures(work_id: str, urls, presets=None, cbeta_ebook=None,
+                   wdir=None) -> tuple:
+    """图片预取：缺的下到 {work}/figures/。返回 (ok_paths, missing_basenames)。
+
+    顺序：{work}/figures 已有 → {work}/txt 基线 bonus 拷贝 → 远端下载；
+    404/失败只记录缺失，不抛错。"""
+    from .figures import (split_graphic_url, download_url, find_figure,
+                          looks_like_image)
+    presets = presets or {}
+    try:
+        canon, no = parse_work_id(work_id)
+    except ValueError:
+        return [], []
+    if wdir is None:
+        title = _catalog_title(presets, canon, no)
+        wdir = work_dir(cbeta_ebook, work_id, title, presets, create=False)
+        if not wdir:
+            return [], [split_graphic_url(u)[1] for u in urls or [] if split_graphic_url(u)[1]]
+    dl = {**DEFAULT_DOWNLOADS, **(presets.get("downloads") or {})}
+    tmpl = dl.get("figures") or DEFAULT_DOWNLOADS["figures"]
+    fig_dir = os.path.join(wdir, "figures")
+    txt_dir = os.path.join(wdir, "txt")
+    ok, missing, downloaded = [], [], 0
+    for url in urls or []:
+        ucanon, base = split_graphic_url(url)
+        if not base:
+            continue
+        hit = find_figure(base, [fig_dir, txt_dir])
+        if hit:
+            if os.path.dirname(os.path.abspath(hit)) != os.path.abspath(fig_dir):
+                # 基线 bonus：拷贝一份进 figures/（统一渲染搜索口径；失败忽略）
+                try:
+                    os.makedirs(fig_dir, exist_ok=True)
+                    shutil.copy2(hit, os.path.join(fig_dir, base))
+                    hit = os.path.join(fig_dir, base)
+                except OSError:
+                    pass
+            ok.append(hit)
+            continue
+        dest = os.path.join(fig_dir, base)
+        try:
+            os.makedirs(fig_dir, exist_ok=True)
+            if _http_download(download_url(ucanon or canon, base, tmpl), dest) \
+                    and looks_like_image(dest):
+                ok.append(dest)
+                downloaded += 1
+                continue
+            try:
+                os.remove(dest)
+            except OSError:
+                pass
+        except Exception:
+            pass
+        missing.append(base)
+    if downloaded:
+        print(f"  {work_id}: 图片缺失，已下载 figures（{downloaded} 张）")
+    if missing:
+        print(f"  {work_id}: 图片仍缺失（{', '.join(missing)}），渲染用占位")
+    return ok, missing
 
 
 def _work_id_from_dirname(name: str) -> str:

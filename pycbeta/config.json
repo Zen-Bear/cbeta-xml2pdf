@@ -27,7 +27,7 @@
       "size": [216, 279],
       "margins": { "top": 25.4, "right": 25.4, "bottom": 25.4, "left": 25.4 },
       "body_font_size": "12pt",
-      "body_line_height": 1.4
+      "body_line_height": 1.5
     },
     "手机": {  // 约 8 寸 16:9（100×178mm）
       "size": [100, 178],
@@ -176,7 +176,8 @@
     "docx": "https://cbdata.dila.edu.tw/stable/download/docx/{canon}/{id}.zip",
     "epub": "https://cbdata.dila.edu.tw/stable/download/epub/{canon}/{id}.epub",
     "txt_notes": "https://cbdata.dila.edu.tw/stable/download/text-with-notes/{id}.txt.zip",
-    "odt": "https://cbdata.dila.edu.tw/stable/download/odt/{canon}/{id}.zip"
+    "odt": "https://cbdata.dila.edu.tw/stable/download/odt/{canon}/{id}.zip",
+    "figures": "https://raw.githubusercontent.com/cbeta-git/CBR2X-figures/master/{canon}/{file}"  // 插图（graphic url 去 ../figures/ 前缀即 {canon}/{file}）
   },
 
   "verify": {

@@ -14,7 +14,8 @@ from typing import List, Optional
 
 from .model import App, E, Gaiji, Lb, Note, NoteRef, Pb, Text, Work
 from .gaiji import GaijiDb
-from .theme import Theme, resolve_page, _hex6, strip_head_no, bracket_pair
+from .theme import (Theme, resolve_page, _hex6, strip_head_no, bracket_pair,
+                    VERTICAL_UNCENTER)
 from .render_html import split_juans
 from .filename import apply_template
 from .annotate import active as _ann_active, split_annotated as _split_ann, parse_rt_size as _parse_rt_size, split_eq_reading as _split_eq, track_seen as _track_seen, page_repeat as _page_repeat
@@ -136,7 +137,7 @@ def split_sections(body, rules: dict) -> list:
 
 # 段落级命名样式（styles.xml 里定义，段落用 <w:pStyle> 引用而非内联 pPr）
 _STYLED_PARAS = ("title", "head", "juan", "pin", "p", "verse", "footnote", "byline",
-                 "author", "translator", "series-title", "def", "div-note")
+                 "author", "translator", "series-title", "def", "div-note", "figure")
 
 # 缺字回退链默认值（config output.docx.fallbackFonts 可覆盖；与预览 PREVIEW_FALLBACKS 对应。
 # 按渲染语言分栏（gaiji_lang）：繁体优先明体、简体优先宋体；SimSunExtB 管 Ext-B 及以后；
@@ -181,7 +182,8 @@ class DocxRenderer:
                    series_title=None, pagination=None, latin_font: Optional[str] = None,
                    annotations=None, gaiji_fonts=None, gaiji_lang: str = "zh-Hant",
                    fallback_fonts=None, siddham_fonts=None,
-                   vertical: bool = False, notes_marker_font: Optional[str] = None):
+                    vertical: bool = False, notes_marker_font: Optional[str] = None,
+                    figure_base=None):
         self.gaiji_db = gaiji_db if gaiji_db is not None else GaijiDb()
         self.theme = theme if theme is not None else Theme()
         self.ignore_xml_style = ignore_xml_style  # 忽略 <p style> 的 margin-left 脏数据
@@ -195,6 +197,10 @@ class DocxRenderer:
         self.suppress_jhead_dup = suppress_jhead_dup  # 仅 jhead 去重（默认 true，head 保留书名）
         self.inline_brackets = inline_brackets    # 正文夹注（place=inline，原文）括号：halfwidth="()" / fullwidth="（）"
         self.note_inline_brackets = note_inline_brackets or inline_brackets  # 校注内联括号（缺省回退 inline_brackets）
+        # 图片搜索目录：str | list[str]（{work}/figures → {work}/txt → 仓库 figures）
+        fb = [figure_base] if isinstance(figure_base, str) else list(figure_base or [])
+        self.figure_dirs = [d for d in fb if d]
+        self.missing_figures = []  # 本次渲染缺失的图片 basename（警告用，不中断）
         self.footnote_per_page = footnote_per_page  # 脚注每页重新编号（默认 true）
         self.footnote_separator = footnote_separator  # 脚注分隔线 {thicknessPt,lengthPercent,spaceTwips}
         self.show_notes = show_notes                # 关闭注释（默认 true 显示）
@@ -569,6 +575,12 @@ class DocxRenderer:
         # 目前仅 div-xu 携带段落属性，其它 div-* 经此路径输出为空串，无影响。
         div_tags = [t for t in tags if t.startswith("div-")]
         div_extra = self.theme.docx_para(*div_tags) if div_tags else ""
+        if div_extra and (self.theme.tags.get(para) or {}).get("line-height") is not None:
+            # 元素自带行距：去掉 div 侧经 body 回退带入的行距（留边距），
+            # 否则内联 pPr 会覆盖命名样式（如 div 内 head 设 1.0 仍被盖成 1.4）。
+            # 全文件无 div-* 规则写 line-height，此处去掉的恒为回退值，零误伤。
+            div_extra = re.sub(r'\s*w:line="[^"]*"', "", div_extra)
+            div_extra = re.sub(r'\s*w:lineRule="[^"]*"', "", div_extra)
         # 偈颂首句悬挂（lg 的 margin-left + text-indent:-N em 特征）：内联 w:ind 覆盖命名样式
         if hang:
             font_pt = self._tag_base_pt(tags)
@@ -576,7 +588,9 @@ class DocxRenderer:
             fl = int(hang[1] * font_pt * 20)
             ind = f'<w:ind w:left="{left}" w:firstLine="{fl}"/>'
             if para in _STYLED_PARAS:
-                p = f"<w:p><w:pPr><w:pStyle w:val=\"{para}\"/>{pb}{ind}{div_extra}</w:pPr>{runs}</w:p>"
+                ppr_h = f"<w:pStyle w:val=\"{para}\"/>{pb}{ind}{div_extra}"
+                ppr_h = self._with_vertical_jc(ppr_h, para)
+                p = f"<w:p><w:pPr>{ppr_h}</w:pPr>{runs}</w:p>"
                 return self._with_bookmark(p)
         # 核心标签走命名段落样式（styles.xml）；footnote 额外内联 spacing 兜底
         if para in _STYLED_PARAS and indent == 0:
@@ -586,15 +600,24 @@ class DocxRenderer:
             if para == "footnote":
                 ppr += self.theme.docx_para("footnote")
             ppr += div_extra
+            ppr = self._with_vertical_jc(ppr, para)
             p = f"<w:p><w:pPr>{ppr}</w:pPr>{runs}</w:p>"
             return self._with_bookmark(p)
         ppr = self.theme.docx_para(*tags, indent_em=indent, no_first_line=no_first_line)
+        ppr = self._with_vertical_jc(ppr, para)
         # 内联路径也挂命名样式（直接属性照旧覆盖样式，视觉不变；
         # Word 样式窗格/预览标签可识别，如 def>p 的“释义”）
         sty = f'<w:pStyle w:val="{para}"/>' if para in _STYLED_PARAS else ""
         ppr = f"<w:pPr>{sty}{ppr}</w:pPr>" if (sty or ppr) else ""
         p = f"<w:p>{ppr}{runs}</w:p>"
         return self._with_bookmark(p)
+
+    def _with_vertical_jc(self, ppr: str, para: str) -> str:
+        """竖排取消居中：title/head/juan/pin 内联 left 覆盖命名样式的居中
+        （竖排 left 即顶部；横排返回原样）。"""
+        if not (self.vertical and para in VERTICAL_UNCENTER):
+            return ppr
+        return re.sub(r"<w:jc[^>]*/>", "", ppr) + '<w:jc w:val="left"/>'
 
     def _with_bookmark(self, para_xml: str) -> str:
         """目录书签：milestone（卷边界）之后的下一个段落用「卷N」书签包裹。书签置于段内避免 pageBreakBefore 产生空白书签页。"""
@@ -660,6 +683,10 @@ class DocxRenderer:
         self._body_para_count = 0
         self._pending_juan = None     # 待加书签的卷号（milestone 之后的下一个段落）
         self._bm_id = 0               # 书签递增 id
+        self._in_para = 0             # 段落上下文深度（>0 时 figure 只出 run，避免 <w:p> 嵌套）
+        self._media = []              # 内嵌图片 [{path, ext, rid, name}]（_build_docx 落盘）
+        self._media_seq = 0
+        self.missing_figures = []
 
     def _render_split(self, work: Work, out_dir: str, filename: str = "") -> List[str]:
         """按卷输出：每卷一个独立文档（书名页 + 本卷正文 + teiHeader 尾页）。"""
@@ -851,9 +878,21 @@ class DocxRenderer:
             del self._tag_stack[-len(tags):]
         return out
 
+    def _render_para_children(self, el, *tags: str) -> str:
+        """段落内容渲染：标记段落上下文，期间 <figure> 只输出 run 级 drawing，
+        避免 <w:p> 嵌套（WPS 会丢弃嵌套段落内的图片）。"""
+        self._in_para = getattr(self, "_in_para", 0) + 1
+        try:
+            return self._render_children(el, *tags)
+        finally:
+            self._in_para -= 1
+
     def _render_inline_mode(self, content: str) -> str:
-        """注释方式=inline：校注用主题 note-inline 样式（括号走 note_inline_brackets）。"""
-        tags = self._current_tag() + ("note-inline",)
+        """注释方式=inline：校注用主题 note-inline 样式（括号走 note_inline_brackets）。
+
+        括号只带 note-inline 标签（去掉外层 head 等元素标签），与内容同为小字，
+        不再继承外层标题字号。"""
+        tags = ("note-inline",)
         lb, rb = bracket_pair(getattr(self, "note_inline_brackets", "fullwidth"))
         return (self._run(lb, *tags) + content + self._run(rb, *tags))
 
@@ -864,7 +903,7 @@ class DocxRenderer:
         prev_note = getattr(self, "_in_note", False)
         self._in_note = True
         try:
-            return self._render_children(note, "footnote")
+            return self._render_para_children(note, "footnote")
         finally:
             self._div_stack = prev
             self._in_note = prev_note
@@ -912,10 +951,18 @@ class DocxRenderer:
         if note.place in ("inline", "inline2", "interlinear"):
             # 夹注样式跟随主题 doube-line-note / interlinear-note（对齐 HTML 的紫色夹注）
             nt = "interlinear-note" if note.place == "interlinear" else "doube-line-note"
-            tags = self._current_tag() + (nt,)
             lb, rb = bracket_pair(getattr(self, "inline_brackets", "fullwidth"))
-            return (self._run(lb, *tags) + self._render_children(note, nt)
-                    + self._run(rb, *tags))
+            # 先压注记标签再取 tags：括号与内容同解算（如 head 内的夹注，
+            # 括号不再继承 head 字号，与内容一致）
+            self._tag_stack.append(nt)
+            self._in_para = getattr(self, "_in_para", 0) + 1
+            try:
+                tags = self._current_tag()
+                return (self._run(lb, *tags) + self._render_children(note)
+                        + self._run(rb, *tags))
+            finally:
+                self._in_para -= 1
+                self._tag_stack.pop()
         return ""
 
     def _pick_note(self, notes):
@@ -924,6 +971,75 @@ class DocxRenderer:
                 if n.ntype == t:
                     return n
         return notes[0]
+
+    def _find_graphic_url(self, e) -> str:
+        if isinstance(e, E) and e.tag == "graphic":
+            return e.attrs.get("url") or ""
+        for c in (getattr(e, "children", None) or []):
+            if isinstance(c, E):
+                u = self._find_graphic_url(c)
+                if u:
+                    return u
+        return ""
+
+    def _render_graphic(self, e) -> str:
+        """<figure><graphic url>：找到图片则内嵌（word/media + w:drawing run），
+        缺失则输出【圖：basename】文本（与 txt 口径一致），并记入 missing_figures。
+
+        段落内（p/head/verse/cell/脚注等）只出 run 级内容；块级（顶层/div）才包段落，
+        避免 <w:p> 嵌套（WPS 会丢弃嵌套段落内的图片）。"""
+        from .figures import find_figure, graphic_basename, image_size, EMU_PER_PX
+        url = self._find_graphic_url(e)
+        base = graphic_basename(url)
+        path = find_figure(base, self.figure_dirs) if base else None
+        if path is None:
+            if base and base not in self.missing_figures:
+                self.missing_figures.append(base)
+            run = self._run(f"【圖：{base}】" if base else "【圖】", *self._current_tag())
+        else:
+            for m in self._media:
+                if os.path.abspath(m["path"]) == os.path.abspath(path):
+                    rid = m["rid"]
+                    break
+            else:
+                self._media_seq += 1
+                rid = f"rIdImg{self._media_seq}"
+                ext = (path.rsplit(".", 1)[-1].lower() if "." in path else "gif") or "gif"
+                self._media.append({"path": path, "ext": ext, "rid": rid, "name": base})
+            w, h = image_size(path) or (480, 360)
+            max_w_tw = self.page_w - self.page_margins["left"] - self.page_margins["right"]
+            # twips → px（96dpi：1px = 15 twips）；只缩小不放大（100% 上限，不足版心不拉伸）
+            max_w_px = max(1, max_w_tw // 15)
+            if w > max_w_px:
+                h = max(1, h * max_w_px // w)
+                w = max_w_px
+            cx, cy = w * EMU_PER_PX, h * EMU_PER_PX
+            nm = _x(base)
+            drawing = (
+                f'<w:drawing><wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" '
+                f'distT="0" distB="0" distL="0" distR="0">'
+                f'<wp:extent cx="{cx}" cy="{cy}"/>'
+                f'<wp:docPr id="{self._media_seq + 100}" name="{nm}"/>'
+                f'<wp:cNvGraphicFramePr>'
+                '<a:graphicFrameLocks xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" noChangeAspect="1"/>'
+                "</wp:cNvGraphicFramePr>"
+                '<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">'
+                '<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">'
+                '<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">'
+                f'<pic:nvPicPr><pic:cNvPr id="{self._media_seq + 100}" name="{nm}"/>'
+                "<pic:cNvPicPr/></pic:nvPicPr>"
+                f'<pic:blipFill><a:blip r:embed="{rid}" '
+                'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/>'
+                "<a:stretch><a:fillRect/></a:stretch></pic:blipFill>"
+                "<pic:spPr><a:xfrm><a:off x=\"0\" y=\"0\"/>"
+                f'<a:ext cx="{cx}" cy="{cy}"/>'
+                '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></a:xfrm></pic:spPr>'
+                "</pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing>"
+            )
+            run = f"<w:r>{drawing}</w:r>"
+        if getattr(self, "_in_para", 0):
+            return run
+        return self._para(run, "figure")
 
     def _render_e(self, e: E) -> str:
         if e.tag == "app":
@@ -941,7 +1057,7 @@ class DocxRenderer:
             if ptype == "pre":
                 prev = self._in_pre
                 self._in_pre = True
-                runs = self._render_children(e, "p")
+                runs = self._render_para_children(e, "p")
                 self._in_pre = prev
                 # 预排不缩进（CSS pre/text-indent:0；只掐首行，段间距/行距跟 p 不变）
                 return self._para(runs, "p", "pre", no_first_line=True)
@@ -954,12 +1070,17 @@ class DocxRenderer:
                 if m:
                     indent = float(m.group(1))
             tags = self._current_tag() + ((ptag,) if ptag else ())
-            return self._para(self._render_children(e, "p", ptag, self._rend_tag(a)),
+            from .figures import is_figure_only
+            if is_figure_only(e):
+                # 纯图片段：figure 样式（居中、无首行缩进），忽略 xml 行缩进
+                runs = self._render_para_children(e, "figure")
+                return self._para(runs, "figure")
+            return self._para(self._render_para_children(e, "p", ptag, self._rend_tag(a)),
                               *tags, indent=indent)
         if tag == "pre":
             prev = self._in_pre
             self._in_pre = True
-            runs = self._render_children(e, "p", "pre")
+            runs = self._render_para_children(e, "p", "pre")
             self._in_pre = prev
             return self._para(runs, "p", "pre", no_first_line=True)
         if tag == "head":
@@ -996,10 +1117,11 @@ class DocxRenderer:
             return p
         if tag == "byline":
             # 作者/译者独立样式：byline cb:type="author" -> author，cb:type="Translator" -> translator
-            bt = a.get("cb:type") or ""
-            btag = "translator" if bt == "Translator" else ("author" if bt == "author" else "byline")
+            # （大小写不敏感：X59 用小写 translator，T0349 用大写 Translator）
+            bt = (a.get("cb:type") or "").strip().lower()
+            btag = "translator" if bt == "translator" else ("author" if bt == "author" else "byline")
             with self._no_ann():
-                runs = self._render_children(e, btag, self._rend_tag(a))
+                runs = self._render_para_children(e, btag, self._rend_tag(a))
             return self._para(runs, btag)
         if tag == "juan":
             if a.get("fun") == "close":
@@ -1090,7 +1212,7 @@ class DocxRenderer:
                 ppr = (f'<w:numPr><w:ilvl w:val="{level}"/>'
                        f'<w:numId w:val="{numid}"/></w:numPr>') + ppr
             ppr = f"<w:pPr>{ppr}</w:pPr>" if ppr else ""
-            return f"<w:p>{ppr}{self._render_children(e, 'item')}</w:p>"
+            return f"<w:p>{ppr}{self._render_para_children(e, 'item')}</w:p>"
         if tag == "div":
             dtype = a.get("type")
             if dtype:
@@ -1104,7 +1226,7 @@ class DocxRenderer:
         if tag == "unclear":
             return self._run("□", *self._current_tag())  # 虚缺符号 U+25A1（文字无法辨析）
         if tag == "form":
-            return self._para(self._render_children(e, "form", self._rend_tag(a)), "form")
+            return self._para(self._render_para_children(e, "form", self._rend_tag(a)), "form")
         if tag == "def":
             # 释义（cb:def）：run 带 def 标签（def 字号/字体生效）；
             # def 内 p 见 _render_def_p（run/段落同时带 def，p 上下文保留）。
@@ -1124,6 +1246,8 @@ class DocxRenderer:
             return (self._run("(", *self._current_tag())
                     + self._render_children(e)
                     + self._run(")", *self._current_tag()))
+        if tag in ("figure", "graphic"):
+            return self._render_graphic(e)
         return self._render_children(e)
 
     def _render_def_p(self, p):
@@ -1141,8 +1265,8 @@ class DocxRenderer:
                 indent = float(m.group(1))
         tags = tuple(dict.fromkeys(tuple(self._div_stack) + ("p", "def")
                                    + ((ptag,) if ptag else ())))
-        runs = self._render_children(p, "p", *((ptag,) if ptag else ()),
-                                     self._rend_tag(a), "def")
+        runs = self._render_para_children(p, "p", *((ptag,) if ptag else ()),
+                                             self._rend_tag(a), "def")
         return self._para(runs, *tags, indent=indent)
 
     def _body_has_title_m(self) -> bool:
@@ -1230,10 +1354,15 @@ class DocxRenderer:
         return "".join(self._render_node(n) for n in nodes)
 
     def _render_tagged(self, nodes, *tags: str) -> str:
+        # 调用点全部喂给段落（head/pin/title/juan/tt/verse），在此统一标记段落上下文
         tags = tuple(t for t in tags if t)
         if tags:
             self._tag_stack.extend(tags)
-        out = "".join(self._render_node(n) for n in nodes)
+        self._in_para = getattr(self, "_in_para", 0) + 1
+        try:
+            out = "".join(self._render_node(n) for n in nodes)
+        finally:
+            self._in_para -= 1
         if tags:
             del self._tag_stack[-len(tags):]
         return out
@@ -1345,7 +1474,7 @@ class DocxRenderer:
         if e.tag == "row":
             return f"<w:tr>{self._render_nodes(e.children)}</w:tr>"
         # 单元格段落走主题（避免回退 Normal 1.5 倍行距）
-        return f"<w:tc>{self._para(self._render_children(e, 'p'), 'p')}</w:tc>"
+        return f"<w:tc>{self._para(self._render_para_children(e, 'p'), 'p')}</w:tc>"
 
     def _footnote_separator_para(self) -> str:
         """脚注分隔线 pPr：底边框线（粗细/长短/与首行脚注间距，来自
@@ -1435,6 +1564,16 @@ class DocxRenderer:
                     f'{self._fb_emit(series, _srpr)}</w:p>'
                 )
         header_xml = ""  # 保留扩展点：如需页眉可在此生成 header1.xml
+        # 内嵌图片（<figure><graphic>）：media 去重已在 _render_graphic 完成
+        media = list(self._media)
+        media_ct = {"gif": "image/gif", "png": "image/png",
+                    "jpg": "image/jpeg", "jpeg": "image/jpeg"}
+        media_defaults = "".join(
+            f'<Default Extension="{e}" ContentType="{media_ct[e]}"/>'
+            for e in sorted({m["ext"] for m in media} & set(media_ct)))
+        media_rels = "".join(
+            f'<Relationship Id="{m["rid"]}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" '
+            f'Target="media/image{i + 1}.{m["ext"]}"/>' for i, m in enumerate(media))
 
         def sect_inner(typ: str = "") -> str:
             t = f'<w:type w:val="{typ}"/>' if typ else ""
@@ -1535,6 +1674,7 @@ class DocxRenderer:
             '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>'
             '<Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>'
             + ('<Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>' if header_xml else "")
+            + media_defaults
             + "</Types>"
         )
         rels = (
@@ -1550,6 +1690,7 @@ class DocxRenderer:
             '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes" Target="footnotes.xml"/>'
             '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>'
             + ('<Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/>' if header_xml else "")
+            + media_rels
             + "</Relationships>"
         )
         numbering = self._build_numbering()
@@ -1564,6 +1705,9 @@ class DocxRenderer:
             z.writestr("word/_rels/document.xml.rels", doc_rels)
             if header_xml:
                 z.writestr("word/header1.xml", header_xml)
+            for i, m in enumerate(media):
+                with open(m["path"], "rb") as f:
+                    z.writestr(f"word/media/image{i + 1}.{m['ext']}", f.read())
         return zio.getvalue()
 
     def _body_font(self) -> str:

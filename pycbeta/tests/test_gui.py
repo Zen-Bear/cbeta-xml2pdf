@@ -879,6 +879,41 @@ class TestMainWindowUx(unittest.TestCase):
         finally:
             w.close()
 
+    def test_cfg_toggle_collapses_panel(self):
+        from pycbeta.gui.__main__ import MainWindow
+        w = MainWindow()
+        try:
+            self.assertTrue(w.cfg_toggle.isChecked())
+            # 扁平无文字小箭头，不占整行
+            self.assertEqual(w.cfg_toggle.text(), "")
+            self.assertTrue(w.cfg_toggle.autoRaise())
+
+            def colors():
+                img = w.cfg_toggle.grab().toImage()
+                bg = img.pixelColor(5, 5)
+                # 箭头抗锯齿后非纯白，只要求明显亮于绿底
+                white = any(img.pixelColor(x, y).lightness() > 150
+                            for x in range(22) for y in range(22))
+                return bg, white
+
+            # 绿底白字；切换前后同色（只靠箭头方向区分）
+            bg, white = colors()
+            self.assertLess(bg.red(), 70)
+            self.assertGreater(bg.green(), 100)
+            self.assertLess(bg.blue(), 80)
+            self.assertTrue(white)
+            w.cfg_toggle.toggle()
+            self.assertTrue(w.panel.isHidden())
+            bg2, white2 = colors()
+            self.assertEqual((bg2.red(), bg2.green(), bg2.blue()),
+                             (bg.red(), bg.green(), bg.blue()))
+            self.assertTrue(white2)
+            w.cfg_toggle.toggle()
+            self.assertFalse(w.panel.isHidden())
+            self.assertIsNotNone(w.panel.tabs)  # tab 区引用保持有效
+        finally:
+            w.close()
+
     def test_open_cell_routing(self):
         import tempfile
         from PySide6.QtCore import Qt
@@ -1310,6 +1345,21 @@ class TestSourceDialog(unittest.TestCase):
                     saved = m.call_args.args[0]
                     self.assertEqual(
                         saved["downloads"]["xml"], "http://example/custom-xml")
+        finally:
+            dlg.close()
+
+    def test_figures_url_visible_with_factory_default(self):
+        import pycbeta.gui.panel as pm
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PySide6.QtWidgets import QApplication
+        QApplication.instance() or QApplication([])
+        dlg = pm.SourceDialog()
+        try:
+            vals = {dlg.dl_table.item(i, 0).text(): dlg.dl_table.item(i, 1).text()
+                    for i in range(dlg.dl_table.rowCount())}
+            # 用户文件即使缺 figures 键，也显示出厂默认值（可改）
+            self.assertIn("figures", vals)
+            self.assertIn("CBR2X-figures", vals["figures"])
         finally:
             dlg.close()
 

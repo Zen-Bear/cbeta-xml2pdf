@@ -1422,7 +1422,7 @@ SOURCE_LABELS = [
     ("cbeta_ebook", "电子书工作根（唯一可写，平展一部一目录）"),
     ("catalog", "佛典目录 catalog（sutra_mapping.txt）"),
 ]
-DOWNLOAD_KEYS = ["xml", "html", "docx", "epub", "txt_notes", "odt"]
+DOWNLOAD_KEYS = ["xml", "html", "docx", "epub", "txt_notes", "odt", "figures"]
 
 
 def apply_source_edits(base, values):
@@ -1500,7 +1500,13 @@ class SourceDialog(QDialog):
         self.dl_table = QTableWidget(0, 2)
         self.dl_table.setHorizontalHeaderLabels(["格式", "URL 模板"])
         self.dl_table.horizontalHeader().setStretchLastSection(True)
-        dl = (data.get("downloads") or {})
+        # 出厂默认值打底：用户文件缺键（如新增的 figures）也显示出厂值，可直接改
+        try:
+            from pycbeta.theme import load_presets
+            _factory_dl = load_presets().get("downloads") or {}
+        except (OSError, ValueError):
+            _factory_dl = {}
+        dl = {**_factory_dl, **(data.get("downloads") or {})}
         keys = [k for k in DOWNLOAD_KEYS if k in dl] + \
             [k for k in dl.keys() if k not in DOWNLOAD_KEYS]
         self.dl_table.setRowCount(len(keys))

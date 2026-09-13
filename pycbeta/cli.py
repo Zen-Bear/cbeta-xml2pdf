@@ -59,7 +59,14 @@ def _annotations_source(config_path, presets):
         return None, None
 
 
-def render_one(w, fmt, out_dir, out_name, args, theme, html_base=None):
+def _report_missing_figures(wid, fmt, renderer):
+    """图片缺失汇总（警告 + 占位，不中断；txt/md 本就只出【圖】标记，不在此列）。"""
+    miss = list(getattr(renderer, "missing_figures", None) or [])
+    if miss:
+        print(f"{wid}: {fmt} 图片缺失（占位）：{', '.join(miss)}")
+
+
+def render_one(w, fmt, out_dir, out_name, args, theme, html_base=None, figure_base=None):
     # pdf 默认 footnote：docx2pdf 中间 docx 用真页底脚注（html2pdf 下 HtmlRenderer 无分页，footnote 与 endnote 同归文末，无影响）
     note_mode = args.notes or ("footnote" if fmt in ("docx", "pdf") else "endnote")
     os.makedirs(out_dir, exist_ok=True)
@@ -69,20 +76,23 @@ def render_one(w, fmt, out_dir, out_name, args, theme, html_base=None):
 
     if fmt == "html":
         # html 纯基底（golden 默认）：pdf_docx 主题不再追加
-        files = HtmlRenderer(theme=None, base_css=html_base, notes=note_mode,
-                             name_template=args.name_template,
-                             ignore_xml_style=args.ignore_xml_style,
-                             ignore_xml_space=args.ignore_xml_space,
-                             grayscale=args.grayscale,
-                              show_notes=args.show_notes,
-                             inline_brackets=args.inline_brackets,
-                             note_inline_brackets=getattr(args, "note_inline_brackets", None),
-                             annotations=ann,
-                             strip_head_no=getattr(args, "strip_head_no", False)).render_work(w, out_dir)
+        r = HtmlRenderer(theme=None, base_css=html_base, notes=note_mode,
+                         name_template=args.name_template,
+                         ignore_xml_style=args.ignore_xml_style,
+                         ignore_xml_space=args.ignore_xml_space,
+                         grayscale=args.grayscale,
+                          show_notes=args.show_notes,
+                         inline_brackets=args.inline_brackets,
+                         note_inline_brackets=getattr(args, "note_inline_brackets", None),
+                         annotations=ann,
+                         strip_head_no=getattr(args, "strip_head_no", False),
+                         figure_base=figure_base)
+        files = r.render_work(w, out_dir)
+        _report_missing_figures(w.id, fmt, r)
         print(f"{w.id}: html({note_mode}) -> {len(files)} file(s) in {out_dir}")
 
     elif fmt == "docx":
-        res = DocxRenderer(theme=theme, page=args.page, notes=note_mode,
+        r = DocxRenderer(theme=theme, page=args.page, notes=note_mode,
                            page_presets=args.page_presets,
                            latin_font=args.latin_font,
                            ignore_xml_style=args.ignore_xml_style,
@@ -113,8 +123,10 @@ def render_one(w, fmt, out_dir, out_name, args, theme, html_base=None):
                            annotations=ann,
                            strip_head_no=getattr(args, "strip_head_no", False),
                            show_body_siddham=getattr(
-                               args, "show_body_siddham", True)) \
-               .render_work(w, out_dir, filename=out_name)
+                               args, "show_body_siddham", True),
+                           figure_base=figure_base)
+        res = r.render_work(w, out_dir, filename=out_name)
+        _report_missing_figures(w.id, fmt, r)
         if isinstance(res, list):
             print(f"{w.id}: docx({note_mode}, split) -> {len(res)} file(s)")
         else:
@@ -144,15 +156,17 @@ def render_one(w, fmt, out_dir, out_name, args, theme, html_base=None):
 
     elif fmt == "epub":
         # epub 纯基底（章节 + style.css 同源，不再进 pdf_docx 主题）
-        fn = EpubRenderer(theme=None, base_css=html_base, notes=note_mode,
-                          ignore_xml_style=args.ignore_xml_style,
-                          ignore_xml_space=args.ignore_xml_space,
-                          show_notes=args.show_notes,
-                          inline_brackets=args.inline_brackets,
-                          note_inline_brackets=getattr(args, "note_inline_brackets", None),
-                          annotations=ann,
-                          strip_head_no=getattr(args, "strip_head_no", False)).render_work(
-            w, out_dir, filename=out_name)
+        r = EpubRenderer(theme=None, base_css=html_base, notes=note_mode,
+                         ignore_xml_style=args.ignore_xml_style,
+                         ignore_xml_space=args.ignore_xml_space,
+                         show_notes=args.show_notes,
+                         inline_brackets=args.inline_brackets,
+                         note_inline_brackets=getattr(args, "note_inline_brackets", None),
+                         annotations=ann,
+                         strip_head_no=getattr(args, "strip_head_no", False),
+                         figure_base=figure_base)
+        fn = r.render_work(w, out_dir, filename=out_name)
+        _report_missing_figures(w.id, fmt, r)
         print(f"{w.id}: epub({note_mode}) -> {fn}")
 
     elif fmt == "pdf":
@@ -169,7 +183,7 @@ def render_one(w, fmt, out_dir, out_name, args, theme, html_base=None):
 
         if pipeline == "docx2pdf":
             chain = ([single] if single else None) or args.docx_pdf_chain
-            docx_res = DocxRenderer(theme=theme, page=args.page,
+            _pdf_docx = DocxRenderer(theme=theme, page=args.page,
                                     page_presets=args.page_presets,
                                     latin_font=args.latin_font,
                                     ignore_xml_style=args.ignore_xml_style,
@@ -193,8 +207,11 @@ def render_one(w, fmt, out_dir, out_name, args, theme, html_base=None):
                                     annotations=ann,
                                     strip_head_no=getattr(args, "strip_head_no", False),
                                     show_body_siddham=getattr(
-                                        args, "show_body_siddham", True)) \
-                .render_work(w, out_dir, filename=base + ".docx")
+                                        args, "show_body_siddham", True),
+                                    figure_base=figure_base)
+            docx_res = _pdf_docx.render_work(w, out_dir, filename=base + ".docx")
+            _report_missing_figures(w.id, fmt, _pdf_docx)
+
 
             def emit(pdf, backend):
                 if args.engine_tag:
@@ -231,8 +248,10 @@ def render_one(w, fmt, out_dir, out_name, args, theme, html_base=None):
                             annotations=ann,
                             strip_head_no=getattr(args, "strip_head_no", False),
                             inline_brackets=args.inline_brackets,
-                            note_inline_brackets=getattr(args, "note_inline_brackets", None))
+                            note_inline_brackets=getattr(args, "note_inline_brackets", None),
+                            figure_base=figure_base)
             html_res = r.render_work(w, out_dir, filename=base + ".html")
+            _report_missing_figures(w.id, fmt, r)
 
             def emit(pdf, backend):
                 if args.engine_tag:
@@ -291,7 +310,8 @@ def resolve_output(xml_fn, fmt, args, work, _used=None):
     return src_dir, out_name
 
 
-def process_file(xml_fn, formats, args, theme, html_base=None, _used=None):
+def process_file(xml_fn, formats, args, theme, html_base=None, _used=None,
+                 ebook_root=None):
     w = P5Parser().parse(xml_fn)
     if args.t2s:
         from .simplify import simplify_work
@@ -302,12 +322,15 @@ def process_file(xml_fn, formats, args, theme, html_base=None, _used=None):
         except Exception:
             _fc_dir = None
         _run_font_check(w, args, theme, _fc_dir)
+    # 图片搜索目录（{work}/figures → {work}/txt → xml 同目录；渲染器按 basename 匹配）
+    from . import figures as _fig
+    fig_dirs = _fig.work_figure_dirs(ebook_root, w.id, xml_fn)
     failed = 0
     for fmt in formats:
         out_dir, out_name = resolve_output(xml_fn, fmt, args, w, _used)
         try:
             render_one(w, fmt, out_dir, out_name, args, theme,
-                       html_base=html_base)
+                       html_base=html_base, figure_base=fig_dirs or None)
         except NotImplementedError as e:
             print(f"{w.id}: {fmt} skipped - {e}", file=sys.stderr)
         except OSError as e:
@@ -615,6 +638,12 @@ def main(argv=None):
 
     _used_names = {}  # 本轮命名状态（render 与 verify 共用，重放得终态名）
     render_failed = 0  # 各格式渲染失败计数（OSError），决定进程退出码
+    # 图片定位用工作根（尽力解析；缺省则只按 xml 同目录找图）
+    try:
+        from .fetch import resolve_source as _rs
+        _, _ebook_root = _rs(presets, xml_dir=args.xml_dir, cbeta_ebook=args.cbeta_ebook)
+    except Exception:
+        _ebook_root = None
     if os.path.isdir(args.input):
         from .merge import split_paths, merge_groups_to_dir
         walked = []
@@ -630,9 +659,10 @@ def main(argv=None):
             ap.error(f"no XML files under {args.input}")
         for x in xmls:
             render_failed += process_file(x, formats, args, theme, html_base=html_base,
-                                          _used=_used_names)
+                                          _used=_used_names, ebook_root=_ebook_root)
     elif os.path.isfile(args.input):
-        render_failed += process_file(args.input, formats, args, theme, html_base=html_base)
+        render_failed += process_file(args.input, formats, args, theme, html_base=html_base,
+                                      ebook_root=_ebook_root)
     else:
         # -i 佛典編號：三源材料化（cbeta_ebook → 本地候选源 → 官方下载）
         from .fetch import is_work_id, materialize_work, inspect_xml_source
@@ -654,7 +684,7 @@ def main(argv=None):
             ap.error(f"{args.input}: 本地候选源与官方均未取得 XML")
         for x in xmls:
             render_failed += process_file(x, formats, args, theme, html_base=html_base,
-                                          _used=_used_names)
+                                          _used=_used_names, ebook_root=_ebook_root)
 
     # --verify：复用 pycbeta/verify.py 模块化能力，供 GUI 调用同一入口
     if args.verify:

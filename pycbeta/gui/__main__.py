@@ -16,8 +16,8 @@ from PySide6.QtWidgets import (
     QFileDialog, QGridLayout, QHBoxLayout,
     QLabel, QLineEdit, QMainWindow, QMenu, QMessageBox, QPlainTextEdit,
     QProgressBar, QPushButton,
-    QRadioButton, QTableWidget, QTableWidgetItem, QTextEdit, QVBoxLayout,
-    QWidget,
+    QRadioButton, QTableWidget, QTableWidgetItem, QTextEdit, QToolButton,
+    QVBoxLayout, QWidget,
 )
 
 from pycbeta.gui.panel import (
@@ -42,7 +42,7 @@ def _gui_date() -> str:
     return datetime.datetime.fromtimestamp(latest).strftime("%Y-%m-%d")
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtCore import QUrl
-from PySide6.QtGui import QColor, QCursor, QDesktopServices, QFont
+from PySide6.QtGui import QColor, QCursor, QDesktopServices, QFont, QPalette
 
 
 def parse_produced_paths(log):
@@ -545,26 +545,48 @@ class MainWindow(QMainWindow):
         self.src_btn.clicked.connect(self._edit_source)
         mode_row.addWidget(self.src_btn)
         mode_row.addStretch(1)
+        # 配置区总开关：绿底白字小箭头（tab 区 +「配置」分组整体收起/复原，收起后批量列表放大）；
+        # 各态同色（checked 也不变），只靠箭头方向区分
+        self.cfg_toggle = QToolButton()
+        self.cfg_toggle.setCheckable(True)
+        self.cfg_toggle.setChecked(True)
+        self.cfg_toggle.setAutoRaise(True)
+        self.cfg_toggle.setFixedSize(22, 22)
+        self.cfg_toggle.setArrowType(Qt.DownArrow)
+        self.cfg_toggle.setToolTip("收起/展开配置面板")
+        # 箭头走 QStyle 调色板（stylesheet 的 color 管不到），显式设白
+        _pal = self.cfg_toggle.palette()
+        _pal.setColor(QPalette.ButtonText, Qt.white)
+        _pal.setColor(QPalette.WindowText, Qt.white)
+        self.cfg_toggle.setPalette(_pal)
+        self.cfg_toggle.setStyleSheet(
+            "QToolButton { background-color: #2e7d32; color: white; border: none; border-radius: 4px; }"
+            "QToolButton:checked { background-color: #2e7d32; color: white; }"
+            "QToolButton:hover { background-color: #2e7d32; color: white; }"
+            "QToolButton:pressed { background-color: #2e7d32; color: white; }"
+            "QToolButton:disabled { background-color: #2e7d32; color: white; }")
+        self.cfg_toggle.toggled.connect(self._toggle_panel)
+        mode_row.addWidget(self.cfg_toggle)
         src.addWidget(QLabel("输入来源"), 0, 0)
         src.addLayout(mode_row, 0, 1, 1, 3)
         self.path_edit = QLineEdit()
-        self.path_edit.setPlaceholderText("XML 目录 / 单个 .xml / ID 列表 .txt（如 test/mini-test.txt）")
+        self.path_edit.setPlaceholderText("XML 目录 / 单个 .xml")
         self.path_edit.textChanged.connect(lambda _t: self.mode_file.setChecked(True))
         browse = QPushButton("目录…")
         browse.setToolTip("选择 XML 目录（递归扫描其中的 .xml）")
         browse.clicked.connect(self._browse)
         browse_file = QPushButton("文件…")
-        browse_file.setToolTip("选择单个 .xml，或 ID 列表 .txt（逐行取佛典編號批量转换）")
+        browse_file.setToolTip("选择 ID 列表 .txt（逐行取佛典編號批量转换，如 test/mini-test.txt）")
         browse_file.clicked.connect(self._browse_file)
         src.addWidget(QLabel("目录/文件"), 1, 0)
-        src.addWidget(self.path_edit, 1, 1)
-        src.addWidget(browse, 1, 2)
-        src.addWidget(browse_file, 1, 3)
+        src.addWidget(self.path_edit, 1, 1, 1, 2)
+        src.addWidget(browse, 1, 3)
         self.ids_edit = QLineEdit()
-        self.ids_edit.setPlaceholderText("T0349, X1116, TX0006（逗号/空格分隔）")
+        self.ids_edit.setPlaceholderText("T0349, X1116（逗号/空格分隔）；或用右边的「文件…」选 ID 列表 .txt")
         self.ids_edit.textChanged.connect(lambda _t: self.mode_ids.setChecked(True))
         src.addWidget(QLabel("编号列表"), 2, 0)
         src.addWidget(self.ids_edit, 2, 1, 1, 2)
+        src.addWidget(browse_file, 2, 3)
         self.auto_xml = QCheckBox("自动下载缺失 XML")
         self.auto_xml.setChecked(True)
         self.auto_base = QCheckBox("同时下载官方电子书")
@@ -611,6 +633,10 @@ class MainWindow(QMainWindow):
         layout.addLayout(bar)
         from pycbeta.theme import default_run_path
         self.statusBar().showMessage(f"运行组合: {default_run_path()}")
+
+    def _toggle_panel(self, show: bool):
+        self.panel.setVisible(show)
+        self.cfg_toggle.setArrowType(Qt.DownArrow if show else Qt.RightArrow)
 
     def _browse(self):
         d = QFileDialog.getExistingDirectory(self, "选择 XML 目录")

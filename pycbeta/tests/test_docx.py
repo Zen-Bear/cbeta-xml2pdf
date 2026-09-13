@@ -259,7 +259,7 @@ class TestPreNoFirstLine(unittest.TestCase):
                                 children=[Text(text="序文")]))
         self.assertNotIn("firstLine", ppr)
         self.assertIn('w:before="120"', ppr)  # 段间距跟 p 不变
-        self.assertIn('w:line="360"', ppr)
+        self.assertIn('w:line="336"', ppr)  # 跟随出厂 p=1.4（2026-09-11 定稿）
 
     def test_true_pre_same(self):
         ppr = self._para_of(E(tag="pre", attrs={},
@@ -1029,6 +1029,136 @@ class TestSiddhamReading(unittest.TestCase):
         txt = open(TxtRenderer().render_work(w, tmp, "t.txt"),
                    encoding="utf-8").read()
         self.assertNotIn("(ra", txt)
+
+
+class TestInlineBracketSize(unittest.TestCase):
+    """内联括号字号与内容一致（不继承外层 head 等标题字号）。"""
+
+    def _renderer(self):
+        from pycbeta.model import Work
+        r = DocxRenderer()
+        r._reset_state(Work(id="T", source_file="",
+                            metadata={"title": "t", "author": ""},
+                            body=[], notes_by_n={}, apps=[], simplified=False))
+        return r
+
+    def _sizes(self, out):
+        return re.findall(r'<w:sz w:val="(\d+)"', out)
+
+    def test_place_inline_in_head(self):
+        from pycbeta.model import Note, Text
+        r = self._renderer()
+        r._tag_stack.append("head")  # 模拟 head 上下文（如 X1077 卷首题名）
+        try:
+            note = Note(tag="note", attrs={}, n="", ntype="", place="inline",
+                        children=[Text(text="夾注")])
+            out = r._render_inline_note(note)
+        finally:
+            r._tag_stack.pop()
+        sizes = self._sizes(out)
+        self.assertTrue(sizes)
+        self.assertEqual(len(set(sizes)), 1)  # 括号与内容同字号
+
+    def test_inline_mode_context_free(self):
+        r = self._renderer()
+        r._tag_stack.append("head")
+        try:
+            out = r._render_inline_mode("校注")
+        finally:
+            r._tag_stack.pop()
+        # note-inline 0.9em（非 head 字号），左右括号一致
+        self.assertEqual(set(self._sizes(out)), {"22"})
+
+
+class TestBylineRight(unittest.TestCase):
+    """署名一律右对齐：cb:type 大小写不敏感映射 + author/translator 样式右对齐。"""
+
+    def _renderer(self):
+        from pycbeta.model import Work
+        r = DocxRenderer()
+        r._reset_state(Work(id="T", source_file="",
+                            metadata={"title": "t", "author": ""},
+                            body=[], notes_by_n={}, apps=[], simplified=False))
+        return r
+
+    def test_mapping_case_insensitive(self):
+        r = self._renderer()
+        for tp, tag in (("author", "author"), ("Translator", "translator"),
+                        ("translator", "translator"), ("TRANSLATOR", "translator"),
+                        ("", "byline")):
+            e = E(tag="byline", attrs={"cb:type": tp} if tp else {},
+                  children=[Text(text="某")])
+            self.assertIn(f'w:pStyle w:val="{tag}"', r._render_e(e))
+
+    def test_align_right(self):
+        r = self._renderer()
+        for tag in ("author", "translator", "byline"):
+            self.assertIn('w:jc w:val="right"', r.theme.docx_para(tag))
+
+
+class TestVerticalUncenter(unittest.TestCase):
+    """竖排取消居中：title/head/juan/pin 内联 left；横排零变化；名单外不动。"""
+
+    def _renderer(self, vertical):
+        from pycbeta.model import Work
+        r = DocxRenderer(vertical=vertical)
+        r._reset_state(Work(id="T", source_file="",
+                            metadata={"title": "t", "author": ""},
+                            body=[], notes_by_n={}, apps=[], simplified=False))
+        return r
+
+    def test_vertical_adds_left(self):
+        for tag in ("title", "head", "juan", "pin"):
+            r = self._renderer(True)
+            out = r._para(r._run("文", tag), tag)
+            self.assertIn('<w:jc w:val="left"/>', out)
+            self.assertIn(f'w:pStyle w:val="{tag}"', out)  # 命名样式保留
+
+    def test_vertical_scope(self):
+        r = self._renderer(True)
+        for tag in ("p", "figure", "byline", "footnote"):
+            out = r._para(r._run("文", tag), tag)
+            self.assertNotIn('w:val="left"', out)
+
+    def test_horizontal_unchanged(self):
+        r = self._renderer(False)
+        out = r._para(r._run("文", "juan"), "juan")
+        self.assertNotIn('w:val="left"', out)
+
+
+class TestDivExtraLineHeight(unittest.TestCase):
+    """div 内段落：元素自带行距不被 div 经 body 回退带入的值覆盖。"""
+
+    def _renderer(self):
+        from pycbeta.model import Work
+        r = DocxRenderer()
+        r._reset_state(Work(id="T", source_file="",
+                            metadata={"title": "t", "author": ""},
+                            body=[], notes_by_n={}, apps=[], simplified=False))
+        return r
+
+    def test_own_value_wins(self):
+        # div-other 无自身属性，其回退行距不得覆盖 head 自身的 1.0
+        r = self._renderer()
+        r._div_stack = ["div-other"]
+        out = r._para(r._run("文", "head"), "head")
+        self.assertIn('w:pStyle w:val="head"', out)
+        self.assertNotIn("w:line=", out)
+
+    def test_div_margins_kept(self):
+        # div-xu 的边距仍要进来，只去行距
+        r = self._renderer()
+        r._div_stack = ["div-xu"]
+        out = r._para(r._run("文", "head"), "head")
+        self.assertIn("w:before=", out)
+        self.assertNotIn("w:line=", out)
+
+    def test_no_own_value_fallback_kept(self):
+        # verse 无自身行距：继续靠 div_extra 拿 body 回退（零回归）
+        r = self._renderer()
+        r._div_stack = ["div-other"]
+        out = r._para(r._run("文", "verse"), "verse")
+        self.assertIn('w:line="336"', out)
 
 
 if __name__ == "__main__":

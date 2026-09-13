@@ -692,14 +692,15 @@ class TestLineHeightInherit(unittest.TestCase):
         self.assertIn('w:line="432"', t.docx_para("juan"))
 
     def test_body_rhythm_uniform(self):
-        # 2026-09-06：正文 p 显式 1.5，head 上下边距，div-xu 随正文节奏
+        # 2026-09-06：正文 p 显式行距，head 上下边距，div-xu 随正文节奏
+        # 2026-09-11：出厂值调整为 p=1.4、head 上边距 0.5em（用户定稿）
         from pycbeta.theme import Theme
         t = Theme()
-        self.assertIn('w:line="360"', t.docx_para("p"))
-        self.assertIn('w:before="400"', t.docx_para("head"))  # 1em@20pt
+        self.assertIn('w:line="336"', t.docx_para("p"))
+        self.assertIn('w:before="200"', t.docx_para("head"))  # 0.5em@20pt
         self.assertIn('w:after="200"', t.docx_para("head"))  # 0.5em@20pt
         self.assertIn('w:before="120"', t.docx_para("div-xu"))  # 0.5em@12pt
-        self.assertIn('w:after="72"', t.docx_para("div-xu"))  # 0.3em@12pt
+        self.assertIn('w:after="240"', t.docx_para("div-xu"))  # 1.0em@12pt（2026-09-12 定稿）
 
     def test_explicit_wins(self):
         from pycbeta.theme import Theme
@@ -788,6 +789,21 @@ class TestLoadEffectivePresets(unittest.TestCase):
         self.assertEqual((p.get("output") or {}).get("notes"), "inline")
         self.assertEqual(load_effective_presets(None).get("output", {}).get("notes"),
                          "footnote")
+
+
+class TestVerticalUncenter(unittest.TestCase):
+    def test_constant(self):
+        from pycbeta.theme import VERTICAL_UNCENTER
+        self.assertEqual(tuple(VERTICAL_UNCENTER), ("title", "head", "juan", "pin"))
+
+    def test_factory_css_has_override(self):
+        from pycbeta.theme import Theme
+        t = Theme()  # 出厂 pdf_docx.css
+        raw = t.raw_css or ""
+        self.assertIn("body.vertical-rl p.juan", raw)
+        self.assertIn("body.vertical-rl h1.title", raw)
+        self.assertIn("body.vertical-rl p.head", raw)
+        self.assertIn("body.vertical-rl p.pin", raw)
 
 
 if __name__ == "__main__":

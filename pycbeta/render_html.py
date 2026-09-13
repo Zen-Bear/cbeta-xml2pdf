@@ -100,7 +100,10 @@ class HtmlRenderer:
                  annotations=None, strip_head_no=False):
         self.gaiji_db = gaiji_db if gaiji_db is not None else GaijiDb()
         self.theme = theme
-        self.figure_base = figure_base
+        # 图片搜索目录：str | list[str]（{work}/figures → {work}/txt → 仓库 figures）
+        fb = [figure_base] if isinstance(figure_base, str) else list(figure_base or [])
+        self.figure_dirs = [d for d in fb if d]
+        self.missing_figures = []  # 本次渲染缺失的图片 basename（警告用，不中断）
         self.notes = notes  # 'endnote' (official) | 'inline'
         self.name_template = name_template
         self.base_css = base_css if base_css is not None else CSS
@@ -137,6 +140,7 @@ class HtmlRenderer:
         os.makedirs(out_dir, exist_ok=True)
         self._work = work
         self._ann_seen = set()
+        self.missing_figures = []
         self._app_by_n = {}
         for n in self._iter_all(work.body):
             if isinstance(n, App) and n.key:
@@ -494,7 +498,8 @@ class HtmlRenderer:
         if ptype:
             cls = f" class=\"{_esc(ptype)}\""
         else:
-            cls = ' class=""'
+            from .figures import is_figure_only
+            cls = ' class="figure"' if is_figure_only(e) else ' class=""'
         s = f' style="{_esc(style)}"' if style else ""
         return f"<p{cls}{s}>{self._line_info(e)}{self._render_nodes(e.children)}</p>"
 
@@ -661,15 +666,18 @@ class HtmlRenderer:
         return self._render_nodes(e.children)
 
     def _render_graphic(self, e: E) -> str:
+        from .figures import find_figure, graphic_basename
         url = e.attrs.get("url") or ""
-        if self.figure_base and url:
-            rel = url.replace("../", "").lstrip("/")
-            path = os.path.join(self.figure_base, rel.replace("/", os.sep))
-            if os.path.isfile(path):
+        base = graphic_basename(url)
+        if base:
+            path = find_figure(base, self.figure_dirs)
+            if path:
                 import base64
                 data = base64.b64encode(open(path, "rb").read()).decode("ascii")
                 mime = path.rsplit(".", 1)[-1].lower() or "png"
                 return f'<img src="data:image/{_esc(mime)};base64,{data}" />'
+            if base not in self.missing_figures:
+                self.missing_figures.append(base)
         return f"<span imgsrc='{_esc(os.path.basename(url))}' class='graphic'></span>"
 
     def _render_table(self, e: E) -> str:

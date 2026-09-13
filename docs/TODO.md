@@ -182,6 +182,34 @@
   - `gui.__main__.parse_work_ids_file(path)`：逐行取 `is_work_id` 命中的 token（去重保序），兼容 `test/mini-test.txt`（`T0349 彌勒…`）、逗号/分号/顿号、行首序号、`#` 注释；utf-8 失败回退 gbk
   - `_collect_jobs`：输入为 `.xml` → 单文件；为其他文件 → 按 ID 列表生成 `kind="id"` 批量（材料化/自动下载）；`path_edit` placeholder/按钮 tooltip 更新
   - 验收：`test_gui.TestParseWorkIdsFile` 2 项
+- [x] **已完成** div 内标题行距被盖住（2026-09-11 用户点档：head 设 1.0 仍出 1.4）
+  - 根因：`_para` 的 `div_extra`（本意只带 div 边距）含 `docx_para(div)` 经 body 回退带入的 `w:line=336`，以内联 pPr 覆盖命名样式（实证：壇法段落 `pStyle=head` + 内联 336）
+  - 修法：段落标签自身有 line-height 时，从 div_extra 只摘 `w:line`/`w:lineRule`（留 before/after；全文件无 div-* 写行距，去掉的恒为回退值）；无自身值（verse 等）继续拿回退，零回归
+  - 另答疑：CSS 删键≠继承 body——`DEFAULT_THEME` 先打底（`p: 1.8`，`theme.py:120`），删键只是不覆盖；继承分支只对无默认值的标签生效；`apply_page_typography` 另有"p 没亲笔写过跟页 body 走"的页级跟随（有 body_line_height 的纸才触发，verify 路径不调）。结论：行距保持显式写法
+  - 验收：`test_docx.TestDivExtraLineHeight` 3 项；X59 实证壇法段落只剩样式引用、无内联 line；出厂值契约测试同步新值（p 1.5→1.4、head 上边距 1em→0.5em）后全量 629 green
+  - 后续（2026-09-12 用户调参）：`div.div-xu` margin-bottom 0.3em→1em；`test_body_rhythm_uniform` 的 `w:after` 断言 72→240 同步，全量回绿
+- [x] **已完成** 竖排取消居中（title/head/juan/pin），横排居中（2026-09-11 用户点档；byline 已另做）
+  - 机制：CSS 文件即事实来源——`pdf_docx.css` 加 `body.vertical-rl h1.title/p.head/p.juan/p.pin {text-align:left}` 块（横排无该 class 恒惰性；整套替换主题需自带）；`theme.VERTICAL_UNCENTER` 名单 docx/pdf 共用；docx `_para` 三分支内联 `<w:jc left/>` 覆盖（竖排 left 即顶部）；pdf `_wrap` 竖排加 body class
+  - 探针实证（Chromium）：vertical-rl 下 `left`==`start`==顶部（y=1），`center` 居中，`end` 落底——无需 fallback
+  - 未动：`TAG_SELECTOR`/compounds 解析、`cbeta_golden.css`、styles.xml、横排输出（字节零变化断言）；X59 竖排实测 46 处 left（含既有 series-title 1 处）
+  - 验收：`test_theme/test_docx/test_pdf` 各 1 组（名单/CSS 块/body class/开关联动）
+- [x] **已完成** byline 署名统一右对齐（2026-09-11 用户点档；竖排 A 搁置）
+  - 查明：html 恒 `class="byline"`（右，对官方）；docx 只认大写 `"Translator"`，X59 小写 `translator` 落 `"byline"`（右）纯属碰巧，T0349 大写则走 `translator`（中）——跨格式本来就不一致
+  - 改法：docx 映射大小写不敏感 + `pdf_docx.css` 的 `p.author, p.translator` center→right（与官方 golden `.byline` 右对齐看齐；译者特有覆盖示例注释同步）；X59/T0349 实测均落 `translator` 右对齐
+  - 验收：`test_docx.TestBylineRight` 2 项（大小写映射 + `jc=right`）
+- [x] **已完成** 文件按钮移编号列表行 + figures 进数据源 + docx 内联括号字号（2026-09-11 用户点档）
+  - 布局：`目录…` 留目录/文件行、`文件…` 移编号列表行最右；`ids_edit` placeholder 改为“逗号/空格分隔；或用「文件…」选 ID 列表 .txt”；`path_edit` placeholder 回到“XML 目录 / 单个 .xml”
+  - 数据源：`SourceDialog` URL 表显示用出厂 `downloads` 打底合并（用户文件缺 `figures` 等键也可见、可改、可存）；新增 `test_figures_url_visible_with_factory_default`
+  - docx 内联括号：根因 `_current_tag()` 只取栈顶——`_render_inline_note` 括号按 `(head,doube)` 解 16pt、内容按 `(doube,)` 解 9.6pt（X59 卷首实测 32 vs 19）。修法：先压注记标签再取 tags（括号与内容同解算）；`_render_inline_mode` 括号只带 `note-inline`（去外层）。验收 `test_docx.TestInlineBracketSize` 2 项；html/md/txt 无字号概念不受影响
+- [x] **已完成** 独立窗设置区折叠：配置 ▾/▸ 总开关（2026-09-11 用户点档）
+  - `MainWindow` 在输入区与设置区之间加 `QToolButton` 开关，`toggled → panel.setVisible` + 箭头 `▾/▸` 同步，默认展开
+  - 收起 `XmlOptionsPanel` 整体（tab 区 +「配置」分组），批量列表因纵向 stretch 自动放大；不碰任何数据逻辑，不持久化
+  - 验收：`test_gui.TestMainWindowUx.test_cfg_toggle_collapses_panel`
+- [x] **已完成** 图片段对中+无首行缩进；折叠按钮 redesign（2026-09-11 用户点档）
+  - figure-only `<p>`（忽略空白/Lb/Pb/anchor/milestone 后全为 figure/graphic）走新 `figure` 主题标签：`p.figure {text-align:center; text-indent:0; margin 0.5em}`（`pdf_docx.css`，超出官方——官方 docx 用 default 样式无居中）；`TAG_SELECTOR`/`_STYLED_PARAS`/样式编辑器「图片」行三件套；图文混排段保持原样
+  - html figure-only 出 `class="figure"` + golden `p.figure{text-align:center}`（X1116 无图，golden 测试不受影响；校验纯文本比对不受影响）
+  - 折叠按钮：删独立整行，改为输入来源行最右扁平无文字小箭头（22px，hover 才显底，tooltip），逻辑/属性名不变
+  - 验收：`test_figures.TestFigureOnly` + `TestFigureParagraphCentered` 4 项（docx `figure` 样式/`jc center`/无 `firstLine`、混排保持 `p`、html class）；`test_cfg_toggle` 加无文字/扁平断言
 - [x] **已完成** 校验汇总弹窗显示生成目标文件名（2026-09-11 用户点档）
   - `BatchWorker.run` 取本格式实际产物 `paths[0]` 的 basename 作 `gen_name` 传入 `_verify_one`（pdf 委托时即 pdf 产物名）
   - `VerifySummaryDialog._line`：`[{tag}] {gen_name}{cnt}`，无 `gen_name` 回退「{id} {fmt}」；例 `[通过] TX0006 太虚大师全书…docx 缺0/多0`
@@ -347,6 +375,14 @@
   - 验收：X60n1116 `-f txt` 开剥离 0/496（missing=0 四令牌 A/B/C/D 全对齐；残留 = 题署行版式差 + body-app 双变体展开，属已知局限类，非 strip 问题）；默认关全量 454/458（4 失败系用户未提交 CSS 改动 `h1.title 30→26pt`，非本件；stash 干净树对照通过）
   - 附带：`docNumber` 独立元素（如 `No. 1116`）两边保留不动；书签/目录文本不同步
   - 导航窗格跟随可见段落（OOXML 同一段落无法分离；mulu 书签名保留 No.）——2026-09-10 用户确认接受现状，不动
+- [x] **插图机制（2026-09-11 用户立项：`<figure><graphic url="../figures/X/X59p0224_01.gif">`，缺图报错？自动下载？）**
+  - 远端已核验：`cbeta-git/CBR2X-figures`（`master`，布局 `{canon}/{basename}`，如 `X/X59p0224_01.gif` 6.4KB 确有其文件）；模板 `https://raw.githubusercontent.com/cbeta-git/CBR2X-figures/master/{canon}/{file}` 进出厂 `config.json downloads.figures` + `panel.DOWNLOAD_KEYS`（数据源 URL 表/重置自动兼容）
+  - 新模块 `pycbeta/figures.py`（纯函数）：`split_graphic_url/download_url/find_figure/search_dirs/work_figure_dirs/graphic_urls_in_text/gif+png size/looks_like_image`
+  - `fetch.ensure_figures`（`{work}/figures` 已有 → `{work}/txt` 基线 bonus 拷贝 → 远端下载；404/失败记缺失不抛错）+ `materialize_work` 四出口与 `ensure_baselines` 自动触发（含图才跑）
+  - 渲染：`HtmlRenderer.figure_base` 升级 str|list + `missing_figures`（占位 span 不变）；`EpubRenderer` 透传；`DocxRenderer` 新增 `_render_graphic`（手拼 OOXML `word/media`+rels+`w:drawing`，尺寸读 GIF 头按版心等比 clamp，缺图 `【圖：…】`）；pdf 两管线自动继承；CLI `render_one/process_file` 经 `figures.work_figure_dirs` 接线 + 缺图行打印（GUI 经子进程同口径进状态栏）；`verify.generate_formal` 同路径传入（文本比对不受图片影响）
+  - 验收：新 `test_figures.py` 17 项（含 docx 包内 media/rels/drawing + 三部件 lxml 良构断言——曾抓到漏 `</a:xfrm>` 致 Word 打不开）；X59 实测 html 4 张 base64 零占位、docx 4 media 良构、raw 下载 6557B 与基线一致；缺图策略=警告+占位不中断（用户确认）
+  - 追修（2026-09-11 用户反馈 X1077 docx/pdf 无图）：根因是 `<figure>` 在 CBETA 里常**内联于 `<p>`**，而 `_render_graphic` 恒包 `<w:p>` → 非法嵌套，WPS 静默丢弃段内图片（最小顶层用例正常，故对照实验才暴露）。修法：`_in_para` 上下文（`_render_para_children` + `_render_tagged` 内统一标记，覆盖 p/pre/head/byline/pin/form/def/verse/cell/脚注/夹注），段内只出 run 级 drawing，块级才包段。实测 X59 pdf（WPS）94 页 4 图；另发现卷名/mulu 区 8 处既有 `title` 嵌套（文字完整，与图片无关，未动）
+  - 追修2（2026-09-11）：折叠按钮改绿底白字（各态 stylesheet 同色 + `ButtonText` 调色板设白，箭头靠方向区分；像素级单测锁定）；图片 100% 上限（审计确认只缩小不放大 + `jpeg_size` SOF 解析 + 1x1 原生/2000px 等比压单测锁定）
 - [ ] **元素覆盖扫描（2026-09-10 三项并查，决议：都不加行，只记录）**
   - test XML 19 文件 body 普查：左栏缺失但可见 = `l`（13/4819）/`caesura`（11/4747）/`cb:t/tt`（T01/X59n1077）/`list/item`（3 文件）/正文内 `title`（6/126）/`hi/seg[border]/note[hide]`/`space`（4/430）/`yin/zi/sg+entry/term`（X59/X60）/`figure/graphic`（3/74）/`g`（12/947）+`app/lem/rdg`/`div@type=orig/commentary/jing/pin/fen/w/other`（other 1808，左栏仅 xu/note）；`rend` 四行 19 文件零命中无样张；结构性无需调 = lb(70125)/pb/milestone/cb:juan/jhead/docNumber/mulu(2087)/anchor(9837)
   - schema（cbeta-p5.rnc）对照：唯一值得加的是 `table/row/cell`（走 bip-table，左栏无行）——本次不加；`list` 低优先级；其余透传/功能性不值得单列；header 无行系正确忽略

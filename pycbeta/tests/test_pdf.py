@@ -125,5 +125,27 @@ class TestPdfHorizontal(unittest.TestCase):
         self.assertEqual(len(set(pages)), 2)  # 两卷不同页
 
 
+class TestVerticalWrap(unittest.TestCase):
+    """竖排 body class 开关（纯字符串，不调引擎/字体）。"""
+
+    def _work(self):
+        from pycbeta.model import Work
+        return Work(id="T", source_file="", metadata={"title": "t", "author": ""},
+                    body=[], notes_by_n={}, apps=[], simplified=False)
+
+    def test_vertical_body_class(self):
+        r = PdfRenderer(page="a4", vertical=True)
+        r._pdf_css = lambda: "BASE"
+        out = r._wrap("<p>x</p>", self._work())
+        self.assertIn('<body class="vertical-rl">', out)
+
+    def test_horizontal_no_class(self):
+        r = PdfRenderer(page="a4", vertical=False)
+        r._pdf_css = lambda: "BASE"
+        out = r._wrap("<p>x</p>", self._work())
+        self.assertIn("<body>", out)
+        self.assertNotIn("vertical-rl", out)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

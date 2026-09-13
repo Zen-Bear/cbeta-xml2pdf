@@ -42,6 +42,7 @@ TAG_SELECTOR = {
     "pre": "pre",
     "verse": "div.lg",
     "form": "p.form",
+    "figure": "p.figure",
     "dharani": "p.dharani",
     "footnote": ".endnote, .fn, .footnote",
     "note-ref": "sup.note-ref, sup.footnote-call",
@@ -57,6 +58,10 @@ TAG_SELECTOR = {
     "mingti": "[rend~=mingti]",
     "def": "cb:def",
 }
+
+# 竖排取消居中的段落标签（横排居中、竖排默认对齐）：书名/标题/卷名/品名。
+# docx 与 pdf 共用此名单（docx 走 _para 内联覆盖，pdf 走 body.vertical-rl CSS 块）。
+VERTICAL_UNCENTER = ("title", "head", "juan", "pin")
 
 # reverse: css selector -> tag
 _SELECTOR_TAGS = {}
