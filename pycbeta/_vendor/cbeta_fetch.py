@@ -13,7 +13,7 @@ URL 模板 / work id 大小写规范化 / catalog 查表 / 文件与 zip 下载 
 同步：本文件是唯一事实源；宿主项目内的副本请用 `tools/sync_into.py` 同步，勿手改。
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 import os
 import re
@@ -239,26 +239,41 @@ def fetch_if_changed(url: str, dest: str, *, etag: Optional[str] = None,
     return ("failed", None, None)
 
 
-def probe(url: str, *, etag: Optional[str] = None,
-          last_modified: Optional[str] = None,
-          timeout: int = 20) -> Tuple[str, Optional[str], Optional[str]]:
-    """不落盘探针（HEAD + 条件头）。返回 `(status, etag, last_modified)`，
-    `status ∈ {"changed","not-modified","failed"}`。"""
+def probe_info(url: str, *, etag: Optional[str] = None,
+               last_modified: Optional[str] = None,
+               timeout: int = 20) -> Dict:
+    """不落盘探针（HEAD + 条件头），返回详情 dict（比 `probe` 多 `size`）。
+
+    返回 `{"status": "changed"|"not-modified"|"failed", "etag", "last_modified",
+    "size"}`；`size` 为远端 `Content-Length`（int，缺失为 None）。
+    供宿主做「大小一致即跳过」类判断；`probe` 保持三元组兼容。
+    """
     ctx = _ctx()
-    headers: Dict[str, str] = {}
+    headers: Dict[str, str] = {"User-Agent": USER_AGENT}
     if etag:
         headers["If-None-Match"] = etag
     if last_modified:
         headers["If-Modified-Since"] = last_modified
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT,
-                                                   **headers}, method="HEAD")
+        req = urllib.request.Request(url, headers=headers, method="HEAD")
         with urllib.request.urlopen(req, timeout=timeout, context=ctx) as r:
-            return ("changed", r.headers.get("ETag"),
-                    r.headers.get("Last-Modified"))
+            cl = r.headers.get("Content-Length")
+            return {"status": "changed", "etag": r.headers.get("ETag"),
+                    "last_modified": r.headers.get("Last-Modified"),
+                    "size": int(cl) if (cl and cl.isdigit()) else None}
     except urllib.error.HTTPError as e:
         if e.code == 304:
-            return ("not-modified", etag, last_modified)
-        return ("failed", None, None)
+            return {"status": "not-modified", "etag": etag,
+                    "last_modified": last_modified, "size": None}
+        return {"status": "failed", "etag": None, "last_modified": None, "size": None}
     except Exception:  # noqa: BLE001
-        return ("failed", None, None)
+        return {"status": "failed", "etag": None, "last_modified": None, "size": None}
+
+
+def probe(url: str, *, etag: Optional[str] = None,
+          last_modified: Optional[str] = None,
+          timeout: int = 20) -> Tuple[str, Optional[str], Optional[str]]:
+    """不落盘探针（HEAD + 条件头）。返回 `(status, etag, last_modified)`，
+    `status ∈ {"changed","not-modified","failed"}`。需要 `size` 时用 `probe_info`。"""
+    r = probe_info(url, etag=etag, last_modified=last_modified, timeout=timeout)
+    return (r["status"], r["etag"], r["last_modified"])

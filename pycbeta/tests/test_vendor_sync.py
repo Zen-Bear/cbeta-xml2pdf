@@ -10,7 +10,7 @@ from pycbeta import names
 
 _API = ("is_work_id", "parse_work_id", "canonical_work_id", "catalog_lookup",
         "DEFAULT_DOWNLOADS", "REMOTE_URLS", "ALL_FORMATS", "download",
-        "unzip_flat", "fetch_if_changed", "probe")
+        "unzip_flat", "fetch_if_changed", "probe", "probe_info")
 
 
 class TestVendorSync(unittest.TestCase):
