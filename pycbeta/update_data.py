@@ -29,9 +29,12 @@ def _repo_root(root=None):
 def load_sources(root=None):
     """读 URL 表 → [(key, kind, url, dest_tuple)]（dest 为空=手动项）。
 
+    URL 单源：条目的 `url` 缺省时取共享层 `cbeta_fetch.REMOTE_URLS`，键名取
+    `spec["source"]` 或（把 `-` 换成 `_` 的）条目 key；仍允许显式 `url` 覆盖。
     文件缺失/非法 JSON/顶层非对象 → 抛 OSError/ValueError（大声报错，不静默）。
     """
     from .theme import _strip_json_comments
+    from ._vendor import cbeta_fetch as _cf
     path = os.path.join(_repo_root(root), *REMOTE_SOURCES_NAME)
     with open(path, encoding="utf-8") as f:
         data = json.loads(_strip_json_comments(f.read()))
@@ -46,9 +49,11 @@ def load_sources(root=None):
             raise ValueError(f"remote_sources[{key}].kind 未知：{kind!r}")
         dest = spec.get("dest", "") or ""
         parts = tuple(p for p in dest.replace("\\", "/").split("/") if p)
-        if kind != "manual" and (not spec.get("url") or not parts):
-            raise ValueError(f"remote_sources[{key}] 缺 url/dest：{path}")
-        out.append({"key": key, "kind": kind, "url": spec.get("url", ""),
+        skey = spec.get("source") or key.replace("-", "_")
+        url = spec.get("url") or _cf.REMOTE_URLS.get(skey, "")
+        if kind != "manual" and (not url or not parts):
+            raise ValueError(f"remote_sources[{key}] 缺 url/source/dest：{path}")
+        out.append({"key": key, "kind": kind, "url": url,
                     "dest": parts, "note": spec.get("note", "") or ""})
     return out
 
@@ -279,34 +284,19 @@ def last_update_summary(root=None, sources=None):
 
 
 def _conditional_probe(url, etag, last_modified, dest_tmp, timeout=30):
-    """条件 GET 探针 → (status, etag, last_modified)。
+    """条件 GET 探针（委托共享层 `fetch_if_changed`）→ (status, etag, last_modified)。
 
     status ∈ not-modified（304，未下载）/ downloaded（200，已存 dest_tmp）/
     failed（网络/异常，调用方回退全量下载路）。
     """
-    import ssl
-    import urllib.error
-    import urllib.request
-    req = urllib.request.Request(url, headers={"User-Agent": "pycbeta/1.0"})
-    if etag:
-        req.add_header("If-None-Match", etag)
-    if last_modified:
-        req.add_header("If-Modified-Since", last_modified)
-    ctx = ssl._create_unverified_context()
-    try:
-        with urllib.request.urlopen(req, timeout=timeout,
-                                     context=ctx) as r:
-            data = r.read()
-            with open(dest_tmp, "wb") as f:
-                f.write(data)
-            return ("downloaded", r.headers.get("ETag"),
-                    r.headers.get("Last-Modified"))
-    except urllib.error.HTTPError as exc:
-        if exc.code == 304:
-            return ("not-modified", etag, last_modified)
-        return ("failed", None, None)
-    except Exception:  # noqa: BLE001 —— 超时/断网等一律回退
-        return ("failed", None, None)
+    from ._vendor import cbeta_fetch as _cf
+    status, e2, lm2 = _cf.fetch_if_changed(
+        url, dest_tmp, etag=etag, last_modified=last_modified, timeout=timeout)
+    if status == "downloaded":
+        return ("downloaded", e2, lm2)
+    if status == "not-modified":
+        return ("not-modified", etag, last_modified)
+    return ("failed", None, None)
 
 
 def format_report(report):

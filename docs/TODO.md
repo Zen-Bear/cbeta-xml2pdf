@@ -479,3 +479,8 @@
   - 实测（`curl -I`）：`TXa001` → XML `.../TX/TX00/TX00na001.xml`、html `.../html/TXa001.html.zip`、epub `.../epub/TX/TXa001.epub` 均 200；全大写 `TXA001` 自动纠为 `TXa001`；`T0128a` 同理（`T0128A` 纠为 `T0128a`）。TX 无 docx/odt（与大小写无关，CBETA 未提供）
   - 测试：`test_fetch.TestLetterSuffixId` 3（不敏感命中保原大小写 / canonical / URL 拼装）；全量 693 OK（skipped=1）
   - 文档：`第三方调用说明.md` §2.3/2.3b
+- [x] **已完成** 抽出共享下载/元数据层 `cbeta-fetch`（纯标准库）并 vendor 进 xml2pdf（2026-09-13 用户立项：与 publish 共享下载，A 方案）
+  - 新仓库 `E:\dev\cbeta\cbeta-fetch`（`cbeta_fetch.py` 单文件、纯标准库）：`is_work_id`/`parse_work_id`（canon 大写、no 原样）/`canonical_work_id`/`catalog_lookup`/`DEFAULT_DOWNLOADS`（含新 `pdf`）/`REMOTE_URLS`（元数据单源）/`download`（原子·可 `unzip`）/`unzip_flat`/`fetch_if_changed`/`probe`；`pyproject.toml`（发行名 `cbeta-fetch`）、README/API/CHANGELOG/LICENSE、`tools/sync_into.py`、`docs/对接单-publish.md`
+  - xml2pdf：新增 `pycbeta/_vendor/{cbeta_fetch.py,SOURCE.txt,__init__.py}`；`fetch.py` 四函数 + `_http_download`/`_unzip_flat`/`_download_if_changed` 全委托共享（保存签名/行为；`DEFAULT_DOWNLOADS` = 共享表 + 专有 `figures`）；`update_data.py` 的 `_conditional_probe` 委托 `fetch_if_changed`；`remote_sources.json` 省略 url、改 `"source"` 引用 `REMOTE_URLS`（URL 单源）
+  - 测试：cbeta-fetch 13 项（file:// 离线下载/解压/大小写/catalog）；xml2pdf 新增 `test_vendor_sync` 3（sha256/version/API/id 语法对账）；全量 696 OK（skipped=1）
+  - 分发：publish 单发 GitHub 自包含（vendored 副本 + sha256 校验）；publish 侧改动见 `cbeta-fetch/docs/对接单-publish.md`（含 `src→cbeta_publish` 具名包、去 requests、官方电子书/remote_manager 迁移）

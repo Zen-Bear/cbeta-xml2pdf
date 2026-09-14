@@ -10,6 +10,11 @@
 基线进**格式同名子目录平展**（html/ docx/ epub/ odt/ txt/＝text-with-notes），
 zip 解压后即删（忽略 zip 内部目录层次）。
 说明：docx/odt 目前官方仅大正藏 T 与《卍續藏》X 提供，其它藏经 404 时静默跳过。
+
+共享层：URL 模板 / work id 大小写规范化 / catalog 查表 / 下载与 zip 解压 / 条件更新
+已抽到独立仓库 `cbeta-fetch`（纯标准库），本模块以 vendored 副本
+`pycbeta/_vendor/cbeta_fetch.py` 复用（此处函数多为薄封装）。同步：
+`python <cbeta-fetch>/tools/sync_into.py pycbeta/_vendor`。
 """
 
 import glob
@@ -29,8 +34,9 @@ if ROOT not in sys.path:
 
 from .names import CANON, WORK_ID, get_canon_id_from_work_id  # noqa: E402
 from .theme import load_presets  # noqa: E402
+from ._vendor import cbeta_fetch as _cf  # noqa: E402  共享下载层（vendor 副本）
 
-ALL_FORMATS = ("xml", "html", "docx", "epub", "txt_notes", "odt")
+ALL_FORMATS = _cf.ALL_FORMATS
 _ZIP_FORMATS = {"html", "docx", "txt_notes", "odt"}
 
 DEFAULT_SOURCE = {
@@ -41,13 +47,9 @@ DEFAULT_SOURCE = {
     "cbeta_ebook": "",
     "title_t2s": True,
 }
+# 共享层模板（含 pdf）+ xml2pdf 专有的 figures
 DEFAULT_DOWNLOADS = {
-    "xml": "https://raw.githubusercontent.com/cbeta-org/xml-p5/master/{canon}/{canon}{vol}/{file}",
-    "html": "https://cbdata.dila.edu.tw/stable/download/html/{id}.html.zip",
-    "docx": "https://cbdata.dila.edu.tw/stable/download/docx/{canon}/{id}.zip",
-    "epub": "https://cbdata.dila.edu.tw/stable/download/epub/{canon}/{id}.epub",
-    "txt_notes": "https://cbdata.dila.edu.tw/stable/download/text-with-notes/{id}.txt.zip",
-    "odt": "https://cbdata.dila.edu.tw/stable/download/odt/{canon}/{id}.zip",
+    **_cf.DEFAULT_DOWNLOADS,
     "figures": "https://raw.githubusercontent.com/cbeta-git/CBR2X-figures/master/{canon}/{file}",
 }
 
@@ -122,62 +124,29 @@ def inspect_xml_source(xml_dir: str, sample: int = 5) -> Dict:
 
 
 def is_work_id(s: str) -> bool:
-    """是否 CBETA 佛典編號（如 T0349 / T0099 / A1057 / X1271 / T0128a）。
-    大小写不敏感（内部归一化为大写，下游查找/下载 URL 统一用大写）。"""
-    return bool(s) and bool(WORK_ID.match((s or "").strip().upper()))
+    """是否 CBETA 佛典編號（如 T0349 / T0099 / A1057 / X1271 / T0128a / TXa001）。
+    大小写不敏感；字母后缀原始大小写由 catalog 决定（见 canonical_work_id）。"""
+    return _cf.is_work_id(s)
 
 
 def parse_work_id(work_id: str) -> tuple:
-    """(canon, no)。canon 可能为多字母（GA/GB/LC/TX/YP/ZS/ZW/CC）。大小写不敏感。"""
-    m = re.match(rf"^({CANON})(.*)$", (work_id or "").strip().upper())
-    if not m:
-        raise ValueError(f"invalid work id: {work_id}")
-    return m.group(1), m.group(2)
+    """(canon, no)。canon 可能为多字母（GA/GB/LC/TX/YP/ZS/ZW/CC）。
+    canon 转大写、no **保留原大小写**（如 `("TX","a001")`）。"""
+    return _cf.parse_work_id(work_id)
 
 
 def catalog_lookup(catalog: str, canon: str, no: str) -> List[Dict]:
-    """sutra_mapping.txt 查表：列 = canon,vol,no,…,书名,… → [{vol,no,file,title}]（多冊全返）。
-
-    **大小写不敏感**比较 canon/no（catalog 里字母后缀大小写不统一：`TX,00,a001`、
-    `T,02,0128a`、`J,15,B005`）；返回值用 catalog 的**原始大小写**（`no`/`file`），
-    供拼下载 URL（CBETA 端点大小写敏感）。"""
-    if not catalog or not os.path.isfile(catalog):
-        return []
-    cu, nl = (canon or "").upper(), (no or "").lower()
-    out = []
-    try:
-        f = io.open(catalog, encoding="utf-8")
-    except OSError:
-        return []
-    with f:
-        for line in f:
-            parts = line.strip().split(",")
-            if len(parts) >= 3 and parts[0].upper() == cu \
-                    and parts[2].lower() == nl:
-                vol = parts[1]
-                stored_no = parts[2]
-                title = parts[6].strip() if len(parts) >= 7 else ""
-                out.append({"vol": vol, "no": stored_no,
-                            "file": f"{parts[0]}{vol}n{stored_no}.xml",
-                            "title": title})
-    return out
+    """sutra_mapping.txt 查表（委托共享层）：canon/no 大小写不敏感，
+    返回项保留 catalog 原始大小写 `[{vol,no,file,title}]`（多冊全返）。"""
+    return _cf.catalog_lookup(catalog, canon, no)
 
 
 def canonical_work_id(work_id: str, presets=None) -> str:
-    """按 catalog 原始大小写规范化 work id（canon 大写 + no 原样，如 TXa001/T0128a/JB005）。
-
-    catalog 未命中（离线/本地/未知）→ 原样返回。用于下载 URL 与工作目录命名：
-    CBETA 的 XML 文件名与电子书端点对字母后缀**大小写敏感**，全大写会 404。"""
-    try:
-        canon, no = parse_work_id(work_id)
-    except ValueError:
-        return work_id
+    """按 catalog 原始大小写规范化 work id（canon 大写 + no 原样，如 TXa001/T0128a）。
+    catalog 未命中（离线/本地/未知）→ 原样返回。用于下载 URL 与工作目录命名。"""
     cfg = (presets.get("source") or {}) if isinstance(presets, dict) else {}
     cat = cfg.get("catalog", DEFAULT_SOURCE.get("catalog", ""))
-    recs = catalog_lookup(cat, canon, no)
-    if recs and recs[0].get("no"):
-        return f"{canon}{recs[0]['no']}"
-    return work_id
+    return _cf.canonical_work_id(work_id, cat)
 
 
 def find_local_xml(xml_dir: str, canon: str, no: str) -> List[str]:
@@ -216,37 +185,13 @@ def find_local_xml(xml_dir: str, canon: str, no: str) -> List[str]:
 
 
 def _http_download(url: str, dest: str, timeout: int = 90) -> bool:
-    import ssl
-    # cbdata 证书缺 Subject Key Identifier，系统校验失败；公共数据集用 unverified context
-    ctx = ssl._create_unverified_context()
-    req = urllib.request.Request(url, headers={"User-Agent": "pycbeta/1.0"})
-    for _ in range(2):
-        try:
-            with urllib.request.urlopen(req, timeout=timeout, context=ctx) as r:
-                data = r.read()
-            os.makedirs(os.path.dirname(dest), exist_ok=True)
-            with open(dest, "wb") as f:
-                f.write(data)
-            return True
-        except Exception:
-            continue
-    return False
+    """委托共享层下载（unverified SSL + 重试 + 原子替换）。"""
+    return _cf.download(url, dest, timeout=timeout)
 
 
 def _unzip_flat(zip_path: str, dest_dir: str) -> None:
-    """平展解压：忽略 zip 自带目录层次，所有文件按 basename 写入 dest_dir。"""
-    os.makedirs(dest_dir, exist_ok=True)
-    with zipfile.ZipFile(zip_path) as z:
-        for n in z.namelist():
-            if n.endswith("/") or n.endswith("\\"):
-                continue
-            base = os.path.basename(n.replace("\\", "/"))
-            if not base:
-                continue
-            # 防 zip-slip：只取 basename，天然不越界
-            target = os.path.join(dest_dir, base)
-            with z.open(n) as src, open(target, "wb") as dst:
-                dst.write(src.read())
+    """平展解压（委托共享层）：忽略 zip 自带目录层次，按 basename 写入 dest_dir（防 zip-slip）。"""
+    _cf.unzip_flat(zip_path, dest_dir)
 
 
 def _find_work_dir(root: str, work_id: str) -> Optional[str]:
@@ -611,26 +556,15 @@ def _work_id_from_dirname(name: str) -> str:
 
 
 def _download_if_changed(url: str, dest: str, timeout: int = 90):
-    """条件下载：本地已有则带 If-Modified-Since（304 免下载）；否则比对字节。
-    返回 (status, detail)，status ∈ changed/unchanged/failed。"""
-    import ssl
+    """条件下载（委托共享层 `fetch_if_changed`，保留本项目 (status, detail) 口径）。
+
+    本地已有则带 If-Modified-Since（304 免下载）；200 先落临时再与本地字节比对，
+    一致则**不落盘**（保持 mtime），不同才替换。status ∈ changed/unchanged/failed。
+    """
     import email.utils
-    import urllib.error
-    ctx = ssl._create_unverified_context()
-    headers = {"User-Agent": "pycbeta/1.0"}
+    last_modified = None
     if os.path.isfile(dest):
-        headers["If-Modified-Since"] = email.utils.formatdate(
-            os.path.getmtime(dest), usegmt=True)
-    req = urllib.request.Request(url, headers=headers)
-    try:
-        with urllib.request.urlopen(req, timeout=timeout, context=ctx) as r:
-            data = r.read()
-    except urllib.error.HTTPError as e:
-        if e.code == 304:
-            return "unchanged", ""
-        return "failed", f"HTTP {e.code}"
-    except Exception as e:  # noqa: BLE001
-        return "failed", type(e).__name__
+        last_modified = email.utils.formatdate(os.path.getmtime(dest), usegmt=True)
     old = b""
     if os.path.isfile(dest):
         try:
@@ -638,12 +572,30 @@ def _download_if_changed(url: str, dest: str, timeout: int = 90):
                 old = f.read()
         except OSError:
             old = b""
-    if old == data:
-        return "unchanged", ""
-    os.makedirs(os.path.dirname(dest), exist_ok=True)
-    with open(dest, "wb") as f:
-        f.write(data)
-    return "changed", f"{len(old)}→{len(data)}"
+    tmp = dest + f".chk{os.getpid()}"
+    try:
+        status, _etag, _lm = _cf.fetch_if_changed(
+            url, tmp, last_modified=last_modified, timeout=timeout)
+        if status == "not-modified":
+            return "unchanged", ""
+        if status == "failed":
+            return "failed", "download failed"
+        with open(tmp, "rb") as f:
+            new = f.read()
+        if old == new:
+            return "unchanged", ""
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        os.replace(tmp, dest)
+        return "changed", f"{len(old)}→{len(new)}"
+    except OSError as e:
+        return "failed", type(e).__name__
+    finally:
+        if os.path.isfile(tmp):
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+
 
 
 def check_ebook_updates(cbeta_ebook: str, presets: Optional[Dict] = None,
