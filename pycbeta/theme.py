@@ -118,15 +118,15 @@ for _dt in _DIV_TYPES:
 REQUIRED_THEME_TAGS: Dict[str, tuple] = {
     "body": ("font-size", "line-height"),
     "title": ("font-size", "font-weight"),
-    "author": ("font-size",),
-    "translator": ("font-size",),
-    "byline": ("font-size",),
+    "author": (),                 # 字号继承 body（单源）
+    "translator": (),
+    "byline": (),
     "head": ("font-size", "font-weight"),
     "juan": ("font-size", "font-weight"),
     "pin": ("font-size", "font-weight"),
-    "p": ("text-indent", "line-height"),      # 刻意不要求 font-size：跟随 body
+    "p": ("text-indent",),        # 刻意不要求 font-size/line-height：跟随 body
     "pre": ("text-indent",),
-    "verse": ("font-size",),
+    "verse": (),                  # 字号继承 body；色/字体另行要求
     "form": ("font-weight",),
     "dharani": (),
     "footnote": ("font-size",),
@@ -161,6 +161,17 @@ def missing_required_theme(theme: "Theme") -> list:
                 sel = TAG_SELECTOR.get(tag, tag)
                 missing.append(f"元素 {tag}（{sel}）缺少属性 {p}")
     return missing
+
+
+# 代码兜底值（保命值，集中定义；值恒定）：CSS/配置缺失时的最后取值，
+# 保证任何输入都能出文件。清单与触发条件见 docs/兜底值清单.md，新增请登记。
+FALLBACKS = {
+    "base_pt": 12.0,            # em/% 换算基准（body、p 均无绝对 pt）
+    "doc_size_pt": 11,          # docDefaults 文档默认字号（body、p 均无字号）
+    "line_height": 1.5,         # Normal 样式行距（body、p 均无行距）
+    "verse_hang_em": 2.0,       # 偈颂 div.lg 无 margin-left 时首句悬挂缩进
+    "body_font": "微軟正黑體",    # body 无字体时 docDefaults eastAsia
+}
 
 # 预设（字体方案 + 页面设置）：外部 JSON 配置，见 styles/presets.json，
 # 用户可直接改或复制后用 --presets-file 指定。
@@ -825,6 +836,7 @@ def apply_page_typography(theme, page, page_presets):
     无键/非法值 → 不动（并打印警告）。返回同一 theme（链式）。纯逻辑（除打印）。
     """
     entry = _lookup_ci(page_presets or {}, page or "")
+    theme._page_typography_applied = (page, id(page_presets))
     if not isinstance(entry, dict):
         return theme
     props = theme.tags.setdefault("body", {})
@@ -848,6 +860,18 @@ def apply_page_typography(theme, page, page_presets):
         else:
             print(f"pages[{page}].body_line_height 非法，已忽略：{lh!r}")
     return theme
+
+
+def ensure_page_typography(theme, page, page_presets):
+    """渲染器入口：若该 theme 尚未按同一 (page, presets) 应用过纸张排版则应用一次。
+
+    CLI 在 `font_scale` **之前**已调用 `apply_page_typography`（缩放要基于纸张基准）；
+    此时标记命中直接跳过，避免在缩放之后被纸张值重置。库直接调用渲染器（无标记）
+    则在此应用，使直接调用也能按纸张生效。
+    """
+    if getattr(theme, "_page_typography_applied", None) == (page, id(page_presets)):
+        return theme
+    return apply_page_typography(theme, page, page_presets)
 
 
 def resolve_page(name: str, page_presets: Optional[Dict] = None) -> Dict:
@@ -940,7 +964,7 @@ class Theme:
         v = (self._font_vars or {}).get("--font-" + suffix)
         return v if v else default
 
-    def base_pt(self, fallback: float = 12.0) -> float:
+    def base_pt(self, fallback: float = FALLBACKS["base_pt"]) -> float:
         """基准字号：body → p 的绝对 pt；找不到回 fallback。
         单源：body{font-size} 为唯一源（p 继承）；DOCX em 换算与文档默认锚定它。
         注意只认绝对 pt（em 基准必须保持绝对，否则复利）；body 优先于 p，

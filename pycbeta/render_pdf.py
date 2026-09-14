@@ -15,7 +15,7 @@ from typing import List, Optional
 
 from .model import App, E, Gaiji, Note, NoteRef, Pb, Text, Work
 from .render_html import HtmlRenderer, LINEHEAD_RE, _esc, split_juans
-from .theme import Theme, resolve_page, bracket_pair
+from .theme import Theme, resolve_page, bracket_pair, ensure_page_typography
 
 def _find_soffice() -> Optional[str]:
     # config.json engines.paths.libreoffice 优先（支持自定义安装位置）
@@ -466,6 +466,8 @@ class PdfRenderer(HtmlRenderer):
         self.notes = notes  # 'footnote' | 'endnote' | 'inline'
         self.font_stack = font_stack or self._default_font_stack()
         self.theme = theme if theme is not None else Theme()
+        # 纸张绑字号：库直接调用也生效；CLI 已在 font_scale 前应用过 → 跳过
+        ensure_page_typography(self.theme, page, page_presets)
         self.engine = engine or os.environ.get("CBETA_PDF_ENGINE", "chromium")
         # HTML->PDF 引擎链：按序尝试，第一个成功者出 PDF（--engine 强制单个时为单元素链）
         self.html_engine_chain = (list(html_engine_chain) if html_engine_chain
@@ -638,6 +640,15 @@ class PdfRenderer(HtmlRenderer):
         fonts = ", ".join(f'"{f}"' if f != "cbetarc" else f for f in stack)
         orientation = "vertical-rl" if self.vertical else "horizontal-tb"
         theme_css = self.theme.raw_css or self.theme.css()
+        # 纸张绑字号：apply_page_typography 写进 theme.tags body（raw_css 不会变），
+        # 故在 theme_css 之后补 body 覆盖，令 html2pdf 也随纸张字号/行距。
+        bt = self.theme.tags.get("body") or {}
+        ov = []
+        if bt.get("font-size"):
+            ov.append(f"font-size: {bt['font-size']}")
+        if bt.get("line-height"):
+            ov.append(f"line-height: {bt['line-height']}")
+        body_override = f"\nbody {{ {'; '.join(ov)}; }}" if ov else ""
         m = self.page_margins
         margin = f"{m['top']}mm {m['right']}mm {m['bottom']}mm {m['left']}mm"
         css = f"""
@@ -649,7 +660,7 @@ body {{
 .tei-info {{ break-before: page; }}
 .tei-info h2 {{ text-align: center; }}
 .tei-info p {{ margin: 0.3em 0; }}
-{theme_css}
+{theme_css}{body_override}
 div.lg {{ display: table; margin-left: 2em; }}
 div.lg-cell {{ display: table-cell; padding: 0 0.5em; }}
 div.lg-row {{ display: table-row; }}

@@ -308,5 +308,20 @@ class TestComConvert(unittest.TestCase):
             dispatch=bad, dispatch_ex=bad, get_active=self._no_active))
 
 
+class TestPdfPageTypography(unittest.TestCase):
+    """html2pdf：纸张 body 字号/行距经 theme.tags 补到 CSS（在 theme_css 之后覆盖）。"""
+
+    def test_css_body_override(self):
+        from pycbeta.theme import PAGE_PRESETS
+        r = PdfRenderer(page="16开", page_presets=PAGE_PRESETS,
+                        font_stack=["SimSun"])
+        self.assertIn("body { font-size: 10.5pt; line-height: 1.5; }", r._pdf_css())
+
+    def test_css_no_presets_keeps_css_body(self):
+        r = PdfRenderer(page="16开", font_stack=["SimSun"])
+        # 无 page_presets → 不应用纸张键；tags body 仍是 CSS 的 12pt/1.4
+        self.assertIn("body { font-size: 12pt; line-height: 1.4; }", r._pdf_css())
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

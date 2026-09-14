@@ -457,3 +457,19 @@
   - 修法（两段后代，仅标题内）：`pdf_docx.css` 与 `cbeta_golden.css` 各加 `p.head .doube-line-note, p.head .interlinear-note { font-size: 0.6em; font-weight: normal; }`（golden 标注「超出官方」）；0.6em×20pt=12pt、去粗，括号同 content
   - HTML/PDF 浏览器原生生效；DOCX 经 `theme.compounds`（head 祖先 + 夹注目标）生效
   - 验证：X1077 实渲 `（呪文節略）` 由 sz=32/b 变 sz=24/无 b、紫 800080，标题本体仍 20pt 加粗；`test_docx.TestAncestorInheritance.test_head_inline_note_not_scaled` + `test_theme.TestDescendantSelector.test_head_inline_note_rule` + golden 断言；全量 682 OK（skipped=1）
+- [x] **已完成** pdf_docx.css 去冗余（单源化）：删与被 body 重复/等价继承的声明（2026-09-13 用户点档）
+  - 删：`p.author/translator/byline`、`div.lg`(verse) 的 `font-size:12pt`（跟 body）；`p` 的 `line-height:1.4`（跟 body；且修「纸张 body_line_height 被 p 钉死」）；`p.form`/`cb:def` 的 `font-size:1em`（等价继承）
+  - 保留（防误删）：`p.form`/`p.figure` 的 `text-indent:0`（压 p 的 2em）、`cb:def` 的 `font-weight:normal`（压 div-note 加粗）、**`p.series-title` 的 `text-align:left`（压 p 的 justify；曾被我误列为可省，已更正）**、脚注 `line-height:1`、`li{text-indent:0}`、`pre{text-indent:0}`（REQUIRED 要求）
+  - 连带：`REQUIRED_THEME_TAGS` 放宽（author/translator/byline/verse→()、p→("text-indent",)）；`render_docx._para` 的 div 行距剥离条件改为「元素自带行距或所有 div 祖先未写行距」→ 去掉 docx_para 经 body 回退带进 div_extra 的重复 `w:line`（含空 `<w:spacing/>` 清理）
+  - 语义：纸张 `body_font_size/line_height` 现能下传到 p/署名/偈颂；默认页输出视觉等价
+  - 验证：T01/X59 对照——文本零变化、rPr 仅少 `w:sz=24`（T01 1017、X59 5，改为 docDefaults 继承）、行距由内联重复移到命名样式（同值 336）；test_theme 缩放/工厂合并、test_docx TestDivExtraLineHeight、TestRequiredThemeTags 更新；全量 683 OK（skipped=1）
+- [x] **已完成** 兜底值（保命值）清点成文档：`docs/兜底值清单.md`（2026-09-13 用户点档）
+  - 区分「主题默认值（CSS 唯一来源）」vs「代码兜底值（CSS/配置缺失才启用）」；按 8 类登记（排版/页面/字体缺字注音/注释括号/PDF 引擎/图片/元数据/运行槽默认），逐条给值+位置+触发条件
+  - 重点：em 基准 12pt（`theme.py:943`）、docDefaults 11pt（`render_docx.py:241`，与 12 不一致属历史）、Normal 行距 1.5（`:1805`）、页面回退 a4/25.4mm/Calibri（`theme.py:864-871`）、字体回退链/悉昙/注码/注音默认等
+  - 第 1/2 类硬性不可配置；第 3 类多可由 `config.json` 覆盖；`主题与样式.md` 加指针；纯文档零代码
+- [x] **已完成** 纸张排版进渲染器构造 + 保命值收敛常量（2026-09-13 用户点档）
+  - 1) `theme.ensure_page_typography(theme, page, presets)`：`DocxRenderer`/`PdfRenderer` 构造时调用；同一 theme 已按 (page,presets) 应用过则跳过。CLI 仍在 `font_scale` **之前** `apply_page_typography`（缩放基于纸张基准），故构造时命中标记直接跳过、不会被重置；库直接调用渲染器只要传 `page_presets` 也按纸张生效，`page_presets=None`（verify/默认）不动
+  - `PdfRenderer._pdf_css`：在 theme_css 之后补 `body { font-size/line-height }`（取自 theme.tags body），使 html2pdf 也随纸张字号/行距（此前 raw_css 不反映 tags 变更，纸张对 html2pdf 无效）
+  - 2) 排版类保命值集中到 `theme.FALLBACKS`（base_pt 12.0 / doc_size_pt 11 / line_height 1.5 / verse_hang_em 2.0 / body_font 微軟正黑體），`render_docx` 与 `base_pt` 默认参统一引用，值不变、只做可读性统一
+  - 测试：`test_theme.TestEnsurePageTypography` 4（直接生效/缩放后跳过/无 presets 不动/常量值）+ `test_docx` 直调按纸张 1 + `test_pdf.TestPdfPageTypography` 2；全量 690 OK（skipped=1）
+  - 文档：`兜底值清单.md`（第 1 节指向 FALLBACKS）、`主题与样式.md`（纸张 vs CSS 改述：库直调也生效）、`第三方调用说明.md`（DocxRenderer 行）

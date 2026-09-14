@@ -1153,12 +1153,15 @@ class TestDivExtraLineHeight(unittest.TestCase):
         self.assertIn("w:before=", out)
         self.assertNotIn("w:line=", out)
 
-    def test_no_own_value_fallback_kept(self):
-        # verse 无自身行距：继续靠 div_extra 拿 body 回退（零回归）
+    def test_no_own_value_uses_body_via_style(self):
+        # verse 无自身行距：不再靠 div_extra 内联回退（避免重复），
+        # 行距由命名样式 verse（docx_para 的 body 回退）提供
         r = self._renderer()
         r._div_stack = ["div-other"]
         out = r._para(r._run("文", "verse"), "verse")
-        self.assertIn('w:line="336"', out)
+        self.assertIn('w:pStyle w:val="verse"', out)
+        self.assertNotIn("w:line=", out)
+        self.assertIn('w:line="336"', r.theme.docx_para("verse"))
 
 
 class TestNoteCf(unittest.TestCase):
@@ -1410,6 +1413,22 @@ class TestAncestorInheritance(unittest.TestCase):
         head = self._rpr("", body, "標題")
         self.assertIn('w:sz w:val="40"', head)  # 标题本体 20pt
         self.assertIn("<w:b/>", head)           # 标题本体加粗
+
+    def test_renderer_page_typography_direct(self):
+        # 库直接调用渲染器（带 page_presets）也按纸张：16开 body 10.5pt → 正文 run 10.5pt
+        import shutil
+        from pycbeta.theme import Theme, PAGE_PRESETS
+        from pycbeta.model import E, Text, Work
+        w = Work(id="T", source_file="", metadata={"title": "t", "author": ""},
+                 body=[E(tag="p", attrs={}, children=[Text("正文")])],
+                 notes_by_n={}, apps=[], simplified=False)
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
+        fn = DocxRenderer(theme=Theme(), page="16开",
+                          page_presets=PAGE_PRESETS).render_work(w, tmp, "pg.docx")
+        with zipfile.ZipFile(fn) as z:
+            xml = z.read("word/document.xml").decode("utf-8")
+        self.assertIn('w:sz w:val="21"', xml)   # 10.5pt
 
 
 class TestLatinFont(unittest.TestCase):

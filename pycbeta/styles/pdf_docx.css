@@ -95,8 +95,7 @@ p.series-title {
    灰色小字右对齐（对齐官方 golden `.byline`；此前 center 规则实际极少命中），
    段前 0.5em、段后 2em，与书名拉开距离。逗号分组共享（译者特有覆盖写在下块，顺序勿换）。 */
 p.author, p.translator {
-  font-size: 12pt;
-  text-align: right;
+  text-align: right;      /* 字号/行距继承 body（单源，随纸张 body_font_size/line_height） */
   /*color: #444444;*/
   /*margin: 0.5em 0;*/        /* 段前/段后 0.5em 段前段后不一样需要 4 值或 margin-top/margin-bottom。）*/
   margin-top: 0.5em;
@@ -155,25 +154,24 @@ body.vertical-rl h1.title, body.vertical-rl p.head,
 body.vertical-rl p.juan, body.vertical-rl p.pin { text-align: left; }
 
 /* ============ 段落 ============ */
-/* 正文（<p>）：两端对齐，首行缩进 2 字符，段前 0.5em、段后 0.3em，行距 1.4（与 body 全局一致）。 */
+/* 正文（<p>）：两端对齐，首行缩进 2 字符，段前 0.5em、段后 0.3em；
+   字号/行距继承 body（单源：随 body 与纸张 body_font_size/line_height）。 */
 p {
   text-indent: 2em;          /* 段前缩进（首行 2 字符） */
-  /*line-height: 1.5;*/          /* 行距（1.5倍，与 body 全局一致；Word 映射为 w:lineRule="auto"） */
   margin-top: 0.5em;         /* 正文段前 0.5 */
   margin-bottom: 0.3em;      /* 段后 */
   text-align: justify;
-  line-height: 1.4;
 }
 /* 咒语（<p type="dharani">，如陀罗尼）：继承正文字号，不加粗；
    不居中：对齐官方 HTML（golden 无 p.dharani 规则，咒语不居中） */
 p.dharani {
   /* 不居中：对齐官方 HTML（golden 无 p.dharani 规则，咒语不居中） */
 }
-/* 格式段（<p type="form">，如仪轨程式）：加粗、不缩进，以示与正文区别。 */
+/* 格式段（<p type="form">，如仪轨程式）：加粗、不缩进，以示与正文区别。
+   字号继承 body（不再显式 1em：DOCX 有完整继承链）。 */
 p.form {
   font-weight: bold;
   text-indent: 0;
-  font-size: 1em;          /* 与正文对齐（恒等于正文；OOXML run 无继承，不写会掉到文档默认 11pt） */
 }
 /* 图片段（仅含 <figure> 的 <p>）：居中、无首行缩进（超出官方：官方 docx 用 default 样式无居中）。 */
 p.figure {
@@ -189,9 +187,8 @@ pre {
 
 /* ============ 偈颂 ============ */
 /* 偈颂块（<lg>）：楷体绿色，左缩进 2em；用 table 布局实现偈句对齐
-   （lg-row=行，lg-cell=格，见下）。 */
+   （lg-row=行，lg-cell=格，见下）。字号继承 body（单源）。 */
 div.lg {
-  font-size: 12pt;         /* 想覆盖改这里 */
   display: table;
   color: #008040;
   margin-left: 2em;
@@ -224,11 +221,11 @@ div.div-xu p.head { color: #0000a0; font-size: 20pt; }
 /* div.div-jing 不加粗：经 = 正文主体，官方 golden 无此规则 */
 div.div-w { color: #777777; }                  /* 附文 */
 div.div-note { font-weight: bold; }              /* 字义：与正文同字号、无特殊色，加粗区分 */
-/* 释义（<cb:def>，div-note 内）：默认正文大小（1em，恒等于正文；OOXML run 无继承，
-   必须显式写 1em，否则掉到文档默认 11pt 比正文小）；无特殊色；
+/* 释义（<cb:def>，div-note 内）：与正文同字号（字号继承 body；DOCX 有继承链，
+   不再显式 1em）；`font-weight:normal` 用于压 div.div-note 的加粗；无特殊色；
    字体走 --font-def（繁简双栏）；DOCX 经 def 标签并入 run（段挂 pStyle def，
    预览标【释义】），HTML/PDF 浏览器原生。 */
-cb:def { font-weight: normal; font-size: 1em; }
+cb:def { font-weight: normal; }
 
 /* ============ 校勘注释 ============ */
 /* 双行夹注（<note place="inline"> 的双行形态）：0.8em 紫色，DOCX 渲染为双行小字。 */
@@ -285,8 +282,7 @@ span.note-inline {
 
 /* ============ byline（作者/译者，<byline cb:type="author"> / cb:type="Translator">） ============ */
 p.byline {
-  font-size: 12pt;
-  text-align: right;
+  text-align: right;      /* 字号继承 body（单源） */
   color: #408080;
   margin: 0.5em 0;        /* 作者/译者段前/段后 0.5em */
 }

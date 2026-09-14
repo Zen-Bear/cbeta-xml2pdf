@@ -84,7 +84,8 @@ class TestScaleFontSizes(unittest.TestCase):
         self.assertEqual(t.tags["footnote"]["font-size"], "0.75em")
         self.assertIn('w:val="27"', t.docx_run("footnote"))
         self.assertEqual(t.tags["note-ref"]["font-size"], "0.75em")
-        self.assertEqual(t.tags["verse"]["font-size"], "18pt")
+        self.assertIsNone((t.tags.get("verse") or {}).get("font-size"))  # 跟随 body
+        self.assertEqual(t.tags["verse"]["color"], "#008040")
 
     def test_font_family_untouched(self):
         t = Theme().scale_font_sizes(1.5)
@@ -94,7 +95,7 @@ class TestScaleFontSizes(unittest.TestCase):
     def test_raw_css_override_appended(self):
         t = Theme().scale_font_sizes(1.5)
         self.assertIn("body { font-size: 18pt; }", t.raw_css)
-        self.assertIn("div.lg { font-size: 18pt; }", t.raw_css)
+        self.assertIn("h1.title { font-size: 39pt; }", t.raw_css)
 
     def test_noop(self):
         t = Theme()
@@ -849,12 +850,21 @@ class TestRequiredThemeTags(unittest.TestCase):
             "pdf_docx.css 缺少必要主题元素/属性（请补上）：\n  - "
             + "\n  - ".join(missing))
 
-    def test_missing_is_reported_with_selector(self):
+    def test_missing_elements_reported(self):
+        # 只剩 body（+ 变量字体）→ title 等整体缺失，文案含选择器
         import pycbeta.theme as _t
-        css = _t.Theme().raw_css.replace("div.lg", "x-lg")  # 模拟 verse 规则丢了
+        t = _t.Theme.from_css("body { font-size: 12pt; line-height: 1.4; }\n")
+        missing = _t.missing_required_theme(t)
+        self.assertTrue(any("title" in m and "h1.title" in m for m in missing),
+                        f"应报出 title（选择器 h1.title），实际：{missing}")
+
+    def test_missing_prop_reported_with_selector(self):
+        # 删掉 p 的 text-indent 声明 → p 元素在（字体变量创建）但缺属性
+        import pycbeta.theme as _t
+        css = _t.Theme().raw_css.replace("text-indent: 2em;", "")
         missing = _t.missing_required_theme(_t.Theme.from_css(css))
-        self.assertTrue(any("verse" in m and "div.lg" in m for m in missing),
-                        f"应报出 verse（选择器 div.lg），实际：{missing}")
+        self.assertTrue(any("元素 p" in m and "text-indent" in m for m in missing),
+                        f"应报出 p 缺 text-indent，实际：{missing}")
 
     def test_default_theme_removed(self):
         # 防回归：默认值不得再写回 Python（否则"DEFAULT 兜底"问题复现）
@@ -875,6 +885,42 @@ class TestRequiredThemeTags(unittest.TestCase):
         t = Theme.from_css("body { font-size: 14pt; }\n")
         self.assertNotIn("w:sz", t.docx_run("p"))     # p 无显式字号
         self.assertEqual(DocxRenderer(theme=t).doc_size, 14.0)
+
+
+class TestEnsurePageTypography(unittest.TestCase):
+    """纸张排版入口 ensure_page_typography：库直接调用渲染器也按纸张生效，
+    且 CLI（先 apply 再 font_scale）不会被二次应用重置。"""
+
+    def test_renderer_applies_when_not_applied(self):
+        from pycbeta.theme import Theme, PAGE_PRESETS
+        from pycbeta.render_docx import DocxRenderer
+        r = DocxRenderer(theme=Theme(), page="16开", page_presets=PAGE_PRESETS)
+        self.assertEqual(r.theme.tags["body"]["font-size"], "10.5pt")
+        self.assertEqual(r.doc_size, 10.5)
+
+    def test_idempotent_after_scale(self):
+        from pycbeta.theme import Theme, apply_page_typography, PAGE_PRESETS
+        from pycbeta.render_docx import DocxRenderer
+        t = Theme()
+        apply_page_typography(t, "16开", PAGE_PRESETS)   # CLI 顺序：先定基准
+        t.scale_font_sizes(1.5)
+        DocxRenderer(theme=t, page="16开", page_presets=PAGE_PRESETS)  # 应跳过
+        self.assertEqual(t.tags["body"]["font-size"], "15.75pt")
+
+    def test_no_presets_noop(self):
+        # page_presets=None（验证/默认）不应用纸张键，保持 CSS body
+        from pycbeta.theme import Theme
+        from pycbeta.render_docx import DocxRenderer
+        r = DocxRenderer(theme=Theme(), page="16开")
+        self.assertEqual(r.theme.tags["body"]["font-size"], "12pt")
+
+    def test_fallbacks_constant(self):
+        from pycbeta.theme import FALLBACKS
+        self.assertEqual(FALLBACKS["base_pt"], 12.0)
+        self.assertEqual(FALLBACKS["doc_size_pt"], 11)
+        self.assertEqual(FALLBACKS["line_height"], 1.5)
+        self.assertEqual(FALLBACKS["verse_hang_em"], 2.0)
+        self.assertTrue(FALLBACKS["body_font"])
 
 
 if __name__ == "__main__":

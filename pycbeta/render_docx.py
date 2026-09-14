@@ -16,7 +16,7 @@ from .model import App, E, Gaiji, Lb, Note, NoteRef, Pb, Text, Work, \
     suppressed_orig_notes
 from .gaiji import GaijiDb
 from .theme import (Theme, resolve_page, _hex6, strip_head_no, bracket_pair,
-                    VERTICAL_UNCENTER)
+                    VERTICAL_UNCENTER, ensure_page_typography, FALLBACKS)
 from .render_html import split_juans
 from .filename import apply_template
 from .annotate import active as _ann_active, split_annotated as _split_ann, parse_rt_size as _parse_rt_size, split_eq_reading as _split_eq, track_seen as _track_seen, page_repeat as _page_repeat
@@ -187,6 +187,8 @@ class DocxRenderer:
                     figure_base=None):
         self.gaiji_db = gaiji_db if gaiji_db is not None else GaijiDb()
         self.theme = theme if theme is not None else Theme()
+        # 纸张绑字号：库直接调用渲染器也生效；CLI 已在 font_scale 前应用过 → 跳过
+        ensure_page_typography(self.theme, page, page_presets)
         self.ignore_xml_style = ignore_xml_style  # 忽略 <p style> 的 margin-left 脏数据
         self.ignore_xml_space = ignore_xml_space  # 忽略文本首尾多余空格（含全角）
         self.verse_caesura = verse_caesura        # 偈颂 caesura 分隔符（默认两个全角空格）
@@ -237,8 +239,8 @@ class DocxRenderer:
         self.page_w = int(w_mm * 56.6929)   # 1mm = 56.6929 twips
         self.page_h = int(h_mm * 56.6929)
         self.page_margins = {k: int(v * 56.6929) for k, v in cfg["margins"].items()}
-        # 文档兜底字号：跟主题 base（body 单源；未知回 11，保持旧 pages 默认行为）
-        self.doc_size = self.theme.base_pt(fallback=11)
+        # 文档兜底字号：跟主题 base（body 单源；未知回 FALLBACKS["doc_size_pt"]，保持旧 pages 默认行为）
+        self.doc_size = self.theme.base_pt(fallback=FALLBACKS["doc_size_pt"])
         # 西文字体优先级：显式参数（font_sets 组合 latin）> 页面方案 latin_font > "Calibri"
         self.latin_font = latin_font or cfg["latin_font"]
         self.notes = notes  # 'footnote' | 'endnote' | 'inline'
@@ -590,12 +592,15 @@ class DocxRenderer:
         # 目前仅 div-xu 携带段落属性，其它 div-* 经此路径输出为空串，无影响。
         div_tags = [t for t in tags if t.startswith("div-")]
         div_extra = self.theme.docx_para(*div_tags) if div_tags else ""
-        if div_extra and (self.theme.tags.get(para) or {}).get("line-height") is not None:
-            # 元素自带行距：去掉 div 侧经 body 回退带入的行距（留边距），
-            # 否则内联 pPr 会覆盖命名样式（如 div 内 head 设 1.0 仍被盖成 1.4）。
-            # 全文件无 div-* 规则写 line-height，此处去掉的恒为回退值，零误伤。
+        # div 侧行距只保留"div 自己写过的"：元素自带行距、或所有 div 祖先都未写行距时，
+        # 去掉 docx_para 经 body 回退带入的 w:line（否则内联 pPr 会盖命名样式/继承值）。
+        if div_extra and (
+                (self.theme.tags.get(para) or {}).get("line-height") is not None
+                or not any((self.theme.tags.get(t) or {}).get("line-height")
+                           for t in div_tags)):
             div_extra = re.sub(r'\s*w:line="[^"]*"', "", div_extra)
             div_extra = re.sub(r'\s*w:lineRule="[^"]*"', "", div_extra)
+            div_extra = re.sub(r"<w:spacing\s*/>", "", div_extra)
         # 偈颂首句悬挂（lg 的 margin-left + text-indent:-N em 特征）：内联 w:ind 覆盖命名样式
         if hang:
             font_pt = self._tag_base_pt(tags)
@@ -1482,7 +1487,7 @@ class DocxRenderer:
             if q:
                 ml = (self.theme.tags.get("verse") or {}).get("margin-left")
                 m = re.match(r"([\d.]+)em", ml or "")
-                left = float(m.group(1)) if m else 2.0
+                left = float(m.group(1)) if m else FALLBACKS["verse_hang_em"]
                 hang = (left, -float(q))
         if self.strip_verse_quotes:
             hang = None  # 去掉引号后不再悬挂
@@ -1788,7 +1793,7 @@ class DocxRenderer:
             names = [n for n in names if n]
             if names:
                 return names[0]
-        return "微軟正黑體"
+        return FALLBACKS["body_font"]
 
     def _normal_spacing(self) -> str:
         """Normal 样式的兜底行距：跟随主题 body 的 line-height（CSS 层叠语义），
@@ -1799,7 +1804,7 @@ class DocxRenderer:
         m = re.match(r"([\d.]+)", lh or "")
         if m:
             return f'<w:spacing w:line="{int(float(m.group(1)) * 240)}" w:lineRule="auto"/>'
-        return '<w:spacing w:line="360" w:lineRule="auto"/>'
+        return f'<w:spacing w:line="{int(FALLBACKS["line_height"] * 240)}" w:lineRule="auto"/>'
 
     def _list_indent_base(self) -> int:
         """编号基准缩进：跟随主题 list 的 margin-left（em，按 12pt 基准）。"""
