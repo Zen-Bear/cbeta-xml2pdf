@@ -27,6 +27,9 @@
       color: purple;
       font-size: 0.8em;
     }
+    /* 标题内正文夹注：不跟标题放大/加粗（超出官方 golden；与 pdf_docx.css 同口径） */
+    .head .doube-line-note,
+    .head .interlinear-note { font-size: 0.6em; font-weight: normal; }
     /* 图片段（仅含 <figure> 的 <p>）：居中（超出官方 golden，官方不居中） */
     p.figure { text-align: center; }
     .head {

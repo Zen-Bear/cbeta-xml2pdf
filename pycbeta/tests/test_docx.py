@@ -1397,6 +1397,20 @@ class TestAncestorInheritance(unittest.TestCase):
         rpr = self._rpr(css, body, "深層標題")
         self.assertIn("123456", rpr)
 
+    def test_head_inline_note_not_scaled(self):
+        # 标题内正文夹注：0.6em×head20pt=12pt、不继承标题粗体（p.head .doube-line-note）
+        from pycbeta.model import E, Note, Text
+        note = Note(tag="note", attrs={}, n="", ntype="", place="inline",
+                    children=[Text("呪文節略")])
+        body = [E(tag="head", attrs={}, children=[Text("標題"), note])]
+        rpr = self._rpr("", body, "呪文節略")
+        self.assertIn('w:sz w:val="24"', rpr)   # 12pt
+        self.assertNotIn("<w:b/>", rpr)         # 不粗
+        self.assertIn("800080", rpr)            # 夹注紫
+        head = self._rpr("", body, "標題")
+        self.assertIn('w:sz w:val="40"', head)  # 标题本体 20pt
+        self.assertIn("<w:b/>", head)           # 标题本体加粗
+
 
 class TestLatinFont(unittest.TestCase):
     """西文字体（--font-latin）落到 run 的 w:ascii/hAnsi；eastAsia 仍中文名。

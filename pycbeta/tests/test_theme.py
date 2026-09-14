@@ -335,6 +335,18 @@ class TestDescendantSelector(unittest.TestCase):
         rpr = t.docx_run("head", "note-inline", base_pt=14.0)
         self.assertNotIn("111111", rpr)
 
+    def test_head_inline_note_rule(self):
+        from pycbeta.theme import Theme
+        t = Theme()   # 出厂 pdf_docx.css
+        hits = [c for c in t.compounds
+                if c[0] == "head" and c[1] == "doube-line-note"]
+        self.assertTrue(hits, "出厂应有 p.head .doube-line-note 规则")
+        self.assertEqual(hits[0][2].get("font-size"), "0.6em")
+        self.assertEqual(hits[0][2].get("font-weight"), "normal")
+        rpr = t.docx_run("head", "doube-line-note", base_pt=20.0)
+        self.assertIn('w:sz w:val="24"', rpr)   # 0.6em × 20pt = 12pt
+        self.assertNotIn("<w:b/>", rpr)         # 不继承标题粗体
+
     def test_run_override(self):
         t = Theme.from_css(self.CSS)
         # 序内 head：后代规则覆盖 p.head 蓝色
@@ -561,6 +573,8 @@ class TestRunConfig(unittest.TestCase):
         css = resolve_html_base_css({}, None)
         self.assertIn("cbetarc", css)
         self.assertNotIn("--font-body", css)
+        # 标题内正文夹注不跟标题放大/加粗（与 pdf_docx.css 同口径）
+        self.assertIn(".head .doube-line-note", css)
 
     def test_placeholder_warns(self):
         import io

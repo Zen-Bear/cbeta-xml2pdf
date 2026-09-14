@@ -241,6 +241,14 @@ span.interlinear-note {
   font-size: 0.8em;
   color: #800080;
 }
+/* 标题内的正文夹注：不跟标题放大、不继承标题粗体（括号同 content）。
+   0.6em → 默认 head 20pt 时为 12pt。超出官方（官方按 0.8em 相对标题放大）。
+   两段后代：HTML/PDF 浏览器原生；DOCX 经 theme.compounds 按祖先匹配。 */
+p.head .doube-line-note,
+p.head .interlinear-note {
+  font-size: 0.6em;
+  font-weight: normal;
+}
 /* 转写行（<cb:tt> 内 sa-x-rj 行）：官方朱砂色；DOCX 经 transliteration 标签并入 run。 */
 span.transliteration {
   color: #FF4400;

@@ -452,3 +452,8 @@
   - 修法：`render_docx._current_tag` 返回 `("body",)+div_stack+全部 tag_stack`（外→内），`docx_run` 逐 tag `update` 即"逐属性最近优先、逐层往外、body 兜底"；`theme._parse_css_tags` 支持三段+后代选择器（祖先按序存 tuple），`_apply_compounds` 按序匹配
   - 影响：纯"增加"——T01 20765 / X59 4589 处 run 补回 `w:sz=24`（=body，视觉等价）；X59 548/T01 15 处内联夹注补回 `rFonts`（继承 body 字体）；X59 27 处无 rPr 的注文补回正文 12pt+字体（此前掉 Word 默认 11pt）；文本零变化、无属性被移除
   - 测试：`test_docx.TestAncestorInheritance` 4（并列标签双生效/li 字号下传/body 颜色下传/三段选择器）+ `test_theme.TestDescendantSelector` 扩展 2；全量 680 OK（skipped=1）
+- [x] **已完成** 标题内正文夹注不跟标题放大/加粗（2026-09-13 用户点档；方案 C）
+  - 现象：`<head>…<note place="inline">呪文節略</note></head>` 因逐层继承 → `.doube-line-note{0.8em}` 相对 head 20pt = **16pt（三号）+ 继承标题粗体**（CSS/官方 html 口径如此；官方 docx 更是整段继承标题 26pt 加粗）
+  - 修法（两段后代，仅标题内）：`pdf_docx.css` 与 `cbeta_golden.css` 各加 `p.head .doube-line-note, p.head .interlinear-note { font-size: 0.6em; font-weight: normal; }`（golden 标注「超出官方」）；0.6em×20pt=12pt、去粗，括号同 content
+  - HTML/PDF 浏览器原生生效；DOCX 经 `theme.compounds`（head 祖先 + 夹注目标）生效
+  - 验证：X1077 实渲 `（呪文節略）` 由 sz=32/b 变 sz=24/无 b、紫 800080，标题本体仍 20pt 加粗；`test_docx.TestAncestorInheritance.test_head_inline_note_not_scaled` + `test_theme.TestDescendantSelector.test_head_inline_note_rule` + golden 断言；全量 682 OK（skipped=1）
