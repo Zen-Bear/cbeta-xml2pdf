@@ -9,7 +9,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from pycbeta.fetch import (resolve_source, fetch_work, catalog_lookup,
                            work_dir, materialize_work, title_t2s,
-                           check_ebook_updates)
+                           check_ebook_updates, canonical_work_id,
+                           parse_work_id, DEFAULT_DOWNLOADS)
 
 
 def _presets(xml_dir="", cbeta_ebook="", **extra):
@@ -53,6 +54,50 @@ class TestCatalog(unittest.TestCase):
         got = catalog_lookup(cat, "T", "0349")
         self.assertEqual(got[0]["title"], "彌勒菩薩所問本願經")
         self.assertEqual(got[0]["file"], "T12n0349.xml")
+
+
+class TestLetterSuffixId(unittest.TestCase):
+    """字母后缀 work id（TXa001/T0128a/JB005）：catalog 大小写不敏感 + 保留原始大小写，
+    规范化 work id 供 URL/目录（CBETA XML 名与电子书端点大小写敏感）。"""
+
+    def _cat(self):
+        d = tempfile.mkdtemp()
+        cat = os.path.join(d, "mapping.txt")
+        with io.open(cat, "w", encoding="utf-8") as f:
+            f.write("TX,00,a001,2,1,a001a01,太虛大師全書．編纂說明,釋太虛\n"
+                    "T,02,0128a,1,1,0835c13,須摩提女經,支謙\n"
+                    "J,15,B005,3,1,0001a01,某經,某\n")
+        return cat
+
+    def test_lookup_case_insensitive_keeps_case(self):
+        cat = self._cat()
+        r = catalog_lookup(cat, "TX", "A001")[0]
+        self.assertEqual((r["vol"], r["no"], r["file"]),
+                         ("00", "a001", "TX00na001.xml"))
+        self.assertEqual(catalog_lookup(cat, "T", "0128A")[0]["file"],
+                         "T02n0128a.xml")
+        self.assertEqual(catalog_lookup(cat, "J", "b005")[0]["file"],
+                         "J15nB005.xml")
+
+    def test_canonical_work_id(self):
+        presets = {"source": {"catalog": self._cat()}}
+        self.assertEqual(canonical_work_id("txa001", presets), "TXa001")
+        self.assertEqual(canonical_work_id("T0128A", presets), "T0128a")
+        self.assertEqual(canonical_work_id("JB005", presets), "JB005")
+        self.assertEqual(canonical_work_id("ZZ9999", presets), "ZZ9999")
+
+    def test_urls_from_canonical(self):
+        presets = {"source": {"catalog": self._cat()}}
+        wid = canonical_work_id("TXA001", presets)
+        canon, no = parse_work_id(wid)
+        rec = catalog_lookup(presets["source"]["catalog"], canon, no)[0]
+        self.assertTrue(DEFAULT_DOWNLOADS["xml"].format(
+            canon=canon, vol=rec["vol"], file=rec["file"])
+            .endswith("/TX/TX00/TX00na001.xml"))
+        self.assertTrue(DEFAULT_DOWNLOADS["html"].format(id=wid)
+                        .endswith("/html/TXa001.html.zip"))
+        self.assertTrue(DEFAULT_DOWNLOADS["epub"].format(canon=canon, id=wid)
+                        .endswith("/epub/TX/TXa001.epub"))
 
 
 class TestWorkDir(unittest.TestCase):

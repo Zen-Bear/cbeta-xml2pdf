@@ -136,9 +136,14 @@ def parse_work_id(work_id: str) -> tuple:
 
 
 def catalog_lookup(catalog: str, canon: str, no: str) -> List[Dict]:
-    """sutra_mapping.txt 查表：列 = canon,vol,no,…,书名,… → [{vol, file, title}]（多冊全返）。"""
+    """sutra_mapping.txt 查表：列 = canon,vol,no,…,书名,… → [{vol,no,file,title}]（多冊全返）。
+
+    **大小写不敏感**比较 canon/no（catalog 里字母后缀大小写不统一：`TX,00,a001`、
+    `T,02,0128a`、`J,15,B005`）；返回值用 catalog 的**原始大小写**（`no`/`file`），
+    供拼下载 URL（CBETA 端点大小写敏感）。"""
     if not catalog or not os.path.isfile(catalog):
         return []
+    cu, nl = (canon or "").upper(), (no or "").lower()
     out = []
     try:
         f = io.open(catalog, encoding="utf-8")
@@ -147,12 +152,32 @@ def catalog_lookup(catalog: str, canon: str, no: str) -> List[Dict]:
     with f:
         for line in f:
             parts = line.strip().split(",")
-            if len(parts) >= 3 and parts[0] == canon and parts[2] == no:
+            if len(parts) >= 3 and parts[0].upper() == cu \
+                    and parts[2].lower() == nl:
                 vol = parts[1]
+                stored_no = parts[2]
                 title = parts[6].strip() if len(parts) >= 7 else ""
-                out.append({"vol": vol, "file": f"{canon}{vol}n{no}.xml",
+                out.append({"vol": vol, "no": stored_no,
+                            "file": f"{parts[0]}{vol}n{stored_no}.xml",
                             "title": title})
     return out
+
+
+def canonical_work_id(work_id: str, presets=None) -> str:
+    """按 catalog 原始大小写规范化 work id（canon 大写 + no 原样，如 TXa001/T0128a/JB005）。
+
+    catalog 未命中（离线/本地/未知）→ 原样返回。用于下载 URL 与工作目录命名：
+    CBETA 的 XML 文件名与电子书端点对字母后缀**大小写敏感**，全大写会 404。"""
+    try:
+        canon, no = parse_work_id(work_id)
+    except ValueError:
+        return work_id
+    cfg = (presets.get("source") or {}) if isinstance(presets, dict) else {}
+    cat = cfg.get("catalog", DEFAULT_SOURCE.get("catalog", ""))
+    recs = catalog_lookup(cat, canon, no)
+    if recs and recs[0].get("no"):
+        return f"{canon}{recs[0]['no']}"
+    return work_id
 
 
 def find_local_xml(xml_dir: str, canon: str, no: str) -> List[str]:
@@ -395,6 +420,7 @@ def materialize_work(work_id: str, presets: Optional[Dict] = None,
         presets = load_presets()
     xml_dir, cbeta_ebook = resolve_source(
         presets, xml_dir=xml_dir, cbeta_ebook=cbeta_ebook)
+    work_id = canonical_work_id(work_id, presets)
     canon, no = parse_work_id(work_id)
     title = _catalog_title(presets, canon, no)
     wdir = work_dir(cbeta_ebook, work_id, title, presets, create=bool(xml_dir))
@@ -450,6 +476,7 @@ def fetch_work(work_id: str, formats: List[str], presets: Optional[Dict] = None,
     source_cfg = {**DEFAULT_SOURCE, **(presets.get("source") or {})}
     dl = {**DEFAULT_DOWNLOADS, **(presets.get("downloads") or {})}
     _, cbeta_ebook = resolve_source(presets, cbeta_ebook=cbeta_ebook)
+    work_id = canonical_work_id(work_id, presets)
     canon, no = parse_work_id(work_id)
     out = {}
     for fmt in formats:
@@ -469,6 +496,7 @@ def ensure_baselines(work_id: str, kinds: List[str], presets: Optional[Dict],
     其余 html/txt_notes/docx/epub 缺啥下啥。返回本次新获取的 {kind: [路径]}。"""
     from .verify import find_official
     fetched = {}
+    work_id = canonical_work_id(work_id, presets)
     canon, no = parse_work_id(work_id)
     title = _catalog_title(presets or {}, canon, no)
     wdir = work_dir(cbeta_ebook, work_id, title, presets, create=bool(kinds))
@@ -522,6 +550,7 @@ def ensure_figures(work_id: str, urls, presets=None, cbeta_ebook=None,
     from .figures import (split_graphic_url, download_url, find_figure,
                           looks_like_image)
     presets = presets or {}
+    work_id = canonical_work_id(work_id, presets)
     try:
         canon, no = parse_work_id(work_id)
     except ValueError:
@@ -649,6 +678,7 @@ def check_ebook_updates(cbeta_ebook: str, presets: Optional[Dict] = None,
     for i, (wid, d) in enumerate(entries):
         if progress:
             progress(wid, i, len(entries))
+        wid = canonical_work_id(wid, presets)
         canon, no = parse_work_id(wid)
         recs = catalog_lookup(catalog, canon, no)
         if not recs:

@@ -112,7 +112,7 @@ def collect_work_frags(xml_dir, canon, no):
             if k is None:
                 continue
             c, vol, n, seq, stem = k
-            if c != canon or n != no:
+            if c != canon or n.upper() != no:
                 continue
             groups.setdefault((c, vol, n), []).append((vol, seq, os.path.join(dp, fn), stem))
     return groups

@@ -473,3 +473,9 @@
   - 2) 排版类保命值集中到 `theme.FALLBACKS`（base_pt 12.0 / doc_size_pt 11 / line_height 1.5 / verse_hang_em 2.0 / body_font 微軟正黑體），`render_docx` 与 `base_pt` 默认参统一引用，值不变、只做可读性统一
   - 测试：`test_theme.TestEnsurePageTypography` 4（直接生效/缩放后跳过/无 presets 不动/常量值）+ `test_docx` 直调按纸张 1 + `test_pdf.TestPdfPageTypography` 2；全量 690 OK（skipped=1）
   - 文档：`兜底值清单.md`（第 1 节指向 FALLBACKS）、`主题与样式.md`（纸张 vs CSS 改述：库直调也生效）、`第三方调用说明.md`（DocxRenderer 行）
+- [x] **已完成** 字母后缀 work id 大小写支持（`TXa001`/`T0128a`/`JB005` 等）（2026-09-13 用户点档）
+  - 根因：全链路把 id 归一为大写（`parse_work_id` `.upper()`），而 catalog 与 CBETA 端点对字母后缀**大小写敏感**且各 canon 不一致（`TX,00,a001`、`T,02,0128a`、`J,15,B005`；T 同一经 A/a 并存）→ `catalog_lookup` 查不到、XML 下不了、ebook URL 404
+  - 修法：`catalog_lookup` canon/no **大小写不敏感**匹配、返回值用 catalog 原大小写（新增 `no` 字段，`file` 按原大小写拼）；新增 `canonical_work_id()`（canon 大写 + no 原样，catalog 未命中原样返回），`materialize_work`/`fetch_work`/`ensure_baselines`/`ensure_figures`/`check_ebook_updates` 内部统一调用；`merge.collect_work_frags` 比对改 `n.upper() != no`
+  - 实测（`curl -I`）：`TXa001` → XML `.../TX/TX00/TX00na001.xml`、html `.../html/TXa001.html.zip`、epub `.../epub/TX/TXa001.epub` 均 200；全大写 `TXA001` 自动纠为 `TXa001`；`T0128a` 同理（`T0128A` 纠为 `T0128a`）。TX 无 docx/odt（与大小写无关，CBETA 未提供）
+  - 测试：`test_fetch.TestLetterSuffixId` 3（不敏感命中保原大小写 / canonical / URL 拼装）；全量 693 OK（skipped=1）
+  - 文档：`第三方调用说明.md` §2.3/2.3b
