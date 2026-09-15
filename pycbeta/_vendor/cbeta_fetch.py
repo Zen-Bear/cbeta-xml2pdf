@@ -13,7 +13,7 @@ URL 模板 / work id 大小写规范化 / catalog 查表 / 文件与 zip 下载 
 同步：本文件是唯一事实源；宿主项目内的副本请用 `tools/sync_into.py` 同步，勿手改。
 """
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 
 import os
 import re
@@ -75,6 +75,8 @@ REMOTE_URLS = {
         "https://cbdata.dila.edu.tw/stable/download/scope-selector/category.json",
     "dynasty_works":
         "https://cbdata.dila.edu.tw/stable/download/scope-selector/dynasty-works.json",
+    "vol_json":
+        "https://cbdata.dila.edu.tw/stable/download/scope-selector/vol.json",
     "creators_by_strokes":
         "https://cbdata.dila.edu.tw/stable/download/scope-selector/creators-by-strokes-with-works.json",
     "all_creators":
