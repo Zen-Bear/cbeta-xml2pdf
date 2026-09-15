@@ -484,3 +484,7 @@
   - xml2pdf：新增 `pycbeta/_vendor/{cbeta_fetch.py,SOURCE.txt,__init__.py}`；`fetch.py` 四函数 + `_http_download`/`_unzip_flat`/`_download_if_changed` 全委托共享（保存签名/行为；`DEFAULT_DOWNLOADS` = 共享表 + 专有 `figures`）；`update_data.py` 的 `_conditional_probe` 委托 `fetch_if_changed`；`remote_sources.json` 省略 url、改 `"source"` 引用 `REMOTE_URLS`（URL 单源）
   - 测试：cbeta-fetch 13 项（file:// 离线下载/解压/大小写/catalog）；xml2pdf 新增 `test_vendor_sync` 3（sha256/version/API/id 语法对账）；全量 696 OK（skipped=1）
   - 分发：publish 单发 GitHub 自包含（vendored 副本 + sha256 校验）；publish 侧改动见 `cbeta-fetch/docs/对接单-publish.md`（含 `src→cbeta_publish` 具名包、去 requests、官方电子书/remote_manager 迁移）
+- [x] **已完成** cbeta-fetch v0.1.1：`probe_info`（HEAD 探针带 `size`），publish 对接落地（2026-09-14）
+  - 共享层：新增 `probe_info(url, *, etag, last_modified, timeout) -> {status, etag, last_modified, size}`（`size` 取 `Content-Length`，缺失 `None`）；`probe` 保持三元组、改为其薄封装（向后兼容）；cbeta-fetch 提交 `50de57e`，测试 15 OK
+  - xml2pdf：vendor 同步 v0.1.1（`SOURCE.txt` `commit=50de57e…`、`sha=04b322d6…`），`test_vendor_sync._API` 补 `probe_info`；全量 696 OK（skipped=1）。**xml2pdf 不用 size**（其变更检测是 GET 字节比对，强于 size；size 仅用于 publish 的「HEAD 存在性/大小即跳过」）
+  - publish：已按对接单完成——`cbeta_publish` 具名包、`_vendor` 同步同一 commit、`official_ebook_source` 用 `cf.probe_info`、`remote_manager`/`remote_sources`/`catalog/work_id` 走 `_vendor`、`requirements.txt` 去 `requests`、`tests/test_vendor_sync.py` 守 sha256+`probe_info`；对接单已标记「已实施」
