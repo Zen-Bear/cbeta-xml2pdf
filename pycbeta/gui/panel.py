@@ -39,6 +39,7 @@ FACTORY_NAME = os.path.join("pycbeta", "config.json")
 USER_PRESET_NAME = "config.user.json"
 PRESET_DIRNAME = "presets"
 SENTINEL_LABEL = "（出厂默认）"
+SLOT_NAME_WIDTH = 220    # “当前配置：<名>”里名字的固定显示宽度（px），超长省略
 
 PAGINATION_KEYS = ["enabled", "duplex", "juan", "juan_first", "mulu_level1", "pb", "tei"]
 PAGINATION_LABELS = {
@@ -526,18 +527,21 @@ class XmlOptionsPanel(QWidget):
         self.cfg_preset_box = QComboBox()
         self.cfg_preset_box.setToolTip(
             "配置预设（presets/*.json + 出厂默认）：选中即载入面板")
+        self.cfg_preset_box.setSizeAdjustPolicy(
+            QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.cfg_preset_box.setMinimumContentsLength(8)
+        self.cfg_preset_box.setMaximumWidth(170)   # 收窄；下拉弹层按最长项放宽
         self.cfg_preset_box.currentIndexChanged.connect(self._on_preset_chosen)
-        self.btn_preset_save = QPushButton("另存为预设…")
+        self.btn_preset_save = QPushButton("另存…")
         self.btn_preset_save.setToolTip("面板当前值另存进 presets/（命名快照，同名覆盖）")
-        self.btn_preset_del = QPushButton("删除预设")
+        self.btn_preset_del = QPushButton("删除")
         self.btn_preset_del.setToolTip("删除当前选中的预设文件（出厂默认项不可删）")
-        self.btn_save = QPushButton("保存预设")
-        self.btn_save.setToolTip("面板当前值覆盖当前选中预设（出厂默认项置灰，请用另存为）")
+        self.btn_save = QPushButton("保存")
+        self.btn_save.setToolTip("面板当前值覆盖当前选中预设（出厂默认项置灰，请用另存…）")
         self.btn_set_default = QPushButton("设为默认")
         self.btn_set_default.setToolTip(
             "run.json 的 config-json 槽指向当前选中项（出厂默认=清空槽）")
         self.btn_reset = QPushButton("还原出厂")
-        self.cfg_preset_box.setMinimumWidth(200)
         self._refresh_cfg_presets()
         self.btn_preset_save.clicked.connect(self._on_preset_save_as)
         self.btn_preset_del.clicked.connect(self._on_preset_delete)
@@ -1213,7 +1217,7 @@ class XmlOptionsPanel(QWidget):
             QMessageBox.warning(self, "保存失败", str(exc))
             return
         self._refresh_cfg_presets(select=path2)
-        self.refresh_slot_label("（已保存）")
+        self.refresh_slot_label()
         self._changed()
 
     def _on_set_default(self):
@@ -1232,7 +1236,7 @@ class XmlOptionsPanel(QWidget):
         except (OSError, ValueError) as exc:
             QMessageBox.warning(self, "设为默认失败", str(exc))
             return
-        self.refresh_slot_label("（已设默认）")
+        self.refresh_slot_label()
         self._changed()
 
     def _refresh_cfg_presets(self, select=None):
@@ -1249,6 +1253,10 @@ class XmlOptionsPanel(QWidget):
                 box.addItem(stem, path)
             idx = box.findData(select) if select else -1
             box.setCurrentIndex(idx if idx >= 0 else 0)
+            fm = box.fontMetrics()
+            longest = max((fm.horizontalAdvance(box.itemText(i))
+                           for i in range(box.count())), default=0)
+            box.view().setMinimumWidth(longest + 48)  # 下拉弹层按最长项放宽
         finally:
             box.blockSignals(False)
         self._update_preset_buttons()
@@ -1284,7 +1292,7 @@ class XmlOptionsPanel(QWidget):
             QMessageBox.warning(self, "载入预设失败", str(exc))
             return
         self.set_options(options_from_presets(data))
-        self.refresh_slot_label("（已载入）")
+        self.refresh_slot_label()
         self._update_preset_buttons()
         self._changed()
 
@@ -1306,7 +1314,7 @@ class XmlOptionsPanel(QWidget):
             QMessageBox.warning(self, "另存失败", str(exc))
             return
         self._refresh_cfg_presets(select=path2)
-        self.refresh_slot_label("（已存预设）")
+        self.refresh_slot_label()
         self._changed()
 
     def _on_preset_delete(self):
@@ -1320,7 +1328,7 @@ class XmlOptionsPanel(QWidget):
             QMessageBox.warning(self, "删除失败", str(exc))
             return
         self._refresh_cfg_presets()
-        self.refresh_slot_label("（已删预设）")
+        self.refresh_slot_label()
         self._changed()
 
     def merged_preset(self, base=None):
@@ -1376,7 +1384,7 @@ class XmlOptionsPanel(QWidget):
         if box.clickedButton() is not ok_btn:
             return
         self.set_options(options_from_presets(reset_factory()))
-        self.refresh_slot_label("（已还原）")
+        self.refresh_slot_label()
         self._refresh_cfg_presets()
         self._changed()
 
@@ -1388,34 +1396,31 @@ class XmlOptionsPanel(QWidget):
     def mark_slot(self, _actual=None):
         self.refresh_slot_label()
 
-    def refresh_slot_label(self, suffix=""):
-        """当前配置：运行组合（run.json → base 文件/出厂默认）。
+    def refresh_slot_label(self):
+        """当前配置：`当前配置：<预设名>`。
 
-        锚定 run.json（链接指它），箭头后是 config-json 槽当前值；
-        保存/载入/设默认/还原只换后缀，不再翻转主体。
+        “当前配置”是链接（指 run.json，点击打开）；名字固定宽度、超长省略号，
+        tooltip 显示全名。
         """
         from pycbeta.theme import (default_run_path, load_run_config,
                                    resolve_base_config, _PRESETS_PATH)
         run_path = default_run_path()
-        base, base_name = None, "出厂默认"
+        name = "出厂默认"
         try:
             run = load_run_config()
             hit = resolve_base_config(
                 run, os.path.dirname(os.path.abspath(run_path)))
             if hit and os.path.abspath(hit) != os.path.abspath(_PRESETS_PATH):
-                base, base_name = hit, os.path.basename(hit)
+                name = os.path.basename(hit)
         except (OSError, ValueError):
-            base, base_name = None, "出厂默认"
-        chain = f"run.json → {base_name}"
-        tip = run_path + (f"\n→ {base}" if base else "")
+            name = "出厂默认"
         url = QUrl.fromLocalFile(os.path.abspath(run_path)).toString()
         short = self.slot_label.fontMetrics().elidedText(
-            chain, Qt.ElideMiddle, 420)
+            name, Qt.ElideRight, SLOT_NAME_WIDTH)
         self.slot_label.setTextFormat(Qt.RichText)
         self.slot_label.setOpenExternalLinks(True)
-        self.slot_label.setToolTip(tip)
-        self.slot_label.setText(
-            f'当前配置：<a href="{url}">运行组合</a>（{short}）{suffix}')
+        self.slot_label.setToolTip(name)
+        self.slot_label.setText(f'<a href="{url}">当前配置</a>：{short}')
 
     # ---------- 读写 ----------
     def get_options(self):

@@ -257,7 +257,7 @@ class TestConfigBar(unittest.TestCase):
     def test_buttons_present(self):
         panel = self._panel()
         try:
-            self.assertEqual(panel.btn_save.text(), "保存预设")
+            self.assertEqual(panel.btn_save.text(), "保存")
             self.assertFalse(hasattr(panel, "btn_load"))  # 选中即载入，无独立载入键
             self.assertEqual(panel.btn_set_default.text(), "设为默认")
             self.assertFalse(hasattr(panel, "btn_update_data"))  # 已搬数据源窗口
@@ -360,8 +360,8 @@ class TestConfigBar(unittest.TestCase):
         panel = self._panel()
         try:
             self.assertIsNotNone(panel.cfg_preset_box)
-            self.assertEqual(panel.btn_preset_save.text(), "另存为预设…")
-            self.assertEqual(panel.btn_preset_del.text(), "删除预设")
+            self.assertEqual(panel.btn_preset_save.text(), "另存…")
+            self.assertEqual(panel.btn_preset_del.text(), "删除")
             self.assertEqual(panel.cfg_preset_box.itemData(0), "")  # 出厂默认占位
         finally:
             panel.close() if hasattr(panel, "close") else None
@@ -971,15 +971,15 @@ class TestLayoutRegroup(unittest.TestCase):
         from pycbeta.gui.panel import XmlOptionsPanel
         panel = XmlOptionsPanel(load_presets())
         panel.mark_slot()
-        # 锚定 run.json，链下游动态显示（本机 run.json 指用户配置）
-        self.assertIn("运行组合", panel.slot_label.text())
-        self.assertIn("config.user.json", panel.slot_label.text())
-        self.assertIn("run.json", panel.slot_label.toolTip())
+        # 锚定 run.json（“当前配置”为链接），名字超长省略、tooltip 全名
+        self.assertIn("当前配置", panel.slot_label.text())
+        self.assertIn("run.json", panel.slot_label.text())   # 链接 href
+        self.assertNotIn("运行组合", panel.slot_label.text())
+        self.assertTrue(panel.slot_label.toolTip())
         self.assertTrue(panel.slot_label.openExternalLinks())
-        # 动作只换后缀，主体不翻转
-        panel.refresh_slot_label("（已保存）")
-        self.assertIn("运行组合", panel.slot_label.text())
-        self.assertIn("（已保存）", panel.slot_label.text())
+        before = panel.slot_label.text()
+        panel.refresh_slot_label()
+        self.assertEqual(panel.slot_label.text(), before)
 
     def test_open_local_file_accepts_dir(self):
         import os
