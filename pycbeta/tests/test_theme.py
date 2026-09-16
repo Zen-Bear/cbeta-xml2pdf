@@ -569,6 +569,74 @@ class TestRunConfig(unittest.TestCase):
             import shutil
             shutil.rmtree(root, ignore_errors=True)
 
+    def test_resolve_config_arg_run_mode(self):
+        import json
+        import tempfile
+        from pycbeta.theme import resolve_config_arg
+        fd, fn = tempfile.mkstemp(suffix=".json")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump({"pdf-docx-user-theme": "mine.css",
+                           "config-json": "config.json"}, f)
+            run, rdir = resolve_config_arg(fn)
+            self.assertEqual(run["pdf-docx-user-theme"], "mine.css")
+            self.assertEqual(rdir, os.path.dirname(os.path.abspath(fn)))
+        finally:
+            os.remove(fn)
+
+    def test_resolve_config_arg_base_mode(self):
+        import json
+        import tempfile
+        from pycbeta.theme import (resolve_config_arg, resolve_effective_config,
+                                   DEFAULT_RUN_CONFIG)
+        fd, fn = tempfile.mkstemp(suffix=".json")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump({"output": {"t2s": True}, "default_page": "a5"}, f)
+            run, rdir = resolve_config_arg(fn)
+            self.assertEqual(os.path.abspath(run["config-json"]),
+                             os.path.abspath(fn))
+            for k in DEFAULT_RUN_CONFIG:
+                if k != "config-json":
+                    self.assertEqual(run[k], DEFAULT_RUN_CONFIG[k])
+            eff = resolve_effective_config(run, rdir)
+            self.assertTrue(eff["output"]["t2s"])
+            self.assertEqual(eff["default_page"], "a5")
+        finally:
+            os.remove(fn)
+
+    def test_resolve_config_arg_default_and_bad(self):
+        import tempfile
+        from pycbeta.theme import resolve_config_arg, DEFAULT_RUN_CONFIG
+        root = tempfile.mkdtemp()
+        try:
+            run, rdir = resolve_config_arg(None, root)  # 无 run.json → 全缺省
+            self.assertEqual({k: run[k] for k in DEFAULT_RUN_CONFIG},
+                             DEFAULT_RUN_CONFIG)
+            self.assertEqual(rdir, os.path.abspath(root))
+            bad = os.path.join(root, "bad.json")
+            with open(bad, "w", encoding="utf-8") as f:
+                f.write("[1, 2]")
+            with self.assertRaises(ValueError):
+                resolve_config_arg(bad)
+        finally:
+            import shutil
+            shutil.rmtree(root, ignore_errors=True)
+
+    def test_html_user_theme_warns_only_explicit(self):
+        import io
+        from contextlib import redirect_stdout
+        from pycbeta.theme import resolve_html_base_css
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            css = resolve_html_base_css({}, None, user="x.css")
+        self.assertIn("尚未接线", buf.getvalue())
+        self.assertIn("cbetarc", css)
+        buf2 = io.StringIO()
+        with redirect_stdout(buf2):
+            resolve_html_base_css({}, None)
+        self.assertNotIn("尚未接线", buf2.getvalue())
+
     def test_html_base_defaults_golden(self):
         from pycbeta.theme import resolve_html_base_css
         css = resolve_html_base_css({}, None)

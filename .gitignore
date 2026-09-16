@@ -10,13 +10,15 @@ test/out*/
 test/X1077/
 [Ee]gg-info/
 
-# GUI 用户槽（本机状态，不入库；出厂 pycbeta/config.json 入库）
+# 预设库 presets/（样式 *.css + 配置 *.json + 样张，随仓库发布给用户）
+# 仅本机默认用户预设/旧槽不入库：
+presets/config.user.json
+presets/config.last.json
+# 旧根槽（已迁入 presets/，保留忽略以防残留）
 config.user.json
 config.last.json
 # run.json（一次运行的组合单，常改，不入库；模板见 docs/主题与样式.md）
 run.json
-# CSS 编辑器用户预设库（本机，不入库；内置预设在 pycbeta/styles/presets/ 入库）
-css-presets/
 
 # 系统
 .DS_Store

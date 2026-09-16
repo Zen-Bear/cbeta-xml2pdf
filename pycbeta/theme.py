@@ -467,13 +467,21 @@ def _subst_vars(value, vars):
 # ---------------- 默认主题槽（config.theme，变种 CSS 选择） ----------------
 _STYLES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "styles")
 BUILTIN_PRESETS_DIR = os.path.join(_STYLES_DIR, "presets")
-USER_PRESETS_DIRNAME = "css-presets"
+USER_PRESETS_DIRNAME = "presets"
 
 
 def user_presets_dir(root=None):
-    """用户预设目录（仓库根 css-presets/；git 忽略）。"""
+    """用户预设目录（仓库根 presets/；随仓库发布）。
+    样式预设 *.css 与配置预设 *.json 混放，按扩展名区分；另有编辑器样张 sample.xml。"""
     base = root or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     return os.path.join(base, USER_PRESETS_DIRNAME)
+
+
+def safe_preset_stem(name):
+    """预设名 → 安全文件名 stem（去路径分隔符与非法字符；空名返回 ""）。
+    样式预设（css_editor）与配置预设（panel）共用。"""
+    stem = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "", (name or "").strip())
+    return stem.strip().strip(".")
 
 
 def list_presets(builtin_dir=None, user_dir=None):
@@ -571,7 +579,8 @@ _LEGACY_CONFIG_KEYS = ("pages", "output", "engines", "theme", "verify",
                        "annotations", "source")
 _RUN_TEMPLATE = """{{
   // 一次运行的组合单（5 槽；显式开关优先）。常改文件，不入库。
-  // config-json：基础配置（名或路径；缺省出厂 pycbeta/config.json）
+  // config-json：基础配置（名或路径；缺省出厂 pycbeta/config.json；
+  //   也可指 presets/ 下命名快照，如 "presets/我的配置.json"）
   "config-json": {config_json},
   // html/epub 标准基底（默认官方 cbeta_golden.css，一般不动）
   "html-epub-theme": {html_epub_theme},
@@ -579,7 +588,7 @@ _RUN_TEMPLATE = """{{
   "html-epub-user-theme": {html_epub_user_theme},
   // pdf/docx 标准（整套替换出厂 pdf_docx.css 全文）
   "pdf-docx-theme": {pdf_docx_theme},
-  // pdf/docx 增量（名走 css-presets/ 双目录或路径，追加在标准之后）
+  // pdf/docx 增量（名走 presets/ 双目录或路径，追加在标准之后）
   "pdf-docx-user-theme": {pdf_docx_user_theme}
 }}
 """
@@ -631,6 +640,35 @@ def load_run_config(path=None, root=None):
         out[k] = v if isinstance(v, str) else DEFAULT_RUN_CONFIG[k]
     out["_path"] = os.path.abspath(path)
     return out
+
+
+def resolve_config_arg(path=None, root=None):
+    """`--config` 分流（两种模式都吃）：返回 `(run, run_dir)`。
+
+    - `path=None`：仓库根 run.json（缺失则全出厂）。
+    - 文件含任一 `RUN_KEYS` → run.json 模式（`load_run_config`）。
+    - 否则为 JSON 对象 → 基础配置模式（config.user.json / presets/*.json /
+      出厂 config.json）：把它当 `config-json` 槽，其余槽用出厂默认。
+    - 解析失败/非对象 → ValueError（提示两种合法形态）。
+    """
+    if not path:
+        return (load_run_config(None, root),
+                os.path.dirname(os.path.abspath(default_run_path(root))))
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+    try:
+        data = json.loads(_strip_json_comments(text))
+    except ValueError as exc:
+        raise ValueError(f"--config 非法 JSON（{path}）：{exc}")
+    if not isinstance(data, dict):
+        raise ValueError(
+            f"--config 顶层必须是对象（{path}）：run.json 组合单或基础配置 JSON")
+    ap = os.path.abspath(path)
+    if any(k in data for k in RUN_KEYS):
+        return load_run_config(path), os.path.dirname(ap)
+    run = dict(DEFAULT_RUN_CONFIG)
+    run["config-json"] = ap
+    return run, os.path.dirname(ap)
 
 
 def _resolve_run_file(value, run_dir, label):
@@ -698,8 +736,14 @@ def resolve_pdf_docx_css(run, run_dir=None, std=None, user=None):
     return base
 
 
-def resolve_html_base_css(run, run_dir=None, std=None):
-    """html/epub 基底 CSS 全文：显式开关 > run.json 槽 > 内置 golden。"""
+def resolve_html_base_css(run, run_dir=None, std=None, user=None):
+    """html/epub 基底 CSS 全文：显式开关 > run.json 槽 > 内置 golden。
+
+    html/epub 为纯基底：增量槽（html-epub-user-theme）**尚未接线**，
+    显式开关或槽值非空都只警告并忽略（槽值的警告在 check_run_placeholders）。
+    """
+    if (user or "").strip():
+        print("html/epub: --html-epub-user-theme 尚未接线，已忽略（纯基底 cbeta_golden.css）")
     std = (std if std is not None else run.get("html-epub-theme") or "").strip() \
         or "cbeta_golden.css"
     if std == "cbeta_golden.css" or std.endswith("/cbeta_golden.css") or \

@@ -33,9 +33,9 @@ _STYLES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                            "..", "styles")
 FACTORY_CSS = os.path.join(_STYLES_DIR, "pdf_docx.css")
 
-# 样张候选（首选用户精简样本 css-presets/sample.xml；glob，按序取首个命中者）
+# 样张候选（首选用户精简样本 presets/sample.xml；glob，按序取首个命中者）
 SAMPLE_CANDIDATES = (
-    os.path.join(REPO_ROOT, "css-presets", "sample.xml"),
+    os.path.join(REPO_ROOT, "presets", "sample.xml"),
     r"E:\dev\cbeta\cbeta_ebook\T0349*\T12n0349.xml",
     r"E:\dev\cbeta\cbeta_ebook\T1144*\T20n1144.xml",
 )
@@ -241,16 +241,10 @@ def css_colors(css_text):
     return out
 
 
-def _safe_preset_stem(name):
-    stem = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "", (name or "").strip())
-    stem = stem.strip().strip(".")
-    return stem
-
-
 def save_preset_file(name, full_css_text, user_dir=None):
     """另存用户预设（纯函数，可单测）；同名覆盖；返回路径。空名抛 ValueError。"""
-    from pycbeta.theme import user_presets_dir
-    stem = _safe_preset_stem(name)
+    from pycbeta.theme import safe_preset_stem, user_presets_dir
+    stem = safe_preset_stem(name)
     if not stem:
         raise ValueError("预设名为空")
     user_dir = os.path.abspath(user_dir or user_presets_dir())
@@ -1303,8 +1297,7 @@ def _suffix_rows():
 
 
 def current_theme_value(root=None):
-    """有效默认主题值：run.json 的 pdf-docx-user-theme → pdf-docx-theme → ''。
-    config.user.json 不再是默认来源（仅面板存档/可显式引用）。"""
+    """有效默认主题值：run.json 的 pdf-docx-user-theme → pdf-docx-theme → ''。"""
     import json
     from pycbeta.theme import DEFAULT_RUN_CONFIG, _strip_json_comments
     root = root or REPO_ROOT
@@ -1334,7 +1327,7 @@ class CssComboBox(QComboBox):
     """CSS 变种下拉（面板样式表卡 + 编辑器预设行共用）。
 
     顺序：当前默认（（默认））→ 出厂默认 → 用户预设；itemData={"value","path"}。
-    内置组已退役（large-print.css 搬进 css-presets/ 当用户预设）；查找仍认旧名。
+    内置组已退役（large-print.css 搬进 presets/ 当用户预设）；查找仍认旧名。
     选中只选择不写默认；设默认走独立按钮（set_user_theme）。
     """
 
@@ -1494,7 +1487,7 @@ class CssEditorDialog(QDialog):
         self.preset_apply.setToolTip("选中项写入用户槽 theme（永久生效）")
         self.preset_apply.clicked.connect(self._apply_default)
         self.preset_save = QPushButton("另存为预设…")
-        self.preset_save.setToolTip("当前样式另存进用户预设库（css-presets/）")
+        self.preset_save.setToolTip("当前样式另存进用户预设库（presets/）")
         self.preset_save.clicked.connect(self._save_preset_as)
         self.preset_del = QPushButton("删除预设")
         self.preset_del.setToolTip("只删用户预设；内置预设受保护")
@@ -1650,7 +1643,7 @@ class CssEditorDialog(QDialog):
             self._refresh_save_enabled()
 
     def _maybe_load_user_theme(self):
-        """启动载入默认主题（run.json 槽值；仅用户目录 css-presets/ 文件）：
+        """启动载入默认主题（run.json 槽值；仅用户目录 presets/ 文件）：
         源码页=其覆盖块、保存按钮亮；内置默认不载入（保持灰归另存）。"""
         from pycbeta.theme import resolve_theme_css, user_presets_dir
         path, _label = resolve_theme_css(current_theme_value())
@@ -1759,7 +1752,7 @@ class CssEditorDialog(QDialog):
         if self._source_err.text().strip():
             QMessageBox.warning(self, "另存失败", "源码页有解析错误，先修好再存。")
             return
-        name, ok = QInputDialog.getText(self, "另存为预设", "预设名（存进用户库 css-presets/）：")
+        name, ok = QInputDialog.getText(self, "另存为预设", "预设名（存进用户库 presets/）：")
         if not ok:
             return
         try:

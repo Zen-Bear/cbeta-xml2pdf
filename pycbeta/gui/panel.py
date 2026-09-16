@@ -3,8 +3,9 @@
 八选项卡：输出格式 / 样式表 / 页面 / 分页 / 排版 / 注释 / 注音 / 校验。
 控件值 ↔ XmlOptions ↔ config presets 三向同步；dict 型选项经临时 presets 进子进程桥。
 
-三槽配置（仓库根目录）：出厂 pycbeta/config.json（只读，GUI 永不写）、
-当前 config.user.json、 上一次 config.last.json。保存时轮换，永不超过三份。
+配置预设统一放仓库根 `presets/*.json`（随仓库发布）：下拉选中即载入，
+保存=覆盖选中、另存为=新建、删除=删选中、设为默认=run.json 的 config-json 槽指选中。
+出厂只读 `pycbeta/config.json`；默认用户预设 `presets/config.user.json`（git 忽略）。
 """
 import copy
 import json
@@ -18,7 +19,8 @@ from PySide6.QtCore import Qt, QThread, Signal, QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox,
-    QFileDialog, QFormLayout, QGridLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit,
+    QFileDialog, QFormLayout, QGridLayout, QGroupBox, QHBoxLayout, QInputDialog,
+    QLabel, QLineEdit,
     QMessageBox, QPlainTextEdit, QPushButton, QSpinBox, QTableWidget, QTableWidgetItem,
     QTabWidget, QVBoxLayout,
     QWidget,
@@ -33,8 +35,10 @@ STYLE_FILES = (
     ("cbeta_golden.css", "电子书基底（html/epub；官方电子书样式）"),
 )
 FACTORY_NAME = os.path.join("pycbeta", "config.json")
-USER_NAME = "config.user.json"
-LAST_NAME = "config.last.json"
+# 默认用户预设（在 presets/ 内，git 忽略）；下拉首项“出厂默认”为空值
+USER_PRESET_NAME = "config.user.json"
+PRESET_DIRNAME = "presets"
+SENTINEL_LABEL = "（出厂默认）"
 
 PAGINATION_KEYS = ["enabled", "duplex", "juan", "juan_first", "mulu_level1", "pb", "tei"]
 PAGINATION_LABELS = {
@@ -193,63 +197,107 @@ BRACKET_NAMES = list(BRACKET_PRESETS.keys())
 
 
 def slot_paths(root=None):
-    """三槽路径 (出厂, 当前, 上一次)。root 默认为仓库根（单测可覆写）。"""
+    """(出厂, 默认用户预设) 路径。默认用户预设 = `presets/config.user.json`。"""
     root = root or REPO_ROOT
     return (os.path.join(root, FACTORY_NAME),
-            os.path.join(root, USER_NAME),
-            os.path.join(root, LAST_NAME))
+            os.path.join(root, PRESET_DIRNAME, USER_PRESET_NAME))
 
 
 def _read_json(path):
     # 出厂 config.json 含 // 注释，走 load_presets 去注释解析；
-    # 用户槽文件为本模块纯 JSON 写出，同样兼容。
+    # 用户预设文件为本模块纯 JSON 写出，同样兼容。
     from pycbeta.theme import load_presets
     return load_presets(path)
 
 
 def load_slot(which="user", root=None):
-    """读槽：which ∈ user/last/factory。user 缺失回退 factory。
-    返回 (data, actual)，actual 为实际来源槽名。"""
-    factory, user, last = slot_paths(root)
+    """读默认用户预设（which='user'）或出厂（which='factory'）。
+    用户预设缺失回退出厂。返回 (data, actual)，actual ∈ {"user","factory"}。"""
+    factory, user = slot_paths(root)
     if which == "factory":
         return _read_json(factory), "factory"
-    if which == "last":
-        return _read_json(last), "last"
     if os.path.isfile(user):
         return _read_json(user), "user"
     return _read_json(factory), "factory"
 
 
 def save_current(data, root=None):
-    """保存当前：上一次 ← 当前文件（若存在），当前 ← data。返回实际来源链。"""
-    _factory, user, last = slot_paths(root)
-    if os.path.isfile(user):
-        with open(user, encoding="utf-8") as f:
-            prev = f.read()
-        with open(last, "w", encoding="utf-8") as f:
-            f.write(prev)
-        rotated = True
-    else:
-        rotated = False
+    """把 data 写入默认用户预设 `presets/config.user.json`（无轮换）。"""
+    _factory, user = slot_paths(root)
+    os.makedirs(os.path.dirname(user), exist_ok=True)
     with open(user, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
         f.write("\n")
-    return {"rotated": rotated}
+    return {"rotated": False}
 
 
 def reset_factory(root=None):
-    """还原出厂：上一次 ← 当前文件（若存在），当前 ← 出厂拷贝。返回出厂数据。"""
-    factory, user, last = slot_paths(root)
-    if os.path.isfile(user):
-        with open(user, encoding="utf-8") as f:
-            prev = f.read()
-        with open(last, "w", encoding="utf-8") as f:
-            f.write(prev)
-    with open(factory, encoding="utf-8") as f:
-        text = f.read()
-    with open(user, "w", encoding="utf-8") as f:
-        f.write(text)
+    """读出厂配置（只读，不写盘）。返回出厂数据。"""
+    factory, _user = slot_paths(root)
     return _read_json(factory)
+
+
+def config_presets_dir(root=None):
+    """配置预设目录（仓库根 presets/；随仓库发布；*.json 快照）。
+    与样式预设 *.css 混放，按扩展名区分。"""
+    from pycbeta.theme import user_presets_dir
+    return user_presets_dir(root)
+
+
+def list_config_presets(root=None):
+    """命名配置快照 → [(stem, path)]（仅 presets/*.json，按名排序）。"""
+    d = os.path.abspath(config_presets_dir(root))
+    if not os.path.isdir(d):
+        return []
+    out = []
+    for fn in sorted(os.listdir(d)):
+        if fn.lower().endswith(".json"):
+            out.append((os.path.splitext(fn)[0], os.path.join(d, fn)))
+    return out
+
+
+def _config_preset_path(name_or_path, root=None):
+    d = os.path.abspath(config_presets_dir(root))
+    cand = (name_or_path if os.path.isabs(name_or_path or "")
+            else os.path.join(d, name_or_path or ""))
+    if not cand.lower().endswith(".json"):
+        cand += ".json"
+    return cand
+
+
+def save_config_preset(name, data, root=None):
+    """快照另存进 presets/<stem>.json；同名覆盖；返回路径。空名抛 ValueError。"""
+    from pycbeta.theme import safe_preset_stem
+    stem = safe_preset_stem(name)
+    if not stem:
+        raise ValueError("预设名为空")
+    d = os.path.abspath(config_presets_dir(root))
+    os.makedirs(d, exist_ok=True)
+    path = os.path.join(d, stem + ".json")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+    return path
+
+
+def load_config_preset(name_or_path, root=None):
+    """读命名快照 → dict（经 _read_json，容忍 // 注释）；缺失抛 ValueError。"""
+    path = _config_preset_path(name_or_path, root)
+    if not os.path.isfile(path):
+        raise ValueError(f"配置预设不存在：{name_or_path}")
+    return _read_json(path)
+
+
+def delete_config_preset(name_or_path, root=None):
+    """删除 presets/ 内 .json 快照；目录外/不存在抛 ValueError。"""
+    d = os.path.abspath(config_presets_dir(root))
+    ap = os.path.abspath(_config_preset_path(name_or_path, root))
+    if not ap.lower().endswith(".json") or not os.path.isfile(ap):
+        raise ValueError(f"配置预设不存在：{name_or_path}")
+    if not (ap == d or ap.startswith(d + os.sep)):
+        raise ValueError(f"不在预设目录内：{name_or_path}")
+    os.remove(ap)
+    return True
 
 
 def load_run_and_presets(root=None):
@@ -466,7 +514,6 @@ class XmlOptionsPanel(QWidget):
             self._build()
         finally:
             self._emitting = False
-        self._refresh_load_button()
         if presets:
             self.set_options(options_from_presets(presets))
 
@@ -476,22 +523,33 @@ class XmlOptionsPanel(QWidget):
         cfg = QGroupBox("配置")
         bar = QHBoxLayout(cfg)
         self.slot_label = QLabel("当前：出厂默认")
-        self.btn_save = QPushButton("保存用户配置")
-        self.btn_save.setToolTip("面板当前值存入 config.user.json（出厂文件不动）")
-        self.btn_load = QPushButton("载入用户配置")
-        self.btn_load.setToolTip("从 config.user.json 读回面板")
+        self.cfg_preset_box = QComboBox()
+        self.cfg_preset_box.setToolTip(
+            "配置预设（presets/*.json + 出厂默认）：选中即载入面板")
+        self.cfg_preset_box.currentIndexChanged.connect(self._on_preset_chosen)
+        self.btn_preset_save = QPushButton("另存为预设…")
+        self.btn_preset_save.setToolTip("面板当前值另存进 presets/（命名快照，同名覆盖）")
+        self.btn_preset_del = QPushButton("删除预设")
+        self.btn_preset_del.setToolTip("删除当前选中的预设文件（出厂默认项不可删）")
+        self.btn_save = QPushButton("保存预设")
+        self.btn_save.setToolTip("面板当前值覆盖当前选中预设（出厂默认项置灰，请用另存为）")
         self.btn_set_default = QPushButton("设为默认")
         self.btn_set_default.setToolTip(
-            "run.json 的 config-json 槽指向 config.user.json（命令行/GUI 默认用它）")
+            "run.json 的 config-json 槽指向当前选中项（出厂默认=清空槽）")
         self.btn_reset = QPushButton("还原出厂")
+        self.cfg_preset_box.setMinimumWidth(200)
+        self._refresh_cfg_presets()
+        self.btn_preset_save.clicked.connect(self._on_preset_save_as)
+        self.btn_preset_del.clicked.connect(self._on_preset_delete)
         self.btn_save.clicked.connect(self._on_save)
-        self.btn_load.clicked.connect(self._on_load_user)
         self.btn_set_default.clicked.connect(self._on_set_default)
         self.btn_reset.clicked.connect(self._on_reset)
         bar.addWidget(self.slot_label)
         bar.addStretch(1)
+        bar.addWidget(self.cfg_preset_box)
+        bar.addWidget(self.btn_preset_save)
+        bar.addWidget(self.btn_preset_del)
         bar.addWidget(self.btn_save)
-        bar.addWidget(self.btn_load)
         bar.addWidget(self.btn_set_default)
         bar.addWidget(self.btn_reset)
         layout.addWidget(cfg)
@@ -835,7 +893,7 @@ class XmlOptionsPanel(QWidget):
             form.addRow(f"{name}\n{desc}", row)
             self.style_rows[name] = (edit, open_btn)
         self.btn_editor = QPushButton("打开 CSS 编辑器…")
-        self.btn_editor.setToolTip("DOCX 所见即所得调样式（左改参/右预览），存预设进 css-presets/")
+        self.btn_editor.setToolTip("DOCX 所见即所得调样式（左改参/右预览），存预设进 presets/")
         self.btn_editor.clicked.connect(self._open_style_editor)
         form.addRow("", self.btn_editor)
         return w
@@ -1136,39 +1194,141 @@ class XmlOptionsPanel(QWidget):
         form.addRow("", self.scope_box)
         return w
 
-    # ---------- 三槽 ----------
+    # ---------- 配置预设（一切按下拉选中项） ----------
     def _on_save(self):
-        cur, _actual = load_slot("user")
-        self._presets = self._presets_merged(cur)
-        save_current(self._presets)
+        """保存＝把面板当前值覆盖写入**当前选中预设**（出厂默认项置灰）。"""
+        path = self._selected_preset()
+        if not path:
+            return
+        try:
+            base = load_config_preset(path)
+        except (OSError, ValueError):
+            base = {}
+        data = self._presets_merged(base if isinstance(base, dict) else {})
+        self._presets = data
+        stem = os.path.splitext(os.path.basename(path))[0]
+        try:
+            path2 = save_config_preset(stem, data)
+        except (OSError, ValueError) as exc:
+            QMessageBox.warning(self, "保存失败", str(exc))
+            return
+        self._refresh_cfg_presets(select=path2)
         self.refresh_slot_label("（已保存）")
-        self._refresh_load_button()
-        self._changed()
-
-    def _user_config_path(self, root=None):
-        _factory, user, _last = slot_paths(root)
-        return user
-
-    def _refresh_load_button(self, root=None):
-        """载入用户配置按钮：文件存在才可用。"""
-        self.btn_load.setEnabled(os.path.isfile(self._user_config_path(root)))
-
-    def _on_load_user(self):
-        data, _actual = load_slot("user")
-        self.set_options(options_from_presets(data))
-        self.refresh_slot_label("（已载入）")
         self._changed()
 
     def _on_set_default(self):
-        """run.json 的 config-json 槽指向 config.user.json（默认用它）。"""
+        """run.json 的 config-json 槽指向当前选中项（出厂默认项=清空槽）。"""
         from pycbeta.theme import set_run_slot
+        path = self._selected_preset()
+        if path:
+            try:
+                slot = os.path.relpath(path, REPO_ROOT).replace(os.sep, "/")
+            except ValueError:
+                slot = path
+        else:
+            slot = ""
         try:
-            set_run_slot("config-json", "config.user.json")
-        except OSError as exc:
+            set_run_slot("config-json", slot)
+        except (OSError, ValueError) as exc:
             QMessageBox.warning(self, "设为默认失败", str(exc))
             return
         self.refresh_slot_label("（已设默认）")
         self._changed()
+
+    def _refresh_cfg_presets(self, select=None):
+        """预设下拉：首项“出厂默认”（空值）+ presets/*.json；
+        select 为 path；未指定则跟随 run.json 当前 config-json 槽。"""
+        box = self.cfg_preset_box
+        if select is None:
+            select = self._run_default_preset_path()
+        box.blockSignals(True)
+        try:
+            box.clear()
+            box.addItem(SENTINEL_LABEL, "")
+            for stem, path in list_config_presets():
+                box.addItem(stem, path)
+            idx = box.findData(select) if select else -1
+            box.setCurrentIndex(idx if idx >= 0 else 0)
+        finally:
+            box.blockSignals(False)
+        self._update_preset_buttons()
+
+    def _run_default_preset_path(self):
+        """run.json 的 config-json 槽解析出的文件路径（未指向预设时 None）。"""
+        try:
+            from pycbeta.theme import (load_run_config, resolve_base_config,
+                                       default_run_path, _PRESETS_PATH)
+            run = load_run_config()
+            hit = resolve_base_config(
+                run, os.path.dirname(os.path.abspath(default_run_path())))
+            if hit and os.path.abspath(hit) != os.path.abspath(_PRESETS_PATH):
+                return hit
+        except (OSError, ValueError):
+            pass
+        return None
+
+    def _selected_preset(self):
+        """下拉当前选中 → 预设文件路径（出厂默认项返回 ""）。"""
+        return self.cfg_preset_box.currentData() or ""
+
+    def _update_preset_buttons(self):
+        has = bool(self._selected_preset())
+        self.btn_save.setEnabled(has)
+        self.btn_preset_del.setEnabled(has)
+
+    def _on_preset_chosen(self, _index):
+        path = self._selected_preset()
+        try:
+            data = load_config_preset(path) if path else load_slot("factory")[0]
+        except (OSError, ValueError) as exc:
+            QMessageBox.warning(self, "载入预设失败", str(exc))
+            return
+        self.set_options(options_from_presets(data))
+        self.refresh_slot_label("（已载入）")
+        self._update_preset_buttons()
+        self._changed()
+
+    def _on_preset_save_as(self):
+        name, ok = QInputDialog.getText(
+            self, "另存为配置预设", "预设名（存进 presets/）：")
+        if not ok:
+            return
+        path = self._selected_preset()
+        try:
+            base = load_config_preset(path) if path else load_slot("factory")[0]
+        except (OSError, ValueError):
+            base = {}
+        if not isinstance(base, dict):
+            base = {}
+        try:
+            path2 = save_config_preset(name, self._presets_merged(base))
+        except (ValueError, OSError) as exc:
+            QMessageBox.warning(self, "另存失败", str(exc))
+            return
+        self._refresh_cfg_presets(select=path2)
+        self.refresh_slot_label("（已存预设）")
+        self._changed()
+
+    def _on_preset_delete(self):
+        path = self._selected_preset()
+        if not path:
+            QMessageBox.information(self, "删除预设", "“出厂默认”不是文件，删不掉。")
+            return
+        try:
+            delete_config_preset(path)
+        except (ValueError, OSError) as exc:
+            QMessageBox.warning(self, "删除失败", str(exc))
+            return
+        self._refresh_cfg_presets()
+        self.refresh_slot_label("（已删预设）")
+        self._changed()
+
+    def merged_preset(self, base=None):
+        """公开：`base`（基础配置 dict，可 None）+ 面板当前值 → 可保存的预设 dict。
+
+        供外部（如 publish）保存预设；语义同内部 `_presets_merged`，
+        但不暴露私有名。"""
+        return self._presets_merged(base if isinstance(base, dict) else {})
 
     def _presets_merged(self, cur):
         """当前槽为底 + 面板值合并 → 可存 presets（含所选纸张作默认纸张；
@@ -1215,10 +1375,9 @@ class XmlOptionsPanel(QWidget):
         box.exec()
         if box.clickedButton() is not ok_btn:
             return
-        reset_factory()
-        self.set_options(options_from_presets(load_slot("user")[0]))
+        self.set_options(options_from_presets(reset_factory()))
         self.refresh_slot_label("（已还原）")
-        self._refresh_load_button()
+        self._refresh_cfg_presets()
         self._changed()
 
     def _open_local_file(self, path):
@@ -1470,7 +1629,7 @@ def clear_xml_dir(root=None):
 
 class SourceDialog(QDialog):
     """数据源窗口：查看/编辑输入来源目录与 CBETA 官方下载 URL 模板。
-    确定 = 合并进当前槽并保存（走三槽轮换）；取消 = 丢弃。"""
+    确定 = 合并进默认用户预设（presets/config.user.json）；取消 = 丢弃。"""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -1700,3 +1859,9 @@ class XmlOptionsDialog(QDialog):
 
     def get_options(self):
         return self.panel.get_options() if self.result() == QDialog.Accepted else None
+
+    def get_preset(self, base=None):
+        """`exec()` 后：Accepted → 合并后的预设 dict（供保存/另存）；否则 None。"""
+        if self.result() != QDialog.Accepted:
+            return None
+        return self.panel.merged_preset(base)

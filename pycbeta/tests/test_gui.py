@@ -8,9 +8,10 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from pycbeta.gui.panel import (
-    DOCX_SINGLES, HTML_SINGLES, XmlOptions, apply_source_edits, detect_engines,
-    load_slot, options_from_presets, reset_factory, save_current, slot_paths,
-    write_temp_presets,
+    DOCX_SINGLES, HTML_SINGLES, XmlOptions, apply_source_edits, config_presets_dir,
+    delete_config_preset, detect_engines, list_config_presets, load_config_preset,
+    load_slot, options_from_presets, reset_factory, save_config_preset, save_current,
+    slot_paths, write_temp_presets,
 )
 from pycbeta.theme import load_presets
 
@@ -33,32 +34,76 @@ class TestSlots(unittest.TestCase):
         self.assertEqual(actual, "factory")
         self.assertTrue(data["output"]["t2s"])
 
-    def test_save_rotates_last(self):
+    def test_save_writes_default_preset_no_rotation(self):
         save_current({"v": 1}, self.root)
         _d, actual = load_slot("user", self.root)
         self.assertEqual(actual, "user")
         save_current({"v": 2}, self.root)
-        last, actual = load_slot("last", self.root)
-        self.assertEqual(actual, "last")
-        self.assertEqual(last, {"v": 1})
         cur, _a = load_slot("user", self.root)
         self.assertEqual(cur, {"v": 2})
+        # 默认预设落在 presets/ 内，且不再有 config.last.json
+        self.assertTrue(os.path.isfile(
+            os.path.join(self.root, "presets", "config.user.json")))
+        self.assertFalse(os.path.exists(
+            os.path.join(self.root, "config.last.json")))
 
-    def test_reset_factory(self):
+    def test_reset_factory_reads_only(self):
         save_current({"v": 9}, self.root)
         data = reset_factory(self.root)
         self.assertTrue(data["output"]["t2s"])
-        cur, actual = load_slot("user", self.root)
-        self.assertEqual(actual, "user")
-        self.assertTrue(cur["output"]["t2s"])
-        last, _a = load_slot("last", self.root)
-        self.assertEqual(last, {"v": 9})
+        # 只读：默认预设文件不被覆盖
+        cur, _a = load_slot("user", self.root)
+        self.assertEqual(cur, {"v": 9})
 
     def test_slot_paths(self):
-        factory, user, last = slot_paths(self.root)
+        factory, user = slot_paths(self.root)
         self.assertTrue(factory.endswith("config.json"))
-        self.assertTrue(user.endswith("config.user.json"))
-        self.assertTrue(last.endswith("config.last.json"))
+        self.assertTrue(user.endswith(os.path.join("presets", "config.user.json")))
+
+
+class TestConfigPresets(unittest.TestCase):
+    """配置预设：presets/*.json 快照（样式 *.css 同目录，按扩展名区分）。"""
+
+    def setUp(self):
+        import shutil
+        self.root = tempfile.mkdtemp()
+        self._shutil = shutil
+
+    def tearDown(self):
+        self._shutil.rmtree(self.root, ignore_errors=True)
+
+    def test_save_list_load_roundtrip(self):
+        path = save_config_preset("我的 快照", {"output": {"t2s": True}}, self.root)
+        self.assertTrue(path.endswith(".json"))
+        self.assertEqual(list_config_presets(self.root), [("我的 快照", path)])
+        self.assertEqual(load_config_preset("我的 快照", self.root),
+                         {"output": {"t2s": True}})
+        save_config_preset("我的 快照", {"output": {"t2s": False}}, self.root)
+        self.assertFalse(
+            load_config_preset("我的 快照", self.root)["output"]["t2s"])
+        self.assertTrue(delete_config_preset("我的 快照", self.root))
+        self.assertEqual(list_config_presets(self.root), [])
+
+    def test_bad_names_and_outside(self):
+        with self.assertRaises(ValueError):
+            save_config_preset("  ///  ", {"a": 1}, self.root)
+        with self.assertRaises(ValueError):
+            load_config_preset("没有这个", self.root)
+        with self.assertRaises(ValueError):
+            delete_config_preset("没有这个", self.root)
+        outside = os.path.join(self.root, "evil.json")
+        with open(outside, "w", encoding="utf-8") as f:
+            f.write("{}")
+        with self.assertRaises(ValueError):
+            delete_config_preset(outside, self.root)
+
+    def test_list_ignores_css_and_missing_dir(self):
+        self.assertEqual(list_config_presets(self.root), [])
+        d = config_presets_dir(self.root)
+        os.makedirs(d)
+        with open(os.path.join(d, "a.css"), "w", encoding="utf-8") as f:
+            f.write("/* x */\n")
+        self.assertEqual(list_config_presets(self.root), [])
 
 
 class TestTempPresets(unittest.TestCase):
@@ -212,64 +257,161 @@ class TestConfigBar(unittest.TestCase):
     def test_buttons_present(self):
         panel = self._panel()
         try:
-            self.assertEqual(panel.btn_save.text(), "保存用户配置")
-            self.assertEqual(panel.btn_load.text(), "载入用户配置")
+            self.assertEqual(panel.btn_save.text(), "保存预设")
+            self.assertFalse(hasattr(panel, "btn_load"))  # 选中即载入，无独立载入键
             self.assertEqual(panel.btn_set_default.text(), "设为默认")
             self.assertFalse(hasattr(panel, "btn_update_data"))  # 已搬数据源窗口
         finally:
             panel.close() if hasattr(panel, "close") else None
 
-    def test_save_writes_user_file(self):
+    def test_save_writes_selected_preset(self):
         import unittest.mock as mock
         import pycbeta.gui.panel as pm
         saved = {}
-        with mock.patch.object(pm, "load_slot",
-                               return_value=({"output": {}}, "user")), \
-                mock.patch.object(pm, "save_current",
-                                  side_effect=lambda d, root=None: saved.update(
-                                      data=d)), \
-                mock.patch("os.path.isfile", return_value=True):
+        with mock.patch.object(pm, "load_config_preset",
+                               return_value={"output": {}}), \
+                mock.patch.object(pm, "save_config_preset",
+                                  side_effect=lambda n, d, root=None: saved.update(
+                                      name=n, data=d)), \
+                mock.patch.object(pm.XmlOptionsPanel, "_selected_preset",
+                                  return_value=r"C:\x\p.json"):
             panel = pm.XmlOptionsPanel({"output": {}})
             try:
                 panel.t2s_box.setChecked(True)
                 panel._on_save()
                 self.assertTrue(saved["data"]["output"]["t2s"])
-                self.assertTrue(panel.btn_load.isEnabled())
+                self.assertEqual(saved["name"], "p")
             finally:
                 panel.close() if hasattr(panel, "close") else None
 
-    def test_load_fills_panel(self):
+    def test_factory_sentinel_loads_factory(self):
         import unittest.mock as mock
         import pycbeta.gui.panel as pm
         panel = self._panel()
         try:
+            panel.cfg_preset_box.setCurrentIndex(0)  # 出厂默认
             with mock.patch.object(pm, "load_slot", return_value=(
-                    {"output": {"t2s": True}}, "user")):
-                panel._on_load_user()
+                    {"output": {"t2s": True}}, "factory")):
+                panel._on_preset_chosen(0)
             self.assertTrue(panel.t2s_box.isChecked())
         finally:
             panel.close() if hasattr(panel, "close") else None
 
-    def test_load_disabled_when_missing(self):
+    def test_preset_buttons_follow_selection(self):
         import unittest.mock as mock
+        import pycbeta.gui.panel as pm
         panel = self._panel()
         try:
-            with mock.patch("os.path.isfile", return_value=False):
-                panel._refresh_load_button()
-                self.assertFalse(panel.btn_load.isEnabled())
-            with mock.patch("os.path.isfile", return_value=True):
-                panel._refresh_load_button()
-                self.assertTrue(panel.btn_load.isEnabled())
+            panel.cfg_preset_box.setCurrentIndex(0)  # 出厂默认
+            panel._update_preset_buttons()
+            self.assertFalse(panel.btn_save.isEnabled())
+            self.assertFalse(panel.btn_preset_del.isEnabled())
+            with mock.patch.object(pm.XmlOptionsPanel, "_selected_preset",
+                                   return_value=r"C:\x\p.json"):
+                panel._update_preset_buttons()
+                self.assertTrue(panel.btn_save.isEnabled())
+                self.assertTrue(panel.btn_preset_del.isEnabled())
         finally:
             panel.close() if hasattr(panel, "close") else None
 
-    def test_set_default_writes_run_slot(self):
+    def test_public_merged_preset_and_dialog(self):
+        import pycbeta.gui.panel as pm
+        panel = self._panel()
+        try:
+            d = panel.merged_preset({"output": {}})
+            self.assertIn("default_page", d)
+            self.assertIn("formats", d)
+            dlg = pm.XmlOptionsDialog({"output": {}})
+            try:
+                self.assertIsNone(dlg.get_preset())  # 未 Accept
+            finally:
+                dlg.close()
+        finally:
+            panel.close() if hasattr(panel, "close") else None
+
+    def test_set_default_sentinel_clears_slot(self):
         import unittest.mock as mock
         panel = self._panel()
         try:
+            panel.cfg_preset_box.setCurrentIndex(0)  # 出厂默认
             with mock.patch("pycbeta.theme.set_run_slot") as m:
                 panel._on_set_default()
-                m.assert_called_once_with("config-json", "config.user.json")
+                m.assert_called_once_with("config-json", "")
+        finally:
+            panel.close() if hasattr(panel, "close") else None
+
+    def test_set_default_points_at_selected_preset(self):
+        import unittest.mock as mock
+        import pycbeta.gui.panel as pm
+        panel = self._panel()
+        try:
+            box = panel.cfg_preset_box
+            box.blockSignals(True)
+            box.addItem("foo", os.path.join(pm.REPO_ROOT, "presets", "foo.json"))
+            box.setCurrentIndex(box.count() - 1)
+            box.blockSignals(False)
+            with mock.patch("pycbeta.theme.set_run_slot") as m:
+                panel._on_set_default()
+                m.assert_called_once_with("config-json", "presets/foo.json")
+        finally:
+            panel.close() if hasattr(panel, "close") else None
+
+    def test_preset_widgets_present(self):
+        panel = self._panel()
+        try:
+            self.assertIsNotNone(panel.cfg_preset_box)
+            self.assertEqual(panel.btn_preset_save.text(), "另存为预设…")
+            self.assertEqual(panel.btn_preset_del.text(), "删除预设")
+            self.assertEqual(panel.cfg_preset_box.itemData(0), "")  # 出厂默认占位
+        finally:
+            panel.close() if hasattr(panel, "close") else None
+
+    def test_preset_chosen_loads_snapshot(self):
+        import unittest.mock as mock
+        import pycbeta.gui.panel as pm
+        panel = self._panel()
+        try:
+            box = panel.cfg_preset_box
+            box.blockSignals(True)
+            box.addItem("foo", "foo.json")
+            box.setCurrentIndex(box.count() - 1)
+            box.blockSignals(False)
+            with mock.patch.object(pm, "load_config_preset",
+                                   return_value={"output": {"t2s": True}}):
+                panel._on_preset_chosen(box.currentIndex())
+            self.assertTrue(panel.t2s_box.isChecked())
+        finally:
+            panel.close() if hasattr(panel, "close") else None
+
+    def test_delete_user_preset_warns(self):
+        import unittest.mock as mock
+        import pycbeta.gui.panel as pm
+        panel = self._panel()
+        try:
+            panel.cfg_preset_box.setCurrentIndex(0)
+            with mock.patch.object(pm, "QMessageBox") as mb:
+                panel._on_preset_delete()
+                mb.information.assert_called_once()
+        finally:
+            panel.close() if hasattr(panel, "close") else None
+
+    def test_preset_save_as_writes_snapshot(self):
+        import unittest.mock as mock
+        import pycbeta.gui.panel as pm
+        panel = self._panel()
+        try:
+            saved = {}
+            with mock.patch.object(pm, "QInputDialog") as qi, \
+                    mock.patch.object(
+                        pm, "save_config_preset",
+                        side_effect=lambda n, d, root=None: saved.update(
+                            name=n, data=d) or "p"), \
+                    mock.patch.object(pm, "load_slot",
+                                      return_value=({"output": {}}, "user")):
+                qi.getText.return_value = ("我的 快照", True)
+                panel._on_preset_save_as()
+            self.assertEqual(saved["name"], "我的 快照")
+            self.assertIn("default_page", saved["data"])
         finally:
             panel.close() if hasattr(panel, "close") else None
 
@@ -278,12 +420,13 @@ class TestConfigBar(unittest.TestCase):
         import pycbeta.gui.panel as pm
         base = {"output": {}, "pages": {"a4": {}}}
         saved = {}
-        with mock.patch.object(pm, "load_slot",
-                               return_value=(dict(base), "user")), \
-                mock.patch.object(pm, "save_current",
-                                  side_effect=lambda d, root=None: saved.update(
+        with mock.patch.object(pm, "load_config_preset",
+                               return_value=dict(base)), \
+                mock.patch.object(pm, "save_config_preset",
+                                  side_effect=lambda n, d, root=None: saved.update(
                                       data=d)), \
-                mock.patch("os.path.isfile", return_value=True):
+                mock.patch.object(pm.XmlOptionsPanel, "_selected_preset",
+                                  return_value=r"C:\x\p.json"):
             panel = pm.XmlOptionsPanel(dict(base))
             panel.format_boxes["docx"].setChecked(True)
             panel.format_boxes["html"].setChecked(True)
@@ -331,12 +474,13 @@ class TestConfigBar(unittest.TestCase):
             panel.autofetch_box.setChecked(False)
             panel.scope_box.setChecked(False)
             saved = {}
-            with mock.patch.object(pm, "load_slot",
-                                   return_value=({"output": {}}, "user")), \
-                 mock.patch.object(pm, "save_current",
-                                   side_effect=lambda d, root=None: saved.update(
+            with mock.patch.object(pm, "load_config_preset",
+                                   return_value={"output": {}}), \
+                 mock.patch.object(pm, "save_config_preset",
+                                   side_effect=lambda n, d, root=None: saved.update(
                                        data=d)), \
-                 mock.patch("os.path.isfile", return_value=True):
+                 mock.patch.object(pm.XmlOptionsPanel, "_selected_preset",
+                                   return_value=r"C:\x\p.json"):
                 panel._on_save()
             v = saved["data"]["verify"]
             self.assertTrue(v["enabled"])
@@ -358,9 +502,8 @@ class TestConfigBar(unittest.TestCase):
         import pycbeta.gui.panel as pm
         panel = pm.XmlOptionsPanel({"output": {}})
         try:
-            with mock.patch.object(pm, "reset_factory") as m_reset, \
-                 mock.patch.object(pm, "load_slot",
-                                   return_value=({"output": {}}, "user")), \
+            with mock.patch.object(pm, "reset_factory",
+                                   return_value={"output": {}}) as m_reset, \
                  mock.patch.object(pm, "QMessageBox") as m_box:
                 box = m_box.return_value
                 ok_btn, cancel_btn = mock.Mock(), mock.Mock()
@@ -383,12 +526,13 @@ class TestConfigBar(unittest.TestCase):
                                                            "bottom": 25.4,
                                                            "left": 25.4}}}}
         saved = {}
-        with mock.patch.object(pm, "load_slot",
-                               return_value=(dict(base), "user")), \
-                mock.patch.object(pm, "save_current",
-                                  side_effect=lambda d, root=None: saved.update(
+        with mock.patch.object(pm, "load_config_preset",
+                               return_value=dict(base)), \
+                mock.patch.object(pm, "save_config_preset",
+                                  side_effect=lambda n, d, root=None: saved.update(
                                       data=d)), \
-                mock.patch("os.path.isfile", return_value=True):
+                mock.patch.object(pm.XmlOptionsPanel, "_selected_preset",
+                                  return_value=r"C:\x\p.json"):
             panel = pm.XmlOptionsPanel(dict(base))
             # 取消跟随 → spin 填预设值作基线；改一个值保存
             panel.margin_follow.setChecked(False)
@@ -435,10 +579,11 @@ class TestConfigBar(unittest.TestCase):
                                                            "right": 25.4,
                                                            "bottom": 25.4,
                                                            "left": 25.4}}}}
-        with mock.patch.object(pm, "load_slot",
-                               return_value=(dict(base), "user")), \
-                mock.patch.object(pm, "save_current"), \
-                mock.patch("os.path.isfile", return_value=True):
+        with mock.patch.object(pm, "load_config_preset",
+                               return_value=dict(base)), \
+                mock.patch.object(pm, "save_config_preset"), \
+                mock.patch.object(pm.XmlOptionsPanel, "_selected_preset",
+                                  return_value=r"C:\x\p.json"):
             panel = pm.XmlOptionsPanel(dict(base))
             panel.margin_follow.setChecked(False)
             panel.margin_spins["top"].setValue(22.0)
@@ -454,12 +599,13 @@ class TestConfigBar(unittest.TestCase):
             "a4": {},
             "16开": {"body_font_size": "10.5pt", "body_line_height": 1.5}}}
         saved = {}
-        with mock.patch.object(pm, "load_slot",
-                               return_value=(dict(base), "user")), \
-                mock.patch.object(pm, "save_current",
-                                  side_effect=lambda d, root=None: saved.update(
+        with mock.patch.object(pm, "load_config_preset",
+                               return_value=dict(base)), \
+                mock.patch.object(pm, "save_config_preset",
+                                  side_effect=lambda n, d, root=None: saved.update(
                                       data=d)), \
-                mock.patch("os.path.isfile", return_value=True):
+                mock.patch.object(pm.XmlOptionsPanel, "_selected_preset",
+                                  return_value=r"C:\x\p.json"):
             panel = pm.XmlOptionsPanel(dict(base))
             # 有键 → 不跟随，框值恢复（默认页即 16开）
             panel.set_options(pm.options_from_presets(dict(base)))
@@ -544,12 +690,13 @@ class TestConfigBar(unittest.TestCase):
         import pycbeta.gui.panel as pm
         base = {"output": {}, "pages": {"a4": {}, "a5": {}}}
         saved = {}
-        with mock.patch.object(pm, "load_slot",
-                               return_value=(dict(base), "user")), \
-                mock.patch.object(pm, "save_current",
-                                  side_effect=lambda d, root=None: saved.update(
+        with mock.patch.object(pm, "load_config_preset",
+                               return_value=dict(base)), \
+                mock.patch.object(pm, "save_config_preset",
+                                  side_effect=lambda n, d, root=None: saved.update(
                                       data=d)), \
-                mock.patch("os.path.isfile", return_value=True):
+                mock.patch.object(pm.XmlOptionsPanel, "_selected_preset",
+                                  return_value=r"C:\x\p.json"):
             panel = pm.XmlOptionsPanel(dict(base))
             i = panel.page_box.findData("a5")
             self.assertGreaterEqual(i, 0)
@@ -1207,6 +1354,7 @@ class TestSourceDialog(unittest.TestCase):
         dlg = P.SourceDialog()
         try:
             dlg.path_edits["xml_dir"].setText(xml_dir)
+            dlg.path_edits["cbeta_ebook"].setText("B")  # 自包含：避免缺工作根弹窗
             saved = {}
             with mock.patch("pycbeta.fetch.inspect_xml_source",
                             return_value={"safe": not unsafe, "edition": "單卷版 XML TEI P5b"}):
@@ -1332,6 +1480,7 @@ class TestSourceDialog(unittest.TestCase):
         dlg = pm.SourceDialog()
         try:
             dlg.dl_table.item(0, 1).setText("http://example/custom-xml")
+            dlg.path_edits["cbeta_ebook"].setText("B")  # 自包含：避免缺工作根弹窗
             with mock.patch.object(pm, "save_current") as m:
                 with mock.patch.object(
                         pm, "load_slot",
@@ -1753,7 +1902,7 @@ class TestCssEditor(unittest.TestCase):
     def test_editor_t2s_renders_simplified(self):
         import glob
         import pycbeta.gui.css_editor as ce
-        sample = glob.glob(r"E:\dev\cbeta\xml2pdf\css-presets\sample.xml")
+        sample = glob.glob(r"E:\dev\cbeta\xml2pdf\presets\sample.xml")
         self.assertTrue(sample, "sample.xml 缺失")
         dlg = ce.CssEditorDialog(sample_xml=sample[0])
         try:
@@ -2506,7 +2655,7 @@ class TestCssEditor(unittest.TestCase):
         import os
         import pycbeta.gui.css_editor as ce
         self.assertTrue(ce.SAMPLE_CANDIDATES[0].endswith(
-            os.path.join("css-presets", "sample.xml")))
+            os.path.join("presets", "sample.xml")))
         self.assertEqual(ce.default_sample(), ce.SAMPLE_CANDIDATES[0])
         self.assertTrue(os.path.isfile(ce.default_sample()))
 
@@ -2695,7 +2844,7 @@ class TestCssEditor(unittest.TestCase):
         import shutil
         import pycbeta.gui.css_editor as ce
         from pycbeta.theme import Theme, theme_file_text
-        # 大字版示例（与 css-presets/large-print.css 同形）：覆盖块可合并
+        # 大字版示例（与 presets/large-print.css 同形）：覆盖块可合并
         tmp = tempfile.mkdtemp()
         try:
             fn = os.path.join(tmp, "large-print.css")
@@ -2738,7 +2887,7 @@ class TestCssEditor(unittest.TestCase):
         root = tempfile.mkdtemp()
         try:
             bdir = os.path.join(root, "builtin")
-            udir = os.path.join(root, "css-presets")
+            udir = os.path.join(root, "presets")
             os.makedirs(bdir)
             os.makedirs(udir)
             with open(os.path.join(bdir, "b.css"), "w",

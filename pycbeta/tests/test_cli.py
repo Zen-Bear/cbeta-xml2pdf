@@ -94,5 +94,27 @@ class TestProcessFileErrors(unittest.TestCase):
         self.assertEqual(R.call_count, 2)
 
 
+class TestConfigArgAccepted(unittest.TestCase):
+    def test_pure_presets_config_not_rejected(self):
+        # 纯基础配置 JSON（config.user.json / presets 快照）经 --config 不再报
+        # 「旧 --config 全量快照」；配置通过后到 input 才失败
+        import io
+        import json
+        from contextlib import redirect_stderr
+        from pycbeta.cli import main
+        fd, fn = tempfile.mkstemp(suffix=".json")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump({"output": {"t2s": True}}, f)
+            err = io.StringIO()
+            with redirect_stderr(err):
+                with self.assertRaises(SystemExit):
+                    main(["--config", fn, "-i", "not-a-work", "-f", "pdf"])
+            self.assertNotIn("全量快照", err.getvalue())
+            self.assertIn("input not found", err.getvalue())
+        finally:
+            os.remove(fn)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -18,9 +18,10 @@ from .render_md import MdRenderer
 from .render_txt import TxtRenderer
 from .render_epub import EpubRenderer
 from .theme import Theme, PAGE_PRESETS, OUTPUT_PRESETS, ENGINE_PRESETS, load_presets, _PRESETS_PATH, load_effective_presets
-from .theme import (load_run_config, resolve_pdf_docx_css,
-                    resolve_html_base_css, default_run_path, check_run_placeholders,
-                    resolve_effective_config, apply_page_typography)
+from .theme import (resolve_pdf_docx_css,
+                    resolve_html_base_css, check_run_placeholders,
+                    resolve_effective_config, apply_page_typography,
+                    resolve_config_arg)
 from .filename import apply_template, default_output_name
 
 _ALL_FORMATS = ["html", "pdf", "docx", "md", "epub", "txt"]
@@ -414,11 +415,13 @@ def main(argv=None):
                         help="pdf/docx 标准 CSS（整套替换出厂 pdf_docx.css 全文；"
                              "缺省 run.json 的 pdf-docx-theme 槽）")
     shared.add_argument("--pdf-docx-user-theme", default=None,
-                        help="pdf/docx 增量 CSS（名走 css-presets/ 双目录或路径，"
+                        help="pdf/docx 增量 CSS（名走 presets/ 双目录或路径，"
                              "追加在标准之后；缺省 run.json 的 pdf-docx-user-theme 槽）")
     shared.add_argument("--html-epub-theme", default=None,
                         help="html/epub 基底 CSS 全文（缺省 run.json 的 "
                              "html-epub-theme 槽，即官方 cbeta_golden.css）")
+    shared.add_argument("--html-epub-user-theme", default=None,
+                        help="html/epub 增量 CSS（占位，尚未接线；传入只警告忽略）")
     shared.add_argument("--font-lang", choices=["zh-Hant", "zh-Hans"],
                         default=None,
                         help="字库：zh-Hant 繁体（默认）/ zh-Hans 简体（CSS :root 双栏变量切换）。"
@@ -436,8 +439,9 @@ def main(argv=None):
                              "默认取 config output.font_scale；与 --verify 互斥）")
     shared.add_argument("--config", "--presets-file",
                         help="run.json 组合单（5 槽：config-json/html-epub-theme/"
-                             "html-epub-user-theme/pdf-docx-theme/pdf-docx-user-theme）；"
-                             "缺省仓库根 run.json，没有就全出厂")
+                             "html-epub-user-theme/pdf-docx-theme/pdf-docx-user-theme），"
+                             "或基础配置 JSON（config.user.json / presets 快照，当作 "
+                             "config-json 槽）；缺省仓库根 run.json，没有就全出厂")
     shared.add_argument("--xml-dir", default=None,
                         help="本地 XML 候选源（只读，角色同远端 URL；默认 config source.xml_dir）")
     shared.add_argument("--cbeta-ebook", default=None,
@@ -538,11 +542,9 @@ def main(argv=None):
         ap.error("--theme 已废弃：pdf/docx 请用 --pdf-docx-theme（整套替换）/"
                  "--pdf-docx-user-theme（增量追加）；html/epub 默认纯官方样式")
     try:
-        run = load_run_config(args.config) if args.config else load_run_config()
+        run, run_dir = resolve_config_arg(args.config)
     except (OSError, ValueError) as exc:
         ap.error(f"--config 读取失败: {exc}")
-    run_dir = os.path.dirname(os.path.abspath(args.config)) if args.config \
-        else os.path.dirname(os.path.abspath(default_run_path()))
     check_run_placeholders(run)
     presets = resolve_effective_config(run, run_dir)  # 出厂 ← base 文件按鍵合并
     args.title_t2s = bool((presets.get("source") or {}).get("title_t2s", True))
@@ -628,7 +630,8 @@ def main(argv=None):
     # 纸张绑字号（pages 条目 body_* 覆盖 theme body；font_scale 之前先定基准）
     apply_page_typography(theme, args.page, args.page_presets)
     # html/epub 基底（显式开关 > run.json 槽 > 内置 golden）；html/epub 纯基底
-    html_base = resolve_html_base_css(run, run_dir, std=args.html_epub_theme)
+    html_base = resolve_html_base_css(run, run_dir, std=args.html_epub_theme,
+                                      user=args.html_epub_user_theme)
     # 西文字体随语言切换（页面方案显式 latin_font 仍优先，见 DocxRenderer）
     args.latin_font = theme.font_var("latin", "Calibri")
     args.gaiji_lang = font_lang  # 缺字字体链按此语言选表（render_docx 懒解析）

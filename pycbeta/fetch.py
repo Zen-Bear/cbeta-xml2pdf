@@ -53,8 +53,9 @@ DEFAULT_DOWNLOADS = {
     "figures": "https://raw.githubusercontent.com/cbeta-git/CBR2X-figures/master/{canon}/{file}",
 }
 
-_EBOOK_HINT = ("电子书工作根未配置：在 config.user.json 的 source.cbeta_ebook 填写 "
-               "（GUI 数据源窗口可视编辑），或 --cbeta-ebook 指定")
+_EBOOK_HINT = ("电子书工作根未配置：在 presets/config.user.json 的 "
+               "source.cbeta_ebook 填写（GUI 数据源窗口可视编辑），"
+               "或 --cbeta-ebook 指定")
 _SAME_HINT = ("本地 XML 候选源与电子书工作根不能相同（source.xml_dir == "
               "source.cbeta_ebook）：候选源只读，工作根写入")
 

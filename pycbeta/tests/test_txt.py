@@ -288,7 +288,7 @@ class TestAuxEntry(unittest.TestCase):
         from pycbeta.verify import verify_one
         sample = os.path.join(os.path.dirname(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-            "css-presets", "sample.xml")
+            "presets", "sample.xml")
         d = tempfile.mkdtemp()
         gen = os.path.join(d, "s.md")
         with open(gen, "w", encoding="utf-8") as f:
@@ -303,7 +303,7 @@ class TestAuxEntry(unittest.TestCase):
         from pycbeta.verify import verify_one
         sample = os.path.join(os.path.dirname(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-            "css-presets", "sample.xml")
+            "presets", "sample.xml")
         d = tempfile.mkdtemp()
         gen = os.path.join(d, "s.txt")
         with open(gen, "w", encoding="utf-8") as f:

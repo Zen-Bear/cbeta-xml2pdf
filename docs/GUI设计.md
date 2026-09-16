@@ -129,10 +129,14 @@ class XmlOptions:
 > （默认灰=未覆盖/加粗/常规，点击轮换）；颜色 26×26 纯色块（无文字，右键清除）；左栏行
 > tooltip 标 cb 标签（双向查找）；启动自动载入 run.json 默认主题（保存亮）。
 >
-> 预设库（双目录）：内置 `pycbeta/styles/presets/`（入库，随包分发，删不掉）+ 用户
-> `css-presets/`（仓库根，不入库）。编辑器顶部预设行切换只装载（切换/另存/删除用户预设）；
+> 预设库（单目录 `presets/`，入库随包分发）：样式 `*.css` + 配置 `*.json` 混放（按扩展名区分）
+> + 样张 `sample.xml`；内置 `pycbeta/styles/presets/`（删不掉）。编辑器顶部预设行切换只装载（切换/另存/删除用户预设）；
 > "设为默认"写 run.json 的 `pdf-docx-user-theme`（面板样式表卡同动作）；`恢复出厂`只装载出厂缓冲（不删预设、不改默认）。
-> 运行组合单见 `run.json`（5 槽；`config.user.json` 只剩面板存档/显式引用，不再是默认）。
+> 面板配置框预设下拉：一切以选中项为准——`presets/*.json`（首项“（出厂默认）”=空）。
+> 选中即载入；**保存**=覆盖选中（出厂默认项置灰）；**另存为预设…**=新建；
+> **删除预设**=删选中；**设为默认**=run.json 的 `config-json` 槽指选中（出厂默认=清空槽）；
+> **还原出厂**=面板回出厂值（不写盘）。默认用户预设 = `presets/config.user.json`（git 忽略）。
+> 运行组合单见 `run.json`（5 槽；`config-json` 可指 `presets/*.json`）。
 >
 > 备忘（2026-09-06）：预览技术选型 QTextEdit vs QWebEngineView，以后再议——
 > QTextEdit 胜在毫秒刷新/逐 run 可编程（注文归并/缺字点名）/单测友好/零依赖，
