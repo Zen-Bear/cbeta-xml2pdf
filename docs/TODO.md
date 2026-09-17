@@ -370,9 +370,28 @@
   - 后代选择器（2026-09-04）：T0672 序标题 `<head>` 在 div-xu 内，命中 p.head 蓝色覆盖 div 黑色（与浏览器优先级一致）；引擎新增两段 `A B` 后代支持（`_parse_css_tags` 收 compounds，`_props`/`docx_para` 凭完整标签栈匹配，`css()` 原样回写，`scale_font_sizes` 跟随；三段+/属性选择器忽略）；pdf_docx.css 加 `div.div-xu p.head` 规则（用户自改为 #408080 + 標楷體，实证 run 同时生效）；连带修 3 位简写色 `#000` 写出非法 `w:val="000"`（`_hex6` 展开，docx_run/_marker_rpr 共用）；仓内源文件颜色统一 6 位（golden `#00f`→`#0000ff`，xu/w/note 灰系展开，注释内一并统一；用户自定义 CSS 仍由 `_hex6` 兜底）。单测 177 OK
   - 验收：五格式注音均可见；单测 120 OK；verify 繁体 16/0、简体 16/0 保持
 
-- [ ] **最低优先级（最后）** `html-epub-user-theme` 接线（2026-09-09 决议：意义不大，暂不做）
-  - 现状：`EMPTY_RUN` 占位 `""`（`theme.py:418`），非空警告+忽略（564-567）；无 CLI 开关、无 GUI 控件；html/epub 默认纯 golden
-  - 将来要做时的探明设计（三步）：`resolve_html_base_css` 加 `user` 形参（显式开关 > 槽 > 纯基底，`_resolve_run_file` 缺文件警告+回退），用户文件追加到 golden 之后——`render_html._wrap` 与 epub `style.css` 同吃一份 `base_css`，渲染侧零改动；CLI 加 `--html-epub-user-theme`（与 pdf 侧对称）；单测锁追加顺序/回退/显式优先；golden 选择器与 pdf 出厂同体系（`.head`/`div.lg`/`p.form`…），增量可复用习惯；verify 走文本不受影响
+- [ ] **最低优先级（最后）** html/epub 使用 CSS（用户增量）方案已定（2026-09-17 用户要求列出；未实施）
+  - 现状：html/epub 基底 = `theme.resolve_html_base_css(run, run_dir, std=args.html_epub_theme, user=args.html_epub_user_theme)`（`cli.py:663`）→ `HtmlRenderer/EpubRenderer(base_css=…)`；`render_html._wrap` 里 `<style>` 顺序 = `base_css` → `theme.raw_css`（html/epub theme=None，无）→ inline_rule → ann_rule → gray_rule
+  - 槽分工（run.json）：`html-epub-theme`＝整套替换基底（默认 `cbeta_golden.css`，一般不动）；`html-epub-user-theme`＝**增量**，追加基底之后（层叠后胜）——当前仅占位警告（`theme.py` `check_run_placeholders`）
+  - 目标：把 `html-epub-user-theme` 接成 html/epub 的用户 CSS 层，与 pdf/docx 的 `pdf-docx-user-theme` 对称；md/txt 无 CSS 不涉
+  - 改动清单（实现时）：
+    1. `theme.resolve_html_base_css`：`user` 非空 → `resolve_theme_css(user, run_dir)`（名走 presets/ 用户库或路径；缺文件警告回退）；命中 → 返回 `base + "\n" + 用户全文`（同 `theme_file_text` 层叠）；删除"尚未接线"警告
+    2. `theme.check_run_placeholders`：移除 `html-epub-user-theme` 占位警告；`_RUN_TEMPLATE` 注释同步
+    3. `cli`：`--html-epub-user-theme` 帮助去掉"占位"（接线已就绪，`cli.py:663` 已传 `user=`）
+    4. `verify.generate_formal`：html/epub 分支目前**没传 `base_css`**（恒 golden，与转换不一致）→ 按 `p("html-epub-theme")`/`p("html-epub-user-theme")` 解析（复用 `resolve_html_base_css`）后传入，保证与转换同 CSS
+    5. GUI 样式表卡：加「html/epub 增量」`CssComboBox`（列 presets/*.css）+「设为默认」写 run.json `html-epub-user-theme` 槽（把 `css_editor.set_user_theme` 的槽名参数化）；`html-epub-theme` 基底不加控件（golden）
+    6. CSS 编辑器：不新建/不扩到 html（左栏行选择器面向 pdf_docx，golden 类名不同）；后续如需“html/epub 模式”（HtmlRenderer 预览）另立
+  - 边界：用户层在 golden **之后**，golden 内 `!important` 会压过用户（如 `*` 灰阶仅 grayscale 时输出）；pdf 的 html2pdf 管线走 `PdfRenderer._pdf_css`（=theme），**不读** `html_base`，不在本方案内
+  - 测试：`test_theme`（追加顺序/显式开关优先/缺文件回退）、`test_cli`（`--html-epub-user-theme` 生效）、`test_verify`（同槽）、`test_gui`（下拉+设为默认写槽）；user 空时行为零变化
+  - 文档：`主题与样式.md`（html/epub 层叠 = 基底 + 用户层）、`安装说明`（CLI 行去"占位"）、`GUI设计`（样式表卡新行）、`第三方调用说明`（公开行为）
+- [x] **已完成** 承接下游两处改动 + 修 `--verify` 編號输入的基线源目录（2026-09-17）
+  - 下游 `7518865`：独立窗 `--formats`（预填格式勾选，全不匹配回退 pdf）；补 `TestLaunchArgs` 用例
+  - 下游 `2a10d12`：CLI `--verify` 用已收集/材料化的 `xmls`（不再把編號当 XML 路径）；
+    补修：基线源目录 `src` 仍按输入算（編號时是 `cwd/T0001`，查不到官方基线）→
+    改为 文件=其目录 / 目录=该目录 / 編號=已材料化 XML 的 work 目录；实测
+    `-i T0349 --verify` 能定位 `{work}/txt/…` 基线（报告正常产出）
+  - 文档：`安装说明`（--verify 说明、启动参数加 --formats）、`第三方调用说明` §6.3
+    （--formats + CLI --verify 支持目录/編號）
 
 - [x] **strip_head_no 去标题行首 No. 令牌**（2026-09-10 用户立项：X60n1116 `<head>No. 1116-B…序`）
   - 落点：`theme.strip_head_no` helper（非变异，跳空节点，余部 lstrip 吃版式空格，正文 No. 不动）+ 六渲染器（docx/html/md/txt 直改，epub/pdf 继承 html；docx jhead 先 strip 再 dedup）+ `config output.strip_head_no=false` + CLI `--strip-head-no` + GUI 排版卡复选（默认不勾）+ verify 三入口联动（生成透传 + 官方行首精确令牌表对等剥离；`--config` 双形态收敛 `_strip_no_from`，旧静默回出厂坑已填）

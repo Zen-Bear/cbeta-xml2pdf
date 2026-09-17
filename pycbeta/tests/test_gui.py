@@ -1287,6 +1287,21 @@ class TestLaunchArgs(unittest.TestCase):
         finally:
             w.close()
 
+    def test_formats_prefill(self):
+        from pycbeta.gui.__main__ import _apply_launch_args
+        w = self._win()
+        try:
+            _apply_launch_args(w, self._args(formats="epub,html"))
+            self.assertTrue(w.panel.format_boxes["epub"].isChecked())
+            self.assertTrue(w.panel.format_boxes["html"].isChecked())
+            self.assertFalse(w.panel.format_boxes["pdf"].isChecked())
+            # 全不匹配 → pdf 兜底
+            _apply_launch_args(w, self._args(formats="bogus"))
+            self.assertTrue(w.panel.format_boxes["pdf"].isChecked())
+            self.assertFalse(w.panel.format_boxes["epub"].isChecked())
+        finally:
+            w.close()
+
     def test_empty_args_noop(self):
         from pycbeta.gui.__main__ import _apply_launch_args
         w = self._win()

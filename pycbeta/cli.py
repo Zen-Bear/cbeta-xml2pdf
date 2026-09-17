@@ -732,8 +732,16 @@ def main(argv=None):
         _rb = _v_rb(_presets_full)  # 自定义右侧注音括号（未启用→None，走默认剥除）
         v_compare_infos = bool(_vp.get("compareInfos", False))
         v_auto_fetch = bool(_vp.get("auto_fetch", True))
-        src = os.path.dirname(os.path.abspath(args.input)) if os.path.isfile(args.input) else os.path.abspath(args.input)
-        # 若输入为文件，其官方在同目录；若为目录，则 source 即该目录
+        # 官方基线源目录：文件→其目录；目录→该目录；編號→已材料化 XML 所在 work 目录
+        if os.path.isfile(args.input):
+            src = os.path.dirname(os.path.abspath(args.input))
+        elif os.path.isdir(args.input):
+            src = os.path.abspath(args.input)
+        else:
+            src = os.path.dirname(os.path.abspath(xmls[0])) if xmls \
+                else os.path.abspath(args.input)
+        # 若输入为文件，其官方在同目录；若为目录，则 source 即该目录；
+        # 若为編號，官方基线随材料化落 work 目录（auto_fetch 同目录）
         # 校验产物目录：镜像渲染输出根，每个经书独立 `{id 书名}（验证）/`（内含 {fmt}/ + report.txt）
         if args.output:
             _o = os.path.abspath(args.output)
