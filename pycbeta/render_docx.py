@@ -629,7 +629,10 @@ class DocxRenderer:
         # 内联路径也挂命名样式（直接属性照旧覆盖样式，视觉不变；
         # Word 样式窗格/预览标签可识别，如 def>p 的“释义”）
         sty = f'<w:pStyle w:val="{para}"/>' if para in _STYLED_PARAS else ""
-        ppr = f"<w:pPr>{sty}{ppr}</w:pPr>" if (sty or ppr) else ""
+        # pageBreakBefore 必须在 pStyle 之后、spacing 之前（schema 顺序）；
+        # 曾只在上面的命名样式分支处理，info 等内联段落断页丢失（docx/pdf 不另起页）
+        inner = f"{sty}{pb if page_break else ''}{ppr}"
+        ppr = f"<w:pPr>{inner}</w:pPr>" if inner else ""
         p = f"<w:p>{ppr}{runs}</w:p>"
         return self._with_bookmark(p)
 

@@ -568,6 +568,9 @@
     `TAG_SELECTOR["info"]="p.info"` + `REQUIRED_THEME_TAGS["info"]=("font-family","line-height")`
   - 测试：`test_docx.test_info_page_fangsong`（仿宋+w:line=240）、
     `test_gui.test_table_readonly_copyable`
+  - 追修（2026-09-17）：`_para` 内联路径（非命名样式段落）**丢弃 `page_break`**，`info`
+    尾页因此不另起页（docx 无 `pageBreakBefore`；pdf 走 docx2pdf 同病）→ 内联路径补
+    `<w:pageBreakBefore/>`（pStyle 之后、spacing 之前，schema 顺序）；`test_info_page_break_before`
 - [x] **已完成** 注音卡三选一 + 生僻字自动注音两处修复（2026-09-17）
   - GUI 注音卡：「无注音 / 难字注音 / 全文注音」互斥三选一（全文含难字）；
     `annotations.enabled`/`full_text` 读写；词表栏**只读**、浏览选择、默认内置表路径

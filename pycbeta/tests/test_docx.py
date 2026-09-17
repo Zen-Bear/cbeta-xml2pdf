@@ -219,6 +219,22 @@ class TestDocx(unittest.TestCase):
         self.assertIn("仿宋", doc)
         self.assertIn('w:line="240"', doc)
 
+    def test_info_page_break_before(self):
+        # 尾页从新页开始：首行（【經文資訊】）段落带 pageBreakBefore
+        doc = self.z.read("word/document.xml").decode("utf-8")
+        i = doc.find("經文資訊")
+        self.assertGreater(i, 0)
+        head = doc[:i]
+        ps = head.rfind("<w:pPr>")
+        pe = head.find("</w:pPr>", ps)
+        self.assertGreater(ps, -1)
+        inner = head[ps:pe]
+        self.assertIn("<w:pageBreakBefore/>", inner)
+        # schema 顺序：pageBreakBefore 在 spacing 之前
+        if "<w:spacing" in inner:
+            self.assertLess(inner.find("<w:pageBreakBefore/>"),
+                            inner.find("<w:spacing"))
+
 
 class TestDivXuSpacing(unittest.TestCase):
     """div 祖先的段落属性必须透过命名样式快车道：div-xu 的 margin 进内联 w:spacing。"""
