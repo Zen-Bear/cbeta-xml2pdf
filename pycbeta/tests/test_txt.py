@@ -664,5 +664,31 @@ class TestSplitLemmaOrig(unittest.TestCase):
         self.assertIn("其積【大】", blob)
 
 
+class TestCorrCbetaTxtPlain(unittest.TestCase):
+    """txt 排除 corr-cbeta：只出文字、无任何标记。"""
+
+    def test_plain(self):
+        import tempfile
+        from pycbeta.model import E, Text, Work
+        from pycbeta.render_txt import TxtRenderer
+        w = Work(id="T", source_file="",
+                 metadata={"title": "t", "author": ""},
+                 body=[E(tag="p", attrs={}, children=[
+                     Text(text="甲"),
+                     E(tag="corr-cbeta", attrs={"n": "1"},
+                       children=[Text(text="弗")]),
+                     Text(text="乙")])],
+                 notes_by_n={}, apps=[], simplified=False)
+        d = tempfile.mkdtemp()
+        try:
+            fn = TxtRenderer(notes="endnote").render_work(w, d)
+            text = open(fn, encoding="utf-8").read()
+            self.assertIn("弗", text)
+            self.assertNotIn("corr", text)
+        finally:
+            import shutil
+            shutil.rmtree(d, ignore_errors=True)
+
+
 if __name__ == "__main__":
     unittest.main()

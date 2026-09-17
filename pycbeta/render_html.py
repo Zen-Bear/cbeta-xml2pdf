@@ -97,7 +97,7 @@ class HtmlRenderer:
                  name_template=None, base_css=None, ignore_xml_style=False,
                  ignore_xml_space=False, show_notes=True, grayscale=False, inline_brackets="fullwidth",
                  note_inline_brackets=None,
-                 annotations=None, strip_head_no=False):
+                 annotations=None, strip_head_no=False, corr_cbeta=False):
         self.gaiji_db = gaiji_db if gaiji_db is not None else GaijiDb()
         self.theme = theme
         # 图片搜索目录：str | list[str]（{work}/figures → {work}/txt → 仓库 figures）
@@ -114,6 +114,7 @@ class HtmlRenderer:
         self.inline_brackets = inline_brackets  # 正文夹注（place=inline，原文）括号
         self.note_inline_brackets = note_inline_brackets or inline_brackets  # 校注内联括号（缺省回退）
         self.strip_head_no = strip_head_no  # 去 head/jhead 行首 No. 令牌（默认 false 保留）
+        self.corr_cbeta = corr_cbeta        # CBETA 校改字标红（corr-cbeta；默认 false）
         # 难字注音（P6）：None 或 {"table", "scheme"}（CLI 已由 resolve_annotations 装载；渲染器内不做 IO）
         self._annotations = _ann_active(annotations)
         self._ann_seen = set()  # repeat first/page 已注词集合（render_work 起始终置零）
@@ -465,7 +466,8 @@ class HtmlRenderer:
         if tag == "form":
             return f'<p class="form">{self._render_nodes(e.children)}</p>\n'
         if tag in ("entry", "def", "term", "foreign", "hi", "seg", "quote", "ref", "title",
-                   "yin", "zi", "sg", "unclear", "choice", "corr", "sic", "reg", "table", "row", "cell",
+                   "yin", "zi", "sg", "unclear", "choice", "corr", "corr-cbeta", "sic", "reg",
+                   "table", "row", "cell",
                    "figure", "graphic", "anchor", "bibl", "biblScope", "sp", "event", "date", "idno",
                    "space", "pb", "lb", "mulu", "milestone"):
             return self._render_misc(e)
@@ -661,6 +663,12 @@ class HtmlRenderer:
             return self._render_nodes(e.children)
         if tag == "corr":
             return self._render_nodes(e.children)
+        if tag == "corr-cbeta":
+            # CBETA 校改字（parser 包出；默认关＝透明）：开则 span.corr 红字
+            inner = self._render_nodes(e.children)
+            if not self.corr_cbeta:
+                return inner
+            return f'<span class="corr">{inner}</span>'
         if tag == "reg":
             return self._render_nodes(e.children)
         return self._render_nodes(e.children)

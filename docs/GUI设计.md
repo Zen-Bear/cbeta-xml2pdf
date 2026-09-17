@@ -52,6 +52,8 @@ class XmlOptions:
 | 排版 | `output.split_juan` | 复选「按卷分文件」 | `output.split_juan` |
 | | `output.show_close_juan` | 复选「显示结束卷标题」 | `output.show_close_juan` |
 | | `output.suppress_jhead_dup` | 复选「卷名去重」 | `output.suppress_jhead_dup` |
+| | `output.strip_head_no` | 复选「去掉标题行首 No.」 | `output.strip_head_no` |
+| | `output.corr_cbeta` | 复选「CBETA校改字标红」（默认关） | `output.corr_cbeta` |
 | | `output.ignore_xml_style` / `ignore_xml_space` | 复选（脏数据忽略） | `output.*` |
 | | `output.verse_caesura` / `verse_strip_quotes` | 输入/复选（偈颂） | `output.*` |
 | 分页 | `output.pagination.*` | 分组复选（智能分页/双面/卷首/序品/pb/尾页） | `pagination.*` |

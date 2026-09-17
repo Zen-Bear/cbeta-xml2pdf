@@ -633,6 +633,10 @@ class MainWindow(QMainWindow):
         self.table.setHorizontalHeaderLabels(["经号", "经名", "来源", "状态", "文件"])
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.setMouseTracking(True)
+        # 只读但可选中拷贝：禁止编辑触发，保留选择/复制（Ctrl+C）
+        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.table.setSelectionBehavior(QTableWidget.SelectItems)
+        self.table.setSelectionMode(QTableWidget.ExtendedSelection)
         self.table.cellClicked.connect(self._open_cell)
         layout.addWidget(self.table, 1)
         # 进度与按钮

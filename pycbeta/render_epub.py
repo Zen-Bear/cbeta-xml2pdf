@@ -26,7 +26,7 @@ class EpubRenderer:
     def __init__(self, gaiji_db=None, theme=None, notes="endnote", base_css=None,
                  ignore_xml_style=False, ignore_xml_space=False, show_notes=True,
                  annotations=None, strip_head_no=False, inline_brackets="fullwidth",
-                 note_inline_brackets=None, figure_base=None):
+                 note_inline_brackets=None, figure_base=None, corr_cbeta=False):
         # theme=None → 纯基底（golden 默认）；pdf_docx 主题不再进 epub
         #（render_html 章节与 style.css 同源 base_css）。
         self.theme = theme
@@ -39,6 +39,7 @@ class EpubRenderer:
         # 难字注音（P6）：None 或 {"table", "scheme"}，转发给内部 HtmlRenderer
         self._annotations = _ann_active(annotations)
         self.strip_head_no = strip_head_no  # 去 head/jhead 行首 No. 令牌（转内部 HtmlRenderer）
+        self.corr_cbeta = corr_cbeta        # CBETA 校改字标红（转内部 HtmlRenderer）
         self.inline_brackets = inline_brackets
         self.note_inline_brackets = note_inline_brackets or inline_brackets
         self.figure_base = figure_base
@@ -57,7 +58,8 @@ class EpubRenderer:
                                  strip_head_no=self.strip_head_no,
                                  inline_brackets=self.inline_brackets,
                                  note_inline_brackets=self.note_inline_brackets,
-                                 figure_base=self.figure_base)
+                                 figure_base=self.figure_base,
+                                 corr_cbeta=self.corr_cbeta)
             html_files = inner.render_work(work, tmp)
             self.missing_figures = list(inner.missing_figures)
             md = work.metadata

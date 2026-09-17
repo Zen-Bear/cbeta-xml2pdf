@@ -57,6 +57,10 @@ TAG_SELECTOR = {
     "fangsong": "[rend~=fangsong]",
     "mingti": "[rend~=mingti]",
     "def": "cb:def",
+    # CBETA 校改字（app.lem 原始 wit 含 #wit.cbeta）：html/epub span.corr 红字
+    "corr-cbeta": "span.corr",
+    # 经文资讯尾页（【經文資訊】等行）：仿宋、行距 1
+    "info": "p.info",
 }
 
 # 竖排取消居中的段落标签（横排居中、竖排默认对齐）：书名/标题/卷名/品名。
@@ -141,6 +145,8 @@ REQUIRED_THEME_TAGS: Dict[str, tuple] = {
     "fangsong": ("font-family",),
     "mingti": ("font-family",),
     "div-orig": ("font-weight",),
+    "corr-cbeta": ("color",),
+    "info": ("font-family", "line-height"),
 }
 
 

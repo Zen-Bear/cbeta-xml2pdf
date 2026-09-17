@@ -449,14 +449,16 @@ class PdfRenderer(HtmlRenderer):
                  ignore_xml_space=False, grayscale=False, page_border=False,
                  bookmarks=True, split=False, show_notes=True,
                  html_engine_chain=None, zoom=1.0, annotations=None, strip_head_no=False,
-                 inline_brackets="fullwidth", note_inline_brackets=None):
+                 inline_brackets="fullwidth", note_inline_brackets=None,
+                 corr_cbeta=False):
         super().__init__(gaiji_db=gaiji_db, figure_base=figure_base,
                          ignore_xml_style=ignore_xml_style,
                          ignore_xml_space=ignore_xml_space,
                          show_notes=show_notes, annotations=annotations,
                          strip_head_no=strip_head_no,
                          inline_brackets=inline_brackets,
-                         note_inline_brackets=note_inline_brackets)
+                         note_inline_brackets=note_inline_brackets,
+                         corr_cbeta=corr_cbeta)
         cfg = resolve_page(page, page_presets)
         w_mm, h_mm = cfg["size"]
         self.page_size = f"{w_mm}mm {h_mm}mm"
@@ -589,7 +591,7 @@ class PdfRenderer(HtmlRenderer):
         info.append(f"【編輯說明】本資料庫由 財團法人佛教電子佛典基金會（CBETA）依「{_esc(src)}」所編輯")
         if contrib:
             info.append(f"【原始資料】{_esc(contrib)}")
-        lines = "".join(f"<p>{l}</p>" for l in info)
+        lines = "".join(f'<p class="info">{l}</p>' for l in info)
         return f'<div class="tei-info"><h2 class="head">版本資訊</h2>{lines}</div>'
 
     def _wrap(self, body: str, work: Work) -> str:

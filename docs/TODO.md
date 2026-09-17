@@ -7,7 +7,7 @@
   - RJ 悉昙接线（2026-09-06）：官方 docx 实锤 `eastAsia="Ranjana"` + rjchar 常规字（不用 PUA）；parser 收 `rjchar`，`_resolve_gaiji` RJ 优先，`_ranjana_font_for` 按覆盖选字体（Ranjana→Siddam），无则主题字体直显（可读）；sample plane-16 PUA 清零，101 Ranjana run；单测 TestRanjana 5 项；全量 308 OK，verify 8/0
   - 回退链/siddhamFonts 进 config（2026-09-06）：`output.docx.fallbackFonts{zh-Hant,zh-Hans}`（替代硬编码，微软雅黑垫底）+ `output.docx.siddhamFonts`（缺省 ["Ranjana","Siddam"]）；`cbeta/fonts/README.md` 补悉昙节；单测 311 OK，verify 8/0
 
-- [ ] **P1 高** GUI 链路 B（设计文档已完成：`docs/GUI设计.md`（选项卡面板 + 佛典編號列表输入/自动下载）；可复用模块调用见 `docs/第三方调用说明.md` §6.1）
+- [x] **已完成 P1** GUI 链路 B（2026-09-17 用户销项：设计文档 `docs/GUI设计.md`、可复用模块边界 `docs/第三方调用说明.md` §6.1、publish 链路B 契约均落地；面板/独立窗/一键送校验已上线。遗留小项 `output.pdf_zoom` 待后续版本移除，见下条）
   - 目录清理执行（2026-09-04）：git 首提交 3168e76（安全网，.gitignore 覆盖 out*/__pycache__/用户槽）→ 缺字库搬家 ruby-cbeta→cbeta/data（gaiji.py 改道，三处文档引用同步；data 与原逐字节一致；names.py 出处注释保留）→ 删 ruby-cbeta 整目录/engines僵尸config/out产物/test/out*/__pycache__/空pycbeta/fonts → docs 三 txt 转 md（无交叉引用）→ 清 tmp 调试残留；验证：缺字冒烟（33893 条，𤬪正常解析）+ 单测 217 OK + T0349 端到端；第二提交 3eb588b；1.75GB 两 zip 用户已移走冷盘（从未入库，工作区干净，无需提交）
   - 落地 panel（2026-09-04）：`pycbeta/gui/panel.py`（XmlOptions 七卡：输出格式/页面/分页/排版/注释/注音/校验；字体并入输出格式卡t2s在上字体在下自动切zh-Hans；纸张下拉`名（宽×高mm）`+定宽220；分页含佛典丛书名右列+双列说明小字；排版双列；引擎组仅pdf启用；注音卡常用六项括号预设下拉；校验文案基线→官方文档；边距四输入；保存/还原出厂三槽 `config.user/last.json`；临时 presets 写入器）+ `__main__.py` 独立窗（目录/編號列表/自动下载/批量表/QThread/取消）+ requirements PySide6；单测 test_gui 23 项（含引擎单引擎 5 项+布局 3 项+产物路径 2 项）；单引擎按管线动态填项+可用性探测（COM+主程序双条件，修 pywin32 误报）+安装提示（缺失红字），配置框置顶；文件列显示产物名链接（UserRole 存全路径，单击打开）；单引擎探测修 pywin32 误报（COM+主程序双条件）并支持版本号目录 glob（C:\Apps\WPS Office\12.1.0.21915 实证 wps 已安装）；编号列表大小写不敏感（fetch 层归一化大写，CLI 同样受益）；窗口标题 CBETA XML 格式转换 v1.0；官方基线改名官方电子书；输出行加打开目录按钮；数据源窗口（source 三路径 + downloads 八模板可视编辑，走三槽保存，apply_source_edits 纯函数可测）；catalog 备份到 cbeta/data/sutra_mapping.txt（默认仍指 publish 原件）；输入来源双向自动切换（同行 HBox 左对齐相邻）；复选框同行相邻；标题带 GUI 日期（gui/*.py 最新 mtime）；输出框默认 cwd/out；文件列多产物菜单选择打开（_on_file/_open_cell 分离）；pdf 默认 footnote（中间 docx 53 真脚注，修 render_one pdf 分支 endnote 默认）；页面边距上下/左右两列；排版两脏数据开关归第二列；全量 200 OK；独立窗 offscreen 实例化通过
   - 待废弃 `output.pdf_zoom`（2026-09-04 用户确认）：GUI 不暴露；config 保留；后续版本移除
@@ -328,16 +328,6 @@
     11pt 与 Word 一致，不再掉 Qt 默认小字）；设为默认等全按钮取消 autoDefault（回车不
     误触）；左栏 480；状态条声明图片不显示；字号 400ms 防抖（输入"12"只刷一次）；
     全量 354 OK、verify 8/0
-- [ ] **P9 中（已归档，不做）** GUI 界面三语切换（2026-09-06 立项，2026-09-10 用户决议归档；与输出经文 t2s/font_sets 无关，是界面本身语言）
-  - 背景：界面中文串全硬编码（panel 约数百处、`__main__` 状态栏/按钮），无 `QTranslator` 机制
-  - 方案（存档）：先抽字符串资源（`pycbeta/gui/i18n/*.ts`，Qt Linguist 流程：`pylupdate6` 抽取→翻译→`lrelease` 编译→`QTranslator.load/install`），面板顶部或设置加语言下拉（简/繁/英，存用户槽，重启生效；或动态 `retranslateUi` 热切）
-  - 验收（存档）：三语切换无硬编码残留（`rg` 查中文串只剩 ts 源）；offscreen 实例化通过；单测不断言具体中文文案（现有 `tabText` 名单用例需同步为 key 断言或跟随默认语言）
-- [ ] **P10 低（已归档，不做）** GUI 深色模式（2026-09-06 立项；2026-09-10 落地一次后用户撤回，整体 revert，归档）
-  - 背景：现为 Qt 默认浅色；Qt6 可部分跟随系统深色，未显式适配（红字提示/灰字 hint 在深色下可能看不清）
-  - 方案（存档）：跟随系统 `Qt::ColorScheme` + 手动开关（三态：跟随/浅色/深色，存用户槽）；先只保证现有样式表（红/灰提示色）在深色下可读，不过度定制 QSS
-  - 验收（存档）：深/浅/跟随三档目检（配置栏/七卡/批量表/状态栏无看不清文字）
-  - 备注：曾落地 `dark.py` 三态+用户槽+recolor（含 Fusion 试错、调色板定案、外观下拉搬家），`63ec9b3`/`cebd6c9`，后经 `dd87a28` 整体 revert；重做时直接看这三提交
-
 - [x] **已完成 P4** `docx` 段合并到 `output`（死配置修复：顶层 `docx` 删段 → `output.docx.footnoteSeparator`；零代码改动，实测自定义 2.0pt 生效；单测 58 + verify 24 0 失败）
   - 落点：`config.json` 顶层 `docx` 段删除，`output.docx.footnoteSeparator` 生效（与 `cli.py:346`、`run_tests.py:79,98` 读取位置对齐）；`render_docx.py:894` 注释同步；`功能清单.md:86` 键路径同步
   - 实测：默认 0.5pt→`w:sz=4`，`--config` 自定义 2.0pt→`w:sz=16`（此前顶层键全仓无读取，改值无效果）
@@ -525,3 +515,24 @@
     stem/文件名/绝对路径三种都认；`--preset` help 同步
   - `TestLaunchArgs` 4 项（预填/三种写法/缺失保持/空参数零作用）；文档 `第三方调用说明 §6.3` +
     `安装说明 §5`；全量 728 OK
+- [x] **已完成** CBETA 校改字标红 `corr-cbeta`（2026-09-17 用户点档；排除 md/txt，默认关）
+  - 判定：`app.lem` **原始** `wit` 含 `#wit.cbeta`（按原始 id，不依赖 `【CB】` label）；实测
+    19 文件 661 处校改全部 beg/end 同父、0 跨父 → parser `_traverse` 末尾按兄弟列表包区间
+  - parser：`_handle` beg/end 放私有 `_CorrMark`；`_wrap_corr` 把中间节点包成
+    `E(tag="corr-cbeta", attrs={n})`（App 留区间外，注码不变红）；标记不进 IR
+  - 渲染（开关 `output.corr_cbeta`，默认 false）：docx `_render_e` 经主题 tag 红 `#FF0000`；
+    html `_render_misc` 出 `span.corr`；epub/ pdf 继承 HtmlRenderer；**md/txt 透明（排除）**
+  - 主题/死命令：`TAG_SELECTOR["corr-cbeta"]="span.corr"`、`REQUIRED_THEME_TAGS=("color",)`、
+    `EDITABLE_ROWS ("span.corr","CBETA校改")`；`pdf_docx.css span.corr{color:#FF0000}`、
+    `cbeta_golden.css .corr{color:red}`（超出官方 html）
+  - 配置：`config.json output.corr_cbeta`；GUI 排版卡「CBETA校改字标红」；无 CLI 开关
+  - 测试：`test_parser`（合成+ T0452 4 处）、`test_docx`/`test_md_epub`/`test_txt` 开关与排除、
+    `test_gui` 选项+左栏行；全量 736 OK（skipped=1）
+- [x] **已完成** 批量表只读可拷贝 + 【經文資訊】尾页 CSS（2026-09-17）
+  - 批量表五列禁止编辑触发（`NoEditTriggers` + `SelectItems`/`ExtendedSelection`），保留选中与
+    Ctrl+C 拷贝；「来源」＝XML 取得方式（本地XML/本地拷贝/合册合成/已下载）
+  - 经文资讯尾页：`p.info{font-family:仿宋;line-height:1}`（pdf_docx.css）+ golden
+    `#cbeta-copyright p`；docx 尾页改走 tag `info`、pdf 尾页 `<p class="info">`；
+    `TAG_SELECTOR["info"]="p.info"` + `REQUIRED_THEME_TAGS["info"]=("font-family","line-height")`
+  - 测试：`test_docx.test_info_page_fangsong`（仿宋+w:line=240）、
+    `test_gui.test_table_readonly_copyable`

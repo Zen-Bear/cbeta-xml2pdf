@@ -1053,8 +1053,12 @@ class XmlOptionsPanel(QWidget):
         self.dedup_box = self._check("卷名去重", checked=True)
         self.strip_no_box = self._check("去掉标题行首 No.")
         self.strip_no_box.setToolTip("去 head/jhead 行首 No. 令牌（如 No. 1116-B 序→序，余部去前导空格；正文内 No. 不动；书签保留原样）")
+        self.corr_box = self._check("CBETA校改字标红")
+        self.corr_box.setToolTip(
+            "output.corr_cbeta（默认关）：app.lem 原始 wit 含 #wit.cbeta 的正文用字标红——"
+            "docx 红 #FF0000、html/epub span.corr；md/txt 不标；与逐字校验无关")
         for b in (self.split_box, self.close_juan_box, self.dedup_box,
-                  self.strip_no_box):
+                  self.strip_no_box, self.corr_box):
             left.addWidget(b)
         left.addStretch(1)
         grid.addLayout(left, 0, 0)
@@ -1511,6 +1515,7 @@ class XmlOptionsPanel(QWidget):
                 "show_close_juan": self.close_juan_box.isChecked(),
                 "suppress_jhead_dup": self.dedup_box.isChecked(),
                 "strip_head_no": self.strip_no_box.isChecked(),
+                "corr_cbeta": self.corr_box.isChecked(),
                 "ignore_xml_style": self.ign_style_box.isChecked(),
                 "ignore_xml_space": self.ign_space_box.isChecked(),
                 "verse_caesura": self.caesura_edit.text(),
@@ -1592,6 +1597,7 @@ class XmlOptionsPanel(QWidget):
             self.close_juan_box.setChecked(bool(o.get("show_close_juan", False)))
             self.dedup_box.setChecked(bool(o.get("suppress_jhead_dup", True)))
             self.strip_no_box.setChecked(bool(o.get("strip_head_no", False)))
+            self.corr_box.setChecked(bool(o.get("corr_cbeta", False)))
             self.ign_style_box.setChecked(bool(o.get("ignore_xml_style", False)))
             self.ign_space_box.setChecked(bool(o.get("ignore_xml_space", False)))
             self.caesura_edit.setText(str(o.get("verse_caesura", "　　")))

@@ -793,6 +793,34 @@ class TestConfigBar(unittest.TestCase):
         self.assertEqual(o2.page, "a4")
 
 
+    def test_table_readonly_copyable(self):
+        from PySide6.QtWidgets import QTableWidget
+        from pycbeta.gui.__main__ import MainWindow
+        w = MainWindow()
+        try:
+            self.assertEqual(w.table.editTriggers(),
+                             QTableWidget.NoEditTriggers)
+            self.assertEqual(w.table.selectionBehavior(),
+                             QTableWidget.SelectItems)
+            self.assertEqual(w.table.selectionMode(),
+                             QTableWidget.ExtendedSelection)
+        finally:
+            w.close()
+
+    def test_corr_cbeta_option_and_editable_row(self):
+        from pycbeta.gui.css_editor import EDITABLE_ROWS
+        self.assertIn(("span.corr", "CBETA校改"), EDITABLE_ROWS)
+        panel = self._panel()
+        try:
+            self.assertFalse(panel.corr_box.isChecked())   # 默认关
+            panel.corr_box.setChecked(True)
+            self.assertTrue(panel.get_options().output["corr_cbeta"])
+            panel.set_options(panel.get_options())
+            self.assertTrue(panel.corr_box.isChecked())
+        finally:
+            panel.close() if hasattr(panel, "close") else None
+
+
 class TestEngineSingles(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

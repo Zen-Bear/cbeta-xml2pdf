@@ -120,6 +120,7 @@
     "notes_marker_font": "Times New Roman", // [docx] 注释注码字体（正文 [N]/文末 [N]/脚注编号上标；如 "宋体, SimSun"；字号恒为正文字号×0.75，不随标题段放大，随 font_scale 等比放大）
     "suppress_title_notes": false, // [docx] true=压制卷名/品名校勘注码（标题干净，默认 false 保留）
     "strip_head_no": false,     // [六格式] true=去 head/jhead 行首 No. 令牌（如 X 藏 "No. 1116-B 序"→"序"，余部 lstrip 吃版式空格；正文内 No. 不动；默认 false 保留）
+    "corr_cbeta": false,        // [docx|html|epub|pdf] true=CBETA 校改字标红（app.lem 原始 wit 含 #wit.cbeta 的正文用字；docx 红 #FF0000、html/epub span.corr；md/txt 不标）；默认 false 关闭
     "show_dharani_transliteration": false, // [txt|md] true=逐字咒文表（<cb:tt> 无 place="inline"）也显示梵文罗马字母；默认 false 去掉（官方 text-with-notes 一致）
     "pdf_zoom": 1.0,               // [pdf/仅chromium] HTML→PDF 整页缩放（Playwright page.pdf scale，不重排；范围 0.1-2.0，1.0=原尺寸；与 font_scale 正交可叠加）
     "font_scale": 1.0,             // [所有格式] 字号等比缩放（重排式大字，老人版推荐 1.33/1.5；与 pdf_zoom 正交；字号不影响逐字校验）
@@ -213,7 +214,7 @@
     "repeat": "page",                     // 注音频率：all=每次都注（默认）；first=全文只注首次；page=每页只注首次
                                          //   （docx=按原书页 <pb> 翻页重注；html/epub=按卷文件；md/txt=整篇，无分页）
                                          //   无 <pb> 的典籍 docx 回退到每个智能分页单元 / 按卷（split 时）
-    "rare_zones": [],                    // 生僻字自动注音分区：空=关闭；如 ["G","H"]（Ext G/H），全扩展 ["A","B","C","D","E","F","G","H","I"]；
+    "rare_zones": ["A","B","C","D","E","F","G","H","I"],                    // 生僻字自动注音分区：空=关闭；如 ["G","H"]（Ext G/H），全扩展 ["A","B","C","D","E","F","G","H","I"]；
                                          // 需 pypinyin，未收录字跳过；词表优先（full_text 除外），多音字取最常用读音（可能不准，需人工校对）
     "full_text": false,                   // 全文注音：true=词表优先整词注音、其余逐字注音（忽略 rare_zones/repeat；专音以词表为准）
     "rare_font": "",                     // 补充字形 cmap 注音：空=关闭；TTF/OTF 路径（如 "cbeta/fonts/CBETASupplement.ttf"，

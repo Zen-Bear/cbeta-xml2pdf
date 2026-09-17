@@ -19,6 +19,14 @@
       text-align: right;
     }
     .cbeta { color: red; }
+    /* CBETA 校改字（IR corr-cbeta，默认关）：官方 epub cbeta.css 同款 red；
+       官方 html 不标红——本条属"超出官方 html"，仅供 html/epub 用 */
+    .corr { color: red; }
+    /* 经文资讯尾页（#cbeta-copyright 内几行）：仿宋、行距 1 行 */
+    #cbeta-copyright p {
+      font-family: 仿宋, FangSong;
+      line-height: 1;
+    }
     /* 悉昙缺字（<g> RJ）：官方同款空元素，读音走 roman 属性显示；文本抽取为空 */
     span.ranja::after { content: attr(roman); }
     /* 转写行（<cb:tt> sa-x-rj 行）：官方朱砂色 */

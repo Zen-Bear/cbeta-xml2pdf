@@ -184,7 +184,7 @@ class DocxRenderer:
                    annotations=None, gaiji_fonts=None, gaiji_lang: str = "zh-Hant",
                    fallback_fonts=None, siddham_fonts=None,
                     vertical: bool = False, notes_marker_font: Optional[str] = None,
-                    figure_base=None):
+                    figure_base=None, corr_cbeta: bool = False):
         self.gaiji_db = gaiji_db if gaiji_db is not None else GaijiDb()
         self.theme = theme if theme is not None else Theme()
         # 纸张绑字号：库直接调用渲染器也生效；CLI 已在 font_scale 前应用过 → 跳过
@@ -210,6 +210,7 @@ class DocxRenderer:
         self.show_body_siddham = show_body_siddham  # 正文悉昙字和读音（默认 true 显示；false 则正文不显示，脚注不受影响）
         self.suppress_title_notes = suppress_title_notes  # 压制卷名/品名校勘注码（默认 false 保留）
         self.strip_head_no = strip_head_no  # 去 head/jhead 行首 No. 令牌（默认 false 保留）
+        self.corr_cbeta = corr_cbeta        # CBETA 校改字标红（corr-cbeta；默认 false）
         self.series_title = series_title or {}         # 经藏名（title level="s"）首页左上角配置 {enabled,font,size}
         self.pagination = pagination or {}             # 智能分页 {enabled,duplex,juan,juan_first,mulu_level1,pb,tei}
         self.vertical = vertical                      # 纵排：每节 sectPr 写 textDirection tbRl（上→下、右→左）
@@ -1330,6 +1331,11 @@ class DocxRenderer:
                     + self._run(")", *self._current_tag()))
         if tag in ("figure", "graphic"):
             return self._render_graphic(e)
+        if tag == "corr-cbeta":
+            # CBETA 校改字（parser 包出；默认关＝透明）：开则经主题 corr-cbeta 上色
+            if not self.corr_cbeta:
+                return self._render_children(e)
+            return self._render_tagged(e.children, "corr-cbeta")
         return self._render_children(e)
 
     def _render_def_p(self, p):
@@ -1590,9 +1596,8 @@ class DocxRenderer:
             info.append(f"【原始資料】{contrib}")
         parts = []
         for i, line in enumerate(info):
-            ppr = '<w:pageBreakBefore/>' if i == 0 else ""
-            parts.append(f'<w:p><w:pPr>{ppr}<w:spacing w:after="120"/></w:pPr>'
-                         f'{self._run(line, "p")}</w:p>')
+            parts.append(self._para(self._run(line, "info"), "info",
+                                    page_break=(i == 0), count=False))
         return "".join(parts)
 
     def _build_docx(self, title: str, author: str, body: str) -> bytes:

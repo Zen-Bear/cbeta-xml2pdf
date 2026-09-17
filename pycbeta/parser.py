@@ -1,12 +1,21 @@
 """CBETA XML P5 parser: XML -> IR (Work)."""
 
 import re
+from dataclasses import dataclass
 from typing import Dict, List, Optional
 
 from lxml import etree
 
 from .model import App, AppRead, E, Gaiji, Lb, Note, NoteRef, Pb, Text, Work
 from .names import get_work_id_from_basename
+
+
+@dataclass
+class _CorrMark:
+    """parser 内私有区间标记（beg/end 锚点），post-pass 消费后不进 IR。"""
+    n: str
+    beg: bool
+
 
 NS_TEI = "http://www.tei-c.org/ns/1.0"
 NS_CB = "http://www.cbeta.org/ns/1.0"
@@ -55,6 +64,7 @@ class P5Parser:
         self._apps_by_key: Dict[str, App] = {}
         self._current_lb: Optional[str] = None
         self._seen_ref_n = set()
+        self._corr_open = set()   # 正在开的 CBETA 校改区间 n（beg 起、end 闭）
 
         header = root.find("teiHeader")
         self.metadata = self._parse_header(header) if header is not None else {}
@@ -313,6 +323,44 @@ class P5Parser:
         r.children = self._traverse(el)
         return r
 
+    @staticmethod
+    def _is_cbeta_reading(app: App) -> bool:
+        """正文用字是否 CBETA 校改：app.lem 的**原始** wit 含 `#wit.cbeta`
+        （按原始 id 判，不依赖解析后的 `【CB】` label）。"""
+        lem = app.lem
+        return bool(lem is not None
+                    and "#wit.cbeta" in (lem.attrs.get("wit") or "").split())
+
+    def _wrap_corr(self, nodes: List[object]) -> List[object]:
+        """把 beg/end 标记之间的节点包成 `E(tag="corr-cbeta")`（同父列表内）。
+
+        实测 661 处校改全部 beg/end 同父；未配对（保险）→ 丢弃标记、不包。
+        App 留在 corr 之外（注码不变红）。"""
+        out: List[object] = []
+        i, n = 0, len(nodes)
+        while i < n:
+            nd = nodes[i]
+            if isinstance(nd, _CorrMark):
+                if not nd.beg:
+                    i += 1
+                    continue
+                j = i + 1
+                while j < n and not (isinstance(nodes[j], _CorrMark)
+                                     and not nodes[j].beg and nodes[j].n == nd.n):
+                    j += 1
+                if j < n:
+                    inner = [x for x in nodes[i + 1:j]
+                             if not isinstance(x, _CorrMark)]
+                    out.append(E(tag="corr-cbeta", attrs={"n": nd.n},
+                                 children=inner))
+                    i = j + 1
+                    continue
+                i += 1   # 未配对：丢弃标记，不包（宁漏不误）
+                continue
+            out.append(nd)
+            i += 1
+        return out
+
     def _traverse(self, el) -> List[object]:
         nodes: List[object] = []
         t = _norm_text(el.text or "")
@@ -327,7 +375,7 @@ class P5Parser:
                         nodes.append(Text(t2, line=self._current_lb))
                 continue
             nodes.extend(self._handle(child))
-        return nodes
+        return self._wrap_corr(nodes)
 
     def _handle(self, el) -> List[object]:
         tag = el.tag
@@ -359,8 +407,15 @@ class P5Parser:
                 app = self._apps_by_key.get(aid)
                 if app is not None:
                     out.append(app)
+                    if self._is_cbeta_reading(app):
+                        n = el.get("n") or aid[3:]
+                        self._corr_open.add(n)
+                        out.append(_CorrMark(n, True))
             elif aid and aid.startswith("end"):
-                pass
+                n = el.get("n") or aid[3:]
+                if n in self._corr_open:
+                    self._corr_open.discard(n)
+                    out.append(_CorrMark(n, False))
             elif el.get("type") == "circle":
                 out.append(E(tag="anchor", attrs=self._attrs(el)))
         elif tag == "note":

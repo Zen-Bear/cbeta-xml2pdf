@@ -62,6 +62,7 @@ EDITABLE_ROWS = (
     ("span.doube-line-note", "正文夹注·双行"),
     ("span.interlinear-note", "正文夹注·单行"),
     ("span.transliteration", "转写"),
+    ("span.corr", "CBETA校改"),
     ("span.note-inline", "校注内联"),
     ("sup.note-ref", "注释序号"),
     (".footnote", "脚注文字"),

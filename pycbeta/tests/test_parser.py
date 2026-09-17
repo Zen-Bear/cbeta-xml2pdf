@@ -127,6 +127,56 @@ class TestT0452(unittest.TestCase):
     def test_work_id(self):
         self.assertEqual(self.w.id, "T0452")
 
+    def test_corr_cbeta_ranges(self):
+        # 4 处 CBETA 校改（弗/梨/掁/頗）→ corr-cbeta 节点；orig 读法不包
+        corr = [n for n in iter_nodes(self.w.body)
+                if getattr(n, "tag", "") == "corr-cbeta"]
+        self.assertEqual(len(corr), 4)
+        marked = "".join(
+            getattr(c, "text", "") or "" for x in corr for c in x.children)
+        self.assertEqual(marked, "弗梨掁頗")
+
+
+class TestCorrCbetaParse(unittest.TestCase):
+    """合成：lem 原始 wit 含 #wit.cbeta → 包 corr-cbeta；orig 不包。"""
+
+    XML = ("<TEI xmlns='http://www.tei-c.org/ns/1.0'>"
+           "<teiHeader><fileDesc><titleStmt><title>t</title>"
+           "</titleStmt></fileDesc></teiHeader>"
+           "<text><body><p>甲"
+           "<anchor xml:id='beg0001' n='0001'/>弗<anchor xml:id='end0001'/>乙"
+           "<anchor xml:id='beg0002' n='0002'/>佛<anchor xml:id='end0002'/>丙"
+           "</p></body><back>"
+           "<app from='#beg0001' to='#end0001'>"
+           "<lem wit='#wit.cbeta'>弗</lem><rdg wit='#wit.orig'>佛</rdg></app>"
+           "<app from='#beg0002' to='#end0002'>"
+           "<lem wit='#wit.orig'>佛</lem><rdg wit='#wit.cbeta'>弗</rdg></app>"
+           "</back></text></TEI>")
+
+    def _parse(self):
+        import tempfile
+        with tempfile.NamedTemporaryFile("w", suffix=".xml", delete=False,
+                                         encoding="utf-8") as f:
+            f.write(self.XML)
+            fn = f.name
+        try:
+            return P5Parser().parse(fn)
+        finally:
+            os.remove(fn)
+
+    def test_only_cbeta_lem_wrapped(self):
+        w = self._parse()
+        corr = [n for n in iter_nodes(w.body)
+                if getattr(n, "tag", "") == "corr-cbeta"]
+        self.assertEqual(len(corr), 1)
+        self.assertEqual("".join(getattr(c, "text", "") or ""
+                                 for c in corr[0].children), "弗")
+        # 未改字的正文「佛」仍在，且不在 corr 内
+        body_text = "".join(getattr(n, "text", "") or ""
+                            for n in iter_nodes(w.body)
+                            if isinstance(n, Text))
+        self.assertIn("佛", body_text)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

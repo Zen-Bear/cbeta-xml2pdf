@@ -79,5 +79,44 @@ class TestEpub(unittest.TestCase):
         self.assertFalse(os.path.isdir(os.path.join(self.tmp, "_epub_tmp")))
 
 
+class TestCorrCbetaRender(unittest.TestCase):
+    """corr-cbeta：html 开门控 span.corr；md 始终透明（排除）。"""
+
+    def _work(self):
+        from pycbeta.model import E, Text, Work
+        return Work(id="T", source_file="",
+                    metadata={"title": "t", "author": ""},
+                    body=[E(tag="p", attrs={}, children=[
+                        Text(text="甲"),
+                        E(tag="corr-cbeta", attrs={"n": "1"},
+                          children=[Text(text="弗")]),
+                        Text(text="乙")])],
+                    notes_by_n={}, apps=[], simplified=False)
+
+    def test_html_on_off(self):
+        from pycbeta.render_html import HtmlRenderer
+        out = {}
+        for flag in (False, True):
+            d = tempfile.mkdtemp()
+            self.addCleanup(__import__("shutil").rmtree, d, True)
+            HtmlRenderer(theme=None, notes="endnote",
+                         corr_cbeta=flag).render_work(self._work(), d)
+            blob = "".join(
+                open(os.path.join(d, f), encoding="utf-8").read()
+                for f in os.listdir(d) if f.endswith(".html"))
+            out[flag] = blob
+        self.assertNotIn('class="corr"', out[False])
+        self.assertIn('class="corr"', out[True])
+        self.assertIn("弗", out[True])
+
+    def test_md_plain(self):
+        d = tempfile.mkdtemp()
+        self.addCleanup(__import__("shutil").rmtree, d, True)
+        fn = MdRenderer(notes="endnote").render_work(self._work(), d)
+        text = open(fn, encoding="utf-8").read()
+        self.assertIn("弗", text)
+        self.assertNotIn("corr", text)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

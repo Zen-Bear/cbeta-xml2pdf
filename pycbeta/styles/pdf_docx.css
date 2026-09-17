@@ -250,6 +250,17 @@ p.head .interlinear-note {
 span.transliteration {
   color: #FF4400;
 }
+/* CBETA 校改字（IR corr-cbeta，默认关）：官方 docx 字符样式 corr = FF0000；
+   DOCX 经 corr-cbeta 标签并入 run；html/epub 走 golden .corr（red） */
+span.corr {
+  color: #FF0000;
+}
+/* 经文资讯尾页（【經文資訊】/【版本記錄】/【編輯說明】/【原始資料】）：仿宋、行距 1 行 */
+p.info {
+  font-family: 仿宋, FangSong;
+  line-height: 1;
+  margin: 0 0 0.5em 0;
+}
 /* 校勘注锚（正文中的 [n] 链接）：默认蓝色；按校勘类型着色——
    .add 新增（红）、.mod 改字（橙）、.orig 原文（紫灰）、.star 星号（红）。
    DOCX 侧注码字号/颜色另由 sup.note-ref 控制（见下）。 */

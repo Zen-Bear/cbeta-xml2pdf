@@ -212,6 +212,13 @@ class TestDocx(unittest.TestCase):
         doc = self.z.read("word/document.xml").decode("utf-8")
         self.assertIn("彌勒", doc)
 
+    def test_info_page_fangsong(self):
+        # 【經文資訊】尾页：仿宋 + 行距 1（w:line=240）
+        doc = self.z.read("word/document.xml").decode("utf-8")
+        self.assertIn("經文資訊", doc)
+        self.assertIn("仿宋", doc)
+        self.assertIn('w:line="240"', doc)
+
 
 class TestDivXuSpacing(unittest.TestCase):
     """div 祖先的段落属性必须透过命名样式快车道：div-xu 的 margin 进内联 w:spacing。"""
@@ -1537,6 +1544,42 @@ class TestAnnotationPerPage(unittest.TestCase):
 
     def test_no_pb_falls_back_single(self):
         self.assertEqual(self._count(self._work(False), "page"), 1)
+
+
+class TestCorrCbetaRender(unittest.TestCase):
+    """corr-cbeta 渲染门控：默认关透明，开则 docx 红字。"""
+
+    def _work(self):
+        from pycbeta.model import Work
+        return Work(id="T", source_file="",
+                    metadata={"title": "t", "author": ""},
+                    body=[E(tag="p", attrs={}, children=[
+                        Text(text="甲"),
+                        E(tag="corr-cbeta", attrs={"n": "1"},
+                          children=[Text(text="弗")]),
+                        Text(text="乙")])],
+                    notes_by_n={}, apps=[], simplified=False)
+
+    def _doc(self, flag):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(__import__("shutil").rmtree, tmp, True)
+        fn = DocxRenderer(notes="footnote", corr_cbeta=flag).render_work(
+            self._work(), tmp, "c.docx")
+        z = zipfile.ZipFile(fn)
+        try:
+            return z.read("word/document.xml").decode("utf-8")
+        finally:
+            z.close()
+
+    def test_off_transparent(self):
+        doc = self._doc(False)
+        self.assertIn("弗", doc)
+        self.assertNotIn("FF0000", doc)
+
+    def test_on_red(self):
+        doc = self._doc(True)
+        self.assertIn('<w:color w:val="FF0000"/>', doc)
+        self.assertIn("弗", doc)
 
 
 if __name__ == "__main__":
