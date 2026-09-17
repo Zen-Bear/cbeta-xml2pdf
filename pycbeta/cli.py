@@ -766,7 +766,8 @@ def main(argv=None):
                 raw = _v_tnorm(raw)
             return v_norm(_t2s(raw) if _t2s else raw, _rb)
         _theirs_norm.toks = []
-        xmls_v = xmls if os.path.isdir(args.input) else [args.input]
+        # 目录/work id：用上面已收集/materialize 的 xmls；仅「单个 XML 文件」用原输入
+        xmls_v = [args.input] if os.path.isfile(args.input) else xmls
         for xml_fn in xmls_v:
             name = os.path.basename(xml_fn)
             block = [f"=== {name}"]
