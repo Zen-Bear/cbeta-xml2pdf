@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _STYLES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                            "styles")
+from pycbeta.annotate import DEFAULT_TABLE as ANN_DEFAULT_TABLE  # 内置注音词表路径
 # 样式表卡：默认两 CSS（路径, 说明）
 STYLE_FILES = (
     ("pdf_docx.css", "印刷主题（pdf/docx 专用）"),
@@ -1140,8 +1141,20 @@ class XmlOptionsPanel(QWidget):
     def _tab_ann(self):
         w = QWidget()
         form = QFormLayout(w)
-        self.ann_on = self._check("开启难字注音")
-        form.addRow("", self.ann_on)
+        arow = QHBoxLayout()
+        self.ann_none = self._check("无注音", checked=True)
+        self.ann_hard = self._check("难字注音")
+        self.ann_full = self._check("全文注音")
+        self.ann_none.setToolTip("不注音（选中即取消后两项）")
+        self.ann_hard.setToolTip("只注难字：词表 + 分区/补充字形自动注音")
+        self.ann_full.setToolTip("全文逐字注音（含难字注音；词表优先，忽略分区/频率）")
+        self.ann_none.toggled.connect(lambda on: on and self._on_ann_pick("none"))
+        self.ann_hard.toggled.connect(lambda on: on and self._on_ann_pick("hard"))
+        self.ann_full.toggled.connect(lambda on: on and self._on_ann_pick("full"))
+        for b in (self.ann_none, self.ann_hard, self.ann_full):
+            arow.addWidget(b)
+        arow.addStretch(1)
+        form.addRow("", arow)
         self.ann_scheme = self._combo(SCHEME_ITEMS, "pinyin")
         form.addRow("方案", self.ann_scheme)
         self.ann_style = self._combo(STYLE_ITEMS, "inline")
@@ -1154,8 +1167,9 @@ class XmlOptionsPanel(QWidget):
             "html/epub 按卷文件；md/txt 整篇（无分页）")
         form.addRow("频率", self.ann_repeat)
         row = QHBoxLayout()
-        self.ann_file = QLineEdit()
-        self.ann_file.setPlaceholderText("空=内置词表")
+        self.ann_file = QLineEdit(ANN_DEFAULT_TABLE)
+        self.ann_file.setReadOnly(True)          # 只能浏览选择，不可手输
+        self.ann_file.setToolTip("注音词表（TSV）：只读；点「浏览…」选用其它词表，默认内置表")
         self.ann_file.textChanged.connect(lambda _v: self._changed())
         browse = QPushButton("浏览…")
         browse.clicked.connect(self._browse_ann_file)
@@ -1174,6 +1188,19 @@ class XmlOptionsPanel(QWidget):
         self.ann_file.textChanged.connect(lambda _v: self._refresh_ann_hint())
         self._refresh_ann_hint()
         return w
+
+    def _on_ann_pick(self, which):
+        """无注音/难字/全文 三选一（全文含难字）。"""
+        if getattr(self, "_emitting", False):
+            return
+        self._emitting = True
+        try:
+            self.ann_none.setChecked(which == "none")
+            self.ann_hard.setChecked(which == "hard")
+            self.ann_full.setChecked(which == "full")
+        finally:
+            self._emitting = False
+        self._changed()
 
     def _ann_table_path(self):
         """当前词表实际路径：空=内置表；否则按 annotate 规则解析（缺失→None）。"""
@@ -1529,7 +1556,8 @@ class XmlOptionsPanel(QWidget):
             vertical=self.vert_box.isChecked(),
             typo=typo,
             annotations={
-                "enabled": self.ann_on.isChecked(),
+                "enabled": self.ann_hard.isChecked() or self.ann_full.isChecked(),
+                "full_text": self.ann_full.isChecked(),
                 "scheme": self.ann_scheme.currentData(),
                 "style": self.ann_style.currentData(),
                 "brackets": list(BRACKET_PRESETS[self.ann_brackets.currentText()]),
@@ -1622,7 +1650,11 @@ class XmlOptionsPanel(QWidget):
                 self.note_brackets_box.setCurrentIndex(j)
             self._sync_note_brackets_enabled()
             an = opts.annotations or {}
-            self.ann_on.setChecked(bool(an.get("enabled", False)))
+            _full = bool(an.get("full_text", False))
+            _en = bool(an.get("enabled", False)) or _full
+            self.ann_none.setChecked(not _en)
+            self.ann_hard.setChecked(_en and not _full)
+            self.ann_full.setChecked(_full)
             for box, key, default in ((self.ann_scheme, "scheme", "pinyin"),
                                       (self.ann_style, "style", "inline"),
                                       (self.ann_repeat, "repeat", "all")):
@@ -1634,7 +1666,7 @@ class XmlOptionsPanel(QWidget):
                 if tuple(pv) == pair:
                     self.ann_brackets.setCurrentText(name)
                     break
-            self.ann_file.setText(str(an.get("file", "")))
+            self.ann_file.setText(str(an.get("file") or ANN_DEFAULT_TABLE))
             vf = opts.verify or {}
             self.verify_on.setChecked(bool(vf.get("enabled", True)))
             self.maxdiff_spin.setValue(int(vf.get("maxDiff", 10) or 10))

@@ -19,6 +19,8 @@
 
 自动注音（词表之外）：``rare_zones`` 为分区 frozenset（空=关闭，如 {"G","H"}），
 ``rare_cmap`` 为补充字形码位集，二者为"或"关系，词表优先；
+读音取 pypinyin，未收录时回退到 CBETA gaiji 的规范化字（norm_big5_char/norm_uni_char/
+norm_unicode）取音（如 𭣛→變→biàn）；与词表同样受 first/page 去重（同页只注首次）。
 ``rare_all`` 为 True 时全文逐字注音（忽略词表与 repeat，专音必错，慎用）。
 
 ``style`` 为注音位置：``ruby`` = 汉字上方（html/epub ``<ruby>``、docx ``w:ruby``，
@@ -134,15 +136,56 @@ def in_rare_zones(cp, zones):
 
 _READING_CACHE = {}
 
+# 规范化字回退表（缺字码位 → 规范化字形候选）：pypinyin 未收录生僻字时，
+# 用 CBETA gaiji 的 norm_big5_char / norm_uni_char / norm_unicode 取读音。
+_NORM_ALT = None
+
+
+def _norm_alts(char):
+    """生僻字 → 规范化字形候选元组（懒建一次；失败空表）。"""
+    global _NORM_ALT
+    if _NORM_ALT is None:
+        m = {}
+        try:
+            from .gaiji import GaijiDb
+            for rec in GaijiDb().records():
+                src = rec.get("uni_char")
+                if not src:
+                    continue
+                alts = []
+                for key in ("norm_big5_char", "norm_uni_char"):
+                    v = rec.get(key)
+                    if v and v != src:
+                        alts.append(v)
+                hexn = rec.get("norm_unicode")
+                if hexn:
+                    try:
+                        ch = chr(int(hexn, 16))
+                        if ch != src:
+                            alts.append(ch)
+                    except ValueError:
+                        pass
+                if alts:
+                    m[src] = tuple(dict.fromkeys(alts))
+        except Exception:  # noqa: BLE001 —— 缺库/损坏只关回退
+            m = {}
+        _NORM_ALT = m
+    return _NORM_ALT.get(char, ())
+
 
 def auto_reading(char, scheme="pinyin"):
-    """生僻字读音（pypinyin 按字取音，词表外兜底）：未知字/无 pypinyin → None。
+    """生僻字读音（pypinyin 按字取音）：未知字 → 规范化字回退 → None。
     多音字取最常用读音，可能不准（词表优先于此）。结果进程级常驻缓存
     （全文模式同字高频复用，避免重复查询）。"""
     key = (char, scheme)
     if key in _READING_CACHE:
         return _READING_CACHE[key]
     rd = _auto_reading_uncached(char, scheme)
+    if rd is None:
+        for alt in _norm_alts(char):
+            rd = _auto_reading_uncached(alt, scheme)
+            if rd:
+                break
     _READING_CACHE[key] = rd
     return rd
 

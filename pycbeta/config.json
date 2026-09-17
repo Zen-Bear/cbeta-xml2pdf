@@ -215,7 +215,8 @@
                                          //   （docx=按原书页 <pb> 翻页重注；html/epub=按卷文件；md/txt=整篇，无分页）
                                          //   无 <pb> 的典籍 docx 回退到每个智能分页单元 / 按卷（split 时）
     "rare_zones": ["A","B","C","D","E","F","G","H","I"],                    // 生僻字自动注音分区：空=关闭；如 ["G","H"]（Ext G/H），全扩展 ["A","B","C","D","E","F","G","H","I"]；
-                                         // 需 pypinyin，未收录字跳过；词表优先（full_text 除外），多音字取最常用读音（可能不准，需人工校对）
+                                         // 需 pypinyin，未收录字回退 gaiji 规范化字（norm_big5_char 等）取音；与词表同样受 repeat 去重；
+                                         // 词表优先（full_text 除外），多音字取最常用读音（可能不准，需人工校对）
     "full_text": false,                   // 全文注音：true=词表优先整词注音、其余逐字注音（忽略 rare_zones/repeat；专音以词表为准）
     "rare_font": "",                     // 补充字形 cmap 注音：空=关闭；TTF/OTF 路径（如 "cbeta/fonts/CBETASupplement.ttf"，
                                          //   相对路径先相对本 config 所在目录），覆盖字形内全部汉字（13943 字）自动注音；与 rare_from 为"或"关系

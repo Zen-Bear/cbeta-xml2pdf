@@ -699,6 +699,7 @@ class DocxRenderer:
         self._fn_seq = 0
         self._fns = []
         self._en_notes = []
+        self._pending_notes = []   # 延迟到页末渲染的注（脚注/尾注），见 _flush_notes
         self._tag_stack = []
         self._div_stack = []
         self._body_para_count = 0
@@ -762,6 +763,7 @@ class DocxRenderer:
                     self._div_stack.pop()
             else:
                 out.append(self._render_node(n))
+        self._flush_notes()
         return "".join(out)
 
     def _resolve_gaiji_raw(self, code: str, raw: str) -> str:
@@ -854,7 +856,21 @@ class DocxRenderer:
         return self._gaiji_font_resolved
 
     def _render_body(self, body) -> str:
-        return "".join(self._render_node(n) for n in body)
+        out = "".join(self._render_node(n) for n in body)
+        self._flush_notes()
+        return out
+
+    def _flush_notes(self) -> None:
+        """延迟注内容在**本页正文渲染完之后**生成：每页只注首次时，正文用字先占
+        `_ann_seen`，脚注/尾注不再重复注（否则注码处先渲脚注会抢注，正文缺注）。
+        嵌套注（脚注内再出注）循环处理。幂等：清空 pending。"""
+        while self._pending_notes:
+            kind, seq, note, app = self._pending_notes.pop(0)
+            content = self._footnote_content(note) + self._cf_run(note, app=app)
+            if kind == "endnote":
+                self._en_notes.append((seq, content))
+            else:
+                self._fns.append(self._fn_entry(seq, content))
 
     def _current_tag(self) -> tuple:
         """run 的继承链（外→内）：body → div-* 祖先 → 当前标签栈全部。
@@ -876,7 +892,9 @@ class DocxRenderer:
         if isinstance(n, Lb):
             return ""
         if isinstance(n, Pb):
-            # repeat=page（docx 专属）：原书页（<pb>）边界清空已注集合，翻页重注
+            # repeat=page（docx 专属）：原书页（<pb>）边界清空已注集合，翻页重注。
+            # 先落本页延迟注（正文已入 _ann_seen），再清，避免脚注抢注/跨页串味。
+            self._flush_notes()
             if _page_repeat(self._annotations):
                 self._ann_seen = set()
             return ""
@@ -992,15 +1010,16 @@ class DocxRenderer:
         note = self._pick_note(notes)
         if note.ntype == "orig" and (note.n or "") in self._orig_suppressed:
             return ""
-        content = self._footnote_content(note) + self._cf_run(note)
         if self.notes == "inline":
+            content = self._footnote_content(note) + self._cf_run(note)
             return self._render_inline_mode(content)
         self._fn_seq += 1
         seq = self._fn_seq
+        # 脚注/尾注内容延迟到页末（_flush_notes）：正文用字先占 _ann_seen
+        kind = "endnote" if self.notes == "endnote" else "footnote"
+        self._pending_notes.append((kind, seq, note, None))
         if self.notes == "endnote":
-            self._en_notes.append((seq, content))
             return f'<w:r>{self._marker_rpr()}<w:t>[{seq}]</w:t></w:r>'
-        self._fns.append(self._fn_entry(seq, content))
         return self._fn_ref(seq)
 
     def _render_app(self, app: App) -> str:
@@ -1017,15 +1036,15 @@ class DocxRenderer:
                 note = self._pick_note(notes)
                 if note.ntype == "orig" and (note.n or "") in self._orig_suppressed:
                     return ""
-                content = self._footnote_content(note) + self._cf_run(note, app=app)
                 if self.notes == "inline":
+                    content = self._footnote_content(note) + self._cf_run(note, app=app)
                     return self._render_inline_mode(content)
                 self._fn_seq += 1
                 seq = self._fn_seq
+                kind = "endnote" if self.notes == "endnote" else "footnote"
+                self._pending_notes.append((kind, seq, note, app))
                 if self.notes == "endnote":
-                    self._en_notes.append((seq, content))
                     return f'<w:r>{self._marker_rpr()}<w:t>[{seq}]</w:t></w:r>'
-                self._fns.append(self._fn_entry(seq, content))
                 return self._fn_ref(seq)
         return ""
 

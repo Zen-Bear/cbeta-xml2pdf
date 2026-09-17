@@ -59,6 +59,7 @@ class XmlOptions:
 | 分页 | `output.pagination.*` | 分组复选（智能分页/双面/卷首/序品/pb/尾页） | `pagination.*` |
 | 经藏名 | `output.series_title.*` | 复选+字体+字号 | `series_title.*` |
 | 校验 | `verify.enabled/maxDiff/diffLines/auto_fetch/scope_juan` | 高级页（转换后校验开关**默认开**/阈值/报告差异行数/自动下载/卷限定） | `verify.*` |
+| 注音 | `annotations.enabled` / `full_text` | 三选一「无注音 / 难字注音 / 全文注音」（全文含难字；互斥）+ 方案/位置/括号/频率/词表（词表**只读**，浏览选择，默认内置表）；`rare_zones`/`rare_font` 走 config | `annotations.*` |
 
 **不适合 GUI 修改**：`source.xml_dir/cbeta_ebook/catalog`（路径，走浏览/配置页而非面板）、`downloads.*` URL 模板（固定，改配置文件）、`source.title_t2s`（数据源窗口复选）。
 

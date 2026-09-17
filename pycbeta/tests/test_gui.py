@@ -1042,11 +1042,12 @@ class TestLayoutRegroup(unittest.TestCase):
         import os
         from pycbeta.gui.panel import XmlOptionsPanel
         panel = XmlOptionsPanel(load_presets())
-        # 空=内置词表，hint 给出实际路径且可打开
-        self.assertEqual(panel.ann_file.text(), "")
+        # 默认填入内置词表路径；只读（只能浏览选择）
+        self.assertTrue(panel.ann_file.isReadOnly())
+        self.assertTrue(panel.ann_file.text().endswith("annotations.txt"))
         self.assertIn("annotations.txt", panel.ann_hint.text())
         self.assertTrue(panel.ann_open.isEnabled())
-        # 填不存在的路径→红字+禁用
+        # 浏览选择不存在的路径→红字+禁用（setText 程序化仍可）
         panel.ann_file.setText(r"E:\nonexistent\x.tsv")
         self.assertIn("不存在", panel.ann_hint.text())
         self.assertFalse(panel.ann_open.isEnabled())
@@ -1442,6 +1443,32 @@ class TestNotesTab(unittest.TestCase):
         from pycbeta.gui.panel import XmlOptionsPanel
         from pycbeta.theme import load_presets
         return XmlOptionsPanel(load_presets())
+
+    def test_ann_three_way_mutual_exclusion(self):
+        panel = self._panel()
+        try:
+            panel.ann_none.setChecked(True)                 # 无注音
+            self.assertFalse(panel.ann_hard.isChecked())
+            self.assertFalse(panel.ann_full.isChecked())
+            panel.ann_hard.setChecked(True)
+            self.assertFalse(panel.ann_none.isChecked())
+            self.assertFalse(panel.ann_full.isChecked())
+            panel.ann_full.setChecked(True)
+            self.assertFalse(panel.ann_hard.isChecked())
+            self.assertFalse(panel.ann_none.isChecked())
+            o = panel.get_options()
+            self.assertTrue(o.annotations["enabled"])
+            self.assertTrue(o.annotations["full_text"])
+            panel.ann_none.setChecked(True)
+            self.assertFalse(panel.ann_hard.isChecked())
+            self.assertFalse(panel.ann_full.isChecked())
+            o2 = panel.get_options()
+            self.assertFalse(o2.annotations["enabled"])
+            self.assertFalse(o2.annotations["full_text"])
+            panel.set_options(o)                            # 回读
+            self.assertTrue(panel.ann_full.isChecked())
+        finally:
+            panel.close() if hasattr(panel, "close") else None
 
     def test_siddham_box_default_on(self):
         panel = self._panel()

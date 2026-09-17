@@ -1582,5 +1582,41 @@ class TestCorrCbetaRender(unittest.TestCase):
         self.assertIn("弗", doc)
 
 
+class TestNoteAnnDedup(unittest.TestCase):
+    """repeat=page 下，正文用字先占 seen，脚注不再重复注（注内容延迟到页末渲染）。"""
+
+    def _doc(self):
+        from pycbeta.model import Note, NoteRef, Work
+        note = Note(tag="note", attrs={}, n="n1", ntype="mod",
+                    children=[Text(text="\U00024B2A")])   # 𤬪（Ext B）
+        ref = NoteRef(n="n1", notes=[note])
+        work = Work(id="T", source_file="",
+                    metadata={"title": "t", "author": ""},
+                    body=[E(tag="p", attrs={}, children=[
+                        Text(text="\U00024B2A"), ref])],
+                    notes_by_n={"n1": [note]}, apps=[], simplified=False)
+        ann = {"table": {"X": {"pinyin": "x", "zhuyin": ""}},
+               "scheme": "pinyin", "style": "inline",
+               "rare_zones": frozenset({"B"}), "rare_cmap": frozenset(),
+               "repeat": "page", "full_text": False,
+               "brackets": ["〔", "〕"], "rt_size": "50%",
+               "rt_font": "", "ruby_up": "100%"}
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(__import__("shutil").rmtree, tmp, True)
+        fn = DocxRenderer(notes="footnote", annotations=ann).render_work(
+            work, tmp, "n.docx")
+        z = zipfile.ZipFile(fn)
+        try:
+            return (z.read("word/document.xml").decode("utf-8"),
+                    z.read("word/footnotes.xml").decode("utf-8"))
+        finally:
+            z.close()
+
+    def test_body_annotated_footnote_not(self):
+        doc, fns = self._doc()
+        self.assertIn("dù", doc)          # 正文注
+        self.assertNotIn("dù", fns)       # 脚注同页不重复注
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

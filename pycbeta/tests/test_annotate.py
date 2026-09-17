@@ -188,6 +188,28 @@ class TestRare(unittest.TestCase):
         finally:
             _a._READING_CACHE.clear()
 
+    def test_auto_reading_norm_fallback(self):
+        # pypinyin 未收录的补字形：用 gaiji 规范化字（norm_big5_char 等）取音
+        # 𭣛（U+2D8DB，CB02654）→ 规范化字「變」→ biàn
+        self.assertEqual(auto_reading("𭣛"), "biàn")
+        self.assertEqual(auto_reading("𭣛", "zhuyin"), "ㄅㄧㄢˋ")
+
+    def test_rare_auto_deduped(self):
+        # seen 去重同样作用于自动生僻字（repeat first/page：同页只注首次）
+        table = {"X": {"pinyin": "x", "zhuyin": ""}}
+        seen = set()
+        zones = frozenset({"B"})
+        self.assertEqual(split_annotated("𤬪", table, rare_zones=zones,
+                                         seen=seen), [("𤬪", "dù")])
+        self.assertEqual(split_annotated("𤬪", table, rare_zones=zones,
+                                         seen=seen), [("𤬪", None)])
+        t = {"菩薩": {"pinyin": "pú sà", "zhuyin": "ㄆㄨˊ ㄙㄚˋ"}}
+        seen2 = set()
+        self.assertEqual(split_annotated("菩薩", t, seen=seen2),
+                         [("菩薩", "pú sà")])
+        self.assertEqual(split_annotated("菩薩", t, seen=seen2),
+                         [("菩薩", None)])
+
     def test_split_rare(self):
         table = {"菩薩": {"pinyin": "pú sà", "zhuyin": "ㄆㄨˊ ㄙㄚˋ"}}
         # 词表优先于自动

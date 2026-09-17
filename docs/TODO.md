@@ -536,3 +536,15 @@
     `TAG_SELECTOR["info"]="p.info"` + `REQUIRED_THEME_TAGS["info"]=("font-family","line-height")`
   - 测试：`test_docx.test_info_page_fangsong`（仿宋+w:line=240）、
     `test_gui.test_table_readonly_copyable`
+- [x] **已完成** 注音卡三选一 + 生僻字自动注音两处修复（2026-09-17）
+  - GUI 注音卡：「无注音 / 难字注音 / 全文注音」互斥三选一（全文含难字）；
+    `annotations.enabled`/`full_text` 读写；词表栏**只读**、浏览选择、默认内置表路径
+  - Bug1：pypinyin 未收录的补字形（如 𭣛 U+2D8DB）无注音 → `auto_reading` 增加
+    gaiji 规范化字回退（`norm_big5_char`/`norm_uni_char`/`norm_unicode`，如 𭣛→變→biàn）
+  - Bug2：`repeat=page` 的 seen 去重被**脚注抢先渲染**消费（脚注在注码处先渲，正文再出现
+    即无注音）→ docx 脚注/尾注内容**延迟到页末（<pb> 或分节末）渲染**，正文先占 seen；
+    自动生僻字恢复参与去重（每页只注首次）
+  - 已知语义：`rare_zones` 仅覆盖 CJK 扩展 A–I；基本区难字（如 癅 U+7645）不在其列，
+    需入词表（单字行）才注
+  - 测试：`test_annotate`（规范化回退、去重含自动）、`test_docx.TestNoteAnnDedup`
+    （正文注/脚注不重）、`test_gui`（三选一互斥+回读、词表只读+默认路径）；真机 T0032 实证

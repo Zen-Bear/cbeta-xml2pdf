@@ -19,6 +19,10 @@ class GaijiDb:
     def get(self, code: str) -> Optional[dict]:
         return self._db.get(code)
 
+    def records(self):
+        """全库记录（dict 值集合；只读遍历用，如注音回退的规范化字）。"""
+        return self._db.values()
+
     def __contains__(self, code: str) -> bool:
         return code in self._db
 
