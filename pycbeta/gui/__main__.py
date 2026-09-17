@@ -878,6 +878,16 @@ def _apply_launch_args(win, a):
                 continue
         if idx >= 0:
             box.setCurrentIndex(idx)   # 触发 _on_preset_chosen，载入面板值
+    if getattr(a, "formats", None):
+        want = [s.strip() for s in str(a.formats).split(",") if s.strip()]
+        try:
+            boxes = win.panel.format_boxes
+            for fmt, box in boxes.items():
+                box.setChecked(fmt in want)
+            if want and not any(b.isChecked() for b in boxes.values()) and "pdf" in boxes:
+                boxes["pdf"].setChecked(True)
+        except Exception:
+            pass
     if getattr(a, "verify", False):
         try:
             win.panel.verify_on.setChecked(True)
@@ -893,6 +903,7 @@ def main(argv=None):
     _ap.add_argument("--ids-file", default=None, help="ID 列表文件，填入输入来源")
     _ap.add_argument("--out", default=None, help="输出目录预填")
     _ap.add_argument("--preset", default=None, help="预设（stem/文件名/路径），选中即载入面板")
+    _ap.add_argument("--formats", default=None, help="逗号分隔输出格式，如 pdf,epub（预填格式勾选）")
     _ap.add_argument("--verify", action="store_true", help="打开转换后校验")
     _ap.add_argument("--autostart", action="store_true", help="窗现即开始批量")
     _raw = sys.argv[1:] if argv is None else list(argv)
