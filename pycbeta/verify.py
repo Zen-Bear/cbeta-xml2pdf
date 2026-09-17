@@ -767,11 +767,10 @@ def generate_formal(xml_fn: str, work, fmt: str, outdir: str, config_path: Optio
     _run = None
     _rdir = None
     try:
-        from .theme import (load_run_config, default_run_path,
+        from .theme import (resolve_config_arg,
                             resolve_effective_config)
-        _run = load_run_config(config_path) if config_path else load_run_config()
-        _rdir = os.path.dirname(os.path.abspath(config_path)) if config_path \
-            else os.path.dirname(os.path.abspath(default_run_path()))
+        # 宽容分流：run.json 或基础配置 JSON（纯 presets）都认；与 CLI 同口径
+        _run, _rdir = resolve_config_arg(config_path)
         presets = resolve_effective_config(_run, _rdir)
         out_defaults = {**(presets.get("output") or {}), **(presets.get("verify") or {})}
     except Exception:

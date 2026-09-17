@@ -392,6 +392,16 @@
     `-i T0349 --verify` 能定位 `{work}/txt/…` 基线（报告正常产出）
   - 文档：`安装说明`（--verify 说明、启动参数加 --formats）、`第三方调用说明` §6.3
     （--formats + CLI --verify 支持目录/編號）
+- [x] **已完成** 承接下游 `37a864a`（CLI --verify 改用 generate_formal）+ 修其 base 配置回退（2026-09-17）
+  - 下游 `37a864a`：CLI `--verify` 比对档改由 `verify.generate_formal` 生成（`verify` 段覆盖
+    `output` 段，inline_brackets/suppress_jhead_dup/show_close_juan 生效），与独立窗一致；
+    比对档落 `{验证}/{fmt}/`，不再复用渲染产物
+  - 补修：`generate_formal` 原用 `load_run_config(config_path)`——`--config` 传**基础配置 JSON**
+    （纯 presets，如 config.user.json）会抛「旧全量快照」并**回退出厂配置**（比对档失真）。
+    改用 `theme.resolve_config_arg`（run.json / 纯 presets 宽容分流，与 CLI 同口径）
+  - 测试：`test_verify.TestGenerateFormalConfig`（base 配置的 `output.inline_brackets` 确实生效）
+  - 文档：`安装说明 --verify`、`第三方调用说明 §6.3`；全量 745 OK（skipped=1）
+  - （同时收到上游 `25eccb8`：同名非XML目录不再劫持編號——逻辑正确，无需另改）
 
 - [x] **strip_head_no 去标题行首 No. 令牌**（2026-09-10 用户立项：X60n1116 `<head>No. 1116-B…序`）
   - 落点：`theme.strip_head_no` helper（非变异，跳空节点，余部 lstrip 吃版式空格，正文 No. 不动）+ 六渲染器（docx/html/md/txt 直改，epub/pdf 继承 html；docx jhead 先 strip 再 dedup）+ `config output.strip_head_no=false` + CLI `--strip-head-no` + GUI 排版卡复选（默认不勾）+ verify 三入口联动（生成透传 + 官方行首精确令牌表对等剥离；`--config` 双形态收敛 `_strip_no_from`，旧静默回出厂坑已填）
@@ -406,7 +416,10 @@
   - 验收：新 `test_figures.py` 17 项（含 docx 包内 media/rels/drawing + 三部件 lxml 良构断言——曾抓到漏 `</a:xfrm>` 致 Word 打不开）；X59 实测 html 4 张 base64 零占位、docx 4 media 良构、raw 下载 6557B 与基线一致；缺图策略=警告+占位不中断（用户确认）
   - 追修（2026-09-11 用户反馈 X1077 docx/pdf 无图）：根因是 `<figure>` 在 CBETA 里常**内联于 `<p>`**，而 `_render_graphic` 恒包 `<w:p>` → 非法嵌套，WPS 静默丢弃段内图片（最小顶层用例正常，故对照实验才暴露）。修法：`_in_para` 上下文（`_render_para_children` + `_render_tagged` 内统一标记，覆盖 p/pre/head/byline/pin/form/def/verse/cell/脚注/夹注），段内只出 run 级 drawing，块级才包段。实测 X59 pdf（WPS）94 页 4 图；另发现卷名/mulu 区 8 处既有 `title` 嵌套（文字完整，与图片无关，未动）
   - 追修2（2026-09-11）：折叠按钮改绿底白字（各态 stylesheet 同色 + `ButtonText` 调色板设白，箭头靠方向区分；像素级单测锁定）；图片 100% 上限（审计确认只缩小不放大 + `jpeg_size` SOF 解析 + 1x1 原生/2000px 等比压单测锁定）
-- [ ] **CBETA 校改字标红 `corr`（2026-09-12 用户点档：先记录不修改）**
+- [x] **已完成**（2026-09-17，以 `corr-cbeta` 落地，默认关）~~CBETA 校改字标红 `corr`（2026-09-12 用户点档：先记录不修改）~~
+  - 实现见本文件「CBETA 校改字标红 `corr-cbeta`」条：parser beg/end 区间包 `E(tag="corr-cbeta")`、
+    按**原始** `#wit.cbeta` 判定（非 `【CB】` label）；docx 红 `#FF0000`、html/epub `span.corr`、
+    pdf 随管线；**md/txt 不标**；IR tag 取 `corr-cbeta` 以避开 TEI `<corr>`；默认关（`output.corr_cbeta`）
   - 现象/取证：官方**同一颗字**在 docx 用字符样式 `corr` 红 `FF0000`（`<w:rStyle w:val="corr"/>`，T0001_001.docx 全文 12 处；styles.xml `corr` → color FF0000）；官方 **epub** 用 `<span class='corr'>` + `cbeta.css` 的 `.corr{color:red}`；官方 **html 不标红**（全库扫描 0 处 `corr`/`cbeta` span）；txt 无颜色
   - 判定规则：正文所采用的读法 `app/lem` 的 `@wit` 含 **`#wit.cbeta`**（IR 解析为 `app.lem.wit` 含 `【CB】`/`【CB-…】`）→ 该校改字标红；lem 为 `#wit.orig`（如 `['【大】']`）不标。例：`0005009` lem `['【CB】','【宮-CB】']` → 官方红；`0006002` lem `['【大】']` → 不红。T01 lem 含 `【CB` 213 处，juan1 与官方 12 处量级吻合
   - 我方现状：判定信息已具备（`app.lem.wit`），但正文夹在 `<anchor beg.../>…<anchor end.../>` 之间，parser 丢弃 `end` 锚点且不记区间 → IR 无法定位校改字；三渲染器均无 `corr`，golden 只有未用的 `.cbeta`、无 `.corr`

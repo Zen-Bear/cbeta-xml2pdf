@@ -17,6 +17,35 @@ from pycbeta.verify import _extract_txt_parts, find_official, _head_no_tokens, \
 NOTE_RE = re.compile(r"(?m)^ {4}\[[^\]\[]{1,12}\]")
 
 
+class TestGenerateFormalConfig(unittest.TestCase):
+    """generate_formal 的配置解析：base 配置 JSON（纯 presets）也要生效（不能回退出厂）。"""
+
+    def test_base_config_preset_applied(self):
+        import json
+        import tempfile
+        from unittest import mock
+        from pycbeta.model import Work
+        import pycbeta.verify as V
+        d = tempfile.mkdtemp()
+        try:
+            pre = os.path.join(d, "presets.json")
+            with open(pre, "w", encoding="utf-8") as f:
+                json.dump({"output": {"inline_brackets": "halfwidth"}}, f)
+            seen = {}
+            with mock.patch.object(V, "HtmlRenderer") as M:
+                M.return_value.render_work.return_value = ["x.html"]
+                V.generate_formal("x.xml", Work(id="T", source_file="",
+                                                metadata={}, body=[],
+                                                notes_by_n={}, apps=[],
+                                                simplified=False),
+                                  "html", os.path.join(d, "out"),
+                                  config_path=pre)
+                seen = M.call_args.kwargs
+            self.assertEqual(seen.get("inline_brackets"), "halfwidth")
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+
 class TestStripOfficialNo(unittest.TestCase):
     def test_token_from_work(self):
         from pycbeta.model import E, Text, Work
