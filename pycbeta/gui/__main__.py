@@ -848,14 +848,56 @@ class MainWindow(QMainWindow):
                                 self).exec()
 
 
+def _apply_launch_args(win, a):
+    """启动参数预填（publish 一键送校验用；无参数时零作用，只填控件，不开跑）。"""
+    if getattr(a, "ids_file", None):
+        win.path_edit.setText(a.ids_file)
+        win.mode_file.setChecked(True)
+    if getattr(a, "out", None):
+        win.out_edit.setText(a.out)
+    if getattr(a, "preset", None):
+        import os as _os
+        box = win.panel.cfg_preset_box
+        idx = -1
+        for i in range(box.count()):
+            try:
+                data = box.itemData(i) or ""
+                base = _os.path.splitext(_os.path.basename(str(data)))[0] if data else ""
+                if box.itemText(i) == a.preset or base == a.preset or str(data) == a.preset:
+                    idx = i
+                    break
+            except Exception:
+                continue
+        if idx >= 0:
+            box.setCurrentIndex(idx)   # 触发 _on_preset_chosen，载入面板值
+    if getattr(a, "verify", False):
+        try:
+            win.panel.verify_on.setChecked(True)
+        except Exception:
+            pass
+
+
 def main(argv=None):
     from pycbeta.gui.css_editor import suppress_font_warnings
     suppress_font_warnings()
-    app = QApplication.instance() or QApplication(sys.argv if argv is None else argv)
+    import argparse
+    _ap = argparse.ArgumentParser(prog="pycbeta.gui", add_help=False)
+    _ap.add_argument("--ids-file", default=None, help="ID 列表文件，填入输入来源")
+    _ap.add_argument("--out", default=None, help="输出目录预填")
+    _ap.add_argument("--preset", default=None, help="预设名（stem），选中即载入面板")
+    _ap.add_argument("--verify", action="store_true", help="打开转换后校验")
+    _ap.add_argument("--autostart", action="store_true", help="窗现即开始批量")
+    _raw = sys.argv[1:] if argv is None else list(argv)
+    _known, _rest = _ap.parse_known_args(_raw)
+    app = QApplication.instance() or QApplication([sys.argv[0]] + _rest)
     from pycbeta.gui.css_editor import ensure_tooltip_style
     ensure_tooltip_style()  # 黑 tooltip 可见（应用级一次）
     win = MainWindow()
+    _apply_launch_args(win, _known)
     win.show()
+    if _known.autostart:
+        from PySide6.QtCore import QTimer
+        QTimer.singleShot(0, win._start)
     return app.exec()
 
 
