@@ -858,12 +858,16 @@ def _apply_launch_args(win, a):
     if getattr(a, "preset", None):
         import os as _os
         box = win.panel.cfg_preset_box
+        # 三种写法都认：stem（如 my）、文件名（如 my.json，publish 传的就是这个）、绝对路径
+        want = (a.preset or "").strip()
+        want_stem = (want[:-5] if want.lower().endswith(".json") else want)
         idx = -1
         for i in range(box.count()):
             try:
                 data = box.itemData(i) or ""
                 base = _os.path.splitext(_os.path.basename(str(data)))[0] if data else ""
-                if box.itemText(i) == a.preset or base == a.preset or str(data) == a.preset:
+                if box.itemText(i) in (want, want_stem) or base in (want, want_stem) \
+                        or str(data) == want:
                     idx = i
                     break
             except Exception:
@@ -884,7 +888,7 @@ def main(argv=None):
     _ap = argparse.ArgumentParser(prog="pycbeta.gui", add_help=False)
     _ap.add_argument("--ids-file", default=None, help="ID 列表文件，填入输入来源")
     _ap.add_argument("--out", default=None, help="输出目录预填")
-    _ap.add_argument("--preset", default=None, help="预设名（stem），选中即载入面板")
+    _ap.add_argument("--preset", default=None, help="预设（stem/文件名/路径），选中即载入面板")
     _ap.add_argument("--verify", action="store_true", help="打开转换后校验")
     _ap.add_argument("--autostart", action="store_true", help="窗现即开始批量")
     _raw = sys.argv[1:] if argv is None else list(argv)

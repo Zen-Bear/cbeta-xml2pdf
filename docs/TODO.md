@@ -516,3 +516,12 @@
     `test_baseline_lands_flat_ignoring_out_decoy` 去诱饵改名；`test_fetch`/`test_layout`
     的 out 根用例改为断言全部收录）
   - 另：标签 `电子书输出目录（…）`→`XML及电子书（官方下载保存平展目录）`（SOURCE_LABELS）
+- [x] **已完成** 独立窗 `--preset` 认 publish 传的文件名（2026-09-17）
+  - 背景：上游 `7258b65` 给 `python -m pycbeta.gui` 加了 `--ids-file/--out/--preset/`
+    `--verify/--autostart` 预填；publish `_send_coll_to_verify` 用其一键送校验
+    （写 `*_ids.txt` → detached 子进程 → 跑完用导入入库）
+  - 缺口：publish 传的是**带 `.json` 的文件名**（如 `my.json`），上游匹配器只认
+    stem/绝对路径 → 预设被静默忽略。修：`_apply_launch_args` 归一化去 `.json` 后缀，
+    stem/文件名/绝对路径三种都认；`--preset` help 同步
+  - `TestLaunchArgs` 4 项（预填/三种写法/缺失保持/空参数零作用）；文档 `第三方调用说明 §6.3` +
+    `安装说明 §5`；全量 728 OK

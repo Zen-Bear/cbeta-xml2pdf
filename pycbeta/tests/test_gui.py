@@ -1185,6 +1185,94 @@ class TestMainWindowUx(unittest.TestCase):
             w.close()
 
 
+class TestLaunchArgs(unittest.TestCase):
+    """独立窗启动参数预填（publish 一键送校验）：ids-file/out/preset/verify。"""
+
+    @classmethod
+    def setUpClass(cls):
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PySide6.QtWidgets import QApplication
+        cls.app = QApplication.instance() or QApplication([])
+
+    def _win(self):
+        from pycbeta.gui.__main__ import MainWindow
+        return MainWindow()
+
+    def _args(self, **kw):
+        from types import SimpleNamespace
+        d = {"ids_file": None, "out": None, "preset": None,
+             "verify": False, "autostart": False}
+        d.update(kw)
+        return SimpleNamespace(**d)
+
+    def test_prefill_ids_out_verify(self):
+        import tempfile
+        from pycbeta.gui.__main__ import _apply_launch_args
+        w = self._win()
+        try:
+            d = tempfile.mkdtemp()
+            self.addCleanup(__import__("shutil").rmtree, d, True)
+            ids = os.path.join(d, "ids.txt")
+            with open(ids, "w", encoding="utf-8") as f:
+                f.write("T0001\n")
+            out = os.path.join(d, "o")
+            _apply_launch_args(w, self._args(ids_file=ids, out=out,
+                                            verify=True))
+            self.assertEqual(w.path_edit.text(), ids)
+            self.assertTrue(w.mode_file.isChecked())
+            self.assertEqual(w.out_edit.text(), out)
+            self.assertTrue(w.panel.verify_on.isChecked())
+        finally:
+            w.close()
+
+    def test_preset_stem_filename_abspath(self):
+        import json
+        import tempfile
+        from pycbeta.gui.__main__ import _apply_launch_args
+        w = self._win()
+        try:
+            d = tempfile.mkdtemp()
+            self.addCleanup(__import__("shutil").rmtree, d, True)
+            fn = os.path.join(d, "mine.json")
+            with open(fn, "w", encoding="utf-8") as f:
+                json.dump({"output": {"t2s": True}}, f)
+            box = w.panel.cfg_preset_box
+            box.blockSignals(True)
+            box.addItem("mine", fn)
+            box.setCurrentIndex(0)
+            box.blockSignals(False)
+            for form in ("mine", "mine.json", fn):
+                _apply_launch_args(w, self._args(preset=form))
+                self.assertEqual(box.currentData(), fn, form)
+            self.assertTrue(w.panel.t2s_box.isChecked())  # 载入面板
+        finally:
+            w.close()
+
+    def test_missing_preset_keeps_selection(self):
+        from pycbeta.gui.__main__ import _apply_launch_args
+        w = self._win()
+        try:
+            before = w.panel.cfg_preset_box.currentIndex()
+            _apply_launch_args(w, self._args(preset="不存在的预设xyz"))
+            self.assertEqual(w.panel.cfg_preset_box.currentIndex(), before)
+        finally:
+            w.close()
+
+    def test_empty_args_noop(self):
+        from pycbeta.gui.__main__ import _apply_launch_args
+        w = self._win()
+        try:
+            before_path = w.path_edit.text()
+            before_out = w.out_edit.text()
+            before_idx = w.panel.cfg_preset_box.currentIndex()
+            _apply_launch_args(w, self._args())
+            self.assertEqual(w.path_edit.text(), before_path)
+            self.assertEqual(w.out_edit.text(), before_out)
+            self.assertEqual(w.panel.cfg_preset_box.currentIndex(), before_idx)
+        finally:
+            w.close()
+
+
 class TestBatchMergeResolve(unittest.TestCase):
     def test_resolve_missing_xml_reasons(self):
         import shutil
