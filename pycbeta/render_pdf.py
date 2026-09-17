@@ -744,7 +744,15 @@ a, a:visited {{ color: #000 !important; }}
         subprocess.run(cmd, check=True)
 
     def _weasyprint_to_pdf(self, html_fn: str, pdf_fn: str) -> None:
-        from weasyprint import HTML
+        try:
+            from weasyprint import HTML
+        except Exception as exc:
+            raise RuntimeError(
+                "WeasyPrint 不可用：Python 包已装但缺系统运行库（GTK/Pango，"
+                "如 libgobject-2.0-0）。Windows 请装 GTK 运行时并把 bin 加入 PATH，"
+                "详见 https://doc.courtbouillon.org/weasyprint/stable/"
+                "first_steps.html#installation "
+                f"（原错：{exc}）")
         HTML(filename=os.path.abspath(html_fn)).write_pdf(os.path.abspath(pdf_fn))
 
     def _chromium_to_pdf(self, html_fn: str, pdf_fn: str, landscape: bool,
