@@ -53,11 +53,11 @@ DEFAULT_DOWNLOADS = {
     "figures": "https://raw.githubusercontent.com/cbeta-git/CBR2X-figures/master/{canon}/{file}",
 }
 
-_EBOOK_HINT = ("电子书工作根未配置：在 presets/config.user.json 的 "
+_EBOOK_HINT = ("电子书输出目录未配置：在 presets/config.user.json 的 "
                "source.cbeta_ebook 填写（GUI 数据源窗口可视编辑），"
                "或 --cbeta-ebook 指定")
-_SAME_HINT = ("本地 XML 候选源与电子书工作根不能相同（source.xml_dir == "
-              "source.cbeta_ebook）：候选源只读，工作根写入")
+_SAME_HINT = ("本地 XML 候选源与电子书输出目录不能相同（source.xml_dir == "
+               "source.cbeta_ebook）：候选源只读，输出目录写入")
 
 
 def resolve_source(presets=None, xml_dir=None, cbeta_ebook=None):
@@ -694,7 +694,7 @@ def main(argv=None) -> int:
                     help="格式：xml,html,docx,epub,txt_notes,odt（逗号列表）或 all")
     ap.add_argument("--config", help="自定义 config.json")
     ap.add_argument("--cbeta-ebook", default=None,
-                    help="电子书工作根（默认 config source.cbeta_ebook）")
+                    help="电子书输出目录（默认 config source.cbeta_ebook）")
     ap.add_argument("--xml-dir", default=None,
                     help="本地 XML 候选源（只读；给定时先材料化再下载）")
     args = ap.parse_args(argv)

@@ -948,15 +948,23 @@ class DocxRenderer:
         return (self._run(lb, *tags) + content + self._run(rb, *tags))
 
     def _footnote_content(self, note) -> str:
-        """脚注内容在正文 div 上下文之外渲染（不继承正文 div 的粗体/颜色）。"""
-        prev = self._div_stack
+        """脚注内容在正文 div/标签上下文之外渲染（不继承正文的字号基准/粗体/颜色）。
+
+        只清 div 栈不够：标题内 noteref（如 jhead 里的校勘注）渲染时标签栈还留着
+        juan/jhead，footnote 的 0.75em 会按外层字号（如 20pt）解成 15pt（小三），
+        且粗体/颜色泄漏。清栈后继承链只剩 body → footnote。
+        """
+        prev_div = self._div_stack
+        prev_tags = self._tag_stack
         self._div_stack = []
+        self._tag_stack = []
         prev_note = getattr(self, "_in_note", False)
         self._in_note = True
         try:
             return self._render_para_children(note, "footnote")
         finally:
-            self._div_stack = prev
+            self._div_stack = prev_div
+            self._tag_stack = prev_tags
             self._in_note = prev_note
 
     def _cf_run(self, note, app=None) -> str:

@@ -1603,7 +1603,7 @@ class XmlOptionsPanel(QWidget):
 
 SOURCE_LABELS = [
     ("xml_dir", "本地 XML 候选源（只读；角色同远端 URL）"),
-    ("cbeta_ebook", "电子书工作根（唯一可写，平展一部一目录）"),
+    ("cbeta_ebook", "电子书输出目录（唯一可写，平展一部一目录）"),
     ("catalog", "佛典目录 catalog（sutra_mapping.txt）"),
 ]
 DOWNLOAD_KEYS = ["xml", "html", "docx", "epub", "txt_notes", "odt", "figures"]
@@ -1643,22 +1643,48 @@ def xml_dir_warning(parent, xml_dir, edition=""):
     return None
 
 
-def clear_xml_dir(root=None):
-    """把用户槽 source.xml_dir 清空并保存（非 P5 源经确认后清除）。"""
-    data, _actual = load_slot("user", root)
-    save_current(apply_source_edits(data, {"source": {"xml_dir": ""}}), root)
+def clear_xml_dir(root=None, preset_path=None):
+    """把目标预设的 source.xml_dir 清空并保存（非 P5 源经确认后清除）。
+
+    preset_path 为空时写默认用户预设（presets/config.user.json）。"""
+    data = None
+    if preset_path and os.path.isfile(preset_path):
+        try:
+            data = _read_json(preset_path)
+        except (OSError, ValueError):
+            data = None
+    if data is None:
+        data, _actual = load_slot("user", root)
+    data = apply_source_edits(data, {"source": {"xml_dir": ""}})
+    if preset_path:
+        os.makedirs(os.path.dirname(os.path.abspath(preset_path)), exist_ok=True)
+        with open(preset_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+            f.write("\n")
+        return
+    save_current(data, root)
 
 
 class SourceDialog(QDialog):
     """数据源窗口：查看/编辑输入来源目录与 CBETA 官方下载 URL 模板。
-    确定 = 合并进默认用户预设（presets/config.user.json）；取消 = 丢弃。"""
 
-    def __init__(self, parent=None):
+    确定 = 合并进目标预设（默认 `presets/config.user.json`；可指定当前选中预设，
+    即本次命中的"未配置"错误来源）；取消 = 丢弃。"""
+
+    def __init__(self, parent=None, preset_path=None):
         super().__init__(parent)
-        self.setWindowTitle("数据源（source / downloads）")
+        self._preset_path = preset_path or ""
+        name = os.path.basename(self._preset_path) or USER_PRESET_NAME
+        self.setWindowTitle(f"数据源（{name}）")
         self.resize(760, 480)
         layout = QVBoxLayout(self)
-        data, _actual = load_slot("user")
+        if self._preset_path and os.path.isfile(self._preset_path):
+            try:
+                data = _read_json(self._preset_path)
+            except (OSError, ValueError):
+                data, _actual = load_slot("user")
+        else:
+            data, _actual = load_slot("user")
         src = (data.get("source") or {})
         form = QFormLayout()
         self.path_edits = {}
@@ -1831,7 +1857,13 @@ class SourceDialog(QDialog):
             edit.setText(path)
 
     def accept(self):
-        data, _actual = load_slot("user")
+        if self._preset_path and os.path.isfile(self._preset_path):
+            try:
+                data = _read_json(self._preset_path)
+            except (OSError, ValueError):
+                data, _actual = load_slot("user")
+        else:
+            data, _actual = load_slot("user")
         values = {"source": {k: e.text().strip() for k, e in self.path_edits.items()},
                   "downloads": {}}
         values["source"]["title_t2s"] = bool(self.title_t2s_box.isChecked())
@@ -1843,8 +1875,8 @@ class SourceDialog(QDialog):
         if not values["source"].get("cbeta_ebook", ""):
             box = QMessageBox(self)
             box.setIcon(QMessageBox.Warning)
-            box.setWindowTitle("电子书工作根未配置")
-            box.setText("电子书工作根（source.cbeta_ebook）是必填项，"
+            box.setWindowTitle("电子书输出目录未配置")
+            box.setText("电子书输出目录（source.cbeta_ebook）是必填项，"
                         "清空后将无法按編號转换。")
             ok_btn = box.addButton("确定保存", QMessageBox.AcceptRole)
             box.addButton("取消", QMessageBox.RejectRole)
@@ -1861,7 +1893,19 @@ class SourceDialog(QDialog):
                     return  # 取消保存
                 if choice == "clear":
                     values["source"]["xml_dir"] = ""
-        save_current(apply_source_edits(data, values))
+        merged = apply_source_edits(data, values)
+        if self._preset_path:
+            try:
+                os.makedirs(os.path.dirname(
+                    os.path.abspath(self._preset_path)), exist_ok=True)
+                with open(self._preset_path, "w", encoding="utf-8") as f:
+                    json.dump(merged, f, ensure_ascii=False, indent=2)
+                    f.write("\n")
+            except OSError as exc:
+                QMessageBox.warning(self, "保存失败", str(exc))
+                return
+        else:
+            save_current(merged)
         super().accept()
 
 

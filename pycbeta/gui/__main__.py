@@ -541,7 +541,7 @@ class MainWindow(QMainWindow):
         mode_row.addWidget(self.mode_file)
         mode_row.addWidget(self.mode_ids)
         self.src_btn = QPushButton("数据源…")
-        self.src_btn.setToolTip("查看/编辑 XML 来源目录与官方下载地址（存用户配置）")
+        self.src_btn.setToolTip("查看/编辑 XML 来源目录与官方下载地址（存当前选中预设）")
         self.src_btn.clicked.connect(self._edit_source)
         mode_row.addWidget(self.src_btn)
         mode_row.addStretch(1)
@@ -664,9 +664,11 @@ class MainWindow(QMainWindow):
 
     def _edit_source(self):
         from pycbeta.gui.panel import SourceDialog
-        dlg = SourceDialog(self)
+        preset = self.panel._selected_preset() if hasattr(self, "panel") else ""
+        dlg = SourceDialog(self, preset_path=preset or None)
         if dlg.exec():
-            self.statusBar().showMessage("数据源已保存到用户配置")
+            name = os.path.basename(preset) if preset else "config.user.json"
+            self.statusBar().showMessage(f"数据源已保存到{name}")
 
     def _collect_jobs(self):
         jobs = []
@@ -776,7 +778,8 @@ class MainWindow(QMainWindow):
         if choice is None:
             return None
         if choice == "clear":
-            clear_xml_dir()
+            preset = self.panel._selected_preset() if hasattr(self, "panel") else ""
+            clear_xml_dir(preset_path=preset or None)
             return {**presets,
                     "source": {**(presets.get("source") or {}), "xml_dir": ""}}
         return presets

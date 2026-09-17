@@ -1218,6 +1218,47 @@ class TestNoteCf(unittest.TestCase):
             self.assertIn(" (cf. A17; B42)", r._cf_run(ref.notes[0]))
 
 
+class TestFootnoteInTitle(unittest.TestCase):
+    """标题内 noteref（如 jhead 里的校勘注）：脚注内容只带 body → footnote 继承链，
+    不继承标题字号基准/粗体/颜色（曾出 15pt 小三加粗蓝字）。"""
+
+    def _xml(self):
+        from pycbeta.model import Note, NoteRef, Work
+        note = Note(tag="note", attrs={}, n="0810005", ntype="mod",
+                    children=[Text(text="園【大】")])
+        jhead = E(tag="jhead", attrs={}, children=[
+            Text(text="佛說"), NoteRef(n="0810005", notes=[note]),
+            Text(text="園生樹經")])
+        body = [E(tag="juan", attrs={"n": "001", "fun": "open"},
+                  children=[jhead]),
+                E(tag="p", attrs={}, children=[Text(text="正文")])]
+        work = Work(id="T", source_file="",
+                    metadata={"title": "t", "author": ""},
+                    body=body, notes_by_n={"0810005": [note]},
+                    apps=[], simplified=False)
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(__import__("shutil").rmtree, tmp, True)
+        fn = DocxRenderer(notes="footnote").render_work(work, tmp, "t.docx")
+        z = zipfile.ZipFile(fn)
+        try:
+            return (z.read("word/document.xml").decode("utf-8"),
+                    z.read("word/footnotes.xml").decode("utf-8"))
+        finally:
+            z.close()
+
+    def test_footnote_runs_are_footnote_sized(self):
+        _doc, fns = self._xml()
+        # 注文 run：footnote 0.75em 按 body 12pt 解 = 9pt（sz 18），不是标题的 15pt
+        self.assertIn('<w:sz w:val="18"/>', fns)
+        self.assertNotIn('<w:sz w:val="30"/>', fns)
+
+    def test_footnote_runs_not_bold_or_colored(self):
+        _doc, fns = self._xml()
+        self.assertNotIn("<w:b/>", fns)
+        self.assertNotIn("<w:b ", fns)
+        self.assertNotIn("0000ff", fns)
+
+
 class TestAppStarRemoved(unittest.TestCase):
     """star_removed app（corresp 指向他处注）：不在自身锚点重渲该注（官方只在注原位出注），
     lem 内 cf 仍由对应 add 注追加；普通 corresp app（beg_N 重出）保持渲染。"""

@@ -258,7 +258,7 @@ class TestPanelSmoke(unittest.TestCase):
 
 
 class TestConfigBar(unittest.TestCase):
-    """配置栏：保存用户配置/载入用户配置/设为默认 + default_page。"""
+    """配置栏（一切按下拉选中项）：保存/另存…/删除/设为默认 + default_page。"""
 
     @classmethod
     def setUpClass(cls):
@@ -1396,6 +1396,54 @@ class TestSourceDialog(unittest.TestCase):
     def test_accept_cancel_does_not_save(self):
         saved = self._accept_with(r"X:\p5b", None)
         self.assertEqual(saved, {})
+
+    def test_accept_writes_named_preset(self):
+        import json
+        import tempfile
+        import pycbeta.gui.panel as P
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PySide6.QtWidgets import QApplication
+        QApplication.instance() or QApplication([])
+        d = tempfile.mkdtemp()
+        try:
+            fn = os.path.join(d, "p.json")
+            with open(fn, "w", encoding="utf-8") as f:
+                json.dump({"source": {"cbeta_ebook": "OLD"}}, f)
+            dlg = P.SourceDialog(preset_path=fn)
+            try:
+                self.assertIn("p.json", dlg.windowTitle())
+                dlg.path_edits["cbeta_ebook"].setText("NEW")
+                dlg.path_edits["xml_dir"].setText("")
+                from unittest import mock
+                with mock.patch.object(P, "save_current") as m_save:
+                    dlg.accept()
+                m_save.assert_not_called()  # 写目标文件，不碰默认槽
+            finally:
+                dlg.close()
+            with open(fn, encoding="utf-8") as f:
+                back = json.load(f)
+            self.assertEqual(back["source"]["cbeta_ebook"], "NEW")
+        finally:
+            import shutil
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_clear_xml_dir_preset_path(self):
+        import json
+        import tempfile
+        import pycbeta.gui.panel as P
+        d = tempfile.mkdtemp()
+        try:
+            fn = os.path.join(d, "p.json")
+            with open(fn, "w", encoding="utf-8") as f:
+                json.dump({"source": {"xml_dir": "X", "cbeta_ebook": "B"}}, f)
+            P.clear_xml_dir(preset_path=fn)
+            with open(fn, encoding="utf-8") as f:
+                back = json.load(f)
+            self.assertEqual(back["source"]["xml_dir"], "")
+            self.assertEqual(back["source"]["cbeta_ebook"], "B")
+        finally:
+            import shutil
+            shutil.rmtree(d, ignore_errors=True)
 
     def test_accept_empty_ebook_warns(self):
         os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")

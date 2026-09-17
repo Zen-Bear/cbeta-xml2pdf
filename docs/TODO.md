@@ -488,3 +488,15 @@
   - 共享层：新增 `probe_info(url, *, etag, last_modified, timeout) -> {status, etag, last_modified, size}`（`size` 取 `Content-Length`，缺失 `None`）；`probe` 保持三元组、改为其薄封装（向后兼容）；cbeta-fetch 提交 `50de57e`，测试 15 OK
   - xml2pdf：vendor 同步 v0.1.1（`SOURCE.txt` `commit=50de57e…`、`sha=04b322d6…`），`test_vendor_sync._API` 补 `probe_info`；全量 696 OK（skipped=1）。**xml2pdf 不用 size**（其变更检测是 GET 字节比对，强于 size；size 仅用于 publish 的「HEAD 存在性/大小即跳过」）
   - publish：已按对接单完成——`cbeta_publish` 具名包、`_vendor` 同步同一 commit、`official_ebook_source` 用 `cf.probe_info`、`remote_manager`/`remote_sources`/`catalog/work_id` 走 `_vendor`、`requirements.txt` 去 `requests`、`tests/test_vendor_sync.py` 守 sha256+`probe_info`；对接单已标记「已实施」
+- [x] **已完成** 数据源窗口按当前选中预设写入 + “电子书工作根”改名“电子书输出目录”（2026-09-16）
+  - 根因：用户在数据源窗口配置的 `source.cbeta_ebook` 只写 `presets/config.user.json`，
+    而运行走的激活预设（run.json 指向的 `Publish A5 繁体….json`）没有该键 →
+    `resolve_source` 抛“未配置”。修：`SourceDialog(preset_path=…)` 读写目标预设文件
+    （默认用户预设）；主窗 `_edit_source`/`clear_xml_dir` 透传当前选中；标题显示文件名
+  - 改名：`电子书工作根`→`电子书输出目录`（SOURCE_LABELS/CLI/fetch/panel 弹窗/config.json/README/docs）
+  - 已把激活预设缺的 source 块回填（现 `resolve_source` → `('', 'E:\dev\cbeta\cbeta_ebook')`）
+- [x] **已完成** 修 jhead 内校勘注的 docx 脚注变小三加粗（2026-09-16）
+  - 根因：`_footnote_content` 只清 `_div_stack`、没清 `_tag_stack`，注文带着外层
+    juan/jhead 标签 → footnote 的 0.75em 按标题 20pt 解成 15pt（小三）+ 粗体/蓝色泄漏
+  - 修：`render_docx._footnote_content` 同时保存/清空 `_tag_stack`（继承链只剩 body→footnote，
+    注文 9pt 无加粗）；`TestFootnoteInTitle` 2 项（字号 sz18/无加粗无色）；全量 719 OK

@@ -468,7 +468,7 @@ def main(argv=None):
     shared.add_argument("--xml-dir", default=None,
                         help="本地 XML 候选源（只读，角色同远端 URL；默认 config source.xml_dir）")
     shared.add_argument("--cbeta-ebook", default=None,
-                        help="电子书工作根（唯一可写；默认 config source.cbeta_ebook）")
+                        help="电子书输出目录（唯一可写；默认 config source.cbeta_ebook）")
     shared.add_argument("--name-template",
                         help='output filename template, e.g. "[id] [书名]（[作者]）" '
                              "(tokens: [id] [书名] [作者] [vol] [juan])")

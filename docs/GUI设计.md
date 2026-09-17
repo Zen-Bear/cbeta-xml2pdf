@@ -177,7 +177,7 @@ class XmlOptions:
 2. **三源材料化**：`fetch.materialize_work(id, presets, xml_dir, cbeta_ebook)`
    - `cbeta_ebook/{id} {书名}/` 已有 → 直接用（来源标「本地XML」）
    - `xml_dir`（只读候选源；**建议指向本地下载的 cbeta-org/xml-p5 全仓库副本（发布版 P5）**，勿指 CBReader）有 → 拷贝/碎片按组合册落 work 目录（来源标「本地拷贝/合册合成」）
-   - **xml_dir 版本抽检**：`fetch.inspect_xml_source(xml_dir)` 抽样读 `<edition>`；非「XML TEI P5」（P5a/P5b）→ GUI 弹窗「仍使用 / 清除该路径 / 取消」（默认高亮清除；「清除」写回用户槽 `source.xml_dir=""`），转换首次也兜底检一次；CLI 打印警告后继续
+    - **xml_dir 版本抽检**：`fetch.inspect_xml_source(xml_dir)` 抽样读 `<edition>`；非「XML TEI P5」（P5a/P5b）→ GUI 弹窗「仍使用 / 清除该路径 / 取消」（默认高亮清除；「清除」写回当前选中预设 `source.xml_dir=""`），转换首次也兜底检一次；CLI 打印警告后继续
    - 勾选「自动下载缺失 XML」且前两源无 → `fetch.fetch_work(id, ["xml"], presets, cbeta_ebook)`（来源标「已下载」）
    - 全无 → 行状态标「缺 XML」跳过
 3. **（可选）官方电子书**：勾选「同时下载官方电子书」→ `fetch.ensure_baselines(id, ["html","docx","txt"], presets, cbeta_ebook)`（落 work 目录；docx/odt 非 T/X 静默失败）
