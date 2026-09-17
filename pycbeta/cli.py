@@ -730,7 +730,7 @@ def main(argv=None):
     # --verify：复用 pycbeta/verify.py 模块化能力，供 GUI 调用同一入口
     if args.verify:
         from .verify import normalize as v_norm, extract_text as v_extract, diff_stats as v_diff, find_official as v_find, strip_infos as v_strip_infos, _extract_html_parts as _v_hparts, _norm_official_txt as _v_tnorm, _ann_brackets_from as _v_rb, _head_no_tokens as _v_htoks, _strip_official_no as _v_tstrip, _mark_span as _v_mark
-        import datetime, glob as _glob
+        import datetime
         try:
             _presets_full = load_effective_presets(args.config)
             _vp = _presets_full.get("verify") or {}
