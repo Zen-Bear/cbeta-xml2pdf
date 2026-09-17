@@ -812,6 +812,10 @@ def main(argv=None):
             verify_dir = os.path.join(verify_root, f"{_vname}（验证）")
             for fmt_raw in formats:
                 disp = fmt_raw
+                # 校验用「正式比对档」由 generate_formal 生成（verify 段覆盖 output 段，
+                # 与 GUI 独立窗一致）：inline_brackets / suppress_jhead_dup / show_close_juan
+                # 等 verify 专属设置必须生效，否则与官方基线比对会误报。
+                from .verify import generate_formal as _gen_formal
                 if fmt_raw == "pdf":
                     # PDF 无官方基线：委托其管线源格式（docx2pdf→docx / html2pdf→html）
                     _src = pdf_source_fmt(getattr(args, "engine", None),
@@ -819,32 +823,22 @@ def main(argv=None):
                     if _src in formats:
                         block.append(f"  [--]  pdf 已覆盖（已由 {_src} 校验）")
                         continue
-                    # 定位渲染时留下的中间件（与 render 同 _used 重放）
-                    _p_out, _p_name = resolve_output(xml_fn, "pdf", args, w,
-                                                     _used=_used_names)
-                    _p_base = os.path.splitext(_p_name)[0] if _p_name else w.id
                     fmt = _src
                     disp = f"pdf→{_src}"
-                    if _src == "docx":
-                        _gp = os.path.join(_p_out, _p_base + ".docx")
-                        gen_paths = [_gp] if os.path.isfile(_gp) else []
-                        gen_path = _gp
-                    else:
-                        gen_paths = sorted(_glob.glob(
-                            os.path.join(_p_out, _p_base + "*.html")))
-                        gen_path = gen_paths[0] if gen_paths else ""
+                    gen_paths = _gen_formal(xml_fn, w, _src,
+                                            os.path.join(verify_dir, _src),
+                                            config_path=args.config)
+                    gen_path = gen_paths[0] if gen_paths else ""
                 else:
                     fmt = fmt_raw
-                    # 计算生成档路径（复用 resolve_output；与 render 同一 _used 重放得终态名）
-                    out_dir, out_name = resolve_output(xml_fn, fmt, args, w,
-                                                       _used=_used_names)
-                    if fmt == "html":
-                        # html 为多文件 Txxx_001.html，全部卷参与比较
-                        gen_paths = sorted(_glob.glob(os.path.join(out_dir, "*.html")))
-                        gen_path = gen_paths[0] if gen_paths else os.path.join(out_dir, f"{w.id}_001.html")
+                    if fmt in ("html", "docx", "epub", "md", "txt"):
+                        gen_paths = _gen_formal(xml_fn, w, fmt,
+                                                os.path.join(verify_dir, fmt),
+                                                config_path=args.config)
+                        gen_path = gen_paths[0] if gen_paths else ""
                     else:
-                        gen_path = os.path.join(out_dir, out_name) if out_name else ""
-                        gen_paths = [gen_path] if gen_path else []
+                        gen_paths = []
+                        gen_path = ""
                 if not gen_path or not os.path.isfile(gen_path):
                     block.append(f"  [--]  {disp} gen not found: {gen_path}")
                     continue
