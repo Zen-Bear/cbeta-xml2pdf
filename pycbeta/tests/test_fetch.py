@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from pycbeta.fetch import (resolve_source, fetch_work, catalog_lookup,
                            work_dir, materialize_work, title_t2s,
                            check_ebook_updates, canonical_work_id,
-                           parse_work_id, DEFAULT_DOWNLOADS)
+                           parse_work_id, DEFAULT_DOWNLOADS, find_local_xml)
 
 
 def _presets(xml_dir="", cbeta_ebook="", **extra):
@@ -137,6 +137,31 @@ class TestWorkDir(unittest.TestCase):
         self.assertEqual(os.path.basename(p), "T0349 彌勒經")
         self.assertTrue(title_t2s(_presets(title_t2s=True)))
         self.assertFalse(title_t2s(_presets(title_t2s=False)))
+
+    def test_out_root_not_excluded(self):
+        # 无目录名排除：工作根自己叫 out（如 cbeta_ebook/out）或子目录叫 out，
+        # 其下文件全部正常参与查找
+        import shutil
+        d = tempfile.mkdtemp()
+        try:
+            root = os.path.join(d, "out")
+            wd = os.path.join(root, "T0349 某經")
+            os.makedirs(wd)
+            fn = os.path.join(wd, "T12n0349.xml")
+            with open(fn, "w", encoding="utf-8") as f:
+                f.write("<x/>")
+            hits = find_local_xml(root, "T", "0349")
+            self.assertEqual(hits, [os.path.abspath(fn)])
+            # 子目录 out/ 同样不排除
+            other = os.path.join(d, "work")
+            os.makedirs(os.path.join(other, "out"))
+            fn2 = os.path.join(other, "out", "T12n0349.xml")
+            with open(fn2, "w", encoding="utf-8") as f:
+                f.write("<x/>")
+            self.assertEqual(find_local_xml(other, "T", "0349"),
+                             [os.path.abspath(fn2)])
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
 
 
 class TestMaterialize(unittest.TestCase):

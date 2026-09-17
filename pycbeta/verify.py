@@ -701,7 +701,10 @@ def _extract_xml_parts(path: str, inline_brackets: str = "fullwidth",
 
 
 def find_official(source: str, stem: str, kind: str, juan: Optional[set] = None) -> List[str]:
-    """官方基线发现：短名回退/`_NNN` 优先/`out/` 排除/卷范围限定；统一根目录下平展优先、仓库次之。"""
+    """官方基线发现：短名回退/`_NNN` 优先/卷范围限定；统一根目录下平展优先、仓库次之。
+
+    说明：不按目录名排除任何路径（曾排除 `out/`，但工作根本身就可能叫 out，
+    误杀整库且用户无从得知；现彻底去掉该隐藏限制）。"""
     short = ""
     m = re.match(r"^([A-Z]+)\d+n(.+)$", stem)
     if m:
@@ -724,8 +727,6 @@ def find_official(source: str, stem: str, kind: str, juan: Optional[set] = None)
     for pat in pats:
         for f in sorted(glob.glob(pat, recursive=True)):
             af = os.path.abspath(f)
-            if "out" + os.sep in af:
-                continue
             if af not in seen and os.path.isfile(af) and os.path.getsize(af) > 0:
                 seen.add(af)
                 out.append(af)

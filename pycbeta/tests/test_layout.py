@@ -29,8 +29,6 @@ class TestTwoTierLayout(unittest.TestCase):
         # 仓库：github 镜像布局
         _touch(os.path.join(self.root, "T", "T99", "T99n9999.xml"))
         _touch(os.path.join(self.root, "T", "T9999", "html", "T9999_001.html"))
-        # out/ 必须排除
-        _touch(os.path.join(self.root, "out", "verify", "T9999_001.html"))
 
     def tearDown(self):
         shutil.rmtree(self.root, ignore_errors=True)
@@ -52,11 +50,38 @@ class TestTwoTierLayout(unittest.TestCase):
         self.assertEqual(len(hits), 2)
         self.assertTrue(hits[0].replace(os.sep, "/").endswith("T9999 Book/T9999_001.html"))
 
-    def test_out_excluded(self):
+    def test_out_files_included(self):
+        # 无目录名排除：out/ 下的文件与其他文件一视同仁
+        _touch(os.path.join(self.root, "out", "verify", "T9999_001.html"))
         hits = find_official(self.root, "T99n9999", "html")
-        self.assertFalse(any(f"{os.sep}out{os.sep}" in f for f in hits))
+        self.assertTrue(any(f"{os.sep}out{os.sep}" in f for f in hits))
+        _touch(os.path.join(self.root, "out", "T99n9999.xml"))
         xmls = find_local_xml(self.root, "T", "9999")
-        self.assertFalse(any(f"{os.sep}out{os.sep}" in f for f in xmls))
+        self.assertTrue(any(f"{os.sep}out{os.sep}" in f for f in xmls))
+
+    def test_out_root_not_excluded(self):
+        # source 根自己叫 out（如 cbeta_ebook/out）：其下文件全部合法
+        import shutil
+        import tempfile
+        base = tempfile.mkdtemp()
+        try:
+            root = os.path.join(base, "out")
+            wd = os.path.join(root, "T9999 Book")
+            os.makedirs(wd)
+            with open(os.path.join(wd, "T99n9999.xml"), "w",
+                      encoding="utf-8") as f:
+                f.write("<x/>")
+            with open(os.path.join(wd, "T9999_001.html"), "w",
+                      encoding="utf-8") as f:
+                f.write("<html></html>")
+            self.assertEqual(
+                find_local_xml(root, "T", "9999"),
+                [os.path.abspath(os.path.join(wd, "T99n9999.xml"))])
+            self.assertEqual(
+                find_official(root, "T99n9999", "html"),
+                [os.path.abspath(os.path.join(wd, "T9999_001.html"))])
+        finally:
+            shutil.rmtree(base, ignore_errors=True)
 
 
 class TestFlatLanding(unittest.TestCase):
@@ -110,12 +135,8 @@ class TestFlatLanding(unittest.TestCase):
         self.assertEqual(os.path.basename(os.path.dirname(res[0])),
                          "T9999 Test Book")
 
-    def test_baseline_lands_flat_ignoring_out_decoy(self):
-        # work 目录 out/ 下的同名诱饵不计入已落盘
-        decoy = os.path.join(self.flat, "out", "verify", "T9999_001.html")
-        os.makedirs(os.path.dirname(decoy))
-        with open(decoy, "w", encoding="utf-8") as f:
-            f.write("x")
+    def test_baseline_lands_flat(self):
+        # 基线落 work 目录格式子目录（out/ 下同名文件不影响判定）
         fakezip = os.path.join(self.root, "f.zip")
         with zipfile.ZipFile(fakezip, "w") as z:
             z.writestr("T9999_001.html", "<html></html>")

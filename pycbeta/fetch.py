@@ -95,7 +95,7 @@ def inspect_xml_source(xml_dir: str, sample: int = 5) -> Dict:
         return {"safe": None, "edition": "", "sample": "", "reason": "目录不存在"}
     files = []
     for root, dirs, fns in os.walk(xml_dir):
-        dirs[:] = [d for d in dirs if d not in ("out", "__pycache__", ".git")]
+        dirs[:] = [d for d in dirs if d not in ("__pycache__", ".git")]
         for fn in sorted(fns):
             if fn.lower().endswith(".xml"):
                 files.append(os.path.join(root, fn))
@@ -151,20 +151,20 @@ def canonical_work_id(work_id: str, presets=None) -> str:
 
 
 def find_local_xml(xml_dir: str, canon: str, no: str) -> List[str]:
-    """本地 XML 源中查找 {canon}*n{no}.xml（排除 out/）。
+    """本地 XML 源中查找 {canon}*n{no}.xml（无任何目录名排除）。
 
     统一根目录（如 E:\\dev\\cbeta\\test）下两档查找：
     - 平展优先：根目录下以 work id（canon+no，如 YP0021）开头的条目内，
       如 `YP0021 異部宗輪論語體釋\\*.xml`；
     - 仓库次之：全树递归，含 github 镜像布局 `{canon}/{canon}{vol}/`
       （如 `YP/YP14/YP14n0021.xml`；下载落盘即此布局）。
-    同一文件只返回一次，平展命中排在前面。"""
+    同一文件只返回一次，平展命中排在前面。
+    说明：曾按目录名排除 `out/`（输出目录），但工作根本身就可能叫 out
+    （如 cbeta_ebook/out），误杀整库且用户无从得知；现彻底去掉该隐藏限制。"""
     out, seen = [], set()
 
     def add(p: str) -> None:
         ap = os.path.abspath(p)
-        if "out" + os.sep in ap:
-            return
         if ap not in seen and os.path.isfile(ap):
             seen.add(ap)
             out.append(ap)

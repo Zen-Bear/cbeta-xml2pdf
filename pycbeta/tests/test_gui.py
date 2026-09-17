@@ -298,6 +298,7 @@ class TestConfigBar(unittest.TestCase):
                 panel._on_save()
                 self.assertTrue(saved["data"]["output"]["t2s"])
                 self.assertEqual(saved["name"], "p")
+                self.assertEqual(panel.cfg_box.title(), "配置（已保存）")
             finally:
                 panel.close() if hasattr(panel, "close") else None
 
@@ -311,6 +312,7 @@ class TestConfigBar(unittest.TestCase):
                     {"output": {"t2s": True}}, "factory")):
                 panel._on_preset_chosen(0)
             self.assertTrue(panel.t2s_box.isChecked())
+            self.assertEqual(panel.cfg_box.title(), "配置")  # 换预设后标题复原
         finally:
             panel.close() if hasattr(panel, "close") else None
 
@@ -409,6 +411,56 @@ class TestConfigBar(unittest.TestCase):
             with mock.patch.object(pm, "QMessageBox") as mb:
                 panel._on_preset_delete()
                 mb.information.assert_called_once()
+        finally:
+            panel.close() if hasattr(panel, "close") else None
+
+    def test_delete_named_preset_confirms_and_clears_slot(self):
+        import unittest.mock as mock
+        import pycbeta.gui.panel as pm
+        panel = self._panel()
+        try:
+            box = panel.cfg_preset_box
+            box.blockSignals(True)
+            box.addItem("foo", r"C:\x\foo.json")
+            box.setCurrentIndex(box.count() - 1)
+            box.blockSignals(False)
+            with mock.patch.object(pm, "QMessageBox") as mb, \
+                    mock.patch.object(pm, "delete_config_preset") as m_del, \
+                    mock.patch("pycbeta.theme.load_run_config",
+                               return_value={"config-json": r"C:\x\foo.json"}), \
+                    mock.patch("pycbeta.theme.set_run_slot") as m_slot:
+                mbox = mb.return_value
+                ok_btn, cancel_btn = mock.Mock(), mock.Mock()
+                mbox.addButton.side_effect = (
+                    lambda text, role: ok_btn if "确定" in text else cancel_btn)
+                mbox.clickedButton.return_value = ok_btn
+                panel._on_preset_delete()
+                m_del.assert_called_once_with(r"C:\x\foo.json")
+                m_slot.assert_called_once_with("config-json", "")
+                self.assertEqual(panel.cfg_box.title(), "配置（已删除）")
+        finally:
+            panel.close() if hasattr(panel, "close") else None
+
+    def test_delete_named_preset_cancel_keeps_file(self):
+        import unittest.mock as mock
+        import pycbeta.gui.panel as pm
+        panel = self._panel()
+        try:
+            box = panel.cfg_preset_box
+            box.blockSignals(True)
+            box.addItem("foo", r"C:\x\foo.json")
+            box.setCurrentIndex(box.count() - 1)
+            box.blockSignals(False)
+            with mock.patch.object(pm, "QMessageBox") as mb, \
+                    mock.patch.object(pm, "delete_config_preset") as m_del:
+                mbox = mb.return_value
+                ok_btn, cancel_btn = mock.Mock(), mock.Mock()
+                mbox.addButton.side_effect = (
+                    lambda text, role: ok_btn if "确定" in text else cancel_btn)
+                mbox.clickedButton.return_value = cancel_btn
+                panel._on_preset_delete()
+                m_del.assert_not_called()
+                self.assertEqual(panel.cfg_box.title(), "配置")
         finally:
             panel.close() if hasattr(panel, "close") else None
 
@@ -1134,6 +1186,47 @@ class TestMainWindowUx(unittest.TestCase):
 
 
 class TestBatchMergeResolve(unittest.TestCase):
+    def test_resolve_missing_xml_reasons(self):
+        import shutil
+        import tempfile
+        from unittest import mock
+        from pycbeta import fetch
+        from pycbeta.gui.__main__ import BatchWorker
+        ebook = tempfile.mkdtemp()
+        try:
+            # 未勾选自动下载 → 直接提示
+            w = BatchWorker([], None, {}, {"auto_xml": False})
+            labels = []
+            w.row_status.connect(lambda i, t: labels.append(t))
+            presets = {"source": {"xml_dir": "", "cbeta_ebook": ebook}}
+            out = w._resolve({"kind": "id", "id": "T0001"}, 0, fetch, presets)
+            self.assertEqual(out, [])
+            self.assertEqual(labels[-1], "缺 XML（未勾选自动下载）")
+            # 自动下载已开但 catalog 未收录 → 指明 catalog（不触网）
+            w2 = BatchWorker([], None, {}, {"auto_xml": True})
+            labels2 = []
+            w2.row_status.connect(lambda i, t: labels2.append(t))
+            cat = os.path.join(ebook, "mulu.txt")
+            with open(cat, "w", encoding="utf-8") as f:
+                f.write("")  # 空 catalog：T0001 未收录（不触网）
+            presets2 = {"source": {"xml_dir": "", "cbeta_ebook": ebook,
+                                   "catalog": cat}}
+            out2 = w2._resolve({"kind": "id", "id": "T0001"}, 0, fetch, presets2)
+            self.assertEqual(out2, [])
+            self.assertEqual(labels2[-1], "缺 XML（catalog 未收录）")
+            # catalog 有收录但取不到 → 下载失败（mock 住下载层，不触网）
+            with mock.patch("pycbeta.fetch.materialize_work",
+                            return_value=([], "")), \
+                 mock.patch("pycbeta.fetch.catalog_lookup",
+                            return_value=[{"vol": "01"}]):
+                labels3 = []
+                w2.row_status.connect(lambda i, t: labels3.append(t))
+                out3 = w2._resolve({"kind": "id", "id": "T0001"}, 0, fetch,
+                                   presets2)
+            self.assertEqual(out3, [])
+            self.assertEqual(labels3[-1], "缺 XML（下载失败）")
+        finally:
+            shutil.rmtree(ebook, ignore_errors=True)
     """BatchWorker._resolve 合册分支：碎片 ID → 按册合成路径 + 行标签。"""
 
     @classmethod

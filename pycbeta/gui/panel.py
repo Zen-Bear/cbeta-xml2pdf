@@ -559,6 +559,7 @@ class XmlOptionsPanel(QWidget):
         self.btn_set_default.setToolTip(
             "run.json 的 config-json 槽指向当前选中项（出厂默认=清空槽）")
         self.btn_reset = QPushButton("还原出厂")
+        self.cfg_box = cfg   # 配置框标题常驻最后动作（_set_cfg_title）
         self._refresh_cfg_presets()
         self.btn_preset_save.clicked.connect(self._on_preset_save_as)
         self.btn_preset_del.clicked.connect(self._on_preset_delete)
@@ -1216,6 +1217,27 @@ class XmlOptionsPanel(QWidget):
         return w
 
     # ---------- 配置预设（一切按下拉选中项） ----------
+    def _set_cfg_title(self, action=None):
+        """配置框标题常驻最后动作（不消失）；换预设/还原出厂后复原为“配置”。"""
+        self.cfg_box.setTitle("配置" if not action else f"配置（{action}）")
+
+    def _clear_default_if_deleted(self, path):
+        """删掉的正是 run.json 默认指向的预设 → 清空槽，避免下次启动悬空警告。"""
+        try:
+            from pycbeta.theme import (load_run_config, set_run_slot,
+                                       default_run_path)
+            run = load_run_config()
+            slot = (run.get("config-json") or "").strip()
+            if not slot:
+                return
+            rdir = os.path.dirname(os.path.abspath(default_run_path()))
+            hit = os.path.abspath(slot if os.path.isabs(slot)
+                                  else os.path.join(rdir, slot))
+            if os.path.normcase(hit) == os.path.normcase(os.path.abspath(path)):
+                set_run_slot("config-json", "")
+        except (OSError, ValueError):
+            pass
+
     def _on_save(self):
         """保存＝把面板当前值覆盖写入**当前选中预设**（出厂默认项置灰）。"""
         path = self._selected_preset()
@@ -1235,6 +1257,7 @@ class XmlOptionsPanel(QWidget):
             return
         self._refresh_cfg_presets(select=path2)
         self.refresh_slot_label()
+        self._set_cfg_title("已保存")
         self._changed()
 
     def _on_set_default(self):
@@ -1254,6 +1277,7 @@ class XmlOptionsPanel(QWidget):
             QMessageBox.warning(self, "设为默认失败", str(exc))
             return
         self.refresh_slot_label()
+        self._set_cfg_title("已设默认")
         self._changed()
 
     def _refresh_cfg_presets(self, select=None):
@@ -1310,6 +1334,7 @@ class XmlOptionsPanel(QWidget):
             return
         self.set_options(options_from_presets(data))
         self.refresh_slot_label()
+        self._set_cfg_title()
         self._update_preset_buttons()
         self._changed()
 
@@ -1332,6 +1357,7 @@ class XmlOptionsPanel(QWidget):
             return
         self._refresh_cfg_presets(select=path2)
         self.refresh_slot_label()
+        self._set_cfg_title("已存预设")
         self._changed()
 
     def _on_preset_delete(self):
@@ -1339,13 +1365,25 @@ class XmlOptionsPanel(QWidget):
         if not path:
             QMessageBox.information(self, "删除预设", "“出厂默认”不是文件，删不掉。")
             return
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Question)
+        box.setWindowTitle("删除预设")
+        box.setText(f"确定删除预设“{os.path.basename(path)}”吗？")
+        ok_btn = box.addButton("确定删除", QMessageBox.AcceptRole)
+        box.addButton("取消", QMessageBox.RejectRole)
+        box.setDefaultButton(ok_btn)
+        box.exec()
+        if box.clickedButton() is not ok_btn:
+            return
         try:
             delete_config_preset(path)
         except (ValueError, OSError) as exc:
             QMessageBox.warning(self, "删除失败", str(exc))
             return
+        self._clear_default_if_deleted(path)
         self._refresh_cfg_presets()
         self.refresh_slot_label()
+        self._set_cfg_title("已删除")
         self._changed()
 
     def merged_preset(self, base=None):
@@ -1403,6 +1441,7 @@ class XmlOptionsPanel(QWidget):
         self.set_options(options_from_presets(reset_factory()))
         self.refresh_slot_label()
         self._refresh_cfg_presets()
+        self._set_cfg_title()
         self._changed()
 
     def _open_local_file(self, path):
@@ -1603,7 +1642,7 @@ class XmlOptionsPanel(QWidget):
 
 SOURCE_LABELS = [
     ("xml_dir", "本地 XML 候选源（只读；角色同远端 URL）"),
-    ("cbeta_ebook", "电子书输出目录（唯一可写，平展一部一目录）"),
+    ("cbeta_ebook", "XML及电子书（官方下载保存平展目录）"),
     ("catalog", "佛典目录 catalog（sutra_mapping.txt）"),
 ]
 DOWNLOAD_KEYS = ["xml", "html", "docx", "epub", "txt_notes", "odt", "figures"]

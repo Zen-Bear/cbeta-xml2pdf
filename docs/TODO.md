@@ -500,3 +500,19 @@
     juan/jhead 标签 → footnote 的 0.75em 按标题 20pt 解成 15pt（小三）+ 粗体/蓝色泄漏
   - 修：`render_docx._footnote_content` 同时保存/清空 `_tag_stack`（继承链只剩 body→footnote，
     注文 9pt 无加粗）；`TestFootnoteInTitle` 2 项（字号 sz18/无加粗无色）；全量 719 OK
+- [x] **已完成** 配置框标题常驻最后动作 + “缺 XML”细分诊断（2026-09-16）
+  - 标题：`_set_cfg_title(action)` 写 `QGroupBox` 标题（配置/配置（已保存/已存预设/已删除/
+    已设默认））；换预设（`_on_preset_chosen`）/还原出厂后复原；去掉 1.5 秒闪现 label
+  - “缺 XML”：`_resolve` 无结果时区分——未勾选自动下载 / `catalog 未收录`（查 catalog，
+    不触网）/ `下载失败`（`_missing_xml_reason`）；修     `fetch` 局部导入导致的 NameError
+    （`__main__` 里 `from pycbeta import fetch` 只在 `run()` 内）
+- [x] **已完成** 彻底去掉 `out` 目录名隐藏排除（2026-09-16，用户定）
+  - 背景：`find_local_xml`/`find_official`/目录扫描曾把绝对路径含 `out/` 的文件全部排除；
+    工作根自己叫 `out`（如 `cbeta_ebook/out`）时下载成功也找不到 → “缺 XML（下载失败）”
+    （根目录因本地早有 XML 从不下载，掩盖了该 bug）。该写法自首版提交 `3168e76` 即有，
+    原意是跳过输出目录，但用户出错无从得知
+  - 修：三处 + `inspect_xml_source` 的子目录剪枝，**全部删除**，无任何目录名排除；
+    相关用例同步（`test_out_excluded`→`test_out_files_included`，
+    `test_baseline_lands_flat_ignoring_out_decoy` 去诱饵改名；`test_fetch`/`test_layout`
+    的 out 根用例改为断言全部收录）
+  - 另：标签 `电子书输出目录（…）`→`XML及电子书（官方下载保存平展目录）`（SOURCE_LABELS）

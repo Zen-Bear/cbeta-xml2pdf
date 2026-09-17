@@ -337,8 +337,24 @@ class BatchWorker(QThread):
                 except Exception:
                     pass
             return found
-        self.row_status.emit(idx, "缺 XML")
+        if not bool(self.flags.get("auto_xml")):
+            self.row_status.emit(idx, "缺 XML（未勾选自动下载）")
+        else:
+            self.row_status.emit(idx, self._missing_xml_reason(wid, presets))
         return []
+
+    def _missing_xml_reason(self, wid, presets):
+        """自动下载已开仍无 XML：区分 catalog 未收录 vs 下载失败。"""
+        from pycbeta import fetch
+        try:
+            canon, no = fetch.parse_work_id(fetch.canonical_work_id(wid, presets))
+            cat = ((presets.get("source") or {}).get("catalog") or "").strip()
+            if cat and os.path.isfile(cat) \
+                    and not fetch.catalog_lookup(cat, canon, no):
+                return "缺 XML（catalog 未收录）"
+        except Exception:
+            pass
+        return "缺 XML（下载失败）"
 
     def _title_of(self, xml, idx, P5Parser):
         try:
@@ -691,8 +707,6 @@ class MainWindow(QMainWindow):
                 from pycbeta.merge import split_paths
                 walked = []
                 for fn in sorted(glob.glob(os.path.join(src, "**", "*.xml"), recursive=True)):
-                    if os.sep + "out" + os.sep in fn:
-                        continue
                     walked.append(fn)
                 whole, groups = split_paths(walked)
                 for fn in whole:
