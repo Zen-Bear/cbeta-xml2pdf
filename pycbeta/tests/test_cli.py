@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from pycbeta.cli import resolve_output
+from pycbeta.cli import resolve_output, resolve_engine_vertical_lang
 
 
 def _args(out):
@@ -92,6 +92,44 @@ class TestProcessFileErrors(unittest.TestCase):
             n = cli.process_file("x.xml", ["docx", "txt"], args, None)
         self.assertEqual(n, 1)
         self.assertEqual(R.call_count, 2)
+
+
+class TestResolveEngineVerticalLang(unittest.TestCase):
+    """engine/vertical/font_lang：显式开关 > 配置 > 默认。"""
+
+    def _args(self, **kw):
+        a = SimpleNamespace(engine=None, vertical=False, font_lang=None, t2s=False)
+        for k, v in kw.items():
+            setattr(a, k, v)
+        return a
+
+    def test_defaults(self):
+        e, v, lang = resolve_engine_vertical_lang(self._args(), {})
+        self.assertIsNone(e)
+        self.assertFalse(v)
+        self.assertEqual(lang, "zh-Hant")
+
+    def test_from_config(self):
+        pres = {"engine": "html2pdf", "font_lang": "zh-Hans",
+                "output": {"vertical": True}}
+        e, v, lang = resolve_engine_vertical_lang(self._args(), pres)
+        self.assertEqual(e, "html2pdf")
+        self.assertTrue(v)
+        self.assertEqual(lang, "zh-Hans")
+
+    def test_explicit_overrides_config(self):
+        pres = {"engine": "html2pdf", "font_lang": "zh-Hans",
+                "output": {"vertical": True}}
+        a = self._args(engine="docx2pdf", font_lang="zh-Hant")
+        e, v, lang = resolve_engine_vertical_lang(a, pres)
+        self.assertEqual(e, "docx2pdf")
+        self.assertTrue(v)               # vertical 无显式关，配置仍生效
+        self.assertEqual(lang, "zh-Hant")
+
+    def test_t2s_forces_simplified_over_config(self):
+        e, v, lang = resolve_engine_vertical_lang(
+            self._args(t2s=True), {"font_lang": "zh-Hant"})
+        self.assertEqual(lang, "zh-Hans")
 
 
 class TestConfigArgAccepted(unittest.TestCase):

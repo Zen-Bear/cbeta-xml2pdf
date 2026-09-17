@@ -334,6 +334,23 @@ def write_temp_run(run, snapshot_path, path=None):
     return path
 
 
+def write_temp_preset(data, path=None):
+    """任意预设 dict → 临时 JSON（一次性改动，不改已有预设/不落 presets/）。
+
+    供第三方（publish）把 `XmlOptionsDialog.get_preset(base)` 的结果直接喂
+    `--config`；`--config` 兼容「基础配置 JSON」与「run.json 组合单」两种形态。
+    调用方用后删除。返回路径。
+    """
+    import tempfile
+    if path is None:
+        fd, path = tempfile.mkstemp(prefix="xml2pdf-preset-", suffix=".json")
+        os.close(fd)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data if isinstance(data, dict) else {}, f,
+                  ensure_ascii=False, indent=2)
+    return path
+
+
 @dataclass
 class XmlOptions:
     """面板数据模型（字段含义见 docs/GUI设计.md §2）。"""

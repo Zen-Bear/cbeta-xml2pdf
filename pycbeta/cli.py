@@ -34,6 +34,29 @@ def resolve_default_page(args_page, presets):
     return args_page or (presets or {}).get("default_page") or "a4"
 
 
+def resolve_engine_vertical_lang(args, presets):
+    """engine / vertical / font_lang 解析：显式开关 > 配置 > 默认（纯函数，可单测）。
+
+    - engine：`--engine` > `presets.engine` > None（渲染时默认 docx2pdf）
+    - vertical：`--vertical` 或 `output.vertical`
+    - font_lang：`--font-lang` > (t2s → zh-Hans) > `presets.font_lang` > zh-Hant
+
+    这样「面板存的预设」经 `--config` 即自足；开关仍可显式覆盖。
+    """
+    presets = presets or {}
+    out = presets.get("output") or {}
+    engine = (getattr(args, "engine", None) or "").strip() \
+        or (presets.get("engine") or "").strip() or None
+    vertical = bool(getattr(args, "vertical", False)) or bool(out.get("vertical"))
+    lang = (getattr(args, "font_lang", None) or "").strip()
+    if not lang:
+        if getattr(args, "t2s", False):
+            lang = "zh-Hans"
+        else:
+            lang = (presets.get("font_lang") or "").strip() or "zh-Hant"
+    return engine, vertical, lang
+
+
 def load_theme(path, lang="zh-Hant"):
     if path.endswith(".css"):
         from .theme import theme_file_text
@@ -424,8 +447,8 @@ def main(argv=None):
                         help="html/epub 增量 CSS（占位，尚未接线；传入只警告忽略）")
     shared.add_argument("--font-lang", choices=["zh-Hant", "zh-Hans"],
                         default=None,
-                        help="字库：zh-Hant 繁体（默认）/ zh-Hans 简体（CSS :root 双栏变量切换）。"
-                             "t2s 未显式指定时自动切简体")
+                        help="字库：zh-Hant 繁体 / zh-Hans 简体（CSS :root 双栏变量切换）。"
+                             "缺省取 config font_lang；t2s 会自动切简体")
     shared.add_argument("--t2s", dest="t2s_flag", action="store_true",
                         default=None,
                         help="简体输出：OpenCC t2s 把正文/注释/元数据转为简体"
@@ -472,10 +495,11 @@ def main(argv=None):
     pdfg = ap.add_argument_group("PDF 专属")
     pdfg.add_argument("--vertical", action="store_true",
                       help="vertical layout (writing-mode)：pdf 走 html2pdf 管线；"
+                           "缺省取 config output.vertical；"
                            "docx 直接分节纵排（sectPr textDirection tbRl）")
     pdfg.add_argument("--engine", default=None,
-                      help="PDF 输出：'管线[:单体]'。默认 docx2pdf（DOCX→PDF，"
-                           "后端链见 config.json engines.docx2pdf.chain）；"
+                      help="PDF 输出：'管线[:单体]'。缺省取 config engine（默认 docx2pdf，"
+                           "DOCX→PDF，后端链见 config.json engines.docx2pdf.chain）；"
                            "html2pdf[:chromium/prince/…] = HTML→PDF 管线；"
                            "chromium/prince/weasyprint/cbetapdf 等具体引擎名 = HTML 单引擎")
     pdfg.add_argument("--engine-tag", action="store_true",
@@ -621,8 +645,8 @@ def main(argv=None):
 
     if args.t2s_flag is not None:
         args.t2s = args.t2s_flag
-    # 字库语言：显式 --font-lang > t2s 自动简体 > 繁体
-    font_lang = args.font_lang or ("zh-Hans" if args.t2s else "zh-Hant")
+    # 引擎/竖排/字库：显式开关 > 配置（presets.engine / output.vertical / font_lang）> 默认
+    args.engine, args.vertical, font_lang = resolve_engine_vertical_lang(args, presets)
     # pdf/docx 主题必建（显式开关 > run.json 槽 > 内置出厂）
     pdf_css = resolve_pdf_docx_css(run, run_dir, std=args.pdf_docx_theme,
                                    user=args.pdf_docx_user_theme)

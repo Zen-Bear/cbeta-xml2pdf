@@ -11,7 +11,7 @@ from pycbeta.gui.panel import (
     DOCX_SINGLES, HTML_SINGLES, XmlOptions, apply_source_edits, config_presets_dir,
     delete_config_preset, detect_engines, list_config_presets, load_config_preset,
     load_slot, options_from_presets, reset_factory, save_config_preset, save_current,
-    slot_paths, write_temp_presets,
+    slot_paths, write_temp_preset, write_temp_presets,
 )
 from pycbeta.theme import load_presets
 
@@ -146,6 +146,23 @@ class TestTempPresets(unittest.TestCase):
             os.remove(path)
         self.assertTrue(data["output"]["t2s"])  # 不依赖 margins 照写
         self.assertNotIn("custom_margins", data.get("pages", {}).get("a4", {}))
+
+    def test_write_temp_preset_dict(self):
+        data = {"output": {"t2s": True}, "pages": {"a4": {}}}
+        path = write_temp_preset(data)
+        try:
+            with open(path, encoding="utf-8") as f:
+                back = json.load(f)
+            self.assertTrue(back["output"]["t2s"])
+        finally:
+            os.remove(path)
+        # 非 dict 容错
+        path2 = write_temp_preset(None)
+        try:
+            with open(path2, encoding="utf-8") as f:
+                self.assertEqual(json.load(f), {})
+        finally:
+            os.remove(path2)
 
     def test_temp_presets_strips_stale_custom_margins(self):
         from pycbeta.gui.panel import write_temp_presets, XmlOptions
