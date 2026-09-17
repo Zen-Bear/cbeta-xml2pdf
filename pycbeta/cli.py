@@ -677,7 +677,10 @@ def main(argv=None):
         _, _ebook_root = _rs(presets, xml_dir=args.xml_dir, cbeta_ebook=args.cbeta_ebook)
     except Exception:
         _ebook_root = None
-    if os.path.isdir(args.input):
+    from .fetch import is_work_id as _is_work_id
+    _dir_mode = os.path.isdir(args.input)
+    _dir_xmls = None
+    if _dir_mode:
         from .merge import split_paths, merge_groups_to_dir
         walked = []
         for dp, _dn, fns in os.walk(args.input):
@@ -685,12 +688,17 @@ def main(argv=None):
                 if f.endswith(".xml"):
                     walked.append(os.path.join(dp, f))
         whole, groups = split_paths(walked)
-        xmls = whole
+        _dir_xmls = whole
         if groups:
-            xmls = xmls + merge_groups_to_dir(groups)
-        if not xmls:
+            _dir_xmls = _dir_xmls + merge_groups_to_dir(groups)
+        if not _dir_xmls and _is_work_id(os.path.basename(os.path.normpath(args.input))):
+            # cwd 下恰好有同名（非 XML）目录：不得劫持合法編號，改按編號材料化
+            _dir_mode = False
+    if _dir_mode:
+        if not _dir_xmls:
             ap.error(f"no XML files under {args.input}")
-        for x in xmls:
+        xmls = _dir_xmls
+        for x in _dir_xmls:
             render_failed += process_file(x, formats, args, theme, html_base=html_base,
                                           _used=_used_names, ebook_root=_ebook_root)
     elif os.path.isfile(args.input):
@@ -698,8 +706,8 @@ def main(argv=None):
                                       ebook_root=_ebook_root)
     else:
         # -i 佛典編號：三源材料化（cbeta_ebook → 本地候选源 → 官方下载）
-        from .fetch import is_work_id, materialize_work, inspect_xml_source
-        if not is_work_id(args.input):
+        from .fetch import materialize_work, inspect_xml_source
+        if not _is_work_id(args.input):
             ap.error(f"input not found: {args.input}")
         if args.xml_dir:
             info = inspect_xml_source(args.xml_dir)

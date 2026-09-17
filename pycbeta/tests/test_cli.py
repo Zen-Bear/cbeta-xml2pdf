@@ -132,6 +132,31 @@ class TestResolveEngineVerticalLang(unittest.TestCase):
         self.assertEqual(lang, "zh-Hans")
 
 
+class TestWorkIdNotHijackedByDir(unittest.TestCase):
+    def test_same_named_dir_without_xml_falls_back_to_work_id(self):
+        # cwd 下恰好有同名（非 XML）目录时，合法編號不得被判为目录而报
+        # 「no XML files under <id>」；应改按編號材料化（此处打桩到材料化即算通过）
+        import io
+        from contextlib import redirect_stderr
+        from unittest import mock
+        from pycbeta.cli import main
+        d = tempfile.mkdtemp()
+        os.mkdir(os.path.join(d, "T0349"))
+        cwd = os.getcwd()
+        try:
+            os.chdir(d)
+            err = io.StringIO()
+            with mock.patch("pycbeta.fetch.materialize_work",
+                            return_value=(["DUMMY.xml"], "x")), \
+                    mock.patch("pycbeta.cli.process_file", return_value=0):
+                with redirect_stderr(err):
+                    rc = main(["-i", "T0349", "-f", "pdf"])
+            self.assertEqual(rc, 0)
+            self.assertNotIn("no XML files under", err.getvalue())
+        finally:
+            os.chdir(cwd)
+
+
 class TestConfigArgAccepted(unittest.TestCase):
     def test_pure_presets_config_not_rejected(self):
         # 纯基础配置 JSON（config.user.json / presets 快照）经 --config 不再报
