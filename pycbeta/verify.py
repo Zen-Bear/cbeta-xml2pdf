@@ -821,7 +821,7 @@ def generate_formal(xml_fn: str, work, fmt: str, outdir: str, config_path: Optio
         return [os.path.join(outdir, TxtRenderer(theme=theme, notes="footnote", show_notes=True, inline_brackets=p("inline_brackets", "fullwidth"), annotations=_ann, strip_head_no=_shn, show_dharani_transliteration=bool(p("show_dharani_transliteration", False))).render_work(work, out_dir=outdir, filename=f"{stem}.txt"))]
     raise ValueError(f"unknown format {fmt}")
 
-def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int = 10, diff_lines: int = 5, config_path: Optional[str] = None, t2s: bool = False, baseline: str = "render") -> Dict:
+def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int = 10, diff_lines: int = 5, config_path: Optional[str] = None, t2s: bool = False, baseline: str = "render", gen_paths: Optional[List[str]] = None) -> Dict:
     if fmt == "pdf":
         # 官方无 PDF 基线：PDF 由 docx（docx2pdf）或 html（html2pdf）派生，正文已由该格式校验覆盖
         return {"xml": xml_fn, "fmt": fmt, "status": "no_baseline", "gen": [],
@@ -835,7 +835,14 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
         from .simplify import simplify_work
         simplify_work(work)
     outdir = os.path.join(out_root, fmt)
-    gen_path = generate_formal(xml_fn, work, fmt, outdir, config_path=config_path)
+    if gen_paths is not None:
+        # 只校验已有产物（--verify-only）：跳过 generate_formal，不重写正式输出
+        gen_path = [p for p in gen_paths if os.path.isfile(p)]
+        if not gen_path:
+            return {"xml": xml_fn, "fmt": fmt, "status": "error",
+                    "detail": "生成档缺失（--verify-only 未找到可比对文件）", "gen": []}
+    else:
+        gen_path = generate_formal(xml_fn, work, fmt, outdir, config_path=config_path)
     ours_raw = "".join(extract_text(p) for p in gen_path)
     try:
         cfg = (load_effective_presets(config_path).get("verify") or {})

@@ -513,6 +513,9 @@ def main(argv=None):
     vg = ap.add_argument_group("校验（模块化，供 GUI 复用 pycbeta/verify.py）")
     vg.add_argument("--verify", action="store_true",
                     help="生成后自动逐字校验（正式管线对比官方 html/txt）")
+    vg.add_argument("--verify-only", action="store_true",
+                    help="只校验已有产物：跳过渲染，用输出命名规则定位既有生成档比对；"
+                         "缺失产物报 gen not found 并计失败（退出码非零）")
     vg.add_argument("--verify-max-diff", type=int, default=10,
                     help="校验阈值 max-diff（缺+多≤阈值判OK，默认10）")
     vg.add_argument("--verify-diff-lines", type=int, default=5,
@@ -527,6 +530,10 @@ def main(argv=None):
                     help="配合 --update-data：只下载比对不写盘")
 
     args = ap.parse_args(argv)
+
+    if args.verify_only:
+        # 只校验已有产物：隐含 --verify，走同一校验段但跳过渲染
+        args.verify = True
 
     if args.update_data:
         from .update_data import update_all, format_report
@@ -698,12 +705,15 @@ def main(argv=None):
         if not _dir_xmls:
             ap.error(f"no XML files under {args.input}")
         xmls = _dir_xmls
-        for x in _dir_xmls:
-            render_failed += process_file(x, formats, args, theme, html_base=html_base,
-                                          _used=_used_names, ebook_root=_ebook_root)
+        if not args.verify_only:
+            # 只校验已有产物：跳过渲染，xmls 照常收集供校验段用
+            for x in _dir_xmls:
+                render_failed += process_file(x, formats, args, theme, html_base=html_base,
+                                              _used=_used_names, ebook_root=_ebook_root)
     elif os.path.isfile(args.input):
-        render_failed += process_file(args.input, formats, args, theme, html_base=html_base,
-                                      ebook_root=_ebook_root)
+        if not args.verify_only:
+            render_failed += process_file(args.input, formats, args, theme, html_base=html_base,
+                                          ebook_root=_ebook_root)
     else:
         # -i 佛典編號：三源材料化（cbeta_ebook → 本地候选源 → 官方下载）
         from .fetch import materialize_work, inspect_xml_source
@@ -723,9 +733,10 @@ def main(argv=None):
             ap.error(str(exc))
         if not xmls:
             ap.error(f"{args.input}: 本地候选源与官方均未取得 XML")
-        for x in xmls:
-            render_failed += process_file(x, formats, args, theme, html_base=html_base,
-                                          _used=_used_names, ebook_root=_ebook_root)
+        if not args.verify_only:
+            for x in xmls:
+                render_failed += process_file(x, formats, args, theme, html_base=html_base,
+                                              _used=_used_names, ebook_root=_ebook_root)
 
     # --verify：复用 pycbeta/verify.py 模块化能力，供 GUI 调用同一入口
     if args.verify:
@@ -816,6 +827,20 @@ def main(argv=None):
                 # 与 GUI 独立窗一致）：inline_brackets / suppress_jhead_dup / show_close_juan
                 # 等 verify 专属设置必须生效，否则与官方基线比对会误报。
                 from .verify import generate_formal as _gen_formal
+                def _locate_existing(target_fmt):
+                    # --verify-only：跳过渲染，用输出命名规则定位既有生成档
+                    # （本轮未渲染，_used_names 为空→走默认名；dedup 改名过的旧产物可能定位不到）
+                    import glob as _glob
+                    try:
+                        _od, _on = resolve_output(xml_fn, target_fmt, args, w,
+                                                  _used=_used_names)
+                    except Exception:
+                        return []
+                    if target_fmt == "html":
+                        return sorted(_glob.glob(os.path.join(_od, "*.html")))
+                    if not _on:
+                        return []
+                    return [os.path.join(_od, _on)]
                 if fmt_raw == "pdf":
                     # PDF 无官方基线：委托其管线源格式（docx2pdf→docx / html2pdf→html）
                     _src = pdf_source_fmt(getattr(args, "engine", None),
@@ -825,22 +850,31 @@ def main(argv=None):
                         continue
                     fmt = _src
                     disp = f"pdf→{_src}"
-                    gen_paths = _gen_formal(xml_fn, w, _src,
-                                            os.path.join(verify_dir, _src),
-                                            config_path=args.config)
+                    if args.verify_only:
+                        gen_paths = _locate_existing(_src)
+                    else:
+                        gen_paths = _gen_formal(xml_fn, w, _src,
+                                                os.path.join(verify_dir, _src),
+                                                config_path=args.config)
                     gen_path = gen_paths[0] if gen_paths else ""
                 else:
                     fmt = fmt_raw
                     if fmt in ("html", "docx", "epub", "md", "txt"):
-                        gen_paths = _gen_formal(xml_fn, w, fmt,
-                                                os.path.join(verify_dir, fmt),
-                                                config_path=args.config)
+                        if args.verify_only:
+                            gen_paths = _locate_existing(fmt)
+                        else:
+                            gen_paths = _gen_formal(xml_fn, w, fmt,
+                                                    os.path.join(verify_dir, fmt),
+                                                    config_path=args.config)
                         gen_path = gen_paths[0] if gen_paths else ""
                     else:
                         gen_paths = []
                         gen_path = ""
                 if not gen_path or not os.path.isfile(gen_path):
                     block.append(f"  [--]  {disp} gen not found: {gen_path}")
+                    if args.verify_only:
+                        # 只校验模式：缺失产物计失败（退出码非零）
+                        grand_total += 1; grand_fail += 1; block_failed = True
                     continue
                 # 找官方
                 stem = os.path.splitext(name)[0]
@@ -1030,6 +1064,9 @@ def main(argv=None):
         summary = f"{grand_total} compared, {grand_fail} failed (阈值 max-diff={args.verify_max_diff})"
         vlog(f"\n{summary}")
         vlog(f"完成时间: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    if args.verify_only:
+        # 只校验模式：未渲染（render_failed 恒 0），退出码由校验结果决定
+        return 1 if grand_fail else 0
     return 1 if render_failed else 0
 
 

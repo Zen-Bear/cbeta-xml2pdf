@@ -179,5 +179,66 @@ class TestConfigArgAccepted(unittest.TestCase):
             os.remove(fn)
 
 
+class TestVerifyOnly(unittest.TestCase):
+    """--verify-only：跳过渲染，用输出命名规则定位既有生成档；缺失计失败。"""
+
+    def _run(self, d, xml, extra=()):
+        import io
+        import json
+        from contextlib import redirect_stdout
+        from types import SimpleNamespace
+        from unittest import mock
+        from pycbeta.cli import main
+        from pycbeta.filename import default_output_name
+        cfgp = os.path.join(d, "cfg.json")
+        with open(cfgp, "w", encoding="utf-8") as f:
+            json.dump({"verify": {"auto_fetch": False}}, f)
+        work = SimpleNamespace(id="T0001", metadata={})
+        out = io.StringIO()
+        with mock.patch("pycbeta.parser.P5Parser") as P, \
+                mock.patch("pycbeta.verify.work_juan_numbers",
+                           return_value=[]), \
+                mock.patch("pycbeta.cli.process_file") as PF:
+            P.return_value.parse.return_value = work
+            with redirect_stdout(out):
+                rc = main(["--config", cfgp, "-i", xml, "-f", "txt",
+                           "--verify-only", *extra])
+        return rc, out.getvalue(), PF, \
+            os.path.join(d, default_output_name("T0001", None, True) + ".txt")
+
+    def test_missing_gen_counts_fail_and_skips_render(self):
+        import shutil
+        d = tempfile.mkdtemp()
+        try:
+            xml = os.path.join(d, "T01n0001.xml")
+            with open(xml, "w", encoding="utf-8") as f:
+                f.write("<TEI/>")
+            rc, s, PF, _ = self._run(d, xml)
+            self.assertIn("gen not found", s)
+            self.assertEqual(rc, 1)
+            PF.assert_not_called()
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_present_gen_no_baseline_skips_render(self):
+        import shutil
+        from pycbeta.filename import default_output_name
+        d = tempfile.mkdtemp()
+        try:
+            xml = os.path.join(d, "T01n0001.xml")
+            with open(xml, "w", encoding="utf-8") as f:
+                f.write("<TEI/>")
+            gen = os.path.join(
+                d, default_output_name("T0001", None, True) + ".txt")
+            with open(gen, "w", encoding="utf-8") as f:
+                f.write("x")
+            rc, s, PF, _ = self._run(d, xml)
+            self.assertIn("no baseline", s)
+            self.assertEqual(rc, 0)
+            PF.assert_not_called()
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+
 if __name__ == "__main__":
     unittest.main()

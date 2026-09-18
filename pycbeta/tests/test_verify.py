@@ -304,5 +304,49 @@ class TestVerifyAlwaysComparesNotes(unittest.TestCase):
         self.assertTrue(self._capture("txt", "TxtRenderer")["show_notes"])
 
 
+class TestVerifyOnlyGenPaths(unittest.TestCase):
+    """verify_one(gen_paths=...)：只校验已有产物，跳过 generate_formal。"""
+
+    def _work(self):
+        from pycbeta.model import Work
+        return Work(id="T", source_file="", metadata={}, body=[],
+                    notes_by_n={}, apps=[], simplified=False)
+
+    def test_missing_gen_returns_error_without_regenerating(self):
+        from unittest import mock
+        import pycbeta.verify as V
+        with mock.patch.object(V, "P5Parser") as P, \
+                mock.patch.object(V, "generate_formal") as G:
+            P.return_value.parse.return_value = self._work()
+            rec = V.verify_one("x.xml", "txt", "srcdir", "outroot",
+                               gen_paths=[])
+        self.assertEqual(rec["status"], "error")
+        self.assertIn("生成档缺失", rec["detail"])
+        G.assert_not_called()
+        s = "\n".join(V.format_verify_report([rec]))
+        self.assertIn("[FAIL] txt 校验异常", s)
+
+    def test_given_gen_skips_regeneration(self):
+        from unittest import mock
+        import pycbeta.verify as V
+        d = tempfile.mkdtemp()
+        try:
+            gen = os.path.join(d, "T.txt")
+            with open(gen, "w", encoding="utf-8") as f:
+                f.write("正文甲")
+            with mock.patch.object(V, "P5Parser") as P, \
+                    mock.patch.object(V, "generate_formal") as G, \
+                    mock.patch.object(V, "_extract_xml_parts",
+                                      return_value=("T", "", "正文甲", [])):
+                P.return_value.parse.return_value = self._work()
+                rec = V.verify_one("x.xml", "txt", d, os.path.join(d, "v"),
+                                   baseline="xml", gen_paths=[gen])
+            G.assert_not_called()
+            self.assertEqual(rec["gen"], [gen])
+            self.assertIn(rec["status"], ("ok", "fail"))
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+
 if __name__ == "__main__":
     unittest.main()
