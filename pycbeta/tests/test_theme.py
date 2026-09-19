@@ -637,7 +637,7 @@ class TestRunConfig(unittest.TestCase):
             resolve_html_base_css({}, None)
         self.assertNotIn("尚未接线", buf2.getvalue())
 
-    def test_html_base_defaults_golden(self):
+    def test_html_base_defaults_official(self):
         from pycbeta.theme import resolve_html_base_css
         css = resolve_html_base_css({}, None)
         self.assertIn("cbetarc", css)
@@ -872,7 +872,7 @@ class TestLoadEffectivePresets(unittest.TestCase):
                        "output": {"notes": "endnote"}}, f)
         run = os.path.join(d, "run.json")
         with open(run, "w", encoding="utf-8") as f:
-            json.dump({"config-json": cfg, "html-epub-theme": "cbeta_golden.css",
+            json.dump({"config-json": cfg, "html-epub-theme": "html_epub_official.css",
                        "html-epub-user-theme": "", "pdf-docx-theme": "pdf_docx.css",
                        "pdf-docx-user-theme": ""}, f)
         p = load_effective_presets(run)

@@ -87,7 +87,7 @@ python -m pycbeta -i 经文.xml -f docx,pdf --presets-file my.json
   输出处理（output）、转换引擎与后端链（engines）、DOCX 字体映射/行高（docx）。
   支持 `//` 注释；复制后用 `--config` 指定。
 - **`pycbeta/styles/pdf_docx.css`** — PDF/DOCX 默认主题（各语义标签的观感）。
-- **`pycbeta/styles/cbeta_golden.css`** — HTML/EPUB 官方格式基底（逐字节对齐官方）。
+- **`pycbeta/styles/html_epub_official.css`** — HTML/EPUB 官方格式基底（逐字节对齐官方）。
 
 想改样式直接编辑对应文件；`--theme` 用于整体替换主题层。
 详见 `docs/设计报告-代码评审.md` §8。
@@ -161,7 +161,7 @@ pycbeta/
   render_md.py     IR -> Markdown
   theme.py         主题：语义标签 -> 各格式样式；config.json 加载
   config.json      全局配置（字体/页面/输出/引擎链）
-  styles/          cbeta_golden.css / pdf_docx.css
+  styles/          html_epub_official.css / pdf_docx.css / epub_print.css
 docs/              设计报告与规格
 test/              run_tests.py 端到端测试 + 样例 XML
 ```

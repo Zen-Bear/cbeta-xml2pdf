@@ -27,7 +27,7 @@ class EpubRenderer:
                  ignore_xml_style=False, ignore_xml_space=False, show_notes=True,
                  annotations=None, strip_head_no=False, inline_brackets="fullwidth",
                  note_inline_brackets=None, figure_base=None, corr_cbeta=False):
-        # theme=None → 纯基底（golden 默认）；pdf_docx 主题不再进 epub
+        # theme=None → 纯基底（官方基底默认）；pdf_docx 主题不再进 epub
         #（render_html 章节与 style.css 同源 base_css）。
         self.theme = theme
         self.notes = notes
@@ -67,10 +67,13 @@ class EpubRenderer:
             author = md.get("author") or ""
             lang = "zh-Hans" if getattr(work, "simplified", False) else "zh-Hant"
             chapters = self._build_chapters(tmp, html_files, title)
-            opf = self._build_opf(work, title, author, chapters, lang)
+            chapters, copyright_ch = self._split_copyright(chapters)
+            # spine = 正文卷 + 版权页；nav/ncx 目录只留正文卷
+            spine = chapters + ([copyright_ch] if copyright_ch else [])
+            opf = self._build_opf(work, title, author, spine, lang)
             nav = self._build_nav(title, chapters, lang)
             ncx = self._build_ncx(title, chapters)
-            data = self._zip(work.id, chapters, opf, nav, ncx, lang)
+            data = self._zip(work.id, spine, opf, nav, ncx, lang)
             os.makedirs(out_dir, exist_ok=True)
             if not filename:
                 filename = f"{work.id}.epub"
@@ -93,6 +96,28 @@ class EpubRenderer:
             chapters.append({"id": cid, "file": f"{cid}.xhtml",
                              "title": f"{title} 卷{juan:03d}", "body": body})
         return chapters
+
+    @staticmethod
+    def _split_copyright(chapters: List[dict]):
+        """各章末尾的 `#cbeta-copyright` 版权块抽走去重，独立成 spine 末项。
+
+        CSS 分页在阅读器里不可靠，且多卷时版权块会逐章重复；
+        独立 spine 项在所有阅读器都另起一页（官方 epub 同款 back.xhtml 做法）。
+        返回 (正文章节, 版权章节或 None)；nav/ncx 只用正文章节。"""
+        kept = None
+        pat = re.compile(r"<div id='cbeta-copyright'>.*?</div>\s*"
+                         r"<!-- end of cbeta-copyright -->", re.S)
+        for ch in chapters:
+            m = pat.search(ch["body"] or "")
+            if m:
+                if kept is None:
+                    kept = m.group(0)
+                ch["body"] = ch["body"][:m.start()] + ch["body"][m.end():]
+        copyright_ch = None
+        if kept:
+            copyright_ch = {"id": "copyright", "file": "copyright.xhtml",
+                            "title": "經文資訊", "body": kept}
+        return chapters, copyright_ch
 
     @staticmethod
     def _extract_body(html: str) -> str:

@@ -11,10 +11,10 @@ from .annotate import active as _ann_active, split_annotated as _split_ann, rt_c
 from .model import App, E, Gaiji, Lb, Note, NoteRef, Pb, Text, Work
 from .theme import strip_head_no, bracket_pair
 
-# 官方（golden）格式基底 CSS：styles/cbeta_golden.css（html/epub 用）。
+# 官方格式基底 CSS：styles/html_epub_official.css（html/epub 用）。
 # pdf/docx 的默认主题是 styles/pdf_docx.css（theme.py 加载）。base_css 供
 # 库调用方自定义基底；CLI 直接用内置文件，不暴露参数。
-_CBETA_CSS_PATH = os.path.join(os.path.dirname(__file__), "styles", "cbeta_golden.css")
+_CBETA_CSS_PATH = os.path.join(os.path.dirname(__file__), "styles", "html_epub_official.css")
 
 
 def _load_cbeta_css() -> str:

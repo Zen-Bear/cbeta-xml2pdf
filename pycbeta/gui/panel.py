@@ -35,7 +35,7 @@ from pycbeta.annotate import DEFAULT_TABLE as ANN_DEFAULT_TABLE  # 内置注音�
 # 样式表卡：默认两 CSS（路径, 说明）
 STYLE_FILES = (
     ("pdf_docx.css", "印刷主题（pdf/docx 专用）"),
-    ("cbeta_golden.css", "电子书基底（html/epub；官方电子书样式）"),
+    ("html_epub_official.css", "电子书基底（html/epub；官方电子书样式）"),
 )
 FACTORY_NAME = os.path.join("pycbeta", "config.json")
 # 默认用户预设（在 presets/ 内，git 忽略）；下拉首项“出厂默认”为空值

@@ -1,4 +1,4 @@
-/* pycbeta PDF/DOCX 默认主题（pdf/docx 默认加载；html/epub 用 cbeta_golden.css）
+/* pycbeta PDF/DOCX 默认主题（pdf/docx 默认加载；html/epub 用 html_epub_official.css）
    基于 CBETA P5 语义 type 暴露的 CSS 钩子。
    属性均可被用户主题（--theme xxx.css）替换。 */
 

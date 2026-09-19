@@ -2,7 +2,7 @@
 
 Users may write styles either as JSON ({"tags": {...}}) or as a CSS file.
 The project ships a default theme (styles/pdf_docx.css, used by PDF/DOCX;
-HTML/EPUB use styles/cbeta_golden.css instead) that is used by default;
+HTML/EPUB use styles/html_epub_official.css instead) that is used by default;
 user CSS/JSON overrides it per tag.
 
 CSS is used directly by HTML/PDF and parsed (via tinycss2) into the same
@@ -576,8 +576,8 @@ RUN_KEYS = ("config-json", "html-epub-theme", "html-epub-user-theme",
             "pdf-docx-theme", "pdf-docx-user-theme")
 DEFAULT_RUN_CONFIG = {
     "config-json": "config.json",          # 基础配置：出厂 pycbeta/config.json
-    "html-epub-theme": "cbeta_golden.css",  # html/epub 标准基底（官方）
-    "html-epub-user-theme": "",            # 占位：非空警告+忽略（纯 golden）
+    "html-epub-theme": "html_epub_official.css",  # html/epub 标准基底（官方）
+    "html-epub-user-theme": "",            # 占位：非空警告+忽略（纯官方基底）
     "pdf-docx-theme": "pdf_docx.css",      # pdf/docx 标准（整套替换出厂全文）
     "pdf-docx-user-theme": "",             # pdf/docx 增量（双目录名/路径，追加）
 }
@@ -588,7 +588,7 @@ _RUN_TEMPLATE = """{{
   // config-json：基础配置（名或路径；缺省出厂 pycbeta/config.json；
   //   也可指 presets/ 下命名快照，如 "presets/我的配置.json"）
   "config-json": {config_json},
-  // html/epub 标准基底（默认官方 cbeta_golden.css，一般不动）
+  // html/epub 标准基底（默认官方 html_epub_official.css，一般不动）
   "html-epub-theme": {html_epub_theme},
   // html/epub 增量：占位（非空警告+忽略，html/epub 纯基底）
   "html-epub-user-theme": {html_epub_user_theme},
@@ -607,7 +607,7 @@ def _render_run_template(values):
                                         ensure_ascii=False)
         for k in RUN_KEYS})
 _DEFAULT_CSS = os.path.join(_STYLES_DIR, "pdf_docx.css")
-_GOLDEN_CSS = os.path.join(_STYLES_DIR, "cbeta_golden.css")
+_OFFICIAL_CSS = os.path.join(_STYLES_DIR, "html_epub_official.css")
 
 
 def default_run_path(root=None):
@@ -743,20 +743,20 @@ def resolve_pdf_docx_css(run, run_dir=None, std=None, user=None):
 
 
 def resolve_html_base_css(run, run_dir=None, std=None, user=None):
-    """html/epub 基底 CSS 全文：显式开关 > run.json 槽 > 内置 golden。
+    """html/epub 基底 CSS 全文：显式开关 > run.json 槽 > 内置官方基底。
 
     html/epub 为纯基底：增量槽（html-epub-user-theme）**尚未接线**，
     显式开关或槽值非空都只警告并忽略（槽值的警告在 check_run_placeholders）。
     """
     if (user or "").strip():
-        print("html/epub: --html-epub-user-theme 尚未接线，已忽略（纯基底 cbeta_golden.css）")
+        print("html/epub: --html-epub-user-theme 尚未接线，已忽略（纯基底 html_epub_official.css）")
     std = (std if std is not None else run.get("html-epub-theme") or "").strip() \
-        or "cbeta_golden.css"
-    if std == "cbeta_golden.css" or std.endswith("/cbeta_golden.css") or \
-            std.endswith("\\cbeta_golden.css"):
-        return _builtin_text(_GOLDEN_CSS)
+        or "html_epub_official.css"
+    if std == "html_epub_official.css" or std.endswith("/html_epub_official.css") or \
+            std.endswith("\\html_epub_official.css"):
+        return _builtin_text(_OFFICIAL_CSS)
     hit = _resolve_run_file(std, run_dir, "html-epub-theme")
-    return _read_text(hit) if hit else _builtin_text(_GOLDEN_CSS)
+    return _read_text(hit) if hit else _builtin_text(_OFFICIAL_CSS)
 
 
 def check_run_placeholders(run):

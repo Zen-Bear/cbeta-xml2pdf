@@ -709,7 +709,9 @@ def find_official(source: str, stem: str, kind: str, juan: Optional[set] = None)
     """官方基线发现：短名回退/`_NNN` 优先/卷范围限定；统一根目录下平展优先、仓库次之。
 
     说明：不按目录名排除任何路径（曾排除 `out/`，但工作根本身就可能叫 out，
-    误杀整库且用户无从得知；现彻底去掉该隐藏限制）。"""
+    误杀整库且用户无从得知；现彻底去掉该隐藏限制）。
+    唯一例外：`*（验证）*/`（校验产物目录，正式比对档与基线同 stem，
+    不排除会自比对假绿）。"""
     short = ""
     m = re.match(r"^([A-Z]+)\d+n(.+)$", stem)
     if m:
@@ -732,6 +734,10 @@ def find_official(source: str, stem: str, kind: str, juan: Optional[set] = None)
     for pat in pats:
         for f in sorted(glob.glob(pat, recursive=True)):
             af = os.path.abspath(f)
+            if "（验证）" in af or "（驗證）" in af:
+                # 校验产物目录（CLI/GUI 的 `{id 书名}（验证）/`）不得当基线：
+                # 正式比对档与它同名 stem，自比对会假绿
+                continue
             if af not in seen and os.path.isfile(af) and os.path.getsize(af) > 0:
                 seen.add(af)
                 out.append(af)
@@ -787,6 +793,11 @@ def generate_formal(xml_fn: str, work, fmt: str, outdir: str, config_path: Optio
             out_defaults = {**dict(_DO), **dict(_DV)}
     if overrides:
         out_defaults = {**out_defaults, **overrides}
+    if "inline_brackets" not in ((presets or {}).get("verify") or {}) and \
+            not (overrides and "inline_brackets" in overrides):
+        # verify 缺键强制半角：output.* 的全角不透入校验管线（官方基线恒半角）；
+        # 显式 verify.inline_brackets 照走（有键不碰）
+        out_defaults["inline_brackets"] = "halfwidth"
     # 注音透传（P6）：开启后校验实际产出（提取/归一侧剥除注音，比对无影响）
     try:
         from .annotate import resolve_annotations
@@ -813,17 +824,19 @@ def generate_formal(xml_fn: str, work, fmt: str, outdir: str, config_path: Optio
         _fig_dirs = []
     # 校验恒比注：忽略 output.show_notes（转换时取消「显示注释」不改变校验内容；
     # 官方基线含注，若生成档不带注会误报大量差异）
+    # 括号口径缺省半角：官方基线恒半角括号；配置缺 verify.inline_brackets
+    # （如 publish 临时预设）时向官方对齐，不回退全角
     if fmt == "html":
-        files = HtmlRenderer(theme=theme, notes="endnote", ignore_xml_style=bool(p("ignore_xml_style")), ignore_xml_space=bool(p("ignore_xml_space")), show_notes=True, inline_brackets=p("inline_brackets", "fullwidth"), annotations=_ann, strip_head_no=_shn, figure_base=_fig_dirs or None).render_work(work, out_dir=outdir)
+        files = HtmlRenderer(theme=theme, notes="endnote", ignore_xml_style=bool(p("ignore_xml_style")), ignore_xml_space=bool(p("ignore_xml_space")), show_notes=True, inline_brackets=p("inline_brackets", "halfwidth"), annotations=_ann, strip_head_no=_shn, figure_base=_fig_dirs or None).render_work(work, out_dir=outdir)
         return [os.path.join(outdir, f) for f in files]
     if fmt == "docx":
-        return [os.path.join(outdir, DocxRenderer(theme=theme, notes="footnote", ignore_xml_style=bool(p("ignore_xml_style")), ignore_xml_space=bool(p("ignore_xml_space")), show_notes=True, suppress_jhead_dup=p("suppress_jhead_dup", True), show_close_juan=bool(p("show_close_juan", False)), inline_brackets=p("inline_brackets", "fullwidth"), series_title=p("series_title", {}), annotations=_ann, strip_head_no=_shn, show_body_siddham=bool(p("show_body_siddham", True)), figure_base=_fig_dirs or None).render_work(work, out_dir=outdir, filename=f"{stem}.docx"))]
+        return [os.path.join(outdir, DocxRenderer(theme=theme, notes="footnote", ignore_xml_style=bool(p("ignore_xml_style")), ignore_xml_space=bool(p("ignore_xml_space")), show_notes=True, suppress_jhead_dup=p("suppress_jhead_dup", True), show_close_juan=bool(p("show_close_juan", False)), inline_brackets=p("inline_brackets", "halfwidth"), series_title=p("series_title", {}), annotations=_ann, strip_head_no=_shn, show_body_siddham=bool(p("show_body_siddham", True)), figure_base=_fig_dirs or None).render_work(work, out_dir=outdir, filename=f"{stem}.docx"))]
     if fmt == "epub":
         return [os.path.join(outdir, EpubRenderer(theme=theme, notes="endnote", ignore_xml_style=bool(p("ignore_xml_style")), ignore_xml_space=bool(p("ignore_xml_space")), show_notes=True, annotations=_ann, strip_head_no=_shn, figure_base=_fig_dirs or None).render_work(work, out_dir=outdir, filename=f"{stem}.epub"))]
     if fmt == "md":
-        return [os.path.join(outdir, MdRenderer(theme=theme, notes="footnote", show_notes=True, inline_brackets=p("inline_brackets", "fullwidth"), annotations=_ann, strip_head_no=_shn, show_dharani_transliteration=bool(p("show_dharani_transliteration", False))).render_work(work, out_dir=outdir, filename=f"{stem}.md"))]
+        return [os.path.join(outdir, MdRenderer(theme=theme, notes="footnote", show_notes=True, inline_brackets=p("inline_brackets", "halfwidth"), annotations=_ann, strip_head_no=_shn, show_dharani_transliteration=bool(p("show_dharani_transliteration", False))).render_work(work, out_dir=outdir, filename=f"{stem}.md"))]
     if fmt == "txt":
-        return [os.path.join(outdir, TxtRenderer(theme=theme, notes="footnote", show_notes=True, inline_brackets=p("inline_brackets", "fullwidth"), annotations=_ann, strip_head_no=_shn, show_dharani_transliteration=bool(p("show_dharani_transliteration", False))).render_work(work, out_dir=outdir, filename=f"{stem}.txt"))]
+        return [os.path.join(outdir, TxtRenderer(theme=theme, notes="footnote", show_notes=True, inline_brackets=p("inline_brackets", "halfwidth"), annotations=_ann, strip_head_no=_shn, show_dharani_transliteration=bool(p("show_dharani_transliteration", False))).render_work(work, out_dir=outdir, filename=f"{stem}.txt"))]
     raise ValueError(f"unknown format {fmt}")
 
 def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int = 10, diff_lines: int = 5, config_path: Optional[str] = None, t2s: bool = False, baseline: str = "render", gen_paths: Optional[List[str]] = None) -> Dict:

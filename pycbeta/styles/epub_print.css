@@ -1,14 +1,14 @@
-/* epub 专用基底：由 cbeta_golden.css + pycbeta/styles/pdf_docx.css 派生。
+/* epub 专用基底：由 html_epub_official.css + pycbeta/styles/pdf_docx.css 派生。
    组成（层叠顺序，后覆盖前）：
-     1) cbeta_golden.css —— 官方电子书结构语义（尾注 display:block、经文资讯不缩进等）
+     1) html_epub_official.css —— 官方电子书结构语义（尾注 display:block、经文资讯不缩进等）
      2) pdf_docx.css    —— 印刷主题外观（pdf_docx 的排版/配色/字号）
      3) 追加段          —— 正文字体 + 卷名字体 + 经文资讯另页（golden/pdf_docx 均无）
    繁体明体 / 简体（--t2s）宋体；卷名楷体。字体一律写字面值（不用 var()：
    部分 epub 阅读器不支持 CSS 自定义属性，var() 会整条失效）。
    本体更新后：以两处「派生：... 全文起止」注释为界整体重抄。
-   用法：--html-epub-theme pycbeta/styles/epub_song.css（整套替换 golden）。 */
+   用法：--html-epub-theme pycbeta/styles/epub_print.css（整套替换官方基底）。 */
 
-/* ============ 派生：cbeta_golden.css 全文起 ============ */
+/* ============ 派生：html_epub_official.css 全文起 ============ */
     @font-face {
       font-family: cbetarc;
       src: url('https://cbeta-org.github.io/cbeta-fonts/CBETASupplement.woff2') format("woff2");
@@ -94,7 +94,7 @@
     span.hint { color: blue; }
     ul.no-marker { list-style-type: none; }
 
-/* ============ 派生：cbeta_golden.css 全文止 / pdf_docx.css 全文起 ============ */
+/* ============ 派生：html_epub_official.css 全文止 / pdf_docx.css 全文起 ============ */
 /* pycbeta PDF/DOCX 默认主题（pdf/docx 默认加载；html/epub 用 cbeta_golden.css）
    基于 CBETA P5 语义 type 暴露的 CSS 钩子。
    属性均可被用户主题（--theme xxx.css）替换。 */

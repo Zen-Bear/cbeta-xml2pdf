@@ -119,12 +119,12 @@ class TestCorrCbetaRender(unittest.TestCase):
 
 
 class TestEpubSongCss(unittest.TestCase):
-    """epub 字体落实：派生基底 epub_song.css 含繁简正文实规则；成品注入生效。"""
+    """epub 字体落实：派生基底 epub_print.css 含繁简正文实规则；成品注入生效。"""
 
     def _text(self):
         import io
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        with io.open(os.path.join(root, "styles", "epub_song.css"),
+        with io.open(os.path.join(root, "styles", "epub_print.css"),
                       encoding="utf-8") as f:
             return f.read()
 
@@ -148,7 +148,7 @@ class TestEpubSongCss(unittest.TestCase):
         self.assertIn("楷体", css)
 
     def test_copyright_page_break(self):
-        # 经文资讯尾页另页（仅 epub_song 定制；官方不另页）
+        # 经文资讯尾页另页（仅 epub_print 定制；官方不另页）
         css = self._text()
         self.assertIn("#cbeta-copyright", css)
         self.assertIn("break-before: page", css)
@@ -157,7 +157,7 @@ class TestEpubSongCss(unittest.TestCase):
     def test_resolve_returns_song_not_golden(self):
         from pycbeta.theme import resolve_html_base_css
         got = resolve_html_base_css({}, None,
-                                    std="pycbeta/styles/epub_song.css")
+                                    std="pycbeta/styles/epub_print.css")
         self.assertIn("SimSun", got)
         self.assertIn("派生：pdf_docx.css 全文止", got)
 
@@ -182,6 +182,46 @@ class TestEpubSongCss(unittest.TestCase):
             self.assertIn('lang="zh-Hant"', head)  # 繁体走明体分支
         finally:
             shutil.rmtree(d, ignore_errors=True)
+
+
+class TestEpubCopyrightPage(unittest.TestCase):
+    """版权块独立成页：各章抽走去重，spine 末项 copyright.xhtml（必另起一页）。"""
+
+    def test_copyright_split_spine(self):
+        import shutil
+        from pycbeta.parser import P5Parser
+        from pycbeta.render_epub import EpubRenderer
+        xml = os.path.join(CBETA, "T0349 彌勒菩薩所問本願經", "T12n0349.xml")
+        work = P5Parser().parse(xml)
+        d = tempfile.mkdtemp()
+        try:
+            fn = EpubRenderer().render_work(work, d)
+            z = zipfile.ZipFile(fn)
+            self.assertIn("OEBPS/copyright.xhtml", z.namelist())
+            opf = z.read("OEBPS/content.opf").decode("utf-8")
+            self.assertLess(opf.find('idref="ch1"'), opf.find('idref="copyright"'))
+            nav = z.read("OEBPS/nav.xhtml").decode("utf-8")
+            self.assertNotIn("copyright", nav)  # 目录只留正文卷
+            ch1 = z.read("OEBPS/ch1.xhtml").decode("utf-8")
+            self.assertNotIn("cbeta-copyright", ch1)
+            cp = z.read("OEBPS/copyright.xhtml").decode("utf-8")
+            self.assertIn("cbeta-copyright", cp)
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_copyright_dedup_multi_chapter(self):
+        from pycbeta.render_epub import EpubRenderer
+        div = ("<div id='cbeta-copyright'><p>版</p></div>"
+               "<!-- end of cbeta-copyright -->")
+        chs = [{"id": "ch1", "file": "ch1.xhtml", "title": "t1",
+                "body": "A" + div},
+               {"id": "ch2", "file": "ch2.xhtml", "title": "t2",
+                "body": "B" + div}]
+        rest, cp = EpubRenderer._split_copyright(chs)
+        self.assertNotIn("cbeta-copyright", rest[0]["body"])
+        self.assertNotIn("cbeta-copyright", rest[1]["body"])
+        self.assertEqual(cp["file"], "copyright.xhtml")
+        self.assertIn("cbeta-copyright", cp["body"])
 
 
 if __name__ == "__main__":

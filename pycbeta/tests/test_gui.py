@@ -3342,7 +3342,7 @@ class TestCssEditor(unittest.TestCase):
         import shutil
         from pycbeta.gui.panel import write_temp_run, write_temp_presets
         from pycbeta.gui.panel import XmlOptions
-        run = {"config-json": "config.json", "html-epub-theme": "cbeta_golden.css",
+        run = {"config-json": "config.json", "html-epub-theme": "html_epub_official.css",
                "html-epub-user-theme": "", "pdf-docx-theme": "pdf_docx.css",
                "pdf-docx-user-theme": "mine"}
         opts = XmlOptions(page="a4")

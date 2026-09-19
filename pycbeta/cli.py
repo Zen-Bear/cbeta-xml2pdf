@@ -99,7 +99,7 @@ def render_one(w, fmt, out_dir, out_name, args, theme, html_base=None, figure_ba
     ann = getattr(args, "annotations", None)
 
     if fmt == "html":
-        # html 纯基底（golden 默认）：pdf_docx 主题不再追加
+        # html 纯基底（官方基底默认）：pdf_docx 主题不再追加
         r = HtmlRenderer(theme=None, base_css=html_base, notes=note_mode,
                          name_template=args.name_template,
                          ignore_xml_style=args.ignore_xml_style,
@@ -339,6 +339,18 @@ def resolve_output(xml_fn, fmt, args, work, _used=None):
     return src_dir, out_name
 
 
+def resolve_verify_ebook(args, presets, src):
+    """校验基线下载目录：显式 --cbeta-ebook > presets source.cbeta_ebook > src。
+
+    与 resolve_source 同语义。修 split-brain：显式值与 preset 值不一致时
+    （如下游 publish），基线必须落在发现目录一侧，否则下完也找不到。"""
+    explicit = (getattr(args, "cbeta_ebook", None) or "").strip()
+    if explicit:
+        return explicit
+    cfg = (presets.get("source") or {}) if isinstance(presets, dict) else {}
+    return (cfg.get("cbeta_ebook") or "").strip() or src
+
+
 def process_file(xml_fn, formats, args, theme, html_base=None, _used=None,
                  ebook_root=None):
     w = P5Parser().parse(xml_fn)
@@ -450,7 +462,7 @@ def main(argv=None):
                              "追加在标准之后；缺省 run.json 的 pdf-docx-user-theme 槽）")
     shared.add_argument("--html-epub-theme", default=None,
                         help="html/epub 基底 CSS 全文（缺省 run.json 的 "
-                             "html-epub-theme 槽，即官方 cbeta_golden.css）")
+                             "html-epub-theme 槽，即官方 html_epub_official.css）")
     shared.add_argument("--html-epub-user-theme", default=None,
                         help="html/epub 增量 CSS（占位，尚未接线；传入只警告忽略）")
     shared.add_argument("--font-lang", choices=["zh-Hant", "zh-Hans"],
@@ -683,7 +695,7 @@ def main(argv=None):
     theme = Theme.from_css(pdf_css, font_lang)
     # 纸张绑字号（pages 条目 body_* 覆盖 theme body；font_scale 之前先定基准）
     apply_page_typography(theme, args.page, args.page_presets)
-    # html/epub 基底（显式开关 > run.json 槽 > 内置 golden）；html/epub 纯基底
+    # html/epub 基底（显式开关 > run.json 槽 > 内置官方基底）；html/epub 纯基底
     html_base = resolve_html_base_css(run, run_dir, std=args.html_epub_theme,
                                       user=args.html_epub_user_theme)
     # 西文字体随语言切换（页面方案显式 latin_font 仍优先，见 DocxRenderer）
@@ -923,8 +935,7 @@ def main(argv=None):
                     need = {"md": ["txt_notes"], "docx": ["docx", "html"], "txt": ["txt_notes"],
                             "html": ["html"], "epub": ["epub"]}.get(fmt, ["html"])
                     _presets_af = load_effective_presets(args.config)
-                    _ebook_af = ((_presets_af.get("source") or {}).get("cbeta_ebook")
-                                 or "").strip() or src
+                    _ebook_af = resolve_verify_ebook(args, _presets_af, src)
                     ensure_baselines(w.id, need, _presets_af, _ebook_af)
                     official = {}
                     for kind in ("html","txt_notes","docx","epub","odt"):

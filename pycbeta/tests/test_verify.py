@@ -46,6 +46,35 @@ class TestGenerateFormalConfig(unittest.TestCase):
             shutil.rmtree(d, ignore_errors=True)
 
 
+class TestGenerateFormalBracketFallback(unittest.TestCase):
+    """缺 verify.inline_brackets（如 publish 临时预设）→ 回退半角（官方口径）。"""
+
+    def test_missing_key_falls_back_halfwidth(self):
+        import json
+        import tempfile
+        from unittest import mock
+        from pycbeta.model import Work
+        import pycbeta.verify as V
+        d = tempfile.mkdtemp()
+        try:
+            pre = os.path.join(d, "presets.json")
+            with open(pre, "w", encoding="utf-8") as f:
+                json.dump({"output": {"inline_brackets": "fullwidth"}}, f)
+            seen = {}
+            with mock.patch.object(V, "HtmlRenderer") as M:
+                M.return_value.render_work.return_value = ["x.html"]
+                V.generate_formal("x.xml", Work(id="T", source_file="",
+                                                metadata={}, body=[],
+                                                notes_by_n={}, apps=[],
+                                                simplified=False),
+                                  "html", os.path.join(d, "out"),
+                                  config_path=pre)
+                seen = M.call_args.kwargs
+            self.assertEqual(seen.get("inline_brackets"), "halfwidth")
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+
 class TestStripOfficialNo(unittest.TestCase):
     def test_token_from_work(self):
         from pycbeta.model import E, Text, Work
@@ -176,6 +205,37 @@ class TestTxtNotesDiscovery(unittest.TestCase):
         hits = find_official(self.root, "T99n9999", "txt_notes", juan={1})
         self.assertEqual(len(hits), 1)
         self.assertTrue(hits[0].endswith("T9999_001.txt"))
+
+
+class TestVerifyDirExcluded(unittest.TestCase):
+    """`*（验证）*/` 不得当基线：正式比对档与基线同 stem，自比对会假绿。"""
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp()
+        flat = os.path.join(self.root, "T9999 Book")
+        os.makedirs(os.path.join(flat, "html"), exist_ok=True)
+        with open(os.path.join(flat, "html", "T9999_001.html"),
+                  "w", encoding="utf-8") as f:
+            f.write("official")
+        vdir = os.path.join(flat, "T9999 Book（验证）", "html")
+        os.makedirs(vdir, exist_ok=True)
+        with open(os.path.join(vdir, "T99n9999.html"),
+                  "w", encoding="utf-8") as f:
+            f.write("formal")
+
+    def tearDown(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def test_formal_excluded_when_official_present(self):
+        hits = find_official(self.root, "T99n9999", "html")
+        self.assertEqual(len(hits), 1)
+        self.assertIn("official", open(hits[0], encoding="utf-8").read())
+
+    def test_formal_only_yields_empty(self):
+        # 无官方、仅正式档 → 空（不得自命中假绿）
+        os.remove(os.path.join(self.root, "T9999 Book", "html",
+                               "T9999_001.html"))
+        self.assertEqual(find_official(self.root, "T99n9999", "html"), [])
 
 
 class TestTxtNotesLanding(unittest.TestCase):

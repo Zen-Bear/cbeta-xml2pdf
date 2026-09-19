@@ -283,6 +283,77 @@ class TestShowNotesFlag(unittest.TestCase):
         self.assertTrue(self._capture())
 
 
+class TestResolveVerifyEbook(unittest.TestCase):
+    """校验基线下载目录：显式 --cbeta-ebook > presets > src（防 split-brain）。"""
+
+    def test_explicit_wins(self):
+        from types import SimpleNamespace
+        from pycbeta.cli import resolve_verify_ebook
+        args = SimpleNamespace(cbeta_ebook="E")
+        self.assertEqual(
+            resolve_verify_ebook(args, {"source": {"cbeta_ebook": "P"}}, "S"),
+            "E")
+
+    def test_preset_fallback(self):
+        from types import SimpleNamespace
+        from pycbeta.cli import resolve_verify_ebook
+        args = SimpleNamespace(cbeta_ebook="")
+        self.assertEqual(
+            resolve_verify_ebook(args, {"source": {"cbeta_ebook": "P"}}, "S"),
+            "P")
+
+    def test_src_last_resort(self):
+        from types import SimpleNamespace
+        from pycbeta.cli import resolve_verify_ebook
+        args = SimpleNamespace(cbeta_ebook="")
+        self.assertEqual(resolve_verify_ebook(args, {}, "S"), "S")
+        self.assertEqual(resolve_verify_ebook(args, None, "S"), "S")
+
+    def test_verify_fetch_uses_explicit_ebook(self):
+        # 主链：--verify 缺基线时 ensure_baselines 落显式目录（publish 场景）
+        import io
+        import json
+        import shutil
+        from contextlib import redirect_stdout
+        from types import SimpleNamespace
+        from unittest import mock
+        from pycbeta.cli import main
+        d = tempfile.mkdtemp()
+        try:
+            xml = os.path.join(d, "T01n0001.xml")
+            with open(xml, "w", encoding="utf-8") as f:
+                f.write("<TEI/>")
+            gen = os.path.join(d, "T0001.html")
+            with open(gen, "w", encoding="utf-8") as f:
+                f.write("x")
+            cfgp = os.path.join(d, "cfg.json")
+            with open(cfgp, "w", encoding="utf-8") as f:
+                json.dump({"verify": {"auto_fetch": True}}, f)
+            eb = os.path.join(d, "eb")
+            os.makedirs(eb)
+            work = SimpleNamespace(id="T0001", metadata={})
+            seen = {}
+            with mock.patch("pycbeta.parser.P5Parser") as P, \
+                    mock.patch("pycbeta.verify.work_juan_numbers",
+                               return_value=[]), \
+                    mock.patch("pycbeta.cli.process_file", return_value=0), \
+                    mock.patch("pycbeta.verify.generate_formal",
+                               return_value=[gen]), \
+                    mock.patch("pycbeta.verify.find_official",
+                               return_value=[]), \
+                    mock.patch("pycbeta.fetch.ensure_baselines",
+                               side_effect=lambda w, n, p, e:
+                               seen.update(wid=w, need=n, ebook=e)):
+                P.return_value.parse.return_value = work
+                with redirect_stdout(io.StringIO()):
+                    main(["--config", cfgp, "-i", xml, "-f", "html",
+                          "--verify", "--cbeta-ebook", eb])
+            self.assertEqual(seen.get("ebook"), eb)
+            self.assertEqual(seen.get("wid"), "T0001")
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+
 class TestVersion(unittest.TestCase):
     def test_version_flag_matches_package(self):
         import io
