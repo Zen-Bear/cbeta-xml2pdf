@@ -41,12 +41,33 @@ _ZIP_FORMATS = {"html", "docx", "txt_notes", "odt"}
 
 DEFAULT_SOURCE = {
     "xml_dir": "",
-    # catalog 默认用仓内版（cbeta/data/sutra_mapping.txt，随包更新；publish 原件仅作上游备份）
+    # catalog 钉死仓内版（程序相对路径 cbeta/data/sutra_mapping.txt，随包更新；
+    # publish 原件仅作上游备份；任何自定义值一律忽略，见 resolve_catalog）
     "catalog": os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                             "cbeta", "data", "sutra_mapping.txt"),
     "cbeta_ebook": "",
     "title_t2s": True,
 }
+
+
+def _repo_root():
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def builtin_catalog() -> str:
+    """内置佛典目录（钉死）：仓库内 cbeta/data/sutra_mapping.txt（程序相对路径）。"""
+    return os.path.join(_repo_root(), "cbeta", "data", "sutra_mapping.txt")
+
+
+def resolve_catalog(value="") -> str:
+    """catalog 解析（钉死内置，不接受自定义路径）。
+    相对值→按仓库根解析（出厂 `cbeta/data/sutra_mapping.txt` 走这条，结果==内置）；
+    绝对值/空→一律回内置（历史预设里的绝对路径视为过期残留，直接忽略）。"""
+    v = (value or "").strip()
+    if v and not os.path.isabs(v):
+        return os.path.abspath(os.path.join(
+            _repo_root(), *v.replace("\\", "/").split("/")))
+    return builtin_catalog()
 # 共享层模板（含 pdf）+ xml2pdf 专有的 figures
 DEFAULT_DOWNLOADS = {
     **_cf.DEFAULT_DOWNLOADS,
@@ -146,7 +167,7 @@ def canonical_work_id(work_id: str, presets=None) -> str:
     """按 catalog 原始大小写规范化 work id（canon 大写 + no 原样，如 TXa001/T0128a）。
     catalog 未命中（离线/本地/未知）→ 原样返回。用于下载 URL 与工作目录命名。"""
     cfg = (presets.get("source") or {}) if isinstance(presets, dict) else {}
-    cat = cfg.get("catalog", DEFAULT_SOURCE.get("catalog", ""))
+    cat = resolve_catalog(cfg.get("catalog", ""))
     return _cf.canonical_work_id(work_id, cat)
 
 
@@ -244,7 +265,7 @@ def work_dir(root: str, work_id: str, title: str = "", presets=None,
 
 def _catalog_title(presets, canon: str, no: str) -> str:
     cfg = (presets.get("source") or {}) if isinstance(presets, dict) else {}
-    for rec in catalog_lookup(cfg.get("catalog", ""), canon, no):
+    for rec in catalog_lookup(resolve_catalog(cfg.get("catalog", "")), canon, no):
         if rec.get("title"):
             return rec["title"]
     return ""
@@ -328,7 +349,7 @@ def _fetch_one(work_id: str, fmt: str, canon: str, no: str,
     """下载单个格式，失败静默返回 []。一律落平展 work 目录。"""
     title = ""
     if fmt == "xml":
-        files = catalog_lookup(source_cfg.get("catalog", ""), canon, no)
+        files = catalog_lookup(resolve_catalog(source_cfg.get("catalog", "")), canon, no)
         if not files:
             print(f"{work_id}: catalog 未收录（书名/冊号缺失），无法拼 XML 下载地址")
             return []
@@ -615,7 +636,7 @@ def check_ebook_updates(cbeta_ebook: str, presets: Optional[Dict] = None,
     if presets is None:
         presets = load_presets()
     src = presets.get("source") or {}
-    catalog = src.get("catalog", "")
+    catalog = resolve_catalog(src.get("catalog", ""))
     dl = {**DEFAULT_DOWNLOADS, **(presets.get("downloads") or {})}
     xml_tmpl = dl.get("xml", DEFAULT_DOWNLOADS["xml"])
     entries = []

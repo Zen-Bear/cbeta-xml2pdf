@@ -118,5 +118,71 @@ class TestCorrCbetaRender(unittest.TestCase):
         self.assertNotIn("corr", text)
 
 
+class TestEpubSongCss(unittest.TestCase):
+    """epub 字体落实：派生基底 epub_song.css 含繁简正文实规则；成品注入生效。"""
+
+    def _text(self):
+        import io
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with io.open(os.path.join(root, "styles", "epub_song.css"),
+                      encoding="utf-8") as f:
+            return f.read()
+
+    def test_both_lang_rules(self):
+        css = self._text()
+        self.assertIn('html[lang="zh-Hant"] body', css)
+        self.assertIn("PMingLiU", css)  # 繁体明体栈
+        self.assertIn('html[lang="zh-Hans"] body', css)
+        self.assertIn("SimSun", css)  # 简体宋体栈
+
+    def test_electronic_structure_rules(self):
+        # 派生自 pdf_docx 会丢 golden 的电子书结构规则，此处守护三条修复：
+        css = self._text()
+        self.assertIn("span.footnote { display: block }", css)  # 尾注逐条分行
+        self.assertIn("text-indent: 0!important", css)  # 经文资讯首行不缩进
+        # 卷名字体：写死字面值（不用 var，阅读器不支持自定义属性），
+        # 选择器带 html[lang] 压过 `html[lang] p` 正文规则
+        self.assertIn('html[lang="zh-Hant"] p.juan', css)
+        self.assertIn('html[lang="zh-Hans"] p.juan', css)
+        self.assertIn("標楷體", css)
+        self.assertIn("楷体", css)
+
+    def test_copyright_page_break(self):
+        # 经文资讯尾页另页（仅 epub_song 定制；官方不另页）
+        css = self._text()
+        self.assertIn("#cbeta-copyright", css)
+        self.assertIn("break-before: page", css)
+        self.assertIn("page-break-before: always", css)
+
+    def test_resolve_returns_song_not_golden(self):
+        from pycbeta.theme import resolve_html_base_css
+        got = resolve_html_base_css({}, None,
+                                    std="pycbeta/styles/epub_song.css")
+        self.assertIn("SimSun", got)
+        self.assertIn("派生：pdf_docx.css 全文止", got)
+
+    def test_epub_embeds_song_rules(self):
+        import shutil
+        from pycbeta.parser import P5Parser
+        from pycbeta.render_epub import EpubRenderer
+        xml = os.path.join(CBETA, "T0349 彌勒菩薩所問本願經", "T12n0349.xml")
+        work = P5Parser().parse(xml)
+        d = tempfile.mkdtemp()
+        try:
+            fn = EpubRenderer(base_css=self._text()).render_work(work, d)
+            z = zipfile.ZipFile(fn)
+            style = z.read("OEBPS/style.css").decode("utf-8")
+            self.assertIn("SimSun", style)
+            # 样式表须在 manifest 声明、章节用 <link> 引用（否则阅读器不加载）
+            opf = z.read("OEBPS/content.opf").decode("utf-8")
+            self.assertIn('href="style.css"', opf)
+            ch = [n for n in z.namelist() if "/ch" in n and n.endswith(".xhtml")]
+            head = z.read(ch[0]).decode("utf-8")
+            self.assertIn('href="style.css"', head)
+            self.assertIn('lang="zh-Hant"', head)  # 繁体走明体分支
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

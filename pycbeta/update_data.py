@@ -58,6 +58,46 @@ def load_sources(root=None):
     return out
 
 
+#: 更新源中文名（GUI 表格/对话框共用；未知 key 回退原 key）
+DISPLAY_NAMES = {
+    "gaiji": "缺字库",
+    "sanskrit": "梵字库",
+    "supplement-ttf": "补充字型",
+    "sutra-mapping": "佛典目录映射表",
+    "siddham-fonts": "悉昙·兰札字型",
+}
+
+
+def source_rows(root=None):
+    """GUI 表格行：[(显示名, 更新 URL, 本地文件, 上次更新)]。纯逻辑，可单测。
+    上次更新取 sidecar 逐项 `at`，缺失回退 git 入库日期；手动项本地文件记目录、
+    上次更新记"手动下载"。"""
+    base = _repo_root(root)
+    try:
+        sources = load_sources(base)
+    except (OSError, ValueError):
+        return []
+    last = load_last_update(base)
+    rows = []
+    for src in sources:
+        key = src["key"]
+        url = src.get("url") or ""
+        if src.get("kind") == "manual":
+            dest_disp = (os.path.join(*src["dest"]) + os.sep) if src.get("dest") \
+                else "手动下载"
+            when = "手动下载"
+        elif not src.get("dest"):
+            dest_disp, when = "手动下载", ""
+        else:
+            dest_disp = os.path.join(*src["dest"])
+            meta = last.get(key) or {}
+            when = str(meta.get("at", ""))[:10]
+            if not when:
+                when = _git_file_date(base, os.path.join(*src["dest"]))
+        rows.append((DISPLAY_NAMES.get(key, key), url, dest_disp, when))
+    return rows
+
+
 def _check_json_dict(raw):
     """(ok, 说明)：JSON 解析成非空 dict；返回条目数供报告。"""
     try:

@@ -101,11 +101,13 @@ class EpubRenderer:
 
     def _build_chapter_xhtml(self, ch: dict, title: str, css: str,
                                lang: str = "zh-Hant") -> str:
+        # css = 外部样式表文件名（同目录）；用 <link> + manifest 声明，
+        # 兼容性优于 <style>@import（部分阅读器忽略未入 manifest 的资源）
         return (
             '<?xml version="1.0" encoding="utf-8"?>\n'
             f'<html xmlns="http://www.w3.org/1999/xhtml" lang="{lang}">\n<head>\n'
             f'<title>{_x(ch["title"])}</title>\n'
-            f'<style>{css}</style>\n'
+            f'<link rel="stylesheet" type="text/css" href="{_x(css)}"/>\n'
             "</head>\n<body>\n"
             f'{ch["body"]}\n'
             "</body>\n</html>"
@@ -118,6 +120,7 @@ class EpubRenderer:
         manifest += ('<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" '
                      'properties="nav"/>')
         manifest += ('<item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>')
+        manifest += ('<item id="style" href="style.css" media-type="text/css"/>')
         spine = "".join(f'<itemref idref="{c["id"]}"/>' for c in chapters)
         return (
             '<?xml version="1.0" encoding="utf-8"?>\n'
@@ -174,7 +177,6 @@ class EpubRenderer:
             z.writestr("OEBPS/style.css", css)
             for c in chapters:
                 xhtml = self._build_chapter_xhtml(c, c["title"],
-                                                  '@import url("style.css");',
-                                                  lang)
+                                                  "style.css", lang)
                 z.writestr(f"OEBPS/{c['file']}", xhtml)
         return zio.getvalue()

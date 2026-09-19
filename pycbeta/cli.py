@@ -427,6 +427,9 @@ def _run_font_check(w, args, theme, out_dir=None):
 def main(argv=None):
     ap = argparse.ArgumentParser(
         prog="pycbeta", description="CBETA XML P5 -> HTML / PDF / DOCX / MD / EPUB")
+    from pycbeta import __version__ as _ver
+    ap.add_argument("--version", action="version",
+                    version=f"%(prog)s {_ver}")
 
     shared = ap.add_argument_group("共享参数（所有格式）")
     shared.add_argument("-i", "--input", required=False, default=None,
@@ -464,7 +467,8 @@ def main(argv=None):
                         help="强制繁体输出（覆盖 config output.t2s=true）")
     shared.add_argument("--font-scale", type=float, default=None,
                         help="字号等比缩放（重排式大字，老人版推荐 1.33/1.5；"
-                             "默认取 config output.font_scale；与 --verify 互斥）")
+                             "默认取 config output.font_scale；与 --verify 互斥）。"
+                             "仅 pdf/docx；html/epub 由阅读器原生缩放，不适用")
     shared.add_argument("--config", "--presets-file",
                         help="run.json 组合单（5 槽：config-json/html-epub-theme/"
                              "html-epub-user-theme/pdf-docx-theme/pdf-docx-user-theme），"
@@ -489,7 +493,16 @@ def main(argv=None):
                            "html/epub/md/txt 仅区分 inline 与否")
     note.add_argument("--strip-head-no", dest="strip_head_no", action="store_true",
                       default=None,
-                      help="去 head/jhead 行首 No. 令牌（如 No. 1116-B 序→序；默认关，可配 output.strip_head_no）")
+                      help="去 head/jhead 行首 No. 令牌（如 No. 1116-B 序→序），"
+                           "并省略 docNumber 编号行（如 No. 349 [No. 310(42)]）；"
+                           "默认关，可配 output.strip_head_no")
+    note.add_argument("--show-notes", dest="show_notes_flag", action="store_true",
+                      default=None,
+                      help="显示校勘注/脚注/尾注（覆盖 config output.show_notes=true；"
+                           "--no-show-notes 可关）")
+    note.add_argument("--no-show-notes", dest="show_notes_flag", action="store_false",
+                      default=None,
+                      help="关闭校勘注/脚注/尾注（覆盖 config output.show_notes；不含正文夹注）")
 
     pg = ap.add_argument_group("页面（pdf/docx；纯 HTML 输出不适用）")
     pg.add_argument("--page", default=None,
@@ -602,7 +615,11 @@ def main(argv=None):
     args.inline_brackets = out_defaults.get("inline_brackets", "fullwidth")
     args.note_inline_brackets = out_defaults.get("note_inline_brackets") or args.inline_brackets
     args.footnote_per_page = out_defaults.get("footnote_per_page", True)
-    args.show_notes = out_defaults.get("show_notes", True)
+    if args.show_notes_flag is not None:
+        # 显式开关优先；否则取 config output.show_notes（默认显示）
+        args.show_notes = args.show_notes_flag
+    else:
+        args.show_notes = bool(out_defaults.get("show_notes", True))
     if args.notes is None:
         # 缺省取 config output.notes（非法/空则不设，render_one 落按格式默认）
         _n = str(out_defaults.get("notes") or "").strip().lower()

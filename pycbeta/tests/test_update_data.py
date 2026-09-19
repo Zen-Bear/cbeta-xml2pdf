@@ -260,9 +260,34 @@ class TestLoadSources(unittest.TestCase):
         rows = load_sources()
         keys = [r["key"] for r in rows]
         self.assertIn("gaiji", keys)
+        self.assertIn("sutra-mapping", keys)
         self.assertIn("siddham-fonts", keys)
         man = next(r for r in rows if r["key"] == "siddham-fonts")
         self.assertEqual(man["kind"], "manual")
+
+
+class TestSourceRows(unittest.TestCase):
+    """GUI 表格行：中文名全覆盖 + 行形状 + 手动项标记。"""
+
+    def test_display_names_cover_all_sources(self):
+        from pycbeta.update_data import DISPLAY_NAMES
+        keys = {s["key"] for s in load_sources()}
+        self.assertEqual(set(DISPLAY_NAMES), keys)
+
+    def test_source_rows_shape(self):
+        from pycbeta.update_data import source_rows
+        rows = source_rows()
+        self.assertTrue(rows)
+        by_name = {r[0]: r for r in rows}
+        name, url, dest, _when = by_name["佛典目录映射表"]
+        self.assertTrue(url.startswith("http"))
+        self.assertTrue(dest.endswith("sutra_mapping.txt"))
+        # 手动项：第一列去"（手动）"，本地文件记目录，上次更新记"手动下载"
+        mname, _u, mdest, mwhen = by_name["悉昙·兰札字型"]
+        self.assertTrue(mdest.endswith("fonts" + os.sep))
+        self.assertEqual(mwhen, "手动下载")
+        for r in rows:
+            self.assertEqual(len(r), 4)
 
 
 if __name__ == "__main__":

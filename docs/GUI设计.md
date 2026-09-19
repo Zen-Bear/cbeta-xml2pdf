@@ -61,7 +61,7 @@ class XmlOptions:
 | 校验 | `verify.enabled/maxDiff/diffLines/auto_fetch/scope_juan` | 高级页（转换后校验开关**默认开**/阈值/报告差异行数/自动下载/卷限定） | `verify.*` |
 | 注音 | `annotations.enabled` / `full_text` | 三选一「无注音 / 难字注音 / 全文注音」（全文含难字；互斥）+ 方案/位置/括号/频率/词表（词表**只读**，浏览选择，默认内置表）；`rare_zones`/`rare_font` 走 config | `annotations.*` |
 
-**不适合 GUI 修改**：`source.xml_dir/cbeta_ebook/catalog`（路径，走浏览/配置页而非面板）、`downloads.*` URL 模板（固定，改配置文件）、`source.title_t2s`（数据源窗口复选）。
+**不适合 GUI 修改**：`source.xml_dir/cbeta_ebook`（路径，数据源窗口只读框走浏览；`catalog` 钉死内置）、`downloads.*` URL 模板（数据源窗口 tab1 可改，存当前选中预设）、`source.title_t2s`（数据源窗口复选）。
 
 ### 2.2 回存语义
 - 面板 `set_options()` 以 `load_presets()` 的 `output/pagination/series_title` 为默认值回填，未勾选项不写入（保持继承）。
@@ -153,6 +153,11 @@ class XmlOptions:
 ### 3.2 `XmlOptionsDialog(QDialog)`
 面板的对话框包装：`exec() -> Optional[XmlOptions]`（Accept→选项；Cancel→None），`[确定][取消]`。
 
+### 3.3 `SourceDialog` / `DataUpdateDialog`（数据源窗口）
+- `SourceDialog`：路径行 `xml_dir` + `cbeta_ebook`（均只读+浏览；后者清空确定时弹必填警告）；`catalog` 钉死内置（tab2 的佛典目录映射表行即其位置与更新状态）。
+- 表格改两 tab：tab1「电子书下载模板」（`downloads.*`，键列只读，值可改，确定存当前选中预设）；tab2「官方数据更新源」（`remote_sources.json` 全表只读：数据项/更新 URL/本地文件/上次更新）。
+- 「更新官方数据」按钮开 `DataUpdateDialog`：更新源列表 + 「开始更新」（后台线程，`dry-run` 仅检查）+ 逐行状态；「更新XML」按钮逻辑不动。
+
 ## 4. 独立窗 `python -m pycbeta.gui`
 
 ### 4.1 输入两种模式
@@ -171,7 +176,7 @@ class XmlOptions:
 │ │ T0349      彌勒菩薩所問本願經  本地XML  待转换  ████░░ 40% │ │
 │ │ X1116      毗尼日用切要香乳記  已下载  待转换  ░░░░░░  0%  │ │
 │ └───────────────────────────────────────────────────────────┘ │
-│ [开始] [取消]   ██████████░░░░░░░░ 进度条                      │
+│ [转换] [取消]   ██████████░░░░░░░░ 进度条                      │
 └──────────────────────────────────────────────────────────────┘
 ```
 

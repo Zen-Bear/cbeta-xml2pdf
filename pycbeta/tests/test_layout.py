@@ -91,10 +91,10 @@ class TestFlatLanding(unittest.TestCase):
         self.root = tempfile.mkdtemp()
         self.flat = os.path.join(self.root, "T9999 Book")
         os.makedirs(self.flat)
-        catalog = os.path.join(self.root, "catalog.txt")
-        with open(catalog, "w", encoding="utf-8") as f:
-            f.write("T,99,9999,1,1,x,Test Book\n")
-        self.source_cfg = {"catalog": catalog}
+        # catalog 已钉死内置：查表层 mock（T9999 内置无记录），source_cfg 不再传 catalog
+        self.source_cfg = {}
+        self._rec = [{"vol": "99", "no": "9999", "file": "T99n9999.xml",
+                      "title": "Test Book"}]
         self.dl = {"xml": "http://example/{canon}/{canon}{vol}/{file}",
                    "html": "http://example/{id}.html.zip"}
         self.downloaded = []
@@ -121,17 +121,23 @@ class TestFlatLanding(unittest.TestCase):
         self.assertEqual(_find_work_dir(self.root, "T9999"), self.flat)
 
     def test_xml_lands_flat(self):
-        res = _fetch_one("T9999", "xml", "T", "9999", self.dl,
-                         self.source_cfg, self.root)
+        from unittest import mock
+        with mock.patch.object(fetch_mod, "catalog_lookup",
+                               return_value=self._rec):
+            res = _fetch_one("T9999", "xml", "T", "9999", self.dl,
+                             self.source_cfg, self.root)
         want = os.path.join(self.flat, "T99n9999.xml")
         self.assertEqual(res, [want])
         self.assertTrue(os.path.isfile(want))
         self.assertEqual(self.downloaded, ["http://example/T/T99/T99n9999.xml"])
 
     def test_xml_creates_work_dir_with_title(self):
+        from unittest import mock
         shutil.rmtree(self.flat)
-        res = _fetch_one("T9999", "xml", "T", "9999", self.dl,
-                         self.source_cfg, self.root)
+        with mock.patch.object(fetch_mod, "catalog_lookup",
+                               return_value=self._rec):
+            res = _fetch_one("T9999", "xml", "T", "9999", self.dl,
+                             self.source_cfg, self.root)
         self.assertEqual(os.path.basename(os.path.dirname(res[0])),
                          "T9999 Test Book")
 

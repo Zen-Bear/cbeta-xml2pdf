@@ -1115,12 +1115,16 @@ class TestMainWindowUx(unittest.TestCase):
 
     def test_title_has_gui_date(self):
         import re
+        from pycbeta import __version__
         from pycbeta.gui.__main__ import MainWindow, _gui_date
         self.assertRegex(_gui_date(), r"^\d{4}-\d{2}-\d{2}$")
         w = MainWindow()
         try:
+            # 标题版本与单点 __version__ 一致（改一处即全局生效）
             self.assertRegex(w.windowTitle(),
-                             r"^CBETA XML 格式转换 v1\.0（\d{4}-\d{2}-\d{2}）$")
+                             r"^CBETA XML 格式转换 v"
+                             + re.escape(__version__)
+                             + r"（\d{4}-\d{2}-\d{2}）$")
         finally:
             w.close()
 
@@ -1156,6 +1160,15 @@ class TestMainWindowUx(unittest.TestCase):
             w.cfg_toggle.toggle()
             self.assertFalse(w.panel.isHidden())
             self.assertIsNotNone(w.panel.tabs)  # tab 区引用保持有效
+        finally:
+            w.close()
+
+
+    def test_start_button_labeled_convert(self):
+        from pycbeta.gui.__main__ import MainWindow
+        w = MainWindow()
+        try:
+            self.assertEqual(w.btn_start.text(), "转换")
         finally:
             w.close()
 
@@ -1334,16 +1347,18 @@ class TestBatchMergeResolve(unittest.TestCase):
             out = w._resolve({"kind": "id", "id": "T0001"}, 0, fetch, presets)
             self.assertEqual(out, [])
             self.assertEqual(labels[-1], "缺 XML（未勾选自动下载）")
-            # 自动下载已开但 catalog 未收录 → 指明 catalog（不触网）
+            # 自动下载已开但 catalog 未收录 → 指明 catalog（mock 查表层，不触网；
+            # catalog 已钉死内置，自定义路径不再生效，未收录只能 mock catalog_lookup）
+            presets2 = {"source": {"xml_dir": "", "cbeta_ebook": ebook}}
             w2 = BatchWorker([], None, {}, {"auto_xml": True})
-            labels2 = []
-            w2.row_status.connect(lambda i, t: labels2.append(t))
-            cat = os.path.join(ebook, "mulu.txt")
-            with open(cat, "w", encoding="utf-8") as f:
-                f.write("")  # 空 catalog：T0001 未收录（不触网）
-            presets2 = {"source": {"xml_dir": "", "cbeta_ebook": ebook,
-                                   "catalog": cat}}
-            out2 = w2._resolve({"kind": "id", "id": "T0001"}, 0, fetch, presets2)
+            with mock.patch("pycbeta.fetch.materialize_work",
+                            return_value=([], "")), \
+                 mock.patch("pycbeta.fetch.catalog_lookup",
+                            return_value=[]):
+                labels2 = []
+                w2.row_status.connect(lambda i, t: labels2.append(t))
+                out2 = w2._resolve({"kind": "id", "id": "T0001"}, 0, fetch,
+                                   presets2)
             self.assertEqual(out2, [])
             self.assertEqual(labels2[-1], "缺 XML（catalog 未收录）")
             # catalog 有收录但取不到 → 下载失败（mock 住下载层，不触网）
@@ -1744,21 +1759,82 @@ class TestSourceDialog(unittest.TestCase):
         finally:
             dlg.close()
 
-    def test_update_finished_shows_report(self):
-        import unittest.mock as mock
+    def test_source_tabs(self):
+        import pycbeta.gui.panel as pm
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PySide6.QtWidgets import QApplication
+        from PySide6.QtCore import Qt
+        QApplication.instance() or QApplication([])
+        dlg = pm.SourceDialog()
+        try:
+            self.assertEqual(dlg.src_tabs.count(), 2)
+            self.assertEqual(dlg.src_tabs.tabText(0), "官方数据更新源")
+            self.assertEqual(dlg.src_tabs.tabText(1), "电子书下载模板")
+            from pycbeta.update_data import load_sources
+            self.assertEqual(dlg.upd_table.rowCount(), len(load_sources()))
+            for i in range(dlg.upd_table.rowCount()):
+                for j in range(dlg.upd_table.columnCount()):
+                    self.assertFalse(bool(
+                        dlg.upd_table.item(i, j).flags() & Qt.ItemIsEditable))
+            names = [dlg.upd_table.item(i, 0).text()
+                     for i in range(dlg.upd_table.rowCount())]
+            self.assertIn("佛典目录映射表", names)
+            self.assertIn("悉昙·兰札字型", names)
+            self.assertNotIn("悉昙·兰札字型（手动）", names)
+        finally:
+            dlg.close()
+
+    def test_upd_table_copy_selection(self):
         import pycbeta.gui.panel as pm
         os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
         from PySide6.QtWidgets import QApplication
         QApplication.instance() or QApplication([])
         dlg = pm.SourceDialog()
         try:
+            t = dlg.upd_table
+            self.assertGreater(t.rowCount(), 0)
+            t.clearSelection()
+            t.item(0, 0).setSelected(True)
+            t.item(0, 1).setSelected(True)
+            pm.SourceDialog._copy_table_selection(t)
+            clip = QApplication.clipboard().text()
+            self.assertIn(t.item(0, 0).text(), clip)
+            self.assertIn("\t", clip)
+        finally:
+            dlg.close()
+
+    def test_data_update_dialog_finished_fills_status(self):
+        import pycbeta.gui.panel as pm
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PySide6.QtWidgets import QApplication
+        QApplication.instance() or QApplication([])
+        dlg = pm.DataUpdateDialog()
+        try:
+            self.assertGreater(dlg.table.rowCount(), 0)
             rep = [{"key": "gaiji", "status": "unchanged", "detail": "1 条"}]
-            with mock.patch.object(pm.QMessageBox, "information") as m:
-                dlg._on_update_finished(rep)
-                m.assert_called_once()
-                args, _kw = m.call_args
-                self.assertIn("gaiji", args[2])
-            self.assertTrue(dlg._buttons_box.isEnabled())
+            dlg._on_finished(rep)
+            from pycbeta.update_data import load_sources
+            keys = [s["key"] for s in load_sources()]
+            self.assertIn("一致", dlg.table.item(keys.index("gaiji"), 3).text())
+            self.assertIn("gaiji", dlg.status.text())
+        finally:
+            dlg.close()
+
+    def test_data_update_dialog_dry_run_passthrough(self):
+        import unittest.mock as mock
+        import pycbeta.gui.panel as pm
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PySide6.QtWidgets import QApplication
+        QApplication.instance() or QApplication([])
+        dlg = pm.DataUpdateDialog()
+        try:
+            dlg.dry_box.setChecked(True)
+            with mock.patch.object(pm, "DataUpdateWorker") as W:
+                dlg._on_go()
+                W.assert_called_once_with(dry_run=True)
+                self.assertFalse(dlg.btn_go.isEnabled())
+            dlg._on_done()
+            self.assertTrue(dlg.btn_go.isEnabled())
         finally:
             dlg.close()
 
@@ -1874,9 +1950,13 @@ class TestSourceDialog(unittest.TestCase):
         dlg = pm.SourceDialog()
         try:
             keys = [k for k, _ in pm.SOURCE_LABELS]
-            self.assertIn("cbeta_ebook", keys)
-            self.assertNotIn("download_dir", keys)
+            # 路径行：xml_dir + cbeta_ebook（catalog 已钉死内置，不再设行）
+            self.assertEqual(keys, ["xml_dir", "cbeta_ebook"])
+            self.assertIn("xml_dir", dlg.path_edits)
             self.assertIn("cbeta_ebook", dlg.path_edits)
+            self.assertNotIn("catalog", dlg.path_edits)
+            for _k, ed in dlg.path_edits.items():
+                self.assertTrue(ed.isReadOnly())  # 只能浏览选择，不可手输
             self.assertTrue(dlg.title_t2s_box.isChecked())  # 默认开
             self.assertTrue(dlg.ebook_base_box.isChecked())  # 默认同时更新基线
         finally:

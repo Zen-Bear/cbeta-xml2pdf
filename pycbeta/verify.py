@@ -370,9 +370,14 @@ def _strip_md_marks(text: str) -> str:
 
 
 def _head_no_tokens(work) -> list:
-    """work 全部 head/jhead 的行首 No. 令牌（去重保序；`output.strip_head_no` 官方侧对等剥离用）。
-    同输入必同值（与生成侧同一 helper 同一规则）；无命中返回 []。"""
+    """work 全部 head/jhead 行首 No. 令牌 + docNumber 整行文本（去重保序；
+    `output.strip_head_no` 官方侧对等剥离用）。
+    生成侧 strip_head_no 开启时 head/jhead 剥令牌、docNumber 整元素省略，
+    故官方侧需按同表对等剥离。同输入必同值；无命中返回 []。"""
     out = []
+    t_doc = (work.metadata.get("docNumber") or "").strip() if hasattr(work, "metadata") else ""
+    if t_doc:
+        out.append(t_doc)
     stack = list(getattr(work, "body", []) or [])
     while stack:
         n = stack.pop(0)

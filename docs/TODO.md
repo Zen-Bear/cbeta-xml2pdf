@@ -408,6 +408,9 @@
   - 验收：X60n1116 `-f txt` 开剥离 0/496（missing=0 四令牌 A/B/C/D 全对齐；残留 = 题署行版式差 + body-app 双变体展开，属已知局限类，非 strip 问题）；默认关全量 454/458（4 失败系用户未提交 CSS 改动 `h1.title 30→26pt`，非本件；stash 干净树对照通过）
   - 附带：`docNumber` 独立元素（如 `No. 1116`）两边保留不动；书签/目录文本不同步
   - 导航窗格跟随可见段落（OOXML 同一段落无法分离；mulu 书签名保留 No.）——2026-09-10 用户确认接受现状，不动
+- [x] **docNumber 编号行随 strip_head_no 省略**（2026-09-18 用户反馈 T0349 html/epub 仍显 `No. 349 [No. 310(42)]`）
+  - 原只剥 head/jhead 令牌，docNumber 独立元素「两边保留不动」；现改为开关开启时 html/epub/md/txt 省略整元素（docx 本恒不显）
+  - verify 对等：`_head_no_tokens` 增 docNumber 全文（生成侧省略 → 官方侧按同表行首剥离）；默认关仍与官方电子书一致（保留）
 - [x] **插图机制（2026-09-11 用户立项：`<figure><graphic url="../figures/X/X59p0224_01.gif">`，缺图报错？自动下载？）**
   - 远端已核验：`cbeta-git/CBR2X-figures`（`master`，布局 `{canon}/{basename}`，如 `X/X59p0224_01.gif` 6.4KB 确有其文件）；模板 `https://raw.githubusercontent.com/cbeta-git/CBR2X-figures/master/{canon}/{file}` 进出厂 `config.json downloads.figures` + `panel.DOWNLOAD_KEYS`（数据源 URL 表/重置自动兼容）
   - 新模块 `pycbeta/figures.py`（纯函数）：`split_graphic_url/download_url/find_figure/search_dirs/work_figure_dirs/graphic_urls_in_text/gif+png size/looks_like_image`

@@ -125,6 +125,42 @@ class TestStripHeadNoX1116(unittest.TestCase):
         self.assertIn("序", text)
 
 
+class TestStripDocNumber(unittest.TestCase):
+    """docNumber 编号行（如 No. 349 [No. 310(42)]）：strip_head_no 开启时四文本格式省略。"""
+
+    def _work(self):
+        from pycbeta.model import Work
+        return Work(id="T", source_file="",
+                    metadata={"docNumber": "No. 349 [No. 310(42)]"},
+                    body=[E(tag="docNumber",
+                            children=[Text(text="No. 349 [No. 310(42)]")])],
+                    notes_by_n={}, apps=[], simplified=False)
+
+    def _html(self, flag):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        files = HtmlRenderer(strip_head_no=flag).render_work(self._work(), d)
+        return "".join(open(os.path.join(d, f), encoding="utf-8").read()
+                       for f in files)
+
+    def test_html_default_kept(self):
+        self.assertIn("No. 349", self._html(False))
+
+    def test_html_stripped(self):
+        self.assertNotIn("No. 349", self._html(True))
+
+    def test_md_txt_stripped(self):
+        from pycbeta.render_txt import TxtRenderer
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        md = open(MdRenderer(strip_head_no=True).render_work(
+            self._work(), d, filename="a.md"), encoding="utf-8").read()
+        txt = open(TxtRenderer(strip_head_no=True).render_work(
+            self._work(), d, filename="a.txt"), encoding="utf-8").read()
+        self.assertNotIn("No. 349", md)
+        self.assertNotIn("No. 349", txt)
+
+
 class TestUnclear(unittest.TestCase):
     """<unclear>（文字无法辨析）渲染为标准虚缺符号 □（U+25A1），四格式一致。"""
 

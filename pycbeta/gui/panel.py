@@ -16,12 +16,14 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
 from PySide6.QtCore import Qt, QThread, Signal, QUrl
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtGui import QDesktopServices, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox,
+    QAbstractItemView, QApplication, QCheckBox, QComboBox, QDialog,
+    QDialogButtonBox, QDoubleSpinBox,
     QFileDialog, QFormLayout, QGridLayout, QGroupBox, QHBoxLayout, QInputDialog,
     QLabel, QLineEdit,
-    QMessageBox, QPlainTextEdit, QPushButton, QSpinBox, QTableWidget, QTableWidgetItem,
+    QMessageBox, QPlainTextEdit, QPushButton, QHeaderView, QSpinBox,
+    QTableWidget, QTableWidgetItem,
     QTabWidget, QVBoxLayout,
     QWidget,
 )
@@ -517,6 +519,85 @@ class EbookUpdateDialog(QDialog):
     def _on_copy(self):
         QApplication.clipboard().setText("\n".join(self._updated))
         self.copy_status.setText(f"已复制 {len(self._updated)} 个編號")
+
+
+class DataUpdateDialog(QDialog):
+    """官方数据更新：先列更新源（remote_sources.json），确认后再跑。
+    行源 update_data.source_rows()；更新跑 DataUpdateWorker（含 dry-run 仅检查），
+    完后逐行填状态（catalog 钉死内置，更新即生效，无自定义路径提示）。"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("官方数据更新")
+        self.resize(640, 420)
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel("可从官方更新的数据："))
+        self.table = QTableWidget(0, 4)
+        self.table.setHorizontalHeaderLabels(
+            ["数据项", "本地文件", "上次更新", "状态"])
+        self.table.horizontalHeader().setStretchLastSection(True)
+        try:
+            from pycbeta.update_data import load_sources, source_rows
+            self._keys = [s["key"] for s in load_sources()]
+            rows = source_rows()
+        except (OSError, ValueError):
+            self._keys, rows = [], []
+        self.table.setRowCount(len(rows))
+        for i, (name, _url, dest, when) in enumerate(rows):
+            for j, text in enumerate((name, dest, when, "待检查")):
+                item = QTableWidgetItem(text)
+                item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+                self.table.setItem(i, j, item)
+        layout.addWidget(self.table, 1)
+        brow = QHBoxLayout()
+        self.dry_box = QCheckBox("仅检查（不写盘）")
+        self.dry_box.setToolTip("dry-run：下载比对并预告，不覆盖本地文件")
+        self.btn_go = QPushButton("开始更新")
+        self.btn_go.setToolTip("后台同步上游，失败项不写盘、不断其他项")
+        self.btn_go.clicked.connect(self._on_go)
+        self.btn_close = QPushButton("关闭")
+        self.btn_close.clicked.connect(self.reject)
+        self.status = QLabel("")
+        self.status.setStyleSheet("color: gray")
+        self.status.setWordWrap(True)
+        brow.addWidget(self.dry_box)
+        brow.addWidget(self.btn_go)
+        brow.addWidget(self.btn_close)
+        brow.addWidget(self.status, 1)
+        layout.addLayout(brow)
+        self._worker = None
+
+    def _on_go(self):
+        self.btn_go.setEnabled(False)
+        self.dry_box.setEnabled(False)
+        self.btn_close.setEnabled(False)
+        self.status.setText("正在从上游同步…")
+        self._worker = DataUpdateWorker(
+            dry_run=bool(self.dry_box.isChecked()))
+        self._worker.finished_report.connect(self._on_finished)
+        self._worker.finished.connect(self._on_done)
+        self._worker.start()
+
+    def _on_done(self):
+        self.btn_go.setEnabled(True)
+        self.dry_box.setEnabled(True)
+        self.btn_close.setEnabled(True)
+
+    def _on_finished(self, report):
+        from pycbeta.update_data import format_report
+        marks = {"unchanged": "一致", "updated": "已更新", "preview": "可更新",
+                 "manual": "手动", "failed": "失败"}
+        by_key = {r.get("key"): r for r in (report or []) if r.get("key")}
+        for i, key in enumerate(self._keys):
+            if i >= self.table.rowCount():
+                break
+            r = by_key.get(key) or {}
+            st = marks.get(r.get("status", ""), "?")
+            detail = r.get("detail", "")
+            item = QTableWidgetItem(f"{st}（{detail}）" if detail else st)
+            item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+            self.table.setItem(i, 3, item)
+        self.status.setText("；".join(format_report(report or [])) or "无更新项")
 
 
 class XmlOptionsPanel(QWidget):
@@ -1681,8 +1762,9 @@ class XmlOptionsPanel(QWidget):
 SOURCE_LABELS = [
     ("xml_dir", "本地 XML 候选源（只读；角色同远端 URL）"),
     ("cbeta_ebook", "XML及电子书（官方下载保存平展目录）"),
-    ("catalog", "佛典目录 catalog（sutra_mapping.txt）"),
 ]
+# catalog 已钉死内置（fetch.resolve_catalog），不再接受自定义：固定为程序内
+# cbeta/data/sutra_mapping.txt，随「更新官方数据」刷新，此处不设编辑行。
 DOWNLOAD_KEYS = ["xml", "html", "docx", "epub", "txt_notes", "odt", "figures"]
 
 
@@ -1753,7 +1835,7 @@ class SourceDialog(QDialog):
         self._preset_path = preset_path or ""
         name = os.path.basename(self._preset_path) or USER_PRESET_NAME
         self.setWindowTitle(f"数据源（{name}）")
-        self.resize(760, 480)
+        self.resize(760, 560)
         layout = QVBoxLayout(self)
         if self._preset_path and os.path.isfile(self._preset_path):
             try:
@@ -1768,11 +1850,10 @@ class SourceDialog(QDialog):
         for key, label in SOURCE_LABELS:
             row = QHBoxLayout()
             edit = QLineEdit(str(src.get(key, "")))
+            edit.setReadOnly(True)  # 只能浏览选择，不可手输（与注音词表行一致）
+            edit.setToolTip("只读；点「浏览…」修改")
             browse = QPushButton("浏览…")
-            if key == "catalog":
-                browse.clicked.connect(lambda _v, e=edit: self._browse_file(e))
-            else:
-                browse.clicked.connect(lambda _v, e=edit: self._browse_dir(e))
+            browse.clicked.connect(lambda _v, e=edit: self._browse_dir(e))
             row.addWidget(edit, 1)
             row.addWidget(browse)
             form.addRow(f"{label}\nsource.{key}", row)
@@ -1783,7 +1864,10 @@ class SourceDialog(QDialog):
             "source.title_t2s：电子书工作目录名 `{id} {书名}` 的书名是否转简体（默认开）")
         self.title_t2s_box.setChecked(bool(src.get("title_t2s", True)))
         layout.addWidget(self.title_t2s_box)
-        layout.addWidget(QLabel("官方下载 URL 模板（{canon}/{vol}/{file}/{id} 为占位符）："))
+        self.src_tabs = QTabWidget()
+        tab_dl = QWidget()
+        t1 = QVBoxLayout(tab_dl)
+        t1.addWidget(QLabel("官方下载 URL 模板（{canon}/{vol}/{file}/{id} 为占位符）："))
         self.dl_table = QTableWidget(0, 2)
         self.dl_table.setHorizontalHeaderLabels(["格式", "URL 模板"])
         self.dl_table.horizontalHeader().setStretchLastSection(True)
@@ -1802,11 +1886,50 @@ class SourceDialog(QDialog):
             key_item.setFlags(key_item.flags() & ~Qt.ItemIsEditable)  # 键列只读
             self.dl_table.setItem(i, 0, key_item)
             self.dl_table.setItem(i, 1, QTableWidgetItem(str(dl[k])))
-        layout.addWidget(self.dl_table, 1)
+        t1.addWidget(self.dl_table, 1)
+        tab_upd = QWidget()
+        t2 = QVBoxLayout(tab_upd)
+        t2.addWidget(QLabel("官方数据更新源（remote_sources.json，只读；"
+                            "点下方「更新官方数据」刷新；单元格可选中后 Ctrl+C 拷贝）："))
+        self.upd_table = QTableWidget(0, 4)
+        self.upd_table.setHorizontalHeaderLabels(
+            ["数据项", "更新 URL", "本地文件", "上次更新"])
+        hdr = self.upd_table.horizontalHeader()
+        hdr.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        hdr.setSectionResizeMode(1, QHeaderView.Stretch)   # 更新 URL 放宽
+        hdr.setSectionResizeMode(2, QHeaderView.Stretch)   # 本地文件放宽
+        hdr.setSectionResizeMode(3, QHeaderView.ResizeToContents)  # 日期缩窄
+        # 只读但可选中拷贝：禁编辑触发 + 扩展选择 + Ctrl+C 进剪贴板
+        self.upd_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.upd_table.setSelectionBehavior(QAbstractItemView.SelectItems)
+        self.upd_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        copy_sc = QShortcut(QKeySequence.Copy, self.upd_table)
+        copy_sc.setContext(Qt.WidgetShortcut)
+        copy_sc.activated.connect(
+            lambda: self._copy_table_selection(self.upd_table))
+        try:
+            from pycbeta.update_data import source_rows
+            _upd_rows = source_rows()
+        except Exception:
+            _upd_rows = []
+        self.upd_table.setRowCount(len(_upd_rows))
+        for i, (name, url, dest, when) in enumerate(_upd_rows):
+            for j, text in enumerate((name, url, dest, when)):
+                item = QTableWidgetItem(text)
+                item.setFlags(item.flags() & ~Qt.ItemIsEditable)  # 全表只读
+                if j == 1:
+                    item.setToolTip(url)
+                self.upd_table.setItem(i, j, item)
+        t2.addWidget(self.upd_table, 1)
+        # 更新源排第一，下载模板排第二
+        self.src_tabs.addTab(tab_upd, "官方数据更新源")
+        self.src_tabs.addTab(tab_dl, "电子书下载模板")
+        layout.addWidget(self.src_tabs, 1)
         urow = QHBoxLayout()
         self.btn_update_data = QPushButton("更新官方数据")
         self.btn_update_data.setToolTip(
-            "缺字库/补充字型/目录从上游直链同步（先校验再落盘，一致跳过）")
+            "打开更新对话框：列出可从官方更新的数据，确认后同步 "
+            "（先校验再落盘，一致跳过）")
         self.btn_update_data.clicked.connect(self._on_update_data)
         self.btn_check_update = QPushButton("更新XML")
         self.btn_check_update.setToolTip(
@@ -1836,7 +1959,6 @@ class SourceDialog(QDialog):
         buttons.addButton(self.btn_reset_urls, QDialogButtonBox.ResetRole)
         layout.addWidget(buttons)
         self._buttons_box = buttons
-        self._update_worker = None
         self._ebook_worker = None
 
     def _refresh_last_update(self):
@@ -1862,27 +1984,10 @@ class SourceDialog(QDialog):
         self.update_status.setText("已重置为出厂（点确定保存）")
 
     def _on_update_data(self):
-        """官方数据更新（后台线程跑；跑完弹报告；期间锁住更新/重置/确定/取消）。"""
-        self.btn_update_data.setEnabled(False)
-        self.btn_reset_urls.setEnabled(False)
-        self._buttons_box.setEnabled(False)
-        self.update_status.setText("正在从上游同步…")
-        self._update_worker = DataUpdateWorker()
-        self._update_worker.finished_report.connect(self._on_update_finished)
-        self._update_worker.finished.connect(self._on_update_done)
-        self._update_worker.start()
-
-    def _on_update_done(self):
-        self.btn_update_data.setEnabled(True)
-        self.btn_reset_urls.setEnabled(True)
-        self._buttons_box.setEnabled(True)
+        """官方数据更新改走对话框：先列更新源，确认后再跑（执行逻辑在 DataUpdateDialog）。"""
+        dlg = DataUpdateDialog(self)
+        dlg.exec()
         self._refresh_last_update()
-
-    def _on_update_finished(self, report):
-        from pycbeta.update_data import format_report
-        QMessageBox.information(
-            self, "官方数据更新",
-            "\n".join(format_report(report or [])) or "无更新项")
 
     def _dialog_presets(self):
         """以对话框当前编辑值构造 presets（未保存也能检查更新）。"""
@@ -1927,11 +2032,21 @@ class SourceDialog(QDialog):
         if d:
             edit.setText(d)
 
-    def _browse_file(self, edit):
-        path, _ = QFileDialog.getOpenFileName(self, "选择 catalog 文件",
-                                              edit.text().strip() or "", "文本 (*.txt);;所有文件 (*)")
-        if path:
-            edit.setText(path)
+    @staticmethod
+    def _copy_table_selection(table):
+        """选中单元格 → 剪贴板（制表符分列、换行分行；供只读信息表 Ctrl+C）。"""
+        try:
+            idxs = table.selectionModel().selectedIndexes()
+        except (AttributeError, RuntimeError):
+            return
+        if not idxs:
+            return
+        rows = {}
+        for ix in idxs:
+            rows.setdefault(ix.row(), {})[ix.column()] = ix.data() or ""
+        lines = ["\t".join(cols.get(c, "") for c in range(max(cols) + 1))
+                 for _, cols in sorted(rows.items())]
+        QApplication.clipboard().setText("\n".join(lines))
 
     def accept(self):
         if self._preset_path and os.path.isfile(self._preset_path):

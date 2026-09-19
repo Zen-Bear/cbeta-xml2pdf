@@ -55,6 +55,20 @@ class TestStripOfficialNo(unittest.TestCase):
             notes_by_n={}, apps=[], simplified=False)
         self.assertEqual(_head_no_tokens(w), ["No. 1116-B"])
 
+    def test_docnumber_included(self):
+        # 生成侧 strip_head_no 省略 docNumber 整元素 → 官方侧需按其全文对等剥离
+        from pycbeta.model import E, Text, Work
+        w = Work(id="T", source_file="",
+                 metadata={"docNumber": "No. 349 [No. 310(42)]"},
+                 body=[E(tag="docNumber",
+                         children=[Text(text="No. 349 [No. 310(42)]")])],
+                 notes_by_n={}, apps=[], simplified=False)
+        self.assertEqual(_head_no_tokens(w), ["No. 349 [No. 310(42)]"])
+        out = _strip_official_no("No. 349 [No. 310(42)]\n正文\n",
+                                 _head_no_tokens(w))
+        self.assertNotIn("No. 349", out)
+        self.assertIn("正文", out)
+
     def test_official_line_start_only(self):
         s = "No. 1116-B序\n正文提No. 1116-B\nNo. 1116-C序\n"
         out = _strip_official_no(s, ["No. 1116-B", "No. 1116-C"])

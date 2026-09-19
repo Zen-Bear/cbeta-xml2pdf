@@ -298,10 +298,8 @@ class TestCheckUpdates(unittest.TestCase):
         self._mk(root, "T0349", "书", "T12n0349.xml")
         self._mk(root, "T0625", "书2", "T15n0625.xml")
         self._mk(root, "T0670", "书3", "T16n0670.xml")
-        cat = os.path.join(root, "m.csv")
-        with open(cat, "w", encoding="utf-8") as f:
-            f.write("T,12,0349,1,1,x,书\nT,15,0625,1,1,x,书2\nT,16,0670,1,1,x,书3\n")
-        presets = {"source": {"cbeta_ebook": root, "catalog": cat},
+        # catalog 已钉死内置（真实收录 T0349/T0625/T0670），不再经 presets 注入
+        presets = {"source": {"cbeta_ebook": root},
                    "downloads": {"xml": "http://x/{file}"}}
 
         def probe(url, dest):
@@ -325,12 +323,10 @@ class TestCheckUpdates(unittest.TestCase):
         d, _ = self._mk(root, "T0349", "书", "T12n0349.xml")
         os.makedirs(os.path.join(d, "html"))
         with open(os.path.join(d, "html", "T0349_001.html"), "w",
-                  encoding="utf-8") as f:
+                   encoding="utf-8") as f:
             f.write("old-html")
-        cat = os.path.join(root, "m.csv")
-        with open(cat, "w", encoding="utf-8") as f:
-            f.write("T,12,0349,1,1,x,书\n")
-        presets = {"source": {"cbeta_ebook": root, "catalog": cat},
+        # catalog 已钉死内置（真实收录 T0349），不再经 presets 注入
+        presets = {"source": {"cbeta_ebook": root},
                    "downloads": {"xml": "http://x/{file}"}}
         seen = []
 
@@ -363,13 +359,30 @@ class TestCheckUpdates(unittest.TestCase):
         self.assertEqual(sorted(_present_baseline_formats(d, "T0349")),
                          ["epub", "html", "txt_notes"])
 
-    def test_check_skips_no_catalog(self):
+    def test_check_skips_unresolvable_id(self):
+        # catalog 钉死内置：T9999 无记录 → skipped（空/缺键同理回内置）
         root = tempfile.mkdtemp()
         self._mk(root, "T9999", "书", "T99n9999.xml")
         rep = check_ebook_updates(
-            root, {"source": {"cbeta_ebook": root, "catalog": ""}},
+            root, {"source": {"cbeta_ebook": root}},
             probe=lambda u, d: ("unchanged", ""))
         self.assertEqual(rep[0]["status"], "skipped")
+
+
+class TestResolveCatalog(unittest.TestCase):
+    """catalog 钉死内置：相对→仓库根解析；绝对/空→一律回内置。"""
+
+    def test_relative_resolves_to_builtin(self):
+        from pycbeta.fetch import resolve_catalog, builtin_catalog
+        self.assertEqual(resolve_catalog("cbeta/data/sutra_mapping.txt"),
+                         builtin_catalog())
+
+    def test_absolute_and_empty_fall_back_to_builtin(self):
+        from pycbeta.fetch import resolve_catalog, builtin_catalog
+        self.assertEqual(resolve_catalog("X:\\nope\\mulu.txt"),
+                         builtin_catalog())
+        self.assertEqual(resolve_catalog(""), builtin_catalog())
+        self.assertEqual(resolve_catalog(None), builtin_catalog())
 
 
 class TestInspectXmlSource(unittest.TestCase):

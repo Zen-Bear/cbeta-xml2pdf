@@ -1,0 +1,441 @@
+/* epub 专用基底：由 cbeta_golden.css + pycbeta/styles/pdf_docx.css 派生。
+   组成（层叠顺序，后覆盖前）：
+     1) cbeta_golden.css —— 官方电子书结构语义（尾注 display:block、经文资讯不缩进等）
+     2) pdf_docx.css    —— 印刷主题外观（pdf_docx 的排版/配色/字号）
+     3) 追加段          —— 正文字体 + 卷名字体 + 经文资讯另页（golden/pdf_docx 均无）
+   繁体明体 / 简体（--t2s）宋体；卷名楷体。字体一律写字面值（不用 var()：
+   部分 epub 阅读器不支持 CSS 自定义属性，var() 会整条失效）。
+   本体更新后：以两处「派生：... 全文起止」注释为界整体重抄。
+   用法：--html-epub-theme pycbeta/styles/epub_song.css（整套替换 golden）。 */
+
+/* ============ 派生：cbeta_golden.css 全文起 ============ */
+    @font-face {
+      font-family: cbetarc;
+      src: url('https://cbeta-org.github.io/cbeta-fonts/CBETASupplement.woff2') format("woff2");
+    }
+    body {
+      font-family: Arial, 微軟正黑體, "Songti TC", "Times New Roman", cbetarc;
+      overflow-wrap: break-word;
+    }
+    #cbeta-copyright {
+      background-color: #f0f0f0;
+      padding: 10px;
+    }
+    #cbeta-copyright p {
+      text-indent: 0!important;
+    }
+    .bold { font-weight: bold; }
+    .byline {
+      color: #408080;
+      text-align: right;
+    }
+    .cbeta { color: red; }
+    /* CBETA 校改字（IR corr-cbeta，默认关）：官方 epub cbeta.css 同款 red；
+       官方 html 不标红——本条属"超出官方 html"，仅供 html/epub 用 */
+    .corr { color: red; }
+    /* 经文资讯尾页（#cbeta-copyright 内几行）：仿宋、行距 1 行 */
+    #cbeta-copyright p {
+      font-family: 仿宋, FangSong;
+      line-height: 1;
+    }
+    /* 悉昙缺字（<g> RJ）：官方同款空元素，读音走 roman 属性显示；文本抽取为空 */
+    span.ranja::after { content: attr(roman); }
+    /* 转写行（<cb:tt> sa-x-rj 行）：官方朱砂色 */
+    .transliteration { color: #FF4400; }
+    .doube-line-note {
+      color: purple;
+      font-size: 0.8em;
+    }
+    /* 标题内正文夹注：不跟标题放大/加粗（超出官方 golden；与 pdf_docx.css 同口径） */
+    .head .doube-line-note,
+    .head .interlinear-note { font-size: 0.6em; font-weight: normal; }
+    /* 图片段（仅含 <figure> 的 <p>）：居中（超出官方 golden，官方不居中） */
+    p.figure { text-align: center; }
+    .head {
+      font-size: larger;
+      color: #0000a0;
+    }
+    .juan {
+      font-size: larger;
+      color: #0000ff;
+    }
+    div.lg {
+      display: table;
+      color: #008040;
+      margin-left: 4em!important;
+    }
+    div.lg-cell { 
+      display: table-cell; 
+      padding-left: 1em;
+      padding-right: 1em;
+    }
+    div.lg-row { display: table-row; }
+
+    /* 手機版 偈頌 縮小間距 */
+    @media screen and (max-width: 768px) {
+      div.lg {
+        margin-left: 0 !important;
+      }
+      div.lg-cell { 
+        display: table-cell; 
+        padding-left: 0.5em;
+        padding-right: 0.5em;
+      }
+    }
+
+    div.div-orig { font-weight: bold;}
+    li > p { text-indent: 0; }
+    p { text-indent: 2em; }
+    p.form { 
+      text-indent: 0;
+      font-weight: bold;
+    }
+    span.footnote { display: block }
+    span.hint { color: blue; }
+    ul.no-marker { list-style-type: none; }
+
+/* ============ 派生：cbeta_golden.css 全文止 / pdf_docx.css 全文起 ============ */
+/* pycbeta PDF/DOCX 默认主题（pdf/docx 默认加载；html/epub 用 cbeta_golden.css）
+   基于 CBETA P5 语义 type 暴露的 CSS 钩子。
+   属性均可被用户主题（--theme xxx.css）替换。 */
+
+/* ============ 基础 ============ */
+/* 字体：本文件是"双栏方案"——:root 为繁体，html[lang="zh-Hans"] 为简体（只重写字体）。
+   规则内用 font-family: var(--font-标签) 引用；HTML/PDF 由浏览器按 <html lang> 原生切换；
+   DOCX 由 theme.py 按 Theme(lang) 代入。字体只此一处，别处不再重复。 */
+:root {
+  --font-latin: Calibri;
+  --font-body: 新細明體, PMingLiU, Songti TC, Times New Roman;
+  --font-title: 標楷體, DFKaiShu;
+  --font-author: 新細明體, PMingLiU;
+  --font-translator: 新細明體, PMingLiU;
+  --font-byline: 新細明體, PMingLiU;
+  --font-head: 微軟正黑體, Microsoft JhengHei;
+  --font-juan: 標楷體, DFKaiShu;
+  --font-pin: 新細明體, PMingLiU;
+  --font-div-xu-head: 標楷體, DFKaiShu;
+  --font-p: 新細明體, PMingLiU;
+  --font-verse: 新細明體, PMingLiU; /* 偈颂 */
+  --font-form: 新細明體, PMingLiU;
+  --font-dharani: 新細明體, PMingLiU;
+  --font-footnote: 新細明體, PMingLiU;
+  --font-note-inline: 新細明體, PMingLiU;
+  --font-kaiti: 標楷體, DFKaiShu;
+  --font-heiti: 黑體, SimHei;
+  --font-fangsong: 仿宋, FangSong;
+  --font-mingti: 新細明體, PMingLiU;
+  --font-series-title: 仿宋, FangSong;
+  --font-def: 新細明體, PMingLiU;
+}
+html[lang="zh-Hans"] {
+  --font-body: 宋体, SimSun, Times New Roman;
+  --font-title: 楷体, KaiTi;
+  --font-author: 宋体, SimSun;
+  --font-translator: 宋体, SimSun;
+  --font-byline: 宋体, SimSun;
+  --font-head: 黑体, SimHei;
+  --font-juan: 楷体, KaiTi;
+  --font-pin: 宋体, SimSun;
+  --font-div-xu-head: 楷体, KaiTi;
+  --font-p: 宋体, SimSun;
+  --font-verse: 宋体, SimSun;  /* 偈颂 */
+  --font-form: 宋体, SimSun;
+  --font-dharani: 宋体, SimSun;
+  --font-footnote: 宋体, SimSun;
+  --font-note-inline: 宋体, SimSun;
+  --font-kaiti: 楷体, KaiTi;
+  --font-heiti: 黑体, SimHei;
+  --font-mingti: 宋体, SimSun;
+  --font-series-title: 仿宋, FangSong;
+  --font-def: 宋体, SimSun;
+}
+body {
+  /* 基准字号/行距（单源默认值）：没写 body_* 键的纸张跟这里。
+     写了键的纸张以纸张为准（纸张赢 CSS）：32开/A5=12pt/1.4（窄栏饱满），
+     16开/B5=10.5pt/1.5（宽栏防串行，书籍主力字号），A4=12pt/1.5。
+     DOCX 由各标签 line-height 覆盖；em 换算与文档默认锚定基准。 */
+  line-height: 1.4;
+  font-size: 12pt;    /* 小四字号。全局基准字号（单源）：p 及无字号元素继承它；DOCX em 换算与文档默认锚定它 */
+}
+/* body 字体栈（--font-body）：正文全局默认，唯一多段"链"——
+   新細明體（Win 繁体首选）→ PMingLiU（同字体英文名）→ Songti TC（macOS 繁体）
+   → Times New Roman（拉丁字母/数字）。
+   简体栈同理：宋体 → SimSun → Times New Roman。
+   PDF 端另有 sans-serif 通用族兜底（render_pdf._pdf_css 追加），此处不再写。
+   其它元素均为"同字体中英双名"（中文名, 英文名），拉丁数字由 body 链 / --font-latin 兜。
+   DOCX 只取首个中文字体作 eastAsia，西文另走 --font-latin。 */
+a { text-decoration: none; }
+
+/* rend 字体（--font-kaiti/heiti/fangsong/mingti，繁简双栏见文件头）。
+   源 XML 的 rend 属性（如 <p rend="kaiti">）按 theme.py TAG_SELECTOR 映射到同名标签，
+   与块级标签正交叠加；DOCX 经 docx_run 合并进 w:rFonts，PDF 经追加规则生效。 */
+
+/* ============ 标题 ============ */
+/* 书名（<title level="m">）：全书最大字号，居中加粗，段后空 1 行。 */
+h1.title {
+  font-size: 26pt;
+  font-weight: bold;
+  text-align: center;
+  line-height: 1.0;
+  margin-top: 0.5em;       /* 卷名段前 1 行 */
+  margin-bottom: 1em;        /* 书名段后 1 行 */
+}
+/* 经藏名（<title level="s">，如「卍新纂大日本續藏經」）：仅首页左上角一行。
+   字体/字号走主题（可视化编辑器可调）；config output.series_title 仅留 enabled 开关，
+   旧配置内 font/size 仍作回退（见 render_docx series_para）。 */
+p.series-title {
+  font-family: var(--font-series-title);
+  font-size: 9pt;
+  text-align: left;
+}
+/* 署名行（<byline cb:type="author"> / cb:type="translator"，大小写不敏感）：
+   灰色小字右对齐（对齐官方 golden `.byline`；此前 center 规则实际极少命中），
+   段前 0.5em、段后 2em，与书名拉开距离。逗号分组共享（译者特有覆盖写在下块，顺序勿换）。 */
+p.author, p.translator {
+  text-align: right;      /* 字号/行距继承 body（单源，随纸张 body_font_size/line_height） */
+  /*color: #444444;*/
+  /*margin: 0.5em 0;*/        /* 段前/段后 0.5em 段前段后不一样需要 4 值或 margin-top/margin-bottom。）*/
+  margin-top: 0.5em;
+  margin-bottom: 2em;
+}
+/* 译者署名特有覆盖（示例，默认空）：
+   独立标签以便分别换字体（font_sets author/translator）。 */
+
+/* 标题层级缩进（数据出自 head 的 data-head-level） */
+p.head[data-head-level="1"] { margin-left: 0em; font-size: 20pt; font-weight: bold; }
+p.head[data-head-level="2"] { margin-left: 1em;  font-size: 18pt; font-weight: bold; }
+p.head[data-head-level="3"] { margin-left: 2em;  font-size: 16pt; font-weight: bold; }
+p.head[data-head-level="4"] { margin-left: 3em;  font-size: 14pt; font-weight: bold; }
+p.head[data-head-level="5"] { margin-left: 4em;  font-size: 12pt; font-weight: bold; }
+p.head[data-head-level="6"] { margin-left: 5em;  font-size: 12pt; font-weight: bold; }
+/* 本文件是默认值**唯一定义处**（Python DEFAULT_THEME 已移除）：想覆盖改这里。
+   必需元素/关键属性由 theme.REQUIRED_THEME_TAGS + test_theme.TestRequiredThemeTags
+   守护；误删会在测试里报出选择器并提示补回。 */
+
+p.head {
+  font-size: 20pt;        /* 想覆盖改这里 */
+  font-weight: bold;      /* 想覆盖改这里 */
+  color: #0000a0;         /* 想覆盖改这里 */
+  text-align: center;     /* 标题居中（含品名等 head） */
+  margin-top: 0.5em;        /* 标题段前（2026-09-06 补：此前紧贴上文，如字義） */
+  margin-bottom: 0.5em;   /* 标题段后 */
+  line-height: 1;
+}
+
+/* ============ 卷 / 品 ============ */
+/* 卷名（<cb:juan><cb:jhead>）：楷体 20pt 蓝色居中，上下各空 1 行；
+   智能分页（output.pagination.juan）以卷为单位换页。 */
+p.juan {
+  font-size: 20pt;
+  font-weight: bold;
+  text-align: center;
+  color: #0000ff;        /* #0000ff 想覆盖改这里 */
+  margin-top: 0.5em;       /* 卷名段前 1 行 */
+  margin-bottom: 0.5em;  /* 卷名段后 1 行 */
+  line-height: 1;
+}
+/* 品名（<cb:jhead type="pin">，如“方便品第二”）：深蓝加粗居中，上下各空 2em；
+   DOCX 同时挂 outlineLvl=1（导航窗格二级目录，挂在卷之下）。 */
+p.pin {
+  font-size: 16pt;
+  font-weight: bold;
+  text-align: center;
+  color: #0000a0;        /* #0000a0 想覆盖改这里 */
+  margin: 1em 0;         /* 品名段前/段后 1em */
+  line-height: 1;
+}
+/* 竖排取消居中（body.vertical-rl 作用域）：title/head/juan/pin 横排居中、
+   竖排默认对齐（竖排 left 即顶部）。整套替换主题（user.css）需自行带上本块；
+   css 编辑器预览为横排，本块恒惰性。 */
+body.vertical-rl h1.title, body.vertical-rl p.head,
+body.vertical-rl p.juan, body.vertical-rl p.pin { text-align: left; }
+
+/* ============ 段落 ============ */
+/* 正文（<p>）：两端对齐，首行缩进 2 字符，段前 0.5em、段后 0.3em；
+   字号/行距继承 body（单源：随 body 与纸张 body_font_size/line_height）。 */
+p {
+  text-indent: 2em;          /* 段前缩进（首行 2 字符） */
+  margin-top: 0.5em;         /* 正文段前 0.5 */
+  margin-bottom: 0.3em;      /* 段后 */
+  text-align: justify;
+}
+/* 咒语（<p type="dharani">，如陀罗尼）：继承正文字号，不加粗；
+   不居中：对齐官方 HTML（golden 无 p.dharani 规则，咒语不居中） */
+p.dharani {
+  /* 不居中：对齐官方 HTML（golden 无 p.dharani 规则，咒语不居中） */
+}
+/* 格式段（<p type="form">，如仪轨程式）：加粗、不缩进，以示与正文区别。
+   字号继承 body（不再显式 1em：DOCX 有完整继承链）。 */
+p.form {
+  font-weight: bold;
+  text-indent: 0;
+}
+/* 图片段（仅含 <figure> 的 <p>）：居中、无首行缩进（超出官方：官方 docx 用 default 样式无居中）。 */
+p.figure {
+  text-align: center;
+  text-indent: 0;
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+}
+/* 预排段（<pre>）：保留源换行，不缩进（DOCX 拆成多 run + <w:br/>）。 */
+pre {
+  text-indent: 0;
+}
+
+/* ============ 偈颂 ============ */
+/* 偈颂块（<lg>）：楷体绿色，左缩进 2em；用 table 布局实现偈句对齐
+   （lg-row=行，lg-cell=格，见下）。字号继承 body（单源）。 */
+div.lg {
+  display: table;
+  color: #008040;
+  margin-left: 2em;
+}
+/* 偈颂 table 布局三件套：lg=表，lg-row=行，lg-cell=格（左右各留 0.5em）。 */
+div.lg-cell {
+  display: table-cell;
+  padding: 0 0.5em;
+}
+div.lg-row {
+  display: table-row;
+}
+/* 注记类偈行（lg type="note1/note2"，如夹注偈）：青灰色以示区别。 */
+div.lg.note1,
+div.lg.note2 {
+  color: #408080;
+}
+
+/* ============ div 类型（章节结构） ============ */
+/* <div type="..."> 语义钩子：只管外观，不管分页。div 属性优先于其内 p
+   （见 theme.py docx_para：div 标签靠前合并优先）。 */
+div.div-orig { font-weight: bold; }         /* 原文（官方 golden 同样加粗） */
+div.div-commentary { font-weight: normal; } /* 解釋 */
+div.div-xu { color: #000000; margin-top: 0.5em; margin-bottom: 1em; } /* 序：与正文同节奏（2026-09-06 前 1em/1em，序内每段大间距、正文忽宽忽挤；块分隔靠标题边距与分页）。PDF 按块生效；DOCX 对序内每个段落生效（命名样式不含 div 上下文，见 render_docx._para 内联追加） */
+/* 序内标题（<head> 在 div-xu 内，如"新譯大乘入楞伽經序"）：颜色覆盖 p.head 的蓝色；
+   font-family 换序标题字体（改这一行即可，如换宋体写 宋体, SimSun, serif）。
+   font-size 序标题字号（属性选择器 p.head[data-head-level] DOCX 不认，序标题走这行四格式通吃）。
+   后代选择器（仅两段）：DOCX 经 theme 后代匹配生效；HTML/PDF 浏览器原生支持。 */
+div.div-xu p.head { color: #0000a0; font-size: 20pt; }
+/* div.div-jing 不加粗：经 = 正文主体，官方 golden 无此规则 */
+div.div-w { color: #777777; }                  /* 附文 */
+div.div-note { font-weight: bold; }              /* 字义：与正文同字号、无特殊色，加粗区分 */
+/* 释义（<cb:def>，div-note 内）：与正文同字号（字号继承 body；DOCX 有继承链，
+   不再显式 1em）；`font-weight:normal` 用于压 div.div-note 的加粗；无特殊色；
+   字体走 --font-def（繁简双栏）；DOCX 经 def 标签并入 run（段挂 pStyle def，
+   预览标【释义】），HTML/PDF 浏览器原生。 */
+cb:def { font-weight: normal; }
+
+/* ============ 校勘注释 ============ */
+/* 双行夹注（<note place="inline"> 的双行形态）：0.8em 紫色，DOCX 渲染为双行小字。 */
+span.doube-line-note {
+  font-size: 0.8em;
+  color: #800080;
+}
+/* 单行夹注：同上，单行形态。 */
+span.interlinear-note {
+  font-size: 0.8em;
+  color: #800080;
+}
+/* 标题内的正文夹注：不跟标题放大、不继承标题粗体（括号同 content）。
+   0.6em → 默认 head 20pt 时为 12pt。超出官方（官方按 0.8em 相对标题放大）。
+   两段后代：HTML/PDF 浏览器原生；DOCX 经 theme.compounds 按祖先匹配。 */
+p.head .doube-line-note,
+p.head .interlinear-note {
+  font-size: 0.6em;
+  font-weight: normal;
+}
+/* 转写行（<cb:tt> 内 sa-x-rj 行）：官方朱砂色；DOCX 经 transliteration 标签并入 run。 */
+span.transliteration {
+  color: #FF4400;
+}
+/* CBETA 校改字（IR corr-cbeta，默认关）：官方 docx 字符样式 corr = FF0000；
+   DOCX 经 corr-cbeta 标签并入 run；html/epub 走 golden .corr（red） */
+span.corr {
+  color: #FF0000;
+}
+/* 经文资讯尾页（【經文資訊】/【版本記錄】/【編輯說明】/【原始資料】）：仿宋、行距 1 行 */
+p.info {
+  font-family: 仿宋, FangSong;
+  line-height: 1;
+  margin: 0 0 0.5em 0;
+}
+/* 校勘注锚（正文中的 [n] 链接）：默认蓝色；按校勘类型着色——
+   .add 新增（红）、.mod 改字（橙）、.orig 原文（紫灰）、.star 星号（红）。
+   DOCX 侧注码字号/颜色另由 sup.note-ref 控制（见下）。 */
+a.noteAnchor { color: #0066cc; }
+a.noteAnchor.add { color: #cc0000; }
+a.noteAnchor.mod { color: #cc6600; }
+a.noteAnchor.orig { color: #6666cc; }
+a.noteAnchor.star { color: #cc0000; }
+/* .footnote/.endnote 映射到 footnote 标签：DOCX 翻译成脚注文字 rPr，
+   PDF 对 class="footnote"/"endnote" 元素原样生效 */
+.footnote, .endnote {
+  font-size: 0.75em; /* 正文12pt时=9pt */
+  /*color: #333333;*/
+  line-height: 1;            /* 行距（1倍） */
+  margin: 0.0em 0 0 0;           /* 段前/段后 */
+
+}
+/* 注码（正文上标序号 / sup.note-ref）：font-size 决定 DOCX 序号字号（0.75em=9pt 适中，
+   随 font_scale 等比放大）；颜色也在此控制，去掉注释启用 */
+sup.note-ref, sup.footnote-call {
+  font-size: 0.75em;
+  /* color: #0066cc; */
+}
+
+/* 括号夹注（--notes inline） */
+span.note-inline {
+  font-size: 0.9em;
+  color: #666666;
+}
+
+/* ============ byline（作者/译者，<byline cb:type="author"> / cb:type="Translator">） ============ */
+p.byline {
+  text-align: right;      /* 字号继承 body（单源） */
+  color: #408080;
+  margin: 0.5em 0;        /* 作者/译者段前/段后 0.5em */
+}
+
+/* ============ 表格 / 列表 ============ */
+/* 双语对照表（<tt> 对照块）：左缩进 1em；cell 左右各留 0.5em。 */
+div.bip-table { margin-left: 1em; }
+div.bip-table-row { display: table-row; }
+div.bip-table-cell { padding: 0 0.5em; }
+/* 列表：左缩进 1em；默认无标记（list-style-type 默认 none，DOCX 无编号；
+   PDF 想显示项目符号改 disc；勿删整条规则，由完整性测试守护）。 */
+ul, ol { margin-left: 1em; list-style-type: none; }   /* 列表（DOCX 按 list-style-type 映射编号）。
+                                                           list-style-type 默认 none（DOCX 无标记）；
+                                                           PDF 想显示项目符号改 disc；勿删整条规则，由完整性测试守护 */
+ul.no-marker { list-style-type: none; }   /* 无标记列表（对齐官方格式） */
+li { text-indent: 0; }                     /* 列表项不缩进（覆盖 p 的 2em 首行缩进） */
+li > p { text-indent: 0; }     /* 列表内段落不缩进（对齐官方格式） */
+
+/* ============ 行号 ============ */
+/* 行首行号（<span class="lineInfo">，如 T12n0349_p0001a01）：默认隐藏；
+   想显示改 display:inline（DOCX 侧忽略此选择器）。 */
+span.lineInfo {
+  display: none;
+}
+
+/* ============ 派生：pdf_docx.css 全文止 / 追加段起 ============ */
+/* 正文字体：镜像 --font-body 两栈为正文实规则（epub 内 theme=None，基底原文注入，
+   阅读器按 <html lang> 原生切换；DOCX/PDF 不受影响）。 */
+html[lang="zh-Hant"] body, html[lang="zh-Hant"] p {
+  font-family: 新細明體, PMingLiU, Songti TC, Times New Roman, serif;
+}
+html[lang="zh-Hans"] body, html[lang="zh-Hans"] p {
+  font-family: 宋体, SimSun, Times New Roman, serif;
+}
+/* 卷名字体：pdf_docx/golden 均只给字号颜色，此处补楷体（写死字面值，不用 var()）。
+   选择器带 html[lang] 提升特指度，压过上面的 `html[lang] p` 正文规则。 */
+html[lang="zh-Hant"] p.juan, html[lang="zh-Hant"] .juan {
+  font-family: 標楷體, DFKaiShu, 楷体, KaiTi, serif;
+}
+html[lang="zh-Hans"] p.juan, html[lang="zh-Hans"] .juan {
+  font-family: 楷体, KaiTi, serif;
+}
+/* 经文资讯尾页另页（仅本派生定制；官方 html/epub 不另页，属"超出官方"）。
+   break-before 供现代阅读器，page-break-before 兼容旧渲染器。 */
+#cbeta-copyright {
+  break-before: page;
+  page-break-before: always;
+}

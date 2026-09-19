@@ -29,7 +29,7 @@
   // 程序不自动下载，仅记录展示，用户自行下载放到 cbeta/fonts/。
   "siddham-fonts": {
     "url": "https://cbeta.org/downloads",
-    "dest": "",
+    "dest": "cbeta/fonts/",
     "kind": "manual",
     "note": "悉曇/蘭札字型请自行下载放到 cbeta/fonts/"
   }

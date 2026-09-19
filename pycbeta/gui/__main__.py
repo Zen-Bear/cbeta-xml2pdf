@@ -344,12 +344,13 @@ class BatchWorker(QThread):
         return []
 
     def _missing_xml_reason(self, wid, presets):
-        """自动下载已开仍无 XML：区分 catalog 未收录 vs 下载失败。"""
+        """自动下载已开仍无 XML：区分 catalog 未收录 vs 下载失败。
+        catalog 钉死内置（fetch.resolve_catalog），此处不再读 presets 自定义值。"""
         from pycbeta import fetch
         try:
             canon, no = fetch.parse_work_id(fetch.canonical_work_id(wid, presets))
-            cat = ((presets.get("source") or {}).get("catalog") or "").strip()
-            if cat and os.path.isfile(cat) \
+            cat = fetch.resolve_catalog()
+            if os.path.isfile(cat) \
                     and not fetch.catalog_lookup(cat, canon, no):
                 return "缺 XML（catalog 未收录）"
         except Exception:
@@ -541,7 +542,8 @@ class VerifySummaryDialog(QDialog):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle(f"CBETA XML 格式转换 v1.0（{_gui_date()}）")
+        from pycbeta import __version__ as _ver
+        self.setWindowTitle(f"CBETA XML 格式转换 v{_ver}（{_gui_date()}）")
         self.resize(980, 720)
         self.worker = None
         central = QWidget()
@@ -641,7 +643,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.table, 1)
         # 进度与按钮
         bar = QHBoxLayout()
-        self.btn_start = QPushButton("开始")
+        self.btn_start = QPushButton("转换")
         self.btn_cancel = QPushButton("取消")
         self.btn_cancel.setEnabled(False)
         self.btn_start.clicked.connect(self._start)
@@ -905,7 +907,7 @@ def main(argv=None):
     _ap.add_argument("--preset", default=None, help="预设（stem/文件名/路径），选中即载入面板")
     _ap.add_argument("--formats", default=None, help="逗号分隔输出格式，如 pdf,epub（预填格式勾选）")
     _ap.add_argument("--verify", action="store_true", help="打开转换后校验")
-    _ap.add_argument("--autostart", action="store_true", help="窗现即开始批量")
+    _ap.add_argument("--autostart", action="store_true", help="窗现即开始转换")
     _raw = sys.argv[1:] if argv is None else list(argv)
     _known, _rest = _ap.parse_known_args(_raw)
     app = QApplication.instance() or QApplication([sys.argv[0]] + _rest)

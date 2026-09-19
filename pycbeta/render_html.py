@@ -450,6 +450,10 @@ class HtmlRenderer:
             with self._no_ann():
                 return self._render_nodes(kids)
         if tag == "docNumber":
+            # 编号行（No. XXXX）：与 head/jhead 同源，strip_head_no 开启时整体省略
+            # （docx 恒不显；html/epub/md/txt 官方版保留，故默认保留）
+            if self.strip_head_no:
+                return ""
             with self._no_ann():
                 return self._render_nodes(e.children)
         if tag == "lg":

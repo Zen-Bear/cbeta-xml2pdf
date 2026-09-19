@@ -292,6 +292,8 @@ class MdRenderer:
                 inner = self._render_children(e).strip()
             return f"## {inner}\n\n"
         if tag in ("jhead", "docNumber"):
+            if tag == "docNumber" and self.strip_head_no:
+                return ""  # 编号行随 strip_head_no 一并省略
             kids = None
             if tag == "jhead" and self.strip_head_no:
                 kids = strip_head_no(e.children)[0]

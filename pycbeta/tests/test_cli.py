@@ -240,5 +240,62 @@ class TestVerifyOnly(unittest.TestCase):
             shutil.rmtree(d, ignore_errors=True)
 
 
+class TestShowNotesFlag(unittest.TestCase):
+    """--show-notes/--no-show-notes：显式开关 > config output.show_notes。"""
+
+    def _capture(self, config_show=None, extra=()):
+        import io
+        import json
+        import shutil
+        from contextlib import redirect_stdout
+        from unittest import mock
+        from pycbeta.cli import main
+        d = tempfile.mkdtemp()
+        try:
+            xml = os.path.join(d, "T01n0001.xml")
+            with open(xml, "w", encoding="utf-8") as f:
+                f.write("<TEI/>")
+            out_cfg = {}
+            if config_show is not None:
+                out_cfg["show_notes"] = config_show
+            cfgp = os.path.join(d, "cfg.json")
+            with open(cfgp, "w", encoding="utf-8") as f:
+                json.dump({"output": out_cfg}, f)
+            buf = io.StringIO()
+            with mock.patch("pycbeta.cli.process_file") as PF:
+                with redirect_stdout(buf):
+                    main(["--config", cfgp, "-i", xml, "-f", "txt", *extra])
+            return PF.call_args.args[2].show_notes
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_no_show_notes_overrides_config_true(self):
+        self.assertFalse(self._capture(True, ["--no-show-notes"]))
+
+    def test_show_notes_overrides_config_false(self):
+        self.assertTrue(self._capture(False, ["--show-notes"]))
+
+    def test_config_applies_without_flag(self):
+        self.assertFalse(self._capture(False))
+        self.assertTrue(self._capture(True))
+
+    def test_default_true(self):
+        self.assertTrue(self._capture())
+
+
+class TestVersion(unittest.TestCase):
+    def test_version_flag_matches_package(self):
+        import io
+        from contextlib import redirect_stdout
+        from pycbeta import __version__
+        from pycbeta.cli import main
+        out = io.StringIO()
+        with redirect_stdout(out):
+            with self.assertRaises(SystemExit) as cm:
+                main(["--version"])
+        self.assertEqual(cm.exception.code, 0)
+        self.assertIn(__version__, out.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()
