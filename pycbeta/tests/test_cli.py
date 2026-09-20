@@ -354,6 +354,68 @@ class TestResolveVerifyEbook(unittest.TestCase):
             shutil.rmtree(d, ignore_errors=True)
 
 
+class TestCliMultiDocxMerge(unittest.TestCase):
+    """CLI 多卷 docx 与 verify_one 同口径：merge_docx 合并（注归文末）再抽取，
+    不得逐文件抽取后拼接（注插正文中间致大差异）。"""
+
+    def test_merge_used_for_multi_docx(self):
+        import io
+        import json
+        import shutil
+        from contextlib import redirect_stdout
+        from types import SimpleNamespace
+        from unittest import mock
+        from pycbeta.cli import main
+        d = tempfile.mkdtemp()
+        try:
+            xml = os.path.join(d, "T01n0001.xml")
+            with open(xml, "w", encoding="utf-8") as f:
+                f.write("<TEI/>")
+            gen = os.path.join(d, "T0001.docx")
+            with open(gen, "w", encoding="utf-8") as f:
+                f.write("x")
+            cfgp = os.path.join(d, "cfg.json")
+            with open(cfgp, "w", encoding="utf-8") as f:
+                json.dump({"verify": {"auto_fetch": False}}, f)
+            vols = [os.path.join(d, f"v{i}.docx") for i in (1, 2, 3)]
+            merged = os.path.join(d, "merged.docx")
+            work = SimpleNamespace(id="T0001", metadata={"title": "T"})
+            seen = {}
+
+            def _find(source, stem, kind, juan=None):
+                return list(vols) if kind == "docx" else []
+
+            def _extract(path):
+                if path == merged:
+                    seen["extracted_merged"] = True
+                    return "OFFICIAL_TEXT"
+                return "GEN_TEXT"
+
+            with mock.patch("pycbeta.parser.P5Parser") as P, \
+                    mock.patch("pycbeta.verify.work_juan_numbers",
+                               return_value=[1, 2, 3]), \
+                    mock.patch("pycbeta.cli.process_file", return_value=0), \
+                    mock.patch("pycbeta.verify.generate_formal",
+                               return_value=[gen]), \
+                    mock.patch("pycbeta.verify.find_official",
+                               side_effect=_find), \
+                    mock.patch("pycbeta.verify.merge_docx",
+                               return_value=merged) as M, \
+                    mock.patch("pycbeta.verify.extract_text",
+                               side_effect=_extract):
+                P.return_value.parse.return_value = work
+                with redirect_stdout(io.StringIO()):
+                    main(["--config", cfgp, "-i", xml, "-f", "docx",
+                          "--verify"])
+            M.assert_called_once()
+            self.assertEqual(list(M.call_args.args[0]), vols)
+            self.assertTrue(M.call_args.args[1].endswith(
+                "_official_merged_docx.docx"))
+            self.assertTrue(seen.get("extracted_merged"))
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+
 class TestVersion(unittest.TestCase):
     def test_version_flag_matches_package(self):
         import io

@@ -963,26 +963,19 @@ def main(argv=None):
                 for bkind, bpath in bases:
                     if isinstance(bpath, list):
                         if bkind == "docx" and len(bpath) > 1:
-                            from .verify import strip_docx_head as _sdh
+                            # 多卷官方 docx：与 verify_one 同口径，先 merge_docx 合并
+                            # （脚注统一在文末）再抽取；逐文件抽取后拼接会把各卷注
+                            # 插在正文中间，与生成档（注全在末尾）错位致大差异
+                            from .verify import strip_docx_head as _sdh, merge_docx as _mdocx
                             title = t_title
-                            parts = []
-                            for p in bpath:
-                                txt = v_extract(p)
-                                if bkind == "docx":
-                                    txt = _sdh(txt, title, t_docnumber, t_series)
-                                if not v_compare_infos:
-                                    txt = v_strip_infos(txt)
-                                parts.append(txt)
-                            merged_raw = "".join(parts)
-                            # 保存合并文件到与生成文件相同的输出目录
-                            try:
-                                merged_dir = os.path.join(verify_dir, fmt)
-                                os.makedirs(merged_dir, exist_ok=True)
-                                merged_path = os.path.join(merged_dir, f"{stem}_official_merged_{bkind}.txt")
-                                with open(merged_path, "w", encoding="utf-8") as mf:
-                                    mf.write(merged_raw)
-                            except Exception:
-                                pass
+                            merged_docx = os.path.join(
+                                verify_dir, fmt,
+                                f"{stem}_official_merged_{bkind}.docx")
+                            merged_docx = _mdocx(bpath, merged_docx)
+                            merged_raw = v_extract(merged_docx)
+                            merged_raw = _sdh(merged_raw, title, t_docnumber, t_series)
+                            if not v_compare_infos:
+                                merged_raw = v_strip_infos(merged_raw)
                             theirs_n = _theirs_norm(merged_raw, bkind)
                             bpath_disp = f"{bpath[0]} (+{len(bpath)-1})"
                         elif len(bpath) > 1:
