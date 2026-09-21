@@ -96,7 +96,7 @@ class HtmlRenderer:
     def __init__(self, gaiji_db=None, figure_base=None, theme=None, notes="endnote",
                  name_template=None, base_css=None, ignore_xml_style=False,
                  ignore_xml_space=False, show_notes=True, grayscale=False, inline_brackets="fullwidth",
-                 note_inline_brackets=None,
+                 note_inline_brackets=None, title_t2s=True,
                  annotations=None, strip_head_no=False, corr_cbeta=False):
         self.gaiji_db = gaiji_db if gaiji_db is not None else GaijiDb()
         self.theme = theme
@@ -113,6 +113,7 @@ class HtmlRenderer:
         self.grayscale = grayscale  # 黑白：渲染时追加全局去色 CSS
         self.inline_brackets = inline_brackets  # 正文夹注（place=inline，原文）括号
         self.note_inline_brackets = note_inline_brackets or inline_brackets  # 校注内联括号（缺省回退）
+        self.title_t2s = title_t2s  # 输出文件名书名转简（与其他格式 default_output_name 同口径）
         self.strip_head_no = strip_head_no  # 去 head/jhead 行首 No. 令牌（默认 false 保留）
         self.corr_cbeta = corr_cbeta        # CBETA 校改字标红（corr-cbeta；默认 false）
         # 难字注音（P6）：None 或 {"table", "scheme"}（CLI 已由 resolve_annotations 装载；渲染器内不做 IO）
@@ -165,7 +166,13 @@ class HtmlRenderer:
                 from .filename import apply_template
                 fn = apply_template(self.name_template, work, juan=juan_no) + ".html"
             else:
-                fn = f"{work.id}_{juan_no:03d}.html"
+                # 默认名与其他格式统一 `{id 书名}`（单卷无后缀，多卷加 `_NNN`）；
+                # 卷数固定一部一值，不会左右横跳
+                from .filename import default_output_name
+                base = default_output_name(
+                    work.id, work.metadata.get("title"), self.title_t2s)
+                fn = f"{base}.html" if len(juans) == 1 \
+                    else f"{base}_{juan_no:03d}.html"
             with open(os.path.join(out_dir, fn), "w", encoding="utf-8") as f:
                 f.write(html_out)
             written.append(fn)

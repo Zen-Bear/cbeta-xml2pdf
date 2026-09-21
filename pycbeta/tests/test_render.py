@@ -43,14 +43,18 @@ class TestRenderX1116(unittest.TestCase):
         shutil.rmtree(cls.tmp, ignore_errors=True)
 
     def test_files(self):
-        self.assertEqual(self.files, ["X1116_001.html", "X1116_002.html"])
+        # 默认名与其他格式统一 `{id 书名}`（多卷加 `_NNN`，书名跟 title_t2s）
+        self.assertEqual(self.files, ["X1116 毗尼日用切要香乳记_001.html",
+                                      "X1116 毗尼日用切要香乳记_002.html"])
 
     def test_matches_official(self):
         base = os.path.join(CBETA, "X1116 毗尼日用切要香乳記")
-        for f in self.files:
+        official = ["X1116_001.html", "X1116_002.html"]
+        self.assertEqual(len(self.files), len(official))
+        for f, of in zip(self.files, official):
             with open(os.path.join(self.tmp, f), encoding="utf-8") as fh:
                 mine = fh.read()
-            with open(os.path.join(base, f), encoding="utf-8") as fh:
+            with open(os.path.join(base, of), encoding="utf-8") as fh:
                 official = fh.read()
             mine_body = _body(mine)
             off_body = _body(official)
@@ -78,16 +82,19 @@ class TestRenderYP0019(unittest.TestCase):
         shutil.rmtree(cls.tmp, ignore_errors=True)
 
     def test_files(self):
-        self.assertEqual(self.files, ["YP0019_001.html", "YP0019_002.html"])
+        self.assertEqual(self.files, ["YP0019 毘尼日用切要讲记_001.html",
+                                      "YP0019 毘尼日用切要讲记_002.html"])
 
     def test_matches_official(self):
         base = os.path.join(CBETA, "YP0019 毘尼日用切要講記")
-        for f in ("YP0019_001.html", "YP0019_002.html"):
-            off = os.path.join(base, f)
+        official = ["YP0019_001.html", "YP0019_002.html"]
+        self.assertEqual(len(self.files), len(official))
+        for f, of in zip(self.files, official):
+            off = os.path.join(base, of)
             if not os.path.isfile(off):
-                off = os.path.join(base, "html", f)  # 新基线布局：{work}/html/
+                off = os.path.join(base, "html", of)  # 新基线布局：{work}/html/
             if not os.path.isfile(off):
-                self.skipTest(f"官方基线缺失：{f}（外部数据已重材料化）")
+                self.skipTest(f"官方基线缺失：{of}（外部数据已重材料化）")
             with open(os.path.join(self.tmp, f), encoding="utf-8") as fh:
                 mine = fh.read()
             with open(off, encoding="utf-8") as fh:
@@ -95,6 +102,32 @@ class TestRenderYP0019(unittest.TestCase):
             mine_body = _body(mine)
             off_body = _body(official)
             self.assertEqual(mine_body, off_body, f"body differs from official for {f}")
+
+
+class TestHtmlSingleNoSuffix(unittest.TestCase):
+    """单卷 html 默认名与其他格式同形（无 `_NNN` 后缀）；多卷加后缀。"""
+
+    def test_single(self):
+        from pycbeta.model import E, Text, Work
+        w = Work(id="T0349", source_file="",
+                 metadata={"title": "彌勒菩薩所問本願經"}, body=[
+                     E(tag="p", attrs={}, children=[Text(text="文")])],
+                 notes_by_n={}, apps=[], simplified=False)
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        files = HtmlRenderer().render_work(w, d)
+        self.assertEqual(files, ["T0349 弥勒菩萨所问本愿经.html"])
+
+    def test_title_t2s_off_keeps_hant(self):
+        from pycbeta.model import E, Text, Work
+        w = Work(id="T0349", source_file="",
+                 metadata={"title": "彌勒菩薩所問本願經"}, body=[
+                     E(tag="p", attrs={}, children=[Text(text="文")])],
+                 notes_by_n={}, apps=[], simplified=False)
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        files = HtmlRenderer(title_t2s=False).render_work(w, d)
+        self.assertEqual(files, ["T0349 彌勒菩薩所問本願經.html"])
 
 
 class TestStripHeadNoX1116(unittest.TestCase):
