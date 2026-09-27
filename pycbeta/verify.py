@@ -79,14 +79,63 @@ def ctx_locations(ctx, ours_line, theirs_line) -> list:
     return out
 
 
-def _mark_span(text: str, a: int, b: int, before: int = 18, after: int = 18) -> str:
-    """归一文本差异段标记：前文…〖差异〗…后文（差异为空时显示空括号）。"""
+def _mark_span(text: str, a: int, b: int, before: int = 18, after: int = 18,
+               pad: int = 0) -> str:
+    """归一文本差异段标记：前文…〖差异〗…后文（差异为空时显示空括号）。
+    pad>0 且 span 为空时填 `〓`×pad（对端 span 长度），使源/新两行位置对齐；
+    pad=0 保持旧行为。"""
     a = max(0, min(a, len(text)))
     b = max(a, min(b, len(text)))
     pre = text[max(0, a - before):a]
     mid = text[a:b]
     post = text[b:b + after]
+    if not mid and pad > 0:
+        return f"{pre}〖{'〓' * pad}〗{post}"
     return f"{pre}〖{mid}〗{post}"
+
+
+def format_work_summary(work_id, items) -> str:
+    """单经书校验总结行（下游速读哪个格式过/不过及程度）：
+    `[T45n1859] 3 format: 1[docx=OK(0/0)], 2[pdf=1], 3[epub=FAIL(48/97)]`。
+    items = [(fmt, status, missing, extra)] 或 [(fmt, status, missing, extra, ref)]，
+    按处理顺序；status ∈ ok/fail/covered/no_baseline/nogen/error/…（大小写不敏感）。
+    - ok→`OK(mi/ex)`，fail→`FAIL(mi/ex)`（缺数/多 None 记 `?`）；
+    - covered + ref 可解（ref 格式在本行内）→ `N[pdf=M]`（M 为 ref 的序号，
+      即"结果看第 M 条"）；解不了回退 `COVERED`；
+    - 其余状态大写原文（no_baseline→NO_BASELINE 等）。
+    行首 `[id]` 刻意避开下游 `[OK]/[FAIL]/[--]` 行首解析；纯报告层，不影响主程序。"""
+    order = []
+    for it in items:
+        f = (it[0] or "?").split("→")[0].strip() or "?"
+        if f not in order:
+            order.append(f)
+    parts = []
+    for i, it in enumerate(items, 1):
+        fmt, status = it[0], it[1]
+        mi = it[2] if len(it) > 2 else None
+        ex = it[3] if len(it) > 3 else None
+        ref = it[4] if len(it) > 4 else None
+        f = (fmt or "?").split("→")[0].strip() or "?"
+        st = (status or "").strip().lower()
+        if st == "ok":
+            mi_s = mi if mi is not None else "?"
+            ex_s = ex if ex is not None else "?"
+            parts.append(f"{i}[{f}=OK({mi_s}/{ex_s})]")
+        elif st == "fail":
+            mi_s = mi if mi is not None else "?"
+            ex_s = ex if ex is not None else "?"
+            parts.append(f"{i}[{f}=FAIL({mi_s}/{ex_s})]")
+        elif st == "covered":
+            r = (ref or "").split("→")[0].strip()
+            if r and r in order:
+                parts.append(f"{i}[{f}={order.index(r) + 1}]")
+            else:
+                parts.append(f"{i}[{f}=COVERED]")
+        elif st in ("no_baseline", "nogen", "error"):
+            parts.append(f"{i}[{f}={st.upper()}]")
+        else:
+            parts.append(f"{i}[{f}={st.upper() or '?'}]")
+    return f"[{work_id}] {len(items)} format: " + ", ".join(parts)
 
 
 def _display_text(raw: str) -> str:
@@ -128,18 +177,48 @@ def _eq_base(m):
         return tail
     return ""
 
-def extract_text(path: str) -> str:
+# epub 导航/封面/前后言 boilerplate（官方结构 titlepage/front/toc/back/nav；
+# 我方 nav）：抽取比对时跳过。命中为空时回退全量，避免空比对。
+_EPUB_SKIP_BASENAMES = frozenset({
+    "nav.xhtml", "toc.xhtml", "titlepage.xhtml", "front.xhtml",
+    "back.xhtml", "cover.xhtml",
+})
+
+
+def _epub_content_names(z) -> list:
+    """epub 内正文 xhtml 名单（跳过 boilerplate；为空回退全量）。"""
+    names = [n for n in z.namelist()
+             if n.lower().endswith((".xhtml", ".html"))
+             and os.path.basename(n).lower() not in _EPUB_SKIP_BASENAMES]
+    if not names:
+        names = [n for n in z.namelist()
+                 if n.lower().endswith((".xhtml", ".html"))]
+    return names
+
+
+def _body_only(raw: str) -> str:
+    """只取 <body> 内容（去掉 <title>/nav 头文本）；无 body 标签原样返回。"""
+    m = re.search(r"<body[^>]*>(.*)</body>", raw, flags=re.S | re.I)
+    return m.group(1) if m else raw
+
+
+def extract_text(path: str, strip_jiaozhu: bool = True) -> str:
+    """抽取可比对文本。html 分支默认剥离 `<hr><h1>校注</h1>` 标题
+    （docx/md/txt 比对：生成侧无此标题，官方侧须同步剥离）；
+    fmt 为 html/epub 时传 False 保留（生成侧 html/epub 有此标题，需对齐）。
+    epub 分支从不处理该标题（章节内联，无独立标题块可剥；txt trial
+    用 `_join_epub_ours` 另行处理）。"""
     ext = os.path.splitext(path)[1].lower()
     if ext == ".epub":
         parts = []
         with zipfile.ZipFile(path) as z:
-            for n in z.namelist():
-                if n.lower().endswith((".xhtml", ".html")):
-                    txt = z.read(n).decode("utf-8", "replace")
-                    txt = _STYLE_RE.sub("", txt)
-                    txt = _RUBY_RE.sub("", txt)
-                    txt = re.sub(r"</(p|div|h[1-6]|li|tr)[^>]*>", "\n", txt, flags=re.I)
-                    parts.append(_TAG_RE.sub("", txt))
+            for n in _epub_content_names(z):
+                txt = z.read(n).decode("utf-8", "replace")
+                txt = _body_only(txt)
+                txt = _STYLE_RE.sub("", txt)
+                txt = _RUBY_RE.sub("", txt)
+                txt = re.sub(r"</(p|div|h[1-6]|li|tr)[^>]*>", "\n", txt, flags=re.I)
+                parts.append(_TAG_RE.sub("", txt))
         return "".join(parts)
     if ext == ".docx":
         with zipfile.ZipFile(path) as z:
@@ -162,10 +241,12 @@ def extract_text(path: str) -> str:
             return _TAG_RE.sub("", z.read("content.xml").decode("utf-8"))
     if ext in (".html", ".xhtml", ".htm"):
         raw = open(path, encoding="utf-8", errors="replace").read()
+        raw = _body_only(raw)
         raw = _STYLE_RE.sub("", raw)
         raw = _RUBY_RE.sub("", raw)
-        raw = re.sub(r"<hr[^>]*>\s*<h1[^>]*>\s*校注\s*</h1>", "", raw, flags=re.I | re.S)
-        raw = re.sub(r"<h1[^>]*>\s*校注\s*</h1>", "", raw, flags=re.I)
+        if strip_jiaozhu:
+            raw = re.sub(r"<hr[^>]*>\s*<h1[^>]*>\s*校注\s*</h1>", "", raw, flags=re.I | re.S)
+            raw = re.sub(r"<h1[^>]*>\s*校注\s*</h1>", "", raw, flags=re.I)
         raw = re.sub(r"</(p|div|h[1-6]|li|tr)[^>]*>", "\n", raw, flags=re.I)
         return _TAG_RE.sub("", raw)
     return open(path, encoding="utf-8", errors="replace").read()
@@ -185,21 +266,248 @@ def _extract_html_parts(path: str):
     """抽取 html 为 (正文, 脚注) 两段，用于多卷合并时将脚注统一放文末（与 docx 合并对齐）。
     同时剥离尾注上方的 <hr><h1>校注</h1> 标题（与 docx 校注区标题对齐）。
     脚注判定以 class='footnote' 为准（div/span 均处理），正文中的校注锚点 [A1]/[0164001] 等
-    由 normalize 的 r\"\\[[^\\]\\[]{1,8}\\]\" 统一剥离（不依赖 class）。"""
+    由 normalize 的 r"\[[^\]\[]{1,8}\]" 统一剥离（不依赖 class）。
+    只取 <body> 内容（<title> 等头文本非正文，官方/生成不对称，见 _body_only）；
+    无 body 标签回退全文。"""
     raw = open(path, encoding="utf-8", errors="replace").read()
+    return _split_html_text(raw, body_only=True)
+
+
+def _foot_block_text(block_raw: str) -> str:
+    """单个 footnote 块转文本（与 `_split_html_text` 注记侧逐字节一致，
+    唯行首 ASCII 空白剥除：新增校注 `[A1]` 与常规注块同列行首；
+    html 成品仍保留官方缩进，此处只影响 txt 重组形，比对归一本就无视空白）。"""
+    t = re.sub(r"</(p|div|h[1-6]|li|tr)[^>]*>", "\n", block_raw, flags=re.I)
+    return _TAG_RE.sub("", t).lstrip(" \n\r\t") + "\n"
+
+
+# 悉昙空位标记（HtmlRenderer 输出；官方 html 同款：读音走 roman 属性，
+# 文本抽取为空，html/epub 比对不受影响；txt 重组形按官方 txt 物化为裸读音）
+_RANJA_RE = re.compile(r"<span\b[^>]*\bclass=(['\"])ranja\1[^>]*>", re.I)
+_ROMAN_RE = re.compile(r"\broman=(['\"])([^'\"]*)\1", re.I)
+
+
+def _materialize_ranja(raw: str) -> str:
+    """epub→txt 专用：ranja 空标记物化为裸读音（如 `raṃ`）。
+    官方 txt 悉昙缺字即裸读音（`raṃ【CB】，◇【卍續】`），而官方 html/epub
+    为空元素——故只在 txt 重组管线物化，extract/html 侧保持为空。"""
+    def _rep(m):
+        rm = _ROMAN_RE.search(m.group(0))
+        return rm.group(2) if rm else ""
+    return _RANJA_RE.sub(_rep, raw)
+
+
+# 内嵌图（HtmlRenderer：找得到嵌 base64 + alt 留文件名；找不到留 imgsrc span）
+# 与无解 PUA 空位标记（官方 txt 作图注/◇，官方 html/epub 为空元素）
+_FIG_IMG_RE = re.compile(r"<img\b[^>]*\balt=(['\"])([^'\"]+)\1[^>]*>", re.I)
+_FIG_SPAN_RE = re.compile(
+    r"<span\b[^>]*\bimgsrc=(['\"])([^'\"]+)\1[^>]*>\s*</span\s*>", re.I)
+_EMPTY_GAIJI_RE = re.compile(
+    r"<span\b[^>]*\bclass=(['\"])gaiji\1[^>]*(?:/>\s*|>\s*</span\s*>)", re.I)
+
+
+def _materialize_figs_gaiji(raw: str) -> str:
+    """epub→txt 专用：内嵌图物化官方 txt 图注（`【圖：x.gif】`），
+    无解 PUA 空位标记物化为 `□`（官方 txt 作 `◇`，归一同值）。
+    均只在 txt 重组管线物化；extract/html/epub 侧保持空元素/无文本，
+    与官方 html/epub 一致。"""
+    raw = _FIG_IMG_RE.sub(lambda m: "【圖：" + m.group(2) + "】", raw)
+    raw = _FIG_SPAN_RE.sub(lambda m: "【圖：" + m.group(2) + "】", raw)
+    return _EMPTY_GAIJI_RE.sub("□", raw)
+
+
+# 星号位空标记（HtmlRenderer._render_star_app 输出；文本抽取为空，
+# html 比对不受影响；本模块按位复注块用）
+_STAR_SPAN_RE = re.compile(
+    r"<span\b[^>]*\bclass=(['\"])note-star\1[^>]*>", re.I)
+_STAR_N_RE = re.compile(r"\bdata-n=(['\"])([^'\"]+)\1", re.I)
+# 正文常规注记锚点：mod/orig 用 note_anchor_{n}，add 用 cb_note_anchor{seq}
+_BODY_ANCHOR_RE = re.compile(
+    r"<a\b[^>]*\bid=(['\"])(?:note_anchor_([^'\"]+)|cb_note_anchor(\d+))\1[^>]*>",
+    re.I)
+_FOOT_ID_RE = re.compile(r"\bid=(['\"])(n([^'\"]+)|cb_note_(\d+))\1", re.I)
+
+
+def _join_epub_blob_star(raw: str) -> tuple:
+    """含星号位标记/新增校注锚点的章节重组：(body, foot)，
+    与 `_split_html_text` 同文本口径，另按正文顺序交错注记
+    （官方 txt 注块按引用位点排列：星号位复块如 `[23]` 与 `[*23-1]` 同块并存，
+    新增校注如 `[A1]` 按出现位置插入；无星号位、无新增校注时与旧逻辑逐字节一致）。"""
+    raw = _prep_html_blob(raw, body_only=True)
+    spans = _footnote_spans(raw)
+    blocks = [raw[s:e] for s, e in spans]
+    parts, prev = [], 0
+    for s, e in spans:
+        parts.append(raw[prev:s])
+        prev = e
+    parts.append(raw[prev:])
+    body_raw = "".join(parts)
+    events = []  # (pos, kind, key)：kind reg=note_anchor_n，add=cb seq，star=note n
+    for m in _BODY_ANCHOR_RE.finditer(body_raw):
+        if m.group(2) is not None:
+            events.append((m.start(), "reg", m.group(2)))
+        else:
+            events.append((m.start(), "add", m.group(3)))
+    for m in _STAR_SPAN_RE.finditer(body_raw):
+        nm = _STAR_N_RE.search(m.group(0))
+        if nm:
+            events.append((m.start(), "star", nm.group(2)))
+    events.sort(key=lambda e: e[0])
+    foots = []  # (key, text)：key 与事件 key 同口径（reg→n，add→seq）
+    for b in blocks:
+        im = _FOOT_ID_RE.search(b[:b.find(">") + 1] if ">" in b else b)
+        if im:
+            key = im.group(3) if im.group(3) is not None else im.group(4)
+            kind = "reg" if im.group(3) is not None else "add"
+            foots.append((kind, key, _foot_block_text(b)))
+        else:
+            foots.append((None, None, _foot_block_text(b)))
+    # add 注记块（_back_cb）在文档尾集中存放，官方 txt 按正文位置交错：
+    # 独立分区、事件驱动发射，不参与常规队列消费（否则前瞻吞掉后续常规块）
+    adds = {}
+    main = []
+    for kind, key, text in foots:
+        if kind == "add":
+            adds.setdefault(key, text)
+        else:
+            main.append((kind, key, text))
+    by_key = {}
+    for kind, key, text in main:
+        by_key.setdefault((kind, key), text)
+    out = []
+    queue = list(main)
+    for _, kind, key in events:
+        if kind == "star":
+            dup = by_key.get(("reg", key))
+            if dup is not None:
+                out.append(dup)
+            continue
+        if kind == "add":
+            hit = adds.get(key)
+            if hit is not None:
+                out.append(hit)
+            continue
+        idx = next((i for i, (k, kk, _) in enumerate(queue)
+                    if k == kind and kk == key), None)
+        if idx is None:
+            continue
+        for i in range(idx + 1):
+            out.append(queue[i][2])
+        del queue[:idx + 1]
+    for _, _, text in queue:
+        out.append(text)
+    body_text = re.sub(r"</(p|div|h[1-6]|li|tr)[^>]*>", "\n", body_raw, flags=re.I)
+    return _TAG_RE.sub("", body_text), "".join(out)
+
+
+def _join_epub_ours(gen_paths) -> str:
+    """epub 生成侧正文+注块重组：解包内各 xhtml（跳过 nav.xhtml 导航页），
+    逐文件 `_extract_html_parts` 拆 body/foot（顺带去 `<hr><h1>校注</h1>` 头，
+    官方 txt 侧无此头），正文全接 + 注记全接，与官方 txt“正文+注块”同构。
+    含星号位标记（`note-star`）或新增校注锚点（`cb_note_anchor`，
+    官方 txt 按正文位置交错、非常规尾聚）的章节走 `_join_epub_blob_star`
+    按位重组（含星号位复注块）；其余与旧逻辑逐字节一致。docx/html/md/txt 不走这里。"""
+    bodies, foots = [], []
+    for p in gen_paths or []:
+        try:
+            if p.lower().endswith(".epub"):
+                with zipfile.ZipFile(p) as z:
+                    blobs = [z.read(n).decode("utf-8", "replace")
+                             for n in _epub_content_names(z)]
+            else:
+                blobs = [open(p, encoding="utf-8", errors="replace").read()]
+        except Exception:
+            # 文件缺失/损坏（含非法 zip）：跳过该文件，不中断整批
+            continue
+        for raw in blobs:
+            # txt 形先物化悉昙读音/图注/无解缺字（官方 txt 裸读音+图注+◇；
+            # html/epub 形保持空元素）
+            raw = _materialize_figs_gaiji(_materialize_ranja(raw))
+            if _STAR_SPAN_RE.search(raw) or "cb_note_anchor" in raw:
+                b, f = _join_epub_blob_star(raw)
+            else:
+                b, f = _split_html_text(raw, body_only=True)
+            bodies.append(b)
+            if f.strip():
+                foots.append(f)
+    out = "".join(bodies)
+    if foots:
+        out += "\n" + "".join(foots)
+    return out
+
+
+_TAG_OPEN_RE = re.compile(r"<(div|span)\b[^>]*>", re.I)
+_TAG_CLOSE_RE = re.compile(r"</(div|span)\s*>", re.I)
+_FOOT_OPEN_RE = re.compile(r"<(div|span)\b[^>]*\bclass='footnote'[^>]*>", re.I)
+
+
+def _prep_html_blob(raw: str, body_only: bool = False) -> str:
+    """html 文本预处理（`_split_html_text` 与星号位重组共用；逐字节一致）：
+    body_only 时先取 `<body>` 内容，再去 style/ruby 与校注头。"""
+    if body_only:
+        m = re.search(r"<body[^>]*>(.*)</body>", raw, flags=re.S | re.I)
+        if m:
+            raw = m.group(1)
     raw = _STYLE_RE.sub("", raw)
     raw = _RUBY_RE.sub("", raw)
     raw = re.sub(r"<hr[^>]*>\s*<h1[^>]*>\s*校注\s*</h1>", "", raw, flags=re.I | re.S)
     raw = re.sub(r"<h1[^>]*>\s*校注\s*</h1>", "", raw, flags=re.I)
-    footnotes = re.findall(r"<(?:div|span) class='footnote'[^>]*>.*?</(?:div|span)>", raw, flags=re.S | re.I)
+    return raw
+
+
+def _split_html_text(raw: str, body_only: bool = False):
+    """html 文本版 _extract_html_parts（输入已是字符串；文件版见该函数）：
+    拆 (正文, 脚注)，去校注头。body_only=True 时先取 <body> 内容
+    （去掉 <title>/nav 头文本；epub 重组专用，官方 txt 侧无此文本）。
+    注记块按栈配平匹配（可含嵌套 div/span，如缺字 ruby），非嵌套输入下
+    与旧非贪婪正则逐字节一致；未闭合的不收录（留正文）。"""
+    raw = _prep_html_blob(raw, body_only=body_only)
+    spans = _footnote_spans(raw)
     foot_text = ""
-    for fn in footnotes:
-        t = re.sub(r"</(p|div|h[1-6]|li|tr)[^>]*>", "\n", fn, flags=re.I)
+    for s, e in spans:
+        t = re.sub(r"</(p|div|h[1-6]|li|tr)[^>]*>", "\n", raw[s:e], flags=re.I)
         foot_text += _TAG_RE.sub("", t) + "\n"
-    body_raw = re.sub(r"<(?:div|span) class='footnote'[^>]*>.*?</(?:div|span)>", "", raw, flags=re.S | re.I)
+    parts, prev = [], 0
+    for s, e in spans:
+        parts.append(raw[prev:s])
+        prev = e
+    parts.append(raw[prev:])
+    body_raw = "".join(parts)
     body_raw = re.sub(r"</(p|div|h[1-6]|li|tr)[^>]*>", "\n", body_raw, flags=re.I)
-    body_text = _TAG_RE.sub("", body_raw)
-    return body_text, foot_text
+    return _TAG_RE.sub("", body_raw), foot_text
+
+
+def _footnote_spans(raw: str):
+    """顶层 footnote div/span 块的 (start, end) 区间（栈配平，可含嵌套 div/span，
+    如注记内的缺字 `<span class="gaiji">`；旧非贪婪正则会在内层闭标签提前截断，
+    把注记尾部（含 `【聖】` 等）漏回正文）。
+    未闭合的不收录（与旧行为一致，留正文）；自闭合不入栈；注释内标签不特殊处理
+    （与旧一致）。"""
+    events = []
+    for m in _TAG_OPEN_RE.finditer(raw):
+        if m.group(0).rstrip().endswith("/>"):
+            continue
+        tag = m.group(1).lower()
+        events.append((m.start(), "open", tag,
+                       bool(_FOOT_OPEN_RE.match(m.group(0))), m.end()))
+    for m in _TAG_CLOSE_RE.finditer(raw):
+        events.append((m.start(), "close", m.group(1).lower(), False, m.end()))
+    events.sort(key=lambda e: e[0])
+    spans = []
+    stack = []
+    for _pos, kind, tag, is_foot, end in events:
+        if kind == "open":
+            stack.append([tag, _pos, end, is_foot])
+            continue
+        while stack and stack[-1][0] != tag:
+            stack.pop()
+        if not stack:
+            continue
+        _otag, opos, _oend, ofoot = stack.pop()
+        if ofoot and not any(s[3] for s in stack):
+            spans.append((opos, end))
+    return spans
+
 
 _INFO_MARKS = ("【版本記錄】", "【編輯說明】", "【原始資料】", "【版權宣告】", "【製作說明】", "【其他事項】")
 
@@ -367,6 +675,56 @@ def _strip_md_marks(text: str) -> str:
     官方侧无此标记体系；正文 `[^n]` 引用由 normalize 通规则处理。此处只动精确字面，安全退化。"""
     text = text.replace("\n\n## 校注\n\n", "\n\n", 1)
     return _MD_FN_RE.sub("", text)
+
+
+#: 各格式校验基线链（首选→回退；官方有变改配置 verify.bases 即可，不改代码）
+DEFAULT_BASES = {
+    "md": ["txt_notes", "html"],
+    "docx": ["docx", "html"],
+    "html": ["html"],
+    "txt": ["txt_notes"],
+    "epub": ["txt_notes", "epub", "html"],
+}
+#: 首选基线缺失时按需下载的格式（跟链首走）
+NEED_BY_KIND = {
+    "txt_notes": ["txt_notes"],
+    "docx": ["docx", "html"],
+    "html": ["html"],
+    "epub": ["epub"],
+}
+_KNOWN_BASE_KINDS = frozenset(("html", "txt_notes", "docx", "epub", "odt"))
+
+
+def chain_for(fmt, chains=None):
+    """fmt 的基线链：配置 verify.bases[fmt]（缺键/空/非法回退默认表），
+    非法 kind 丢弃、保序去重，恒非空。"""
+    c = chains.get(fmt) if isinstance(chains, dict) else None
+    if isinstance(c, list) and c:
+        seen, out = set(), []
+        for k in c:
+            if isinstance(k, str) and k in _KNOWN_BASE_KINDS and k not in seen:
+                seen.add(k)
+                out.append(k)
+        if out:
+            return out
+    return list(DEFAULT_BASES.get(fmt, ["html"]))
+
+
+def resolve_bases(fmt, official, chains=None):
+    """基线 trial 链：链序 ∩ 本地现货，保序；同路径去重。返回 [(kind, paths)]。"""
+    chain = chain_for(fmt, chains)
+    seen_paths, out = [], []
+    for k in chain:
+        v = (official or {}).get(k)
+        if v and all(p != v for p in seen_paths):
+            seen_paths.append(v)
+            out.append((k, v))
+    return out
+
+
+def need_for_base(base_kind):
+    """首选基线缺失时按需下载的格式（跟链首走）。"""
+    return list(NEED_BY_KIND.get(base_kind, ["html"]))
 
 
 def _head_no_tokens(work) -> list:
@@ -705,13 +1063,28 @@ def _extract_xml_parts(path: str, inline_brackets: str = "fullwidth",
     return title, author, "".join(body_chunks), foots
 
 
-def find_official(source: str, stem: str, kind: str, juan: Optional[set] = None) -> List[str]:
+def find_official(source: str, stem: str, kind: str, juan: Optional[set] = None,
+                  extra_roots=()) -> List[str]:
     """官方基线发现：短名回退/`_NNN` 优先/卷范围限定；统一根目录下平展优先、仓库次之。
+
+    多根：`extra_roots`（配置的各格式基线目录，如 2026r2）在前、`source`（输入
+    相邻目录，旧行为）在后，逐根独立跑发现流程，**首个非空根胜出**（跨根不合并，
+    避免同内容重复文件导致注块翻倍假挂；缺键/空串=未配置，直走旧行为）。
 
     说明：不按目录名排除任何路径（曾排除 `out/`，但工作根本身就可能叫 out，
     误杀整库且用户无从得知；现彻底去掉该隐藏限制）。
     唯一例外：`*（验证）*/`（校验产物目录，正式比对档与基线同 stem，
     不排除会自比对假绿）。"""
+    for root in ([r for r in (extra_roots or []) if r] + [source]):
+        found = _find_official_in(root, stem, kind, juan)
+        if found:
+            return found
+    return []
+
+
+def _find_official_in(source: str, stem: str, kind: str,
+                      juan: Optional[set] = None) -> List[str]:
+    """单根发现（原 find_official 本体；多根时逐根调用）。"""
     short = ""
     m = re.match(r"^([A-Z]+)\d+n(.+)$", stem)
     if m:
@@ -723,20 +1096,32 @@ def find_official(source: str, stem: str, kind: str, juan: Optional[set] = None)
     for s in stems:
         if kind == "txt_notes":
             # 官方 text-with-notes：新布局 `{work}/txt/{s}_NNN.txt`；
-            # 兼容旧布局 `{s}.txt_notes/` 与平铺 `{s}.txt`
+            # 兼容旧布局 `{s}.txt_notes/` 与平铺 `{s}.txt`；
+            # 2026r2 集中库布局 `{letter}/{s}/{s}_NNN.txt`（无 txt/ 中间层）。
             pats += [os.path.join(source, "**", "txt", f"{s}_*.txt"),
                      os.path.join(source, "**", "txt", f"{s}.txt"),
+                     os.path.join(source, "**", s, f"{s}_*.txt"),
                      os.path.join(source, "**", f"{s}.txt_notes", "*.txt"),
                      os.path.join(source, "**", f"{s}.txt_notes")]
         else:
             pats.append(os.path.join(source, "**", f"{s}*.{kind}"))
     out, seen = [], set()
+    # 自产文件排除（与基线同名会误命中）：
+    # 1) *（验证）*/ —— 校验正式比对档；
+    # 2) 文件名含空格 —— 我方渲染产物 `{id 书名}.ext` 恒带空格，官方文件名恒无空格；
+    # 3) `{stem}_html/`、`{short}_html/` 目录 —— HtmlRenderer 默认输出目录。
+    html_dirs = {f"{s}_html" for s in (stems or []) if s}
     for pat in pats:
         for f in sorted(glob.glob(pat, recursive=True)):
             af = os.path.abspath(f)
             if "（验证）" in af or "（驗證）" in af:
                 # 校验产物目录（CLI/GUI 的 `{id 书名}（验证）/`）不得当基线：
-                # 正式比对档与它同名 stem，自比对会假绿
+                # 正式比对档与基线同 stem，自比对会假绿
+                continue
+            if " " in os.path.basename(af):
+                continue
+            parts = af.split(os.sep)
+            if any(p in html_dirs for p in parts):
                 continue
             if af not in seen and os.path.isfile(af) and os.path.getsize(af) > 0:
                 seen.add(af)
@@ -827,19 +1212,20 @@ def generate_formal(xml_fn: str, work, fmt: str, outdir: str, config_path: Optio
     # 括号口径缺省半角：官方基线恒半角括号；配置缺 verify.inline_brackets
     # （如 publish 临时预设）时向官方对齐，不回退全角
     if fmt == "html":
-        files = HtmlRenderer(theme=theme, notes="endnote", ignore_xml_style=bool(p("ignore_xml_style")), ignore_xml_space=bool(p("ignore_xml_space")), show_notes=True, inline_brackets=p("inline_brackets", "halfwidth"), annotations=_ann, strip_head_no=_shn, figure_base=_fig_dirs or None).render_work(work, out_dir=outdir)
+        from .fetch import title_t2s as _tt
+        files = HtmlRenderer(theme=theme, notes="endnote", ignore_xml_style=bool(p("ignore_xml_style")), ignore_xml_space=bool(p("ignore_xml_space")), show_notes=True, inline_brackets=p("inline_brackets", "halfwidth"), annotations=_ann, strip_head_no=_shn, siddham_text=bool(p("siddham_text", False)), title_t2s=bool(_tt(presets)), figure_base=_fig_dirs or None).render_work(work, out_dir=outdir)
         return [os.path.join(outdir, f) for f in files]
     if fmt == "docx":
         return [os.path.join(outdir, DocxRenderer(theme=theme, notes="footnote", ignore_xml_style=bool(p("ignore_xml_style")), ignore_xml_space=bool(p("ignore_xml_space")), show_notes=True, suppress_jhead_dup=p("suppress_jhead_dup", True), show_close_juan=bool(p("show_close_juan", False)), inline_brackets=p("inline_brackets", "halfwidth"), series_title=p("series_title", {}), annotations=_ann, strip_head_no=_shn, show_body_siddham=bool(p("show_body_siddham", True)), figure_base=_fig_dirs or None).render_work(work, out_dir=outdir, filename=f"{stem}.docx"))]
     if fmt == "epub":
-        return [os.path.join(outdir, EpubRenderer(theme=theme, notes="endnote", ignore_xml_style=bool(p("ignore_xml_style")), ignore_xml_space=bool(p("ignore_xml_space")), show_notes=True, annotations=_ann, strip_head_no=_shn, figure_base=_fig_dirs or None).render_work(work, out_dir=outdir, filename=f"{stem}.epub"))]
+        return [os.path.join(outdir, EpubRenderer(theme=theme, notes="endnote", ignore_xml_style=bool(p("ignore_xml_style")), ignore_xml_space=bool(p("ignore_xml_space")), show_notes=True, inline_brackets=p("inline_brackets", "halfwidth"), annotations=_ann, strip_head_no=_shn, siddham_text=bool(p("siddham_text", False)), figure_base=_fig_dirs or None).render_work(work, out_dir=outdir, filename=f"{stem}.epub"))]
     if fmt == "md":
-        return [os.path.join(outdir, MdRenderer(theme=theme, notes="footnote", show_notes=True, inline_brackets=p("inline_brackets", "halfwidth"), annotations=_ann, strip_head_no=_shn, show_dharani_transliteration=bool(p("show_dharani_transliteration", False))).render_work(work, out_dir=outdir, filename=f"{stem}.md"))]
+        return [os.path.join(outdir, MdRenderer(theme=theme, notes="footnote", show_notes=True, inline_brackets=p("inline_brackets", "halfwidth"), annotations=_ann, strip_head_no=_shn, show_dharani_transliteration=bool(p("show_dharani_transliteration", False)), siddham_text=bool(p("siddham_text", False))).render_work(work, out_dir=outdir, filename=f"{stem}.md"))]
     if fmt == "txt":
-        return [os.path.join(outdir, TxtRenderer(theme=theme, notes="footnote", show_notes=True, inline_brackets=p("inline_brackets", "halfwidth"), annotations=_ann, strip_head_no=_shn, show_dharani_transliteration=bool(p("show_dharani_transliteration", False))).render_work(work, out_dir=outdir, filename=f"{stem}.txt"))]
+        return [os.path.join(outdir, TxtRenderer(theme=theme, notes="footnote", show_notes=True, inline_brackets=p("inline_brackets", "halfwidth"), annotations=_ann, strip_head_no=_shn, show_dharani_transliteration=bool(p("show_dharani_transliteration", False)), siddham_text=bool(p("siddham_text", False))).render_work(work, out_dir=outdir, filename=f"{stem}.txt"))]
     raise ValueError(f"unknown format {fmt}")
 
-def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int = 10, diff_lines: int = 5, config_path: Optional[str] = None, t2s: bool = False, baseline: str = "render", gen_paths: Optional[List[str]] = None) -> Dict:
+def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int = 10, diff_lines: int = 5, config_path: Optional[str] = None, t2s: bool = False, baseline: str = "render", gen_paths: Optional[List[str]] = None, baseline_roots: Optional[dict] = None) -> Dict:
     if fmt == "pdf":
         # 官方无 PDF 基线：PDF 由 docx（docx2pdf）或 html（html2pdf）派生，正文已由该格式校验覆盖
         return {"xml": xml_fn, "fmt": fmt, "status": "no_baseline", "gen": [],
@@ -861,7 +1247,8 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
                     "detail": "生成档缺失（--verify-only 未找到可比对文件）", "gen": []}
     else:
         gen_path = generate_formal(xml_fn, work, fmt, outdir, config_path=config_path)
-    ours_raw = "".join(extract_text(p) for p in gen_path)
+    ours_raw = "".join(extract_text(p, strip_jiaozhu=(fmt not in ("html", "epub")))
+                       for p in gen_path)
     try:
         cfg = (load_effective_presets(config_path).get("verify") or {})
     except Exception:
@@ -884,6 +1271,16 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
         ours_raw = strip_infos(ours_raw)
     ours_disp = _display_text(ours_raw)
     ours, ours_line, _ours_lines = normalize_with_lines(ours_disp, ruby_brackets)
+    if fmt == "epub":
+        # txt trial 专用形（官方 txt“正文+注块”同构）；其余 trial 沿用原交错形
+        _txt_raw = _join_epub_ours(gen_path)
+        if not compare_infos:
+            _txt_raw = strip_infos(_txt_raw)
+        ours_txt_disp = _display_text(_txt_raw)
+        ours_txt, ours_txt_line, _ = normalize_with_lines(ours_txt_disp,
+                                                          ruby_brackets)
+    else:
+        ours_txt, ours_txt_line, ours_txt_disp = ours, ours_line, ours_disp
     # strip_head_no 联动：生成侧已剥 head/jhead 行首 No. 令牌；官方侧求同一令牌表对等剥离
     _strip_no = _strip_no_from(config_path)
     strip_tokens = _head_no_tokens(work) if _strip_no else []
@@ -915,9 +1312,8 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
         title_x, author_x, body_x, foots_x = _extract_xml_parts(
             xml_fn, _ib_defaults.get("inline_brackets", "fullwidth"),
             bool(_ib_defaults.get("show_dharani_transliteration", False)))
-        if not title_x:
-            title_x = work.id  # 与生成侧 `md.get("title") or work.id` 对齐
-        theirs_raw = f"{title_x}\n\n{author_x}\n\n{body_x}"
+        # 生成侧（TxtRenderer）卷首已去书名/作者名，官方侧同口径直接从正文开始
+        theirs_raw = body_x.lstrip("\n")
         if foots_x:
             theirs_raw += "\n\n" + "\n\n".join(foots_x)
         if not compare_infos:
@@ -952,35 +1348,39 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
 
     def _discover():
         out = {}
+        # 配置基线目录优先（数据源面板「校验基线」tab：source.baselines 或显式传入；
+        # 缺键/空=未配置，直走旧行为）；首个非空根胜出
+        _bl = baseline_roots
+        if _bl is None:
+            try:
+                _bl = ((_presets_full.get("source") or {}).get("baselines")
+                       or {})
+            except Exception:
+                _bl = {}
+        if not isinstance(_bl, dict):
+            _bl = {}
         for k in ("html", "txt_notes", "docx", "epub", "odt"):
+            _extra = [(_bl.get(k) or "").strip()] if (_bl.get(k) or "").strip() else []
             found = find_official(source, stem, k,
-                                  juan=_juan if k in ("html", "docx", "txt_notes") else None)
+                                  juan=_juan if k in ("html", "docx", "txt_notes") else None,
+                                  extra_roots=_extra)
             if found:
                 out[k] = found
         return out
 
-    base_kind = {"md": "txt_notes", "docx": "docx", "html": "html",
-                 "epub": "epub", "txt": "txt_notes"}.get(fmt, "html")
+    _chains = (cfg or {}).get("bases")
+    chain = chain_for(fmt, _chains)
+    base_kind = chain[0]
 
     def _bases(official):
-        # 文本族（txt/md）只用官方 text-with-notes（plain text 已弃用）；
-        # 其余用同格式 + html 兜底；txt 不回退（无官方直接 no_baseline）
-        b = []
-        if base_kind in official:
-            b.append((base_kind, official[base_kind]))
-        if fmt != "txt":
-            fb = official.get("html")
-            if fb and all(p != fb for _, p in b):
-                b.append(("html", fb))
-        return b
+        return resolve_bases(fmt, official, _chains)
 
     official = _discover()
     if base_kind not in official and bool((cfg or {}).get("auto_fetch", True)):
         # 首选基线缺失：按需下载（docx/odt 非 T/X 等 404 静默跳过）
         from .fetch import ensure_baselines
         presets = load_effective_presets(config_path)
-        need = {"md": ["txt_notes"], "docx": ["docx", "html"],
-                "txt": ["txt_notes"], "html": ["html"], "epub": ["epub"]}.get(fmt, ["html"])
+        need = need_for_base(base_kind)
         # 材料化模型：基线落 cbeta_ebook work 目录（缺省回退 source）
         ebook = ((presets.get("source") or {}).get("cbeta_ebook") or "").strip() \
             or source
@@ -1030,7 +1430,7 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
             else:
                 parts = []
                 for p in bpath:
-                    txt = extract_text(p)
+                    txt = extract_text(p, strip_jiaozhu=(fmt not in ("html", "epub")))
                     if bkind == "docx" or (bkind == "html" and fmt == "docx"):
                         title = t_title
                         txt = strip_docx_head(txt, title, t_docnumber, t_series)
@@ -1041,7 +1441,7 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
             bpath_disp = f"{bpath[0]} (+{len(bpath)-1})"
         elif isinstance(bpath, list):
             # 单文件：docx 亦过滤 title/docNumber（与多卷首卷一致）；docx 回退 html 同理
-            theirs_raw = extract_text(bpath[0])
+            theirs_raw = extract_text(bpath[0], strip_jiaozhu=(fmt not in ("html", "epub")))
             if bkind == "docx" or (bkind == "html" and fmt == "docx"):
                 title = t_title
                 theirs_raw = strip_docx_head(theirs_raw, title, t_docnumber, t_series)
@@ -1049,7 +1449,7 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
                 theirs_raw = strip_infos(theirs_raw)
             bpath_disp = bpath[0]
         else:
-            theirs_raw = extract_text(bpath)
+            theirs_raw = extract_text(bpath, strip_jiaozhu=(fmt not in ("html", "epub")))
             if bkind == "docx" or (bkind == "html" and fmt == "docx"):
                 title = t_title
                 theirs_raw = strip_docx_head(theirs_raw, title, t_docnumber, t_series)
@@ -1068,31 +1468,38 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
             theirs_raw = t2s_baseline(theirs_raw)
         theirs_disp = _display_text(theirs_raw)
         theirs, theirs_line, _theirs_lines = normalize_with_lines(theirs_disp, ruby_brackets)
+        if bkind == "txt_notes" and fmt == "epub":
+            # epub→txt trial：生成侧用重组形（正文全接+注块全接）；
+            # 其余 trial 沿用原交错形（官方同形）
+            t_ours, t_line, t_disp = ours_txt, ours_txt_line, ours_txt_disp
+        else:
+            t_ours, t_line, t_disp = ours, ours_line, ours_disp
         try:
             os.makedirs(outdir, exist_ok=True)
             src_cmp = os.path.join(outdir, f"{stem}_compare_{bkind}_official.txt")
-            gen_cmp = os.path.join(outdir, f"{stem}_compare_{fmt}_generated.txt")
+            gen_cmp = os.path.join(outdir, f"{stem}_compare_{fmt}_{bkind}_generated.txt")
             with open(src_cmp, "w", encoding="utf-8") as f:
                 f.write(theirs_disp)
             with open(gen_cmp, "w", encoding="utf-8") as f:
-                f.write(ours_disp)
+                f.write(t_disp)
         except Exception:
             src_cmp = gen_cmp = ""
-        m, mi, ex, ctx = diff_stats(ours, theirs)
+        m, mi, ex, ctx = diff_stats(t_ours, theirs)
         total = mi + ex
         trials.append({"kind": bkind, "official": bpath_disp, "missing": mi,
                        "extra": ex, "total": total, "ok": total <= max_diff,
                        "ctx": ctx, "norm_official": theirs,
-                       "ctx_loc": ctx_locations(ctx, ours_line, theirs_line),
+                       "norm_gen": t_ours,
+                       "ctx_loc": ctx_locations(ctx, t_line, theirs_line),
                        "src_cmp": src_cmp, "gen_cmp": gen_cmp})
         cur = (bkind, bpath_disp, m, mi, ex, ctx, total, src_cmp, gen_cmp, theirs,
-               ctx_locations(ctx, ours_line, theirs_line))
+               ctx_locations(ctx, t_line, theirs_line), t_ours)
         if best is None or total < best[6]:
             best = cur
         if total <= max_diff:
-            return {"xml": xml_fn, "fmt": fmt, "status": "ok", "gen": gen_path, "official": bpath_disp, "official_kind": bkind, "matched": m, "missing": mi, "extra": ex, "total": total, "ctx": ctx, "src_cmp": src_cmp, "gen_cmp": gen_cmp, "norm_gen": ours, "norm_official": theirs, "trials": trials}
-    bkind, bpath, m, mi, ex, ctx, total, src_cmp, gen_cmp, best_theirs, best_loc = best
-    return {"xml": xml_fn, "fmt": fmt, "status": "fail", "gen": gen_path, "official": bpath, "official_kind": bkind, "matched": m, "missing": mi, "extra": ex, "total": total, "ctx": ctx, "ctx_loc": best_loc, "src_cmp": src_cmp, "gen_cmp": gen_cmp, "norm_gen": ours, "norm_official": best_theirs, "trials": trials}
+            return {"xml": xml_fn, "fmt": fmt, "status": "ok", "gen": gen_path, "official": bpath_disp, "official_kind": bkind, "matched": m, "missing": mi, "extra": ex, "total": total, "ctx": ctx, "src_cmp": src_cmp, "gen_cmp": gen_cmp, "norm_gen": t_ours, "norm_official": theirs, "trials": trials}
+    bkind, bpath, m, mi, ex, ctx, total, src_cmp, gen_cmp, best_theirs, best_loc, best_ours = best
+    return {"xml": xml_fn, "fmt": fmt, "status": "fail", "gen": gen_path, "official": bpath, "official_kind": bkind, "matched": m, "missing": mi, "extra": ex, "total": total, "ctx": ctx, "ctx_loc": best_loc, "src_cmp": src_cmp, "gen_cmp": gen_cmp, "norm_gen": best_ours, "norm_official": best_theirs, "trials": trials}
 
 
 def format_verify_report(records, diff_lines: int = 5, max_diff: int = 10):
@@ -1101,67 +1508,93 @@ def format_verify_report(records, diff_lines: int = 5, max_diff: int = 10):
     记录须为 verify_one 返回 dict；每个 XML 一段，逐条列出**每个尝试过的基线**
     （`trials`）并标 [OK]/[FAIL]，失败项列前 diff_lines 条【源】【新】差异。
     无 `trials` 的记录（如 P3 辅轨 baseline=xml）退化为单条，标签 `{fmt}→{kind}`。
+    同一 work 的多条记录（多格式）先聚组，每组段首加总结行
+    `[id] N format: 1[docx=OK], …`（下游速读；行首避开 `[OK]/[FAIL]/[--]` 解析）。
     """
-    lines = []
+    groups, order = {}, []
     for r in records or []:
-        name = os.path.basename(r.get("xml") or r.get("id") or "")
-        fmt = r.get("fmt", "")
-        st = r.get("status")
-        lines.append(f"=== {name}")
-        if st == "no_baseline":
-            detail = r.get("detail")
-            lines.append(f"  [--]  {fmt} no baseline"
-                         + (f"（{detail}）" if detail else ""))
-            continue
-        if st == "covered":
-            lines.append(f"  [--]  {fmt} {r.get('detail') or '已覆盖'}")
-            continue
-        if st == "error":
-            lines.append(f"  [FAIL] {fmt} 校验异常: {r.get('detail', '')}")
-            continue
-        ours = r.get("norm_gen") or ""
-        gen = r.get("gen")
-        if isinstance(gen, list):
-            gen = gen[0] if gen else ""
-        trials = r.get("trials")
-        if not trials:
-            trials = [{"kind": r.get("official_kind") or "?",
-                       "official": r.get("official"),
-                       "missing": r.get("missing"), "extra": r.get("extra"),
-                       "total": r.get("total"), "ok": st == "ok",
-                       "ctx": r.get("ctx"), "ctx_loc": r.get("ctx_loc"),
-                       "src_cmp": r.get("src_cmp"), "gen_cmp": r.get("gen_cmp"),
-                       "norm_official": r.get("norm_official")}]
-        for t in trials:
-            ok = bool(t.get("ok"))
-            mark = "[OK]" if ok else "[FAIL]"
-            op = "≤" if ok else ">"
-            lines.append(f"  {mark} ({fmt}→{t.get('kind')} 缺{t.get('missing')}/"
-                         f"多{t.get('extra')} {op}阈值{max_diff})")
-            if t.get("official"):
-                lines.append(f"  {fmt} 【源】{t['official']}")
-                if t.get("src_cmp"):
-                    lines.append("       【源比较】行号对齐 "
-                                 + os.path.basename(t["src_cmp"]))
-            if gen:
-                lines.append(f"  {fmt} 【新】{gen}")
-                if t.get("gen_cmp"):
-                    lines.append("       【新比较】行号对齐 "
-                                 + os.path.basename(t["gen_cmp"]))
-            # 有差异就列前 diff_lines 条（含绿灯但非 缺0/多0 的情况）
-            if not ok or (t.get("missing") or 0) + (t.get("extra") or 0) > 0:
-                theirs = t.get("norm_official") or ""
-                locs = t.get("ctx_loc") or []
-                for idx, (_tag, i1, i2, j1, j2) in enumerate(
-                        (t.get("ctx") or [])[:diff_lines], 1):
-                    loc = locs[idx - 1] if idx - 1 < len(locs) else {}
-                    parts = []
-                    if loc.get("src_line"):
-                        parts.append(f"源比较第{loc['src_line']}行")
-                    if loc.get("gen_line"):
-                        parts.append(f"新比较第{loc['gen_line']}行")
-                    where = f"（{'，'.join(parts)}）" if parts else ""
-                    lines.append(f"      {idx}.{where}")
-                    lines.append(f"         【源】{_mark_span(theirs, j1, j2)}")
-                    lines.append(f"         【新】{_mark_span(ours, i1, i2)}")
+        key = r.get("id") or os.path.basename(r.get("xml") or "") or "?"
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append(r)
+    lines = []
+    for key in order:
+        recs = groups[key]
+        lines.append(format_work_summary(
+            key, [((rec.get("fmt") or ""), rec.get("status"),
+                    rec.get("missing"), rec.get("extra"),
+                    rec.get("cover_by"))
+                   for rec in recs]))
+        for r in recs:
+            lines.extend(_format_verify_record(r, diff_lines, max_diff))
+    return lines
+
+
+def _format_verify_record(r, diff_lines: int = 5, max_diff: int = 10):
+    """单条记录 → 报告行（原 format_verify_report 循环体）。"""
+    lines = []
+    name = os.path.basename(r.get("xml") or r.get("id") or "")
+    fmt = r.get("fmt", "")
+    st = r.get("status")
+    lines.append(f"=== {name}")
+    if st == "no_baseline":
+        detail = r.get("detail")
+        lines.append(f"  [--]  {fmt} no baseline"
+                     + (f"（{detail}）" if detail else ""))
+        return lines
+    if st == "covered":
+        lines.append(f"  [--]  {fmt} {r.get('detail') or '已覆盖'}")
+        return lines
+    if st == "error":
+        lines.append(f"  [FAIL] {fmt} 校验异常: {r.get('detail', '')}")
+        return lines
+    ours = r.get("norm_gen") or ""
+    gen = r.get("gen")
+    if isinstance(gen, list):
+        gen = gen[0] if gen else ""
+    trials = r.get("trials")
+    if not trials:
+        trials = [{"kind": r.get("official_kind") or "?",
+                   "official": r.get("official"),
+                   "missing": r.get("missing"), "extra": r.get("extra"),
+                   "total": r.get("total"), "ok": st == "ok",
+                   "ctx": r.get("ctx"), "ctx_loc": r.get("ctx_loc"),
+                   "src_cmp": r.get("src_cmp"), "gen_cmp": r.get("gen_cmp"),
+                   "norm_official": r.get("norm_official")}]
+    for t in trials:
+        ok = bool(t.get("ok"))
+        mark = "[OK]" if ok else "[FAIL]"
+        op = "≤" if ok else ">"
+        lines.append(f"  {mark} ({fmt}→{t.get('kind')} 缺{t.get('missing')}/"
+                     f"多{t.get('extra')} {op}阈值{max_diff})")
+        if t.get("official"):
+            lines.append(f"  {fmt} 【源】{t['official']}")
+            if t.get("src_cmp"):
+                lines.append("       【源比较】行号对齐 "
+                             + os.path.basename(t["src_cmp"]))
+        if gen:
+            lines.append(f"  {fmt} 【新】{gen}")
+            if t.get("gen_cmp"):
+                lines.append("       【新比较】行号对齐 "
+                             + os.path.basename(t["gen_cmp"]))
+        # 有差异就列前 diff_lines 条（含绿灯但非 缺0/多0 的情况）
+        if not ok or (t.get("missing") or 0) + (t.get("extra") or 0) > 0:
+            theirs = t.get("norm_official") or ""
+            # 各 trial 的生成侧文本可能不同（如 epub→txt 用重组形），
+            # 用 trial 自带的 norm_gen（缺失回退整记录级）
+            t_ours = t.get("norm_gen") or ours
+            locs = t.get("ctx_loc") or []
+            for idx, (_tag, i1, i2, j1, j2) in enumerate(
+                    (t.get("ctx") or [])[:diff_lines], 1):
+                loc = locs[idx - 1] if idx - 1 < len(locs) else {}
+                parts = []
+                if loc.get("src_line"):
+                    parts.append(f"源比较第{loc['src_line']}行")
+                if loc.get("gen_line"):
+                    parts.append(f"新比较第{loc['gen_line']}行")
+                where = f"（{'，'.join(parts)}）" if parts else ""
+                lines.append(f"      {idx}.{where}")
+                lines.append(f"         【源】{_mark_span(theirs, j1, j2, pad=i2 - i1)}")
+                lines.append(f"         【新】{_mark_span(t_ours, i1, i2, pad=j2 - j1)}")
     return lines

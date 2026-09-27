@@ -9,7 +9,7 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from pycbeta.parser import P5Parser
-from pycbeta.model import E, Note, NoteRef, Text
+from pycbeta.model import App, E, Note, NoteRef, Text, Work
 from pycbeta.render_docx import DocxRenderer
 from pycbeta.render_html import HtmlRenderer
 from pycbeta.render_md import MdRenderer
@@ -274,6 +274,181 @@ class TestNoteInlineSemantics(unittest.TestCase):
         self.assertIn("〔校注〕", r._render_noteref(self._ref()))
         self.assertIn("[", DocxRenderer(note_inline_brackets="square")
                       ._render_inline_mode("校注"))
+
+
+class TestStarAppHtml(unittest.TestCase):
+    """星号位校勘（有 corresp 的 App）：html 正文官方无标记，
+    只留空位标记供 `_join_epub_ours` 按位复注块（文本抽取为空）。"""
+
+    def _app(self, atype=None, corresp="#n1"):
+        attrs = {}
+        if corresp is not None:
+            attrs["corresp"] = corresp
+        return App(tag="app", attrs=attrs, children=[], key="beg_1",
+                   atype=atype, lem=None, rdgs=[])
+
+    def _work(self):
+        note = Note(tag="note", attrs={}, n="n1", ntype="mod", place="foot",
+                    children=[Text(text="校注")])
+        return Work(id="T", source_file="", metadata={}, body=[],
+                    notes_by_n={"n1": [note]}, apps=[], simplified=False)
+
+    def test_star_app_emits_empty_span(self):
+        r = HtmlRenderer()
+        r._work = self._work()
+        out = r._render_star_app(self._app())
+        self.assertIn("note-star", out)
+        self.assertIn("data-n='n1'", out)
+        from pycbeta.verify import extract_text
+        import tempfile, os
+        d = tempfile.mkdtemp()
+        try:
+            p = os.path.join(d, "a.html")
+            with open(p, "w", encoding="utf-8") as f:
+                f.write(f"<html><body><p>甲{out}乙</p></body></html>")
+            self.assertEqual(extract_text(p).replace("\n", ""), "甲乙")
+        finally:
+            import shutil
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_regular_app_and_removed_silent(self):
+        r = HtmlRenderer()
+        r._work = self._work()
+        self.assertEqual(r._render_star_app(self._app(corresp=None)), "")
+        self.assertEqual(
+            r._render_star_app(self._app(atype="star_removed")), "")
+        r2 = HtmlRenderer(show_notes=False)
+        r2._work = self._work()
+        self.assertEqual(r2._render_star_app(self._app()), "")
+
+    def test_inline_mode_renders_content(self):
+        r = HtmlRenderer(notes="inline", inline_brackets="halfwidth")
+        r._work = self._work()
+        self.assertIn("(校注)", r._render_star_app(self._app()))
+
+
+class TestSiddhamBlockTt(unittest.TestCase):
+    """块级对照表（无 place）：悉昙消音但注记锚点保留（X1077 陀罗尼类）；
+    行内对照表与注内容不受影响。"""
+
+    def _tt(self, place=None):
+        from pycbeta.model import Gaiji, NoteRef
+        attrs = {}
+        if place is not None:
+            attrs["place"] = place
+        note = Note(tag="note", attrs={}, n="n1", ntype="add", place="foot",
+                    children=[Gaiji(code="RJ-CCEB", char="X")])
+        sa = E(tag="t", attrs={"xml:lang": "sa-x-rj"},
+               children=[NoteRef(n="n1", notes=[note]),
+                         Gaiji(code="RJ-CCEB", char="X")])
+        zh = E(tag="t", attrs={"xml:lang": "zh-Hant"},
+               children=[Text(text="南")])
+        return E(tag="tt", attrs=attrs, children=[zh, sa]), note
+
+    def _renderer(self):
+        r = HtmlRenderer()
+        r._work = Work(id="T", source_file="", metadata={
+            "charDecl": {"RJ-CCEB": {"roman": "raṃ"}}}, body=[],
+            notes_by_n={}, apps=[], simplified=False)
+        r._app_by_n = {}
+        r._ann_seen = set()
+        return r
+
+    def test_block_tt_drops_siddham_keeps_ref(self):
+        tt, _ = self._tt()
+        out = self._renderer()._render_tt(tt)
+        self.assertIn("南", out)
+        self.assertIn("[A1]", out)
+        self.assertNotIn("ranja", out)
+
+    def test_inline_tt_keeps_ranja(self):
+        tt, _ = self._tt(place="inline")
+        out = self._renderer()._render_tt(tt)
+        self.assertIn("ranja", out)
+        self.assertIn("transliteration", out)
+
+    def test_unresolvable_pua_empty_span(self):
+        # 无解 PUA（gaiji_db/charDecl 均无映射）：空 span，文本抽取为空
+        from pycbeta.model import Gaiji
+        r = self._renderer()
+        out = r._render_gaiji(
+            Gaiji(code="RJ-TEST-NONE", char=chr(0x10E046)))
+        self.assertIn("data-gid", out)
+        self.assertNotIn(chr(0x10E046), out)
+        self.assertTrue(out.endswith("</span>"))
+
+
+class TestSiddhamTextFlag(unittest.TestCase):
+    """output.siddham_text（默认关）：有读音悉昙按 docx 形输出字形(读音)。"""
+
+    def _work(self):
+        from pycbeta.model import Gaiji
+        return Work(id="T", source_file="", metadata={
+            "charDecl": {"RJ-CCEB": {"roman": "raṃ", "rjchar": "誆"}}},
+            body=[Gaiji(code="RJ-CCEB", char="X")],
+            notes_by_n={}, apps=[], simplified=False)
+
+    def _plain(self, html):
+        return re.sub(r"<[^>]+>", "", html)
+
+    def test_html_default_empty(self):
+        import tempfile
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        files = HtmlRenderer().render_work(self._work(), d)
+        html = "".join(open(os.path.join(d, f), encoding="utf-8").read()
+                       for f in files)
+        self.assertIn("ranja", html)
+        self.assertNotIn("raṃ", self._plain(html))
+
+    def test_html_flag_text(self):
+        r = HtmlRenderer(siddham_text=True)
+        r._work = self._work()
+        from pycbeta.model import Gaiji
+        out = r._render_gaiji(Gaiji(code="RJ-CCEB", char="X"))
+        self.assertNotIn("ranja", out)
+        self.assertIn("誆(raṃ)", self._plain(out))
+
+    def test_txt_md_flag(self):
+        import tempfile
+        from pycbeta.render_txt import TxtRenderer
+        from pycbeta.render_md import MdRenderer
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        t = open(TxtRenderer().render_work(self._work(), d, "a.txt"),
+                 encoding="utf-8").read()
+        self.assertIn("raṃ", t)
+        self.assertNotIn("誆(raṃ)", t)
+        t2 = open(TxtRenderer(siddham_text=True).render_work(
+            self._work(), d, "b.txt"), encoding="utf-8").read()
+        self.assertIn("誆(raṃ)", t2)
+        m = open(MdRenderer(siddham_text=True).render_work(
+            self._work(), d, "c.md"), encoding="utf-8").read()
+        self.assertIn("誆(raṃ)", m)
+
+
+class TestAddFootnoteIndent(unittest.TestCase):
+    """新增校注（add）注块：html 成品保留官方两格缩进（X1116 与官方逐字节一致）；
+    txt 重组形（`_join_epub_ours`）行首无缩进，与常规注块同列。"""
+
+    def test_add_footnote_keeps_official_indent(self):
+        note = Note(tag="note", attrs={}, n="n9", ntype="add", place="foot",
+                    children=[Text(text="新增")])
+        r = HtmlRenderer()
+        r._app_by_n = {}
+        r._work = Work(id="T", source_file="", metadata={}, body=[],
+                       notes_by_n={"n9": [note]}, apps=[], simplified=False)
+        out = r._render_noteref(NoteRef(n="n9", notes=[note]))
+        self.assertIn("[A1]", out)
+        self.assertEqual(len(r._back_cb), 1)
+        self.assertIn("\n  [<a", r._back_cb[0])
+
+    def test_join_strips_footnote_indent(self):
+        from pycbeta.verify import _foot_block_text
+        out = _foot_block_text("<div class='footnote' id='cb_note_1'>\n"
+                               "  [A1] 新增\n</div>")
+        self.assertTrue(out.startswith("[A1] 新增"))
+        self.assertNotIn("  [A1]", out)
 
 
 if __name__ == "__main__":

@@ -11,7 +11,7 @@ from pycbeta.gui.panel import (
     DOCX_SINGLES, HTML_SINGLES, XmlOptions, apply_source_edits, config_presets_dir,
     delete_config_preset, detect_engines, list_config_presets, load_config_preset,
     load_slot, options_from_presets, reset_factory, save_config_preset, save_current,
-    slot_paths, write_temp_preset, write_temp_presets,
+    set_config_preset_theme, slot_paths, write_temp_preset, write_temp_presets,
 )
 from pycbeta.theme import load_presets
 
@@ -104,6 +104,16 @@ class TestConfigPresets(unittest.TestCase):
         with open(os.path.join(d, "a.css"), "w", encoding="utf-8") as f:
             f.write("/* x */\n")
         self.assertEqual(list_config_presets(self.root), [])
+
+    def test_preset_theme_key_roundtrip(self):
+        path = save_config_preset(
+            "带样式", {"output": {"t2s": True}}, self.root)
+        set_config_preset_theme(path, "霞鹜文楷")
+        data = load_config_preset(path)
+        self.assertEqual(data["pdf-docx-user-theme"], "霞鹜文楷.css")
+        self.assertTrue(data["output"]["t2s"])  # 其余键原样保留
+        set_config_preset_theme(path, "pdf_docx.css")  # 出厂值删键
+        self.assertNotIn("pdf-docx-user-theme", load_config_preset(path))
 
 
 class TestTempPresets(unittest.TestCase):
@@ -257,6 +267,184 @@ class TestPanelSmoke(unittest.TestCase):
         self.assertTrue(panel.vert_box.isChecked())
 
 
+class TestSourceBaselineTab(unittest.TestCase):
+    """数据源「校验基线」tab（排第一）：4 行顺序/键映射/保存。"""
+
+    @classmethod
+    def setUpClass(cls):
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PySide6.QtWidgets import QApplication
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_first_tab_rows(self):
+        from pycbeta.gui.panel import SourceDialog
+        dlg = SourceDialog()
+        try:
+            self.assertEqual(dlg.src_tabs.tabText(1), "本地官方电子书")
+            self.assertEqual(list(dlg.base_edits.keys()),
+                             ["xml_dir", "txt", "txt_notes", "docx", "epub",
+                              "pdf"])
+            for e in dlg.base_edits.values():
+                self.assertTrue(e.isReadOnly())
+        finally:
+            dlg.close()
+
+    def test_presets_include_baselines(self):
+        from pycbeta.gui.panel import SourceDialog
+        dlg = SourceDialog()
+        try:
+            dlg.base_edits["txt_notes"].setText("R:/txt")
+            dlg.base_edits["docx"].setText("R:/docx")
+            dlg.base_edits["epub"].setText("")
+            p = dlg._dialog_presets()
+            self.assertEqual(p["source"]["baselines"],
+                             {"txt": "", "txt_notes": "R:/txt",
+                              "docx": "R:/docx", "epub": "", "pdf": ""})
+        finally:
+            dlg.close()
+
+    def test_detect_fills_rows(self):
+        import shutil
+        import tempfile
+        from pycbeta.gui.panel import SourceDialog
+        d = tempfile.mkdtemp()
+        try:
+            for name in ("cbeta-text-with-notes", "cbeta_docx_2026r2",
+                         "cbeta_epub_2026r2"):
+                os.makedirs(os.path.join(d, name))
+            dlg = SourceDialog()
+            try:
+                dlg.base_root_edit.setText(d)
+                dlg._on_detect_baselines()
+                self.assertEqual(
+                    dlg.base_edits["txt_notes"].text(),
+                    os.path.abspath(os.path.join(d, "cbeta-text-with-notes")))
+                self.assertEqual(
+                    dlg.base_edits["docx"].text(),
+                    os.path.abspath(os.path.join(d, "cbeta_docx_2026r2")))
+                self.assertEqual(
+                    dlg.base_edits["epub"].text(),
+                    os.path.abspath(os.path.join(d, "cbeta_epub_2026r2")))
+                p = dlg._dialog_presets()
+                self.assertEqual(p["source"]["baselines_root"], d)
+            finally:
+                dlg.close()
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_xml_dir_sync(self):
+        from pycbeta.gui.panel import SourceDialog
+        dlg = SourceDialog()
+        try:
+            dlg.base_edits["xml_dir"].setText("X:/a")
+            self.assertEqual(dlg.path_edits["xml_dir"].text(), "X:/a")
+            dlg.path_edits["xml_dir"].setText("X:/b")
+            self.assertEqual(dlg.base_edits["xml_dir"].text(), "X:/b")
+        finally:
+            dlg.close()
+
+    def test_io_tab_contents(self):
+        from pycbeta.gui.panel import SourceDialog
+        from PySide6.QtWidgets import QLabel
+        dlg = SourceDialog()
+        try:
+            tab = dlg.src_tabs.widget(0)
+            texts = [w.text() for w in tab.findChildren(QLabel)]
+            self.assertIn("XML及电子书", texts)
+            self.assertIn("输出目录", texts)
+            self.assertTrue(any(
+                "官方下载保存平展目录" in t and "source.cbeta_ebook" in t
+                for t in texts))
+            self.assertTrue(any("title_t2s" in t for t in texts))
+            self.assertTrue(any("source.out_dir" in t for t in texts))
+            self.assertEqual(dlg.windowTitle()[:2], "设置")
+            # 输出目录初始值透传构造参数
+            dlg2 = SourceDialog(out_dir="O:/x")
+            try:
+                self.assertEqual(dlg2.io_out_edit.text(), "O:/x")
+                dlg2.io_out_edit.setText("O:/y")
+                self.assertEqual(dlg2.out_dir(), "O:/y")
+            finally:
+                dlg2.close()
+        finally:
+            dlg.close()
+
+    def test_xml_dir_row_removed_update_row_moved(self):
+        from pycbeta.gui.panel import SourceDialog
+        dlg = SourceDialog()
+        try:
+            # 主表无 xml_dir 可见行（edit 保留为隐藏数据载体）
+            self.assertIsNone(dlg.path_edits["xml_dir"].parent())
+            # 更新按钮行在“官方数据更新源”tab 内
+            tab_upd = dlg.src_tabs.widget(2)
+            self.assertEqual(dlg.btn_update_data.parent(), tab_upd)
+            self.assertEqual(dlg.btn_check_update.parent(), tab_upd)
+            # 官方链接可点开
+            from PySide6.QtWidgets import QLabel
+            links = dlg.src_tabs.widget(1).findChildren(QLabel)
+            self.assertTrue(any(w.openExternalLinks() for w in links))
+        finally:
+            dlg.close()
+
+
+class TestPageMarginSwitch(unittest.TestCase):
+    """取消跟随后切纸张：spin 显示必须跟随当前纸张（A5 custom/手机 custom 互不串扰）。"""
+
+    @classmethod
+    def setUpClass(cls):
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PySide6.QtWidgets import QApplication
+        cls.app = QApplication.instance() or QApplication([])
+
+    def _panel(self):
+        from pycbeta.gui.panel import XmlOptionsPanel
+        presets = {
+            "default_page": "a5",
+            "pages": {
+                "a5": {"size": [148, 210],
+                       "margins": {"top": 25.4, "right": 25.4,
+                                   "bottom": 25.4, "left": 25.4},
+                       "custom_margins": {"top": 18.0, "bottom": 15.0,
+                                          "left": 10.0, "right": 10.0}},
+                "手机": {"size": [100, 178],
+                         "margins": {"top": 10, "right": 10,
+                                     "bottom": 10, "left": 10},
+                         "custom_margins": {"top": 5.0, "bottom": 5.0,
+                                            "left": 5.0, "right": 5.0}},
+            },
+        }
+        return XmlOptionsPanel(presets)
+
+    def _spins(self, panel):
+        return {k: sp.value() for k, sp in panel.margin_spins.items()}
+
+    def test_switch_page_refreshes_custom(self):
+        panel = self._panel()
+        try:
+            panel.margin_follow.setChecked(False)
+            panel.page_box.setCurrentIndex(panel.page_box.findData("手机"))
+            self.assertEqual(
+                self._spins(panel),
+                {"top": 5.0, "right": 5.0, "bottom": 5.0, "left": 5.0})
+            panel.page_box.setCurrentIndex(panel.page_box.findData("a5"))
+            self.assertEqual(
+                self._spins(panel),
+                {"top": 18.0, "right": 10.0, "bottom": 15.0, "left": 10.0})
+        finally:
+            panel.close()
+
+    def test_switch_page_follow_shows_preset(self):
+        panel = self._panel()
+        try:
+            panel.margin_follow.setChecked(True)
+            panel.page_box.setCurrentIndex(panel.page_box.findData("手机"))
+            self.assertEqual(
+                self._spins(panel),
+                {"top": 10.0, "right": 10.0, "bottom": 10.0, "left": 10.0})
+        finally:
+            panel.close()
+
+
 class TestConfigBar(unittest.TestCase):
     """配置栏（一切按下拉选中项）：保存/另存…/删除/设为默认 + default_page。"""
 
@@ -372,6 +560,52 @@ class TestConfigBar(unittest.TestCase):
             with mock.patch("pycbeta.theme.set_run_slot") as m:
                 panel._on_set_default()
                 m.assert_called_once_with("config-json", "presets/foo.json")
+        finally:
+            panel.close() if hasattr(panel, "close") else None
+
+    def test_theme_default_writes_preset_when_selected(self):
+        import unittest.mock as mock
+        import pycbeta.gui.panel as pm
+        panel = self._panel()
+        try:
+            with mock.patch.object(pm.XmlOptionsPanel, "_selected_preset",
+                                   return_value=r"C:\x\p.json"), \
+                    mock.patch.object(pm, "set_config_preset_theme") as m_pre, \
+                    mock.patch("pycbeta.gui.css_editor.set_user_theme") as m_run:
+                panel.theme_box.setCurrentIndex(0)
+                panel._on_theme_default()
+                m_pre.assert_called_once_with(
+                    r"C:\x\p.json", panel.theme_box.selected_value())
+                m_run.assert_not_called()
+        finally:
+            panel.close() if hasattr(panel, "close") else None
+
+    def test_theme_default_writes_run_slot_for_factory(self):
+        import unittest.mock as mock
+        import pycbeta.gui.panel as pm
+        panel = self._panel()
+        try:
+            panel.cfg_preset_box.setCurrentIndex(0)  # 出厂默认
+            with mock.patch.object(pm, "set_config_preset_theme") as m_pre, \
+                    mock.patch("pycbeta.gui.css_editor.set_user_theme") as m_run:
+                panel._on_theme_default()
+                m_run.assert_called_once_with(panel.theme_box.selected_value())
+                m_pre.assert_not_called()
+        finally:
+            panel.close() if hasattr(panel, "close") else None
+
+    def test_merged_preset_syncs_theme_box(self):
+        import unittest.mock as mock
+        panel = self._panel()
+        try:
+            with mock.patch.object(panel, "theme_box") as m_box:
+                m_box.selected_value.return_value = "my"
+                d = panel.merged_preset({"output": {}})
+                self.assertEqual(d["pdf-docx-user-theme"], "my.css")
+                m_box.selected_value.return_value = "pdf_docx.css"
+                d2 = panel.merged_preset(
+                    {"output": {}, "pdf-docx-user-theme": "old.css"})
+                self.assertNotIn("pdf-docx-user-theme", d2)
         finally:
             panel.close() if hasattr(panel, "close") else None
 
@@ -1052,16 +1286,41 @@ class TestLayoutRegroup(unittest.TestCase):
         self.assertIn("不存在", panel.ann_hint.text())
         self.assertFalse(panel.ann_open.isEnabled())
 
-    def test_source_button_above_input(self):
+    def test_settings_menu(self):
+        import unittest.mock as mock
+        from PySide6.QtWidgets import QMessageBox
         from pycbeta.gui.__main__ import MainWindow
         w = MainWindow()
         try:
-            self.assertEqual(w.src_btn.text(), "数据源…")
-            # 第一行佛典编号列表右边（mode_row 内第 3 个控件）
-            grid = w.centralWidget().layout().itemAt(0).layout()
-            mode_row = grid.itemAtPosition(0, 1).layout()
-            self.assertEqual(mode_row.itemAt(2).widget(), w.src_btn)
-            self.assertTrue(w.mode_ids.text().startswith("佛典编号"))
+            from PySide6.QtWidgets import QMenu
+            self.assertEqual(w.menuBar().findChildren(QMenu), [])
+            acts = {a.text(): a for a in w.menuBar().actions()}
+            self.assertIn("设置…", acts)
+            self.assertIn("关于", acts)
+            self.assertFalse(hasattr(w, "src_btn"))
+            from pycbeta import __version__
+            with mock.patch.object(QMessageBox, "about") as m:
+                acts["关于"].trigger()
+                m.assert_called_once()
+                self.assertIn(__version__, m.call_args[0][2])
+        finally:
+            w.close()
+
+    def test_edit_source_applies_out_dir(self):
+        import unittest.mock as mock
+        from pycbeta.gui.__main__ import MainWindow
+        w = MainWindow()
+        try:
+            fake = mock.Mock()
+            fake.exec.return_value = True
+            fake.out_dir.return_value = "O:/new"
+            with mock.patch("pycbeta.gui.panel.SourceDialog",
+                            return_value=fake) as cls:
+                w.out_edit.setText("O:/old")
+                w._edit_source()
+                cls.assert_called_once()
+                self.assertEqual(cls.call_args[1].get("out_dir"), "O:/old")
+                self.assertEqual(w.out_edit.text(), "O:/new")
         finally:
             w.close()
 
@@ -1527,6 +1786,22 @@ class TestNotesTab(unittest.TestCase):
         finally:
             panel.close()
 
+    def test_siddham_text_box_roundtrip(self):
+        from pycbeta.gui.panel import XmlOptions
+        panel = self._panel()
+        try:
+            self.assertFalse(panel.siddham_text_box.isChecked())  # 缺省关
+            self.assertFalse(panel.get_options().output["siddham_text"])
+            panel.siddham_text_box.setChecked(True)
+            self.assertTrue(panel.get_options().output["siddham_text"])
+            panel.set_options(XmlOptions(page="a4", output={}))
+            self.assertFalse(panel.siddham_text_box.isChecked())  # 缺键默认关
+            panel.set_options(XmlOptions(
+                page="a4", output={"siddham_text": True}))
+            self.assertTrue(panel.siddham_text_box.isChecked())
+        finally:
+            panel.close()
+
     def test_notes_mode_default_and_roundtrip(self):
         from pycbeta.gui.panel import XmlOptions
         panel = self._panel()
@@ -1693,7 +1968,31 @@ class TestSourceDialog(unittest.TestCase):
             import shutil
             shutil.rmtree(d, ignore_errors=True)
 
-    def test_clear_xml_dir_preset_path(self):
+    def test_accept_persists_baselines_and_out_dir(self):
+        import pycbeta.gui.panel as P
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PySide6.QtWidgets import QApplication
+        QApplication.instance() or QApplication([])
+        dlg = P.SourceDialog()
+        try:
+            dlg.path_edits["cbeta_ebook"].setText("B")
+            dlg.base_edits["txt"].setText("R:/t")
+            dlg.base_edits["pdf"].setText("R:/p")
+            dlg.io_out_edit.setText("O:/o")
+            saved = {}
+            from unittest import mock
+            with mock.patch("pycbeta.fetch.inspect_xml_source",
+                            return_value={"safe": True}):
+                with mock.patch.object(P, "save_current",
+                                       side_effect=lambda d, r=None: saved.update(d)):
+                    with mock.patch.object(P, "load_slot",
+                                           return_value=({"source": {}}, None)):
+                        dlg.accept()
+            self.assertEqual(saved["source"]["baselines"]["txt"], "R:/t")
+            self.assertEqual(saved["source"]["baselines"]["pdf"], "R:/p")
+            self.assertEqual(saved["source"]["out_dir"], "O:/o")
+        finally:
+            dlg.close()
         import json
         import tempfile
         import pycbeta.gui.panel as P
@@ -1767,9 +2066,11 @@ class TestSourceDialog(unittest.TestCase):
         QApplication.instance() or QApplication([])
         dlg = pm.SourceDialog()
         try:
-            self.assertEqual(dlg.src_tabs.count(), 2)
-            self.assertEqual(dlg.src_tabs.tabText(0), "官方数据更新源")
-            self.assertEqual(dlg.src_tabs.tabText(1), "电子书下载模板")
+            self.assertEqual(dlg.src_tabs.count(), 4)
+            self.assertEqual(dlg.src_tabs.tabText(0), "输入输出")
+            self.assertEqual(dlg.src_tabs.tabText(1), "本地官方电子书")
+            self.assertEqual(dlg.src_tabs.tabText(2), "官方数据更新源")
+            self.assertEqual(dlg.src_tabs.tabText(3), "电子书下载模板")
             from pycbeta.update_data import load_sources
             self.assertEqual(dlg.upd_table.rowCount(), len(load_sources()))
             for i in range(dlg.upd_table.rowCount()):
@@ -1781,6 +2082,33 @@ class TestSourceDialog(unittest.TestCase):
             self.assertIn("佛典目录映射表", names)
             self.assertIn("悉昙·兰札字型", names)
             self.assertNotIn("悉昙·兰札字型（手动）", names)
+        finally:
+            dlg.close()
+
+    def test_upd_url_double_click(self):
+        import unittest.mock as mock
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PySide6.QtWidgets import QApplication
+        QApplication.instance() or QApplication([])
+        from PySide6.QtGui import QDesktopServices
+        from pycbeta.gui.panel import SourceDialog
+        dlg = SourceDialog()
+        try:
+            self.assertGreater(dlg.upd_table.rowCount(), 0)
+            url_item = dlg.upd_table.item(0, 1)
+            self.assertTrue(url_item.text().startswith("http"))
+            with mock.patch.object(QDesktopServices, "openUrl") as m:
+                dlg._open_upd_url(url_item)
+                m.assert_called_once()
+                dlg._open_upd_url(dlg.upd_table.item(0, 0))
+                self.assertEqual(m.call_count, 1)  # 非 URL 列不响应
+            from PySide6.QtWidgets import QLabel
+            tab = next(dlg.src_tabs.widget(i)
+                       for i in range(dlg.src_tabs.count())
+                       if dlg.src_tabs.tabText(i) == "官方数据更新源")
+            hints = [w.text() for w in tab.findChildren(QLabel)
+                     if "双击" in w.text()]
+            self.assertTrue(hints)
         finally:
             dlg.close()
 
@@ -2878,6 +3206,18 @@ class TestCssEditor(unittest.TestCase):
         ce.ensure_tooltip_style()  # 重复不叠加
         self.assertIn("QToolTip", QApplication.instance().styleSheet())
 
+    def test_dialog_tooltip_scoped_no_app_pollution(self):
+        from PySide6.QtWidgets import QApplication
+        import pycbeta.gui.css_editor as ce
+        app = QApplication.instance() or QApplication([])
+        before = app.styleSheet() or ""
+        dlg = ce.CssEditorDialog()
+        try:
+            self.assertIn("QToolTip", dlg.styleSheet())  # 实例级生效
+        finally:
+            dlg.close()
+        self.assertEqual(app.styleSheet() or "", before)  # 应用级不动
+
     def test_row_cb_tip_two_segments(self):
         import pycbeta.gui.css_editor as ce
         self.assertEqual(ce._row_cb_tip("div.div-xu p.head"),
@@ -3334,6 +3674,29 @@ class TestCssEditor(unittest.TestCase):
             d = load_run_config(os.path.join(root, "run.json"))
             self.assertEqual(d["pdf-docx-user-theme"], "large-print.css")
             self.assertEqual(d["pdf-docx-theme"], "pdf_docx.css")
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+    def test_theme_source_preset_beats_run_slot(self):
+        import json
+        import shutil
+        from pycbeta.gui.css_editor import current_theme_source
+        root = tempfile.mkdtemp()
+        try:
+            pre = os.path.join(root, "我的样式.json")
+            with open(pre, "w", encoding="utf-8") as f:
+                json.dump({"pdf-docx-user-theme": "large-print.css"}, f)
+            with open(os.path.join(root, "run.json"), "w",
+                      encoding="utf-8") as f:
+                json.dump({"config-json": pre,
+                           "pdf-docx-user-theme": "my.css"}, f)
+            # 预设键胜 run 槽，并标出来源
+            self.assertEqual(current_theme_source(root),
+                             ("large-print.css", "预设 我的样式"))
+            with open(os.path.join(root, "run.json"), "w",
+                      encoding="utf-8") as f:
+                json.dump({"pdf-docx-user-theme": "my.css"}, f)
+            self.assertEqual(current_theme_source(root), ("my.css", "run.json"))
         finally:
             shutil.rmtree(root, ignore_errors=True)
 

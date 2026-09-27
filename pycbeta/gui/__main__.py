@@ -437,7 +437,7 @@ class BatchWorker(QThread):
                 src = pdf_source_fmt(getattr(self.opts, "engine", None),
                                      getattr(self.opts, "vertical", False))
                 if src in self.opts.formats:
-                    rec.update({"status": "covered",
+                    rec.update({"status": "covered", "cover_by": src,
                                 "detail": f"已由 {src} 校验覆盖（未重复）"})
                     self.log.emit(f"verify {rec['id']} pdf: covered by {src}")
                     return rec
@@ -544,24 +544,29 @@ class MainWindow(QMainWindow):
         super().__init__()
         from pycbeta import __version__ as _ver
         self.setWindowTitle(f"CBETA XML 格式转换 v{_ver}（{_gui_date()}）")
-        self.resize(980, 720)
+        self.resize(817, 720)
+        menu = self.menuBar()
+        act_cfg = menu.addAction("设置…")
+        act_cfg.setToolTip("查看/编辑数据源与配置（存当前选中预设）")
+        act_cfg.triggered.connect(self._edit_source)
+        act_about = menu.addAction("关于")
+        act_about.triggered.connect(self._show_about)
         self.worker = None
         central = QWidget()
         self.setCentralWidget(central)
         layout = QVBoxLayout(central)
         # 输入来源（两 radio 同格左对齐相邻；数据源按钮在编号列表行最右）
         src = QGridLayout()
+        # 标签列贴内容、输入列吃掉多余宽度（否则各列平分导致输入框远离标签）
+        src.setColumnStretch(1, 1)
         self.mode_file = QRadioButton("目录/文件")
         self.mode_ids = QRadioButton("佛典编号列表")
         self.mode_file.setChecked(True)
         mode_row = QHBoxLayout()
         mode_row.setSpacing(18)
+        mode_row.setContentsMargins(0, 0, 0, 0)
         mode_row.addWidget(self.mode_file)
         mode_row.addWidget(self.mode_ids)
-        self.src_btn = QPushButton("数据源…")
-        self.src_btn.setToolTip("查看/编辑 XML 来源目录与官方下载地址（存当前选中预设）")
-        self.src_btn.clicked.connect(self._edit_source)
-        mode_row.addWidget(self.src_btn)
         mode_row.addStretch(1)
         # 配置区总开关：绿底白字小箭头（tab 区 +「配置」分组整体收起/复原，收起后批量列表放大）；
         # 各态同色（checked 也不变），只靠箭头方向区分
@@ -596,6 +601,9 @@ class MainWindow(QMainWindow):
         browse_file = QPushButton("文件…")
         browse_file.setToolTip("选择 ID 列表 .txt（逐行取佛典編號批量转换，如 test/mini-test.txt）")
         browse_file.clicked.connect(self._browse_file)
+        for b in (browse, browse_file):
+            b.setFixedWidth(
+                b.fontMetrics().boundingRect("目录…").width() + 24)
         src.addWidget(QLabel("目录/文件"), 1, 0)
         src.addWidget(self.path_edit, 1, 1, 1, 2)
         src.addWidget(browse, 1, 3)
@@ -610,25 +618,22 @@ class MainWindow(QMainWindow):
         self.auto_base = QCheckBox("同时下载官方电子书")
         dl_row = QHBoxLayout()
         dl_row.setSpacing(18)
+        dl_row.setContentsMargins(0, 0, 0, 0)
         dl_row.addWidget(self.auto_xml)
         dl_row.addWidget(self.auto_base)
         dl_row.addStretch(1)
         src.addLayout(dl_row, 3, 1, 1, 3)
-        src.addWidget(QLabel("输出"), 4, 0)
+        # 输出目录行已并入数据源「输入输出」tab；此处保留隐藏 edit 作会话值载体
         self.out_edit = QLineEdit(os.path.join(os.getcwd(), "out"))
-        out_browse = QPushButton("浏览…")
-        out_browse.clicked.connect(self._browse_out)
-        out_open = QPushButton("打开目录")
-        out_open.clicked.connect(self._open_out)
-        src.addWidget(self.out_edit, 4, 1)
-        src.addWidget(out_browse, 4, 2)
-        src.addWidget(out_open, 4, 3)
         layout.addLayout(src)
         # 设置面板（有效配置：run.json → base 文件 → 出厂）
         run, presets = load_run_and_presets()
         self._run = run
         self.panel = XmlOptionsPanel(presets)
         self.panel.mark_slot()
+        _out0 = ((presets.get("source") or {}).get("out_dir") or "").strip()
+        if _out0:
+            self.out_edit.setText(_out0)
         layout.addWidget(self.panel, 1)
         # 批量列表
         self.table = QTableWidget(0, 5)
@@ -674,21 +679,18 @@ class MainWindow(QMainWindow):
             self.path_edit.setText(f)
             self.mode_file.setChecked(True)
 
-    def _browse_out(self):
-        d = QFileDialog.getExistingDirectory(self, "选择输出目录")
-        if d:
-            self.out_edit.setText(d)
-
-    def _open_out(self):
-        d = self.out_edit.text().strip() or os.path.join(os.getcwd(), "out")
-        os.makedirs(d, exist_ok=True)
-        QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.abspath(d)))
+    def _show_about(self):
+        from pycbeta import __version__ as _ver
+        QMessageBox.about(self, "关于", f"v{_ver}")
 
     def _edit_source(self):
         from pycbeta.gui.panel import SourceDialog
         preset = self.panel._selected_preset() if hasattr(self, "panel") else ""
-        dlg = SourceDialog(self, preset_path=preset or None)
+        dlg = SourceDialog(
+            self, preset_path=preset or None,
+            out_dir=self.out_edit.text().strip())
         if dlg.exec():
+            self.out_edit.setText(dlg.out_dir())
             name = os.path.basename(preset) if preset else "config.user.json"
             self.statusBar().showMessage(f"数据源已保存到{name}")
 
@@ -852,6 +854,27 @@ class MainWindow(QMainWindow):
         if results:
             VerifySummaryDialog(results, getattr(self, "_out_dir", ""),
                                 self).exec()
+        # 注音待审字落盘（P6）：本轮收集的多音/无收录字写入词表 stub 行并告知
+        try:
+            from pycbeta.annotate import pending_review, append_review_stubs
+            _pending = pending_review()
+            _table = ""
+            try:
+                _table = self.panel._ann_table_path() \
+                    if hasattr(self, "panel") else ""
+            except Exception:
+                _table = ""
+            _new = append_review_stubs(_table) if _table else []
+            if _new:
+                _poly = "".join(sorted(
+                    c for c in _new if _pending.get(c) == "polyphonic")) or "无"
+                _unk = "".join(sorted(
+                    c for c in _new if _pending.get(c) != "polyphonic")) or "无"
+                self.statusBar().showMessage(
+                    f"注音待审已写入词表（多音：{_poly}；无收录：{_unk}）："
+                    f"{_table}，请填写读音后重跑")
+        except Exception:
+            pass
 
 
 def _apply_launch_args(win, a):

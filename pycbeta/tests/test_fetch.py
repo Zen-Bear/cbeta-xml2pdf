@@ -43,6 +43,62 @@ class TestResolveSource(unittest.TestCase):
         self.assertEqual((xml, eb), ("Y:\\a", "X:\\b"))
 
 
+class TestDetectBaselineDirs(unittest.TestCase):
+    """官方电子书根目录自动检测（数据源面板一键填充用）。"""
+
+    def _root(self):
+        import tempfile
+        d = tempfile.mkdtemp()
+        for name in ("cbeta-text-with-notes", "cbeta_docx_2026r2",
+                     "cbeta_epub_2026r2", "other"):
+            os.makedirs(os.path.join(d, name))
+        return d
+
+    def test_detect_three_kinds(self):
+        import shutil
+        from pycbeta.fetch import detect_baseline_dirs
+        d = self._root()
+        try:
+            got = detect_baseline_dirs(d)
+            self.assertEqual(
+                {k: os.path.basename(v) for k, v in got.items()
+                 if k in ("txt_notes", "docx", "epub")},
+                {"txt_notes": "cbeta-text-with-notes",
+                 "docx": "cbeta_docx_2026r2",
+                 "epub": "cbeta_epub_2026r2"})
+            self.assertTrue(all(os.path.isabs(v) for v in got.values()))
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_txt_notes_beats_plain_txt(self):
+        import shutil
+        from pycbeta.fetch import detect_baseline_dirs
+        d = tempfile.mkdtemp()
+        try:
+            os.makedirs(os.path.join(d, "txt"))
+            os.makedirs(os.path.join(d, "cbeta-text-with-notes"))
+            got = detect_baseline_dirs(d)
+            self.assertEqual(os.path.basename(got["txt_notes"]),
+                             "cbeta-text-with-notes")
+            self.assertEqual(os.path.basename(got["txt"]), "txt")
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_bad_root_empty(self):
+        from pycbeta.fetch import detect_baseline_dirs
+        self.assertEqual(detect_baseline_dirs(""), {})
+        self.assertEqual(detect_baseline_dirs(os.path.join(
+            tempfile.mkdtemp(), "nope")), {})
+        d = tempfile.mkdtemp()
+        try:
+            with open(os.path.join(d, "f.txt"), "w") as f:
+                f.write("x")
+            self.assertEqual(detect_baseline_dirs(d), {})
+        finally:
+            import shutil
+            shutil.rmtree(d, ignore_errors=True)
+
+
 class TestCatalog(unittest.TestCase):
     def test_title_returned(self):
         import io

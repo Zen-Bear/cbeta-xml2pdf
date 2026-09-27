@@ -1,0 +1,297 @@
+{
+  "default_page": "a5",
+  "pdf-docx-user-theme": "霞鹜文楷.css",
+  "pages": {
+    "a4": {
+      "size": [
+        210,
+        297
+      ],
+      "margins": {
+        "top": 25.4,
+        "right": 25.4,
+        "bottom": 25.4,
+        "left": 25.4
+      },
+      "body_font_size": "12pt",
+      "body_line_height": "1.5"
+    },
+    "a5": {
+      "size": [
+        148,
+        210
+      ],
+      "margins": {
+        "top": 25.4,
+        "right": 25.4,
+        "bottom": 25.4,
+        "left": 25.4
+      },
+      "body_font_size": "12pt",
+      "body_line_height": "1.5",
+      "custom_margins": {
+        "top": 15.0,
+        "bottom": 20.0,
+        "left": 15.0,
+        "right": 15.0
+      }
+    },
+    "信纸": {
+      "size": [
+        216,
+        279
+      ],
+      "margins": {
+        "top": 25.4,
+        "right": 25.4,
+        "bottom": 25.4,
+        "left": 25.4
+      },
+      "body_font_size": "12pt",
+      "body_line_height": 1.5
+    },
+    "手机": {
+      "size": [
+        100,
+        178
+      ],
+      "margins": {
+        "top": 10,
+        "right": 10,
+        "bottom": 10,
+        "left": 10
+      }
+    },
+    "平板8寸": {
+      "size": [
+        108,
+        172
+      ],
+      "margins": {
+        "top": 10,
+        "right": 10,
+        "bottom": 10,
+        "left": 10
+      }
+    },
+    "平板9寸": {
+      "size": [
+        121,
+        194
+      ],
+      "margins": {
+        "top": 10,
+        "right": 10,
+        "bottom": 10,
+        "left": 10
+      }
+    },
+    "平板11寸": {
+      "size": [
+        148,
+        237
+      ],
+      "margins": {
+        "top": 10,
+        "right": 10,
+        "bottom": 10,
+        "left": 10
+      }
+    },
+    "32开": {
+      "size": [
+        130,
+        184
+      ],
+      "margins": {
+        "top": 20,
+        "right": 20,
+        "bottom": 20,
+        "left": 20
+      },
+      "body_font_size": "12pt",
+      "body_line_height": 1.4
+    },
+    "16开": {
+      "size": [
+        185,
+        260
+      ],
+      "margins": {
+        "top": 20,
+        "right": 20,
+        "bottom": 20,
+        "left": 20
+      },
+      "body_font_size": "10.5pt",
+      "body_line_height": 1.5
+    },
+    "B5": {
+      "size": [
+        182,
+        257
+      ],
+      "margins": {
+        "top": 20,
+        "right": 20,
+        "bottom": 20,
+        "left": 20
+      },
+      "body_font_size": "10.5pt",
+      "body_line_height": 1.5
+    }
+  },
+  "engines": {
+    "html2pdf": {
+      "chain": [
+        "chromium",
+        "cbetapdf"
+      ]
+    },
+    "docx2pdf": {
+      "chain": [
+        "msword",
+        "wps",
+        "docbuilder",
+        "libreoffice",
+        "minipdf"
+      ]
+    },
+    "external": {
+      "minipdf": {
+        "executable": "engines/minipdf.exe",
+        "arguments": "convert \"{input}\" -o \"{output}\"",
+        "timeoutSeconds": 120
+      },
+      "cbetapdf": {
+        "executable": "engines/cbetapdf.exe",
+        "arguments": "\"{input}\" -o \"{output}\"",
+        "timeoutSeconds": 300
+      }
+    },
+    "paths": {
+      "docbuilder": "C:\\Dev\\DocBuilder8.2\\docbuilder.exe",
+      "libreoffice": "C:\\Apps\\LibreOffice\\program\\soffice.com"
+    }
+  },
+  "output": {
+    "t2s": false,
+    "ignore_xml_style": false,
+    "ignore_xml_space": false,
+    "verse_caesura": "　　",
+    "verse_strip_quotes": false,
+    "grayscale": false,
+    "page_border": false,
+    "bookmarks": true,
+    "split_juan": false,
+    "show_close_juan": false,
+    "suppress_jhead_dup": true,
+    "inline_brackets": "fullwidth",
+    "footnote_per_page": true,
+    "show_notes": true,
+    "notes_marker_font": "Times New Roman",
+    "suppress_title_notes": false,
+    "strip_head_no": false,
+    "pdf_zoom": 1.0,
+    "font_scale": 1.0,
+    "docx": {
+      "footnoteSeparator": {
+        "thicknessPt": 0.5,
+        "lengthPercent": 30,
+        "spaceTwips": 20
+      },
+      "gaijiFonts": {
+        "zh-Hant": [
+          "CBETA Supplement"
+        ],
+        "zh-Hans": [
+          "SimSun-ExtB",
+          "SimSun-ExtG",
+          "CBETA Supplement"
+        ]
+      },
+      "fallbackFonts": {
+        "zh-Hant": [
+          "PMingLiU",
+          "SimSun",
+          "SimSun-ExtB",
+          "SimSun-ExtG",
+          "CBETA Supplement",
+          "Microsoft YaHei"
+        ],
+        "zh-Hans": [
+          "SimSun",
+          "SimSun-ExtB",
+          "SimSun-ExtG",
+          "CBETA Supplement",
+          "Microsoft YaHei"
+        ]
+      },
+      "siddhamFonts": [
+        "Ranjana",
+        "Siddam"
+      ]
+    },
+    "pagination": {
+      "enabled": true,
+      "duplex": false,
+      "juan": true,
+      "juan_first": false,
+      "mulu_level1": true,
+      "pb": false,
+      "tei": true
+    },
+    "series_title": {
+      "enabled": true
+    },
+    "vertical": false,
+    "notes": "footnote",
+    "show_body_siddham": true,
+    "note_inline_brackets": "fullwidth",
+    "corr_cbeta": false,
+    "siddham_text": false
+  },
+  "source": {
+    "xml_dir": "",
+    "cbeta_ebook": "E:\\dev\\cbeta\\cbeta_ebook",
+    "title_t2s": true
+  },
+  "downloads": {
+    "xml": "https://raw.githubusercontent.com/cbeta-org/xml-p5/master/{canon}/{canon}{vol}/{file}",
+    "html": "https://cbdata.dila.edu.tw/stable/download/html/{id}.html.zip",
+    "docx": "https://cbdata.dila.edu.tw/stable/download/docx/{canon}/{id}.zip",
+    "epub": "https://cbdata.dila.edu.tw/stable/download/epub/{canon}/{id}.epub",
+    "txt": "https://cbdata.dila.edu.tw/stable/download/text/{id}.txt.zip",
+    "txt_notes": "https://cbdata.dila.edu.tw/stable/download/text-with-notes/{id}.txt.zip",
+    "odt": "https://cbdata.dila.edu.tw/stable/download/odt/{canon}/{id}.zip",
+    "figures": "https://raw.githubusercontent.com/cbeta-git/CBR2X-figures/master/{canon}/{file}"
+  },
+  "verify": {
+    "inline_brackets": "halfwidth",
+    "suppress_jhead_dup": false,
+    "show_close_juan": true,
+    "compareInfos": false,
+    "maxDiff": 10,
+    "diffLines": 5,
+    "auto_fetch": true,
+    "scope_juan": true,
+    "enabled": true
+  },
+  "annotations": {
+    "enabled": false,
+    "full_text": false,
+    "scheme": "pinyin",
+    "style": "field",
+    "brackets": [
+      "〔",
+      "〕"
+    ],
+    "repeat": "page",
+    "file": "e:\\dev\\cbeta\\xml2pdf\\pycbeta\\data\\annotations.txt"
+  },
+  "formats": [
+    "pdf"
+  ],
+  "engine": "docx2pdf",
+  "font_lang": "zh-Hant"
+}

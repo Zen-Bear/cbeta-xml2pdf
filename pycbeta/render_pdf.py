@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 from typing import List, Optional
 
 from .model import App, E, Gaiji, Note, NoteRef, Pb, Text, Work
@@ -43,6 +44,42 @@ def _find_soffice() -> Optional[str]:
 _COM_WORD = ("Word.Application",)
 _COM_WPS = ("KWPS.Application", "wps.Application")
 
+# COM 并发纪律：Office 是 STA 服务器，进程内转换串行化。
+# 只约束本进程（subprocess 批量各进程独立，不受影响）。
+_COM_LOCK = threading.Lock()
+# 本进程内已确认 RPC 死亡的 ProgID：后续 work 直接跳过，不再鞭尸
+_DEAD_PROGIDS = set()
+# RPC 死亡码：RPC_S_CALL_FAILED / RPC_S_SERVER_UNAVAILABLE
+_RPC_DEAD = frozenset((0x800706BE, 0x800706BA))
+
+
+def _is_rpc_dead(exc) -> bool:
+    """异常是否为 RPC 死亡（服务器端已死）。hresult 可正可负，归一化后比对；
+    无 hresult（如普通 RuntimeError）一律按"非死亡"处理。"""
+    code = getattr(exc, "hresult", None)
+    if code is None:
+        return False
+    try:
+        code &= 0xFFFFFFFF
+    except TypeError:
+        return False
+    return code in _RPC_DEAD
+
+
+def _ensure_com_apartment(_mod=None):
+    """调用线程进 STA 公寓（Office COM 要求）→ (模块, 是否本次初始化)。
+    pythoncom 缺失 / 线程已是 MTA（RPC_E_CHANGED_MODE）等一律返回 (mod|None, False)，
+    调用方照常继续、不配对。_mod 供测试注入。"""
+    try:
+        mod = _mod if _mod is not None else __import__("pythoncom")
+    except ImportError:
+        return None, False
+    try:
+        mod.CoInitializeEx(mod.COINIT_APARTMENTTHREADED)
+    except Exception:
+        return mod, False
+    return mod, True
+
 
 def _prep_open_path(docx_fn: str):
     """返回 (用于打开的路径, 清理回调)。
@@ -69,6 +106,10 @@ def _com_convert(docx_fn: str, pdf_fn: str, progids, dispatch=None,
     Close(0)、DisplayAlerts=0 后恢复），避免弹出「是否保存修改」或退出用户进程。
     始终从临时副本转换，避免误关用户已打开的同名文档。
     dispatch/dispatch_ex/get_active 可注入（测试用）。
+
+    并发纪律：进程内串行（_COM_LOCK）+ 调用线程进 STA 公寓；
+    已有实例先验活（Documents.Count 探针），僵尸不附着；
+    RPC 死亡的 ProgID 记入 _DEAD_PROGIDS，本进程后续直接跳过。
     """
     if dispatch is None or dispatch_ex is None or get_active is None:
         try:
@@ -82,8 +123,12 @@ def _com_convert(docx_fn: str, pdf_fn: str, progids, dispatch=None,
         if get_active is None:
             get_active = getattr(win32com.client, "GetActiveObject", None)
     work_docx, cleanup = _prep_open_path(docx_fn)
+    _com_mod, _com_init = _ensure_com_apartment()
+    _COM_LOCK.acquire()
     try:
         for progid in progids:
+            if progid in _DEAD_PROGIDS:
+                continue  # 本进程已确认 RPC 死亡，不再鞭尸
             app = d = None
             owned = False
             prev = {}
@@ -91,9 +136,14 @@ def _com_convert(docx_fn: str, pdf_fn: str, progids, dispatch=None,
                 running = False
                 if get_active is not None:
                     try:
-                        get_active(progid)   # 用户在用 → 附着，不抢实例
+                        _probe_app = get_active(progid)
+                        # 活性探针：ROT 残留的僵尸实例必抛（含 RPC 错误），
+                        # 不验活直接附着是批量第二部崩溃的根因
+                        _probe_app.Documents.Count
                         running = True
-                    except Exception:
+                    except Exception as e:
+                        if _is_rpc_dead(e):
+                            _DEAD_PROGIDS.add(progid)
                         running = False
                 if not running and dispatch_ex is not None:
                     try:
@@ -152,7 +202,9 @@ def _com_convert(docx_fn: str, pdf_fn: str, progids, dispatch=None,
                     _com_restore(app, prev)
                 app = None
                 return os.path.abspath(pdf_fn)
-            except Exception:  # 该 ProgID 不可用或转换失败，尝试下一个
+            except Exception as e:  # 该 ProgID 不可用或转换失败，尝试下一个
+                if _is_rpc_dead(e):
+                    _DEAD_PROGIDS.add(progid)
                 if d is not None:
                     try:
                         d.Close(0)
@@ -164,6 +216,15 @@ def _com_convert(docx_fn: str, pdf_fn: str, progids, dispatch=None,
                     _com_restore(app, prev)
         return None
     finally:
+        try:
+            _COM_LOCK.release()
+        except Exception:
+            pass
+        if _com_init and _com_mod is not None:
+            try:
+                _com_mod.CoUninitialize()
+            except Exception:
+                pass
         cleanup()
 
 

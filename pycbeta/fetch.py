@@ -102,6 +102,38 @@ def title_t2s(presets=None) -> bool:
     return bool(cfg.get("title_t2s", True))
 
 
+#: 官方电子书根目录子目录名 → 基线格式（按序优先匹配；txt_notes 排在 txt 前，
+#: 防止 `text-with-notes` 被纯 `txt` 规则截胡；大小写不敏感）
+BASELINE_DIR_HINTS = (
+    ("txt_notes", ("text-with-notes", "txt_notes")),
+    ("docx", ("docx",)),
+    ("epub", ("epub",)),
+    ("pdf", ("pdf",)),
+    ("txt", ("txt",)),
+)
+
+
+def detect_baseline_dirs(root: str) -> Dict[str, str]:
+    """官方电子书根目录（如 CBETA 2026r2）自动检测：直属子目录名按
+    BASELINE_DIR_HINTS 匹配基线格式，返回 `{kind: 子目录绝对路径}`。
+    同格式多命中取排序首个（确定性）；无命中/根无效返回 {}，不抛异常。
+    供数据源面板「本地官方电子书」tab 一键填充（只填表，点确定才保存）。"""
+    out: Dict[str, str] = {}
+    try:
+        names = sorted(os.listdir(root)) if root and os.path.isdir(root) else []
+    except OSError:
+        return out
+    for kind, hints in BASELINE_DIR_HINTS:
+        for name in names:
+            low = name.lower()
+            if not os.path.isdir(os.path.join(root, name)):
+                continue
+            if any(h in low for h in hints):
+                out[kind] = os.path.abspath(os.path.join(root, name))
+                break
+    return out
+
+
 def inspect_xml_source(xml_dir: str, sample: int = 5) -> Dict:
     """抽检本地 XML 候选源的 TEI 版本，判断是否发布版 P5（安全）。
 

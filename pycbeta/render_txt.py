@@ -23,7 +23,8 @@ from .theme import Theme, strip_head_no, bracket_pair
 class TxtRenderer:
     def __init__(self, gaiji_db=None, theme=None, notes="endnote", show_notes=True, inline_brackets="fullwidth",
                  note_inline_brackets=None,
-                 annotations=None, strip_head_no=False, show_dharani_transliteration=False):
+                 annotations=None, strip_head_no=False, show_dharani_transliteration=False,
+                 siddham_text=False):
         self.gaiji_db = gaiji_db if gaiji_db is not None else GaijiDb()
         self.theme = theme if theme is not None else Theme()
         self.notes = notes  # 'footnote' | 'endnote' | 'inline'
@@ -32,6 +33,7 @@ class TxtRenderer:
         self.note_inline_brackets = note_inline_brackets or inline_brackets  # 校注内联括号（缺省回退）
         self.strip_head_no = strip_head_no  # 去 head/jhead 行首 No. 令牌（默认 false 保留）
         self.show_dharani_transliteration = show_dharani_transliteration  # 逐字咒文表（无 place="inline"）转写（默认 false 去掉，官方 txt 一致）
+        self.siddham_text = siddham_text  # 有读音悉昙字形+读音文本形（docx 同款；默认 false 走官方裸读音）
         # 难字注音（P6）：None 或 {"table", "scheme"}；txt 无上方注音，恒为右侧行内括注
         # （不用（），避免与校勘记 inline 括号混淆；verify 侧 normalize 已剥除〔〕）
         self._annotations = _ann_active(annotations)
@@ -62,11 +64,10 @@ class TxtRenderer:
             if isinstance(n, App) and n.key:
                 self._app_by_n[n.key[3:]] = n
         self._orig_suppressed = suppressed_orig_notes(work.notes_by_n)
-        md = work.metadata
-        title = md.get("title") or work.id
-        author = md.get("author") or ""
+        # 卷首不对齐官方 txt：书名/作者名不重复输出，直接从 No. 行开始
+        #（官方版头经 strip_infos/_strip_txt_head 后即 No. 行；No. 独立一行见 docNumber 渲染）
         body = self._render_body(work.body)
-        text = f"{title}\n\n{author}\n\n{body}"
+        text = body.lstrip("\n")
         if self._fn_notes:
             notes = "\n\n".join(f"[{i}] {c}"
                                 for i, c in enumerate(self._fn_notes, 1))
@@ -136,6 +137,18 @@ class TxtRenderer:
         rec = chard.get(code) or {}
         return (rec.get("roman") or rec.get("roman_cbeta") or "").strip()
 
+    def _siddham_glyph(self, code: str, raw: str) -> str:
+        """悉昙字形（siddham_text 开启用；docx 同款优先级：charDecl rjchar
+        → _resolve_gaiji；t2s 与 _resolve_gaiji 同口径）。"""
+        chard = (self._work.metadata.get("charDecl") or {}) if self._work else {}
+        rj = (chard.get(code) or {}).get("rjchar")
+        if rj:
+            if getattr(self._work, "simplified", False):
+                from .simplify import simplify_text
+                return simplify_text(rj)
+            return rj
+        return self._resolve_gaiji(code, raw)
+
     def _render_body(self, body) -> str:
         return "".join(self._render_node(n) for n in body)
 
@@ -163,6 +176,12 @@ class TxtRenderer:
         if isinstance(n, Gaiji):
             roman = self._gaiji_roman(n.code)
             drop = self._drop_sa and not self.show_dharani_transliteration
+            if roman and self.siddham_text and not drop:
+                # docx 同款文本形：字形(读音)；默认关（开则偏离官方基线，校验必挂，见文档）
+                glyph = self._siddham_glyph(n.code, n.char or n.code)
+                if self._annotations is not None:
+                    glyph = self._ann_text(glyph)
+                return f"{glyph}({roman})"
             if n.code.startswith("RJ"):
                 # 悉昙：逐字咒文表整行不显示；否则有声读声、无声用官方占位 ◇
                 if drop:
@@ -295,11 +314,16 @@ class TxtRenderer:
             return ""
         if tag == "unclear":
             return "□"  # 虚缺符号 U+25A1（文字无法辨析）
-        if tag in ("jhead", "docNumber"):
-            if tag == "docNumber" and self.strip_head_no:
+        if tag == "docNumber":
+            if self.strip_head_no:
                 return ""  # 编号行随 strip_head_no 一并省略
+            # No. 独立一行 + 空一行（对齐官方 txt），后接卷名
+            with self._no_ann():
+                inner = self._render_children(e).strip()
+            return inner + "\n\n" if inner else ""
+        if tag == "jhead":
             kids = None
-            if tag == "jhead" and self.strip_head_no:
+            if self.strip_head_no:
                 kids = strip_head_no(e.children)[0]
             with self._no_ann():
                 return self._render_children(e, kids)

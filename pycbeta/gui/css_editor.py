@@ -1297,21 +1297,42 @@ def _suffix_rows():
     return out
 
 
-def current_theme_value(root=None):
-    """有效默认主题值：run.json 的 pdf-docx-user-theme → pdf-docx-theme → ''。"""
+def current_theme_source(root=None):
+    """(有效默认主题值, 来源说明)：预设键（“预设 <stem>”）> run.json 槽
+    （“run.json”）> 出厂（“出厂默认”）。基础配置缺失/非法时回退 run 槽。"""
     import json
-    from pycbeta.theme import DEFAULT_RUN_CONFIG, _strip_json_comments
+    from pycbeta.theme import (DEFAULT_RUN_CONFIG, _strip_json_comments,
+                               preset_theme_value, resolve_base_config,
+                               default_run_path, _PRESETS_PATH)
     root = root or REPO_ROOT
     try:
         with open(os.path.join(root, "run.json"), encoding="utf-8") as f:
             data = json.loads(_strip_json_comments(f.read())) or {}
     except (OSError, ValueError):
         data = {}
+    if not isinstance(data, dict):
+        data = {}
+    try:
+        bpath = resolve_base_config(
+            data, os.path.dirname(os.path.abspath(default_run_path(root))))
+        stem = os.path.splitext(os.path.basename(bpath))[0] \
+            if os.path.abspath(bpath) != os.path.abspath(_PRESETS_PATH) else ""
+    except Exception:
+        stem = ""
     for k in ("pdf-docx-user-theme", "pdf-docx-theme"):
-        v = data.get(k, "") if isinstance(data, dict) else ""
+        v = preset_theme_value(data, root, k)
+        if v:
+            src = f"预设 {stem}" if stem else "预设"
+            return v, src
+        v = data.get(k, "")
         if isinstance(v, str) and v.strip():
-            return v.strip()
-    return DEFAULT_RUN_CONFIG["pdf-docx-theme"]
+            return v.strip(), "run.json"
+    return DEFAULT_RUN_CONFIG["pdf-docx-theme"], "出厂默认"
+
+
+def current_theme_value(root=None):
+    """有效默认主题值（来源说明见 current_theme_source）。"""
+    return current_theme_source(root)[0]
 
 
 def set_user_theme(value, root=None):
@@ -1457,7 +1478,7 @@ class CssEditorDialog(QDialog):
                             | Qt.WindowMaximizeButtonHint)
         self.resize(1180, 760)
         self._engine_chain = engine_chain
-        ensure_tooltip_style()  # 黑 tooltip 可见（应用级一次）
+        _apply_dialog_tooltip_style(self)  # 实例级（嵌入安全；禁碰 QApplication）
         self._tmp = tempfile.mkdtemp(prefix="css-editor-")
         self._work = None            # 当前解析后 Work（样张缓存）
         self._work_src = ("", 0)     # (path, mtime)
@@ -2637,9 +2658,17 @@ def suppress_font_warnings():
         os.environ[key] = (cur + ";" + rule) if cur else rule
 
 
+_TOOLTIP_RULE = "QToolTip { background-color: #222222; color: #ffffff; " \
+    "border: 1px solid #888888; padding: 2px; }"
+
+
 def ensure_tooltip_style():
     """QToolTip 深底白字（黑按钮的黑 tooltip 可见；全局一次）。
 
+    仅自家进程入口调用（gui.__main__.main / css_editor.main）；
+    可被嵌入他应用的 CssEditorDialog 禁止走这里（构造器只设实例级样式，
+    见 _apply_dialog_tooltip_style），否则应用级 repolish 会抬高宿主
+    minimumSizeHint 且粘住回不来。
     tooltip 样式只能应用级定制（按控件各调无效）；深底白字对所有色块
     都对比可读。已设置则跳过，不叠加。
     """
@@ -2648,10 +2677,20 @@ def ensure_tooltip_style():
     if app is None or getattr(app, "_tooltip_styled", False):
         return
     app.setProperty("_tooltip_styled", True)
-    rule = "QToolTip { background-color: #222222; color: #ffffff; " \
-        "border: 1px solid #888888; padding: 2px; }"
-    if rule not in (app.styleSheet() or ""):
-        app.setStyleSheet((app.styleSheet() or "") + "\n" + rule)
+    if _TOOLTIP_RULE not in (app.styleSheet() or ""):
+        app.setStyleSheet((app.styleSheet() or "") + "\n" + _TOOLTIP_RULE)
+
+
+def _apply_dialog_tooltip_style(dlg):
+    """对话框实例级 tooltip 样式（嵌入安全：只重排本子树，不碰 QApplication）。
+
+    QTipLabel 是无父顶层窗，实例级 QSS 不一定够得到它——够不到时本对话框
+    内 tooltip 回系统默认（与嵌入方 workaround 状态一致，零回归）；
+    自家程序因入口保留全局调用，深色效果不变。
+    """
+    cur = dlg.styleSheet() or ""
+    if _TOOLTIP_RULE not in cur:
+        dlg.setStyleSheet((cur + "\n" + _TOOLTIP_RULE) if cur else _TOOLTIP_RULE)
 
 
 def main(argv=None):
@@ -2662,6 +2701,7 @@ def main(argv=None):
     ap.add_argument("--sample", default="", help="预览样张 XML 路径")
     args = ap.parse_args(argv)
     app = QApplication.instance() or QApplication(sys.argv if argv is None else argv or [])
+    ensure_tooltip_style()  # 自家进程：应用级一次（嵌入对话框不走这里）
     dlg = CssEditorDialog(sample_xml=args.sample or None)
     dlg.exec()
     return 0

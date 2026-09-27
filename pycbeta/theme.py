@@ -569,11 +569,15 @@ def resolve_theme_css(value, base_dir=None):
 
 # ---------------- run.json（一次运行的组合单；替代旧 --config 全量快照） ----------------
 # 5 槽：config-json（基础配置）+ 按格式分的标准/增量主题槽。
-# 优先级（逐槽）：显式开关 > run.json 槽 > 内置默认。
+# 优先级（逐槽）：显式开关 > 预设键（基础配置 JSON 顶层同名键）> run.json 槽 > 内置默认。
 # 不带 --config 时自动读仓库根 run.json（没有就全出厂）；config.user.json 已废弃。
 RUN_CONFIG_NAME = "run.json"
 RUN_KEYS = ("config-json", "html-epub-theme", "html-epub-user-theme",
             "pdf-docx-theme", "pdf-docx-user-theme")
+# 基础配置 JSON（config.user.json / presets/*.json）可携带的主题键：
+# 与 run.json 主题槽同名，选中该预设即生效（免反复切换 run.json 槽）。
+PRESET_THEME_KEYS = ("html-epub-theme", "html-epub-user-theme",
+                     "pdf-docx-theme", "pdf-docx-user-theme")
 DEFAULT_RUN_CONFIG = {
     "config-json": "config.json",          # 基础配置：出厂 pycbeta/config.json
     "html-epub-theme": "html_epub_official.css",  # html/epub 标准基底（官方）
@@ -585,16 +589,17 @@ _LEGACY_CONFIG_KEYS = ("pages", "output", "engines", "theme", "verify",
                        "annotations", "source")
 _RUN_TEMPLATE = """{{
   // 一次运行的组合单（5 槽；显式开关优先）。常改文件，不入库。
+  // 分工约定：标准槽放 run.json 全局；增量槽建议放预设键跟预设走。
   // config-json：基础配置（名或路径；缺省出厂 pycbeta/config.json；
   //   也可指 presets/ 下命名快照，如 "presets/我的配置.json"）
   "config-json": {config_json},
-  // html/epub 标准基底（默认官方 html_epub_official.css，一般不动）
+  // html/epub 标准基底（全局，默认官方 html_epub_official.css，一般不动）
   "html-epub-theme": {html_epub_theme},
-  // html/epub 增量：占位（非空警告+忽略，html/epub 纯基底）
+  // html/epub 增量（建议放预设的 html-epub-user-theme 键；此处为全局默认值）
   "html-epub-user-theme": {html_epub_user_theme},
-  // pdf/docx 标准（整套替换出厂 pdf_docx.css 全文）
+  // pdf/docx 标准（全局，整套替换出厂 pdf_docx.css 全文）
   "pdf-docx-theme": {pdf_docx_theme},
-  // pdf/docx 增量（名走 presets/ 双目录或路径，追加在标准之后）
+  // pdf/docx 增量（建议放预设的 pdf-docx-user-theme 键；名走 presets/ 双目录或路径，追加在标准之后）
   "pdf-docx-user-theme": {pdf_docx_user_theme}
 }}
 """
@@ -712,6 +717,24 @@ def resolve_base_config(run, run_dir=None):
     return hit or _PRESETS_PATH
 
 
+def preset_theme_value(run, run_dir=None, key="pdf-docx-user-theme"):
+    """基础配置文件的主题键 → 去空白字符串（无/空/非字符串 → ""）。
+    供各 resolve_* 在“显式开关”与“run.json 槽”之间插入预设层；
+    文件缺失/非法一律 ""（不崩，回退 run 槽）。纯读。"""
+    if key not in PRESET_THEME_KEYS:
+        return ""
+    try:
+        bpath = resolve_base_config(run, run_dir)
+        with open(bpath, encoding="utf-8") as f:
+            data = json.loads(_strip_json_comments(f.read()))
+    except (OSError, ValueError):
+        return ""
+    if not isinstance(data, dict):
+        return ""
+    v = data.get(key, "")
+    return v.strip() if isinstance(v, str) and v.strip() else ""
+
+
 def _builtin_text(path):
     try:
         return _read_text(path)
@@ -720,21 +743,27 @@ def _builtin_text(path):
 
 
 def resolve_pdf_docx_css(run, run_dir=None, std=None, user=None):
-    """pdf/docx 生效 CSS 全文：显式开关 > run.json 槽 > 内置。
+    """pdf/docx 生效 CSS 全文：显式开关 > 预设键 > run.json 槽 > 内置。
 
     标准槽：内置名（pdf_docx.css）用出厂全文；自定义文件全文替换出厂。
     增量槽：双目录名/路径，追加（复用 theme_file_text 层叠语义）。
     """
-    std = (std if std is not None else run.get("pdf-docx-theme") or "").strip() \
-        or "pdf_docx.css"
+    if std is None:
+        _pre = preset_theme_value(run, run_dir, "pdf-docx-theme")
+        if _pre:
+            print(f"主题：预设键 pdf-docx-theme={_pre!r} 整套替换出厂全文"
+                  "（出厂进化不再跟随；只想微调请用 pdf-docx-user-theme）")
+        std = _pre or (run.get("pdf-docx-theme") or "")
+    std = (std or "").strip() or "pdf_docx.css"
     if std == "pdf_docx.css" or std.endswith("/pdf_docx.css") or \
             std.endswith("\\pdf_docx.css"):
         base = _builtin_text(_DEFAULT_CSS)
     else:
         hit = _resolve_run_file(std, run_dir, "pdf-docx-theme")
         base = _read_text(hit) if hit else _builtin_text(_DEFAULT_CSS)
-    usr = (user if user is not None else run.get("pdf-docx-user-theme")
-           or "").strip()
+    usr = (user if user is not None
+             else preset_theme_value(run, run_dir, "pdf-docx-user-theme")
+             or run.get("pdf-docx-user-theme") or "").strip()
     if usr:
         upath, _label = resolve_theme_css(usr, run_dir)
         if upath:
@@ -743,26 +772,38 @@ def resolve_pdf_docx_css(run, run_dir=None, std=None, user=None):
 
 
 def resolve_html_base_css(run, run_dir=None, std=None, user=None):
-    """html/epub 基底 CSS 全文：显式开关 > run.json 槽 > 内置官方基底。
+    """html/epub 基底 CSS 全文：显式开关 > 预设键 > run.json 槽 > 内置官方基底。
 
-    html/epub 为纯基底：增量槽（html-epub-user-theme）**尚未接线**，
-    显式开关或槽值非空都只警告并忽略（槽值的警告在 check_run_placeholders）。
+    标准槽：内置名（html_epub_official.css）用出厂全文；自定义文件全文替换出厂。
+    增量槽（html-epub-user-theme）：双目录名/路径，**纯文本追加**在基底之后
+    （html 无 Theme 层叠语义；官方文件本身不动，“超出官方”部分全在增量里）。
     """
-    if (user or "").strip():
-        print("html/epub: --html-epub-user-theme 尚未接线，已忽略（纯基底 html_epub_official.css）")
-    std = (std if std is not None else run.get("html-epub-theme") or "").strip() \
-        or "html_epub_official.css"
+    if std is None:
+        _pre = preset_theme_value(run, run_dir, "html-epub-theme")
+        if _pre:
+            print(f"主题：预设键 html-epub-theme={_pre!r} 替换官方基底"
+                  "（html/epub 不再是官方原样；只想追加请用 html-epub-user-theme）")
+        std = _pre or (run.get("html-epub-theme") or "")
+    std = (std or "").strip() or "html_epub_official.css"
     if std == "html_epub_official.css" or std.endswith("/html_epub_official.css") or \
             std.endswith("\\html_epub_official.css"):
-        return _builtin_text(_OFFICIAL_CSS)
-    hit = _resolve_run_file(std, run_dir, "html-epub-theme")
-    return _read_text(hit) if hit else _builtin_text(_OFFICIAL_CSS)
+        base = _builtin_text(_OFFICIAL_CSS)
+    else:
+        hit = _resolve_run_file(std, run_dir, "html-epub-theme")
+        base = _read_text(hit) if hit else _builtin_text(_OFFICIAL_CSS)
+    usr = (user if user is not None
+             else preset_theme_value(run, run_dir, "html-epub-user-theme")
+             or run.get("html-epub-user-theme") or "").strip()
+    if usr:
+        upath, _label = resolve_theme_css(usr, run_dir)
+        if upath:
+            return base + "\n" + _read_text(upath)
+    return base
 
 
 def check_run_placeholders(run):
-    """占位槽非空 → 警告（html-epub-user-theme 尚未接线，忽略）。"""
-    if (run.get("html-epub-user-theme") or "").strip():
-        print("run.json: html-epub-user-theme 尚未接线，已忽略（html/epub 纯基底）")
+    """占位槽非空 → 警告（目前无占位槽；html-epub-user-theme 已接线）。"""
+    return None
 
 
 def _replace_json_string_slot(text, key, value):
@@ -832,7 +873,8 @@ def deep_merge(base, over):
 def resolve_effective_config(run, run_dir=None):
     """有效配置（面板显示/CLI 输出选项共用）：出厂 ← base 文件，按鍵深合并。
 
-    base 文件的遗留 theme 键警告（出厂文件除外；主题唯一来源是 run.json 槽）。
+    base 文件的遗留 theme 键警告（出厂文件除外；新式 PRESET_THEME_KEYS
+    键合法，随 base 文件生效，优先级高于 run.json 同名槽）。
     工厂文件损坏 → {}（调用方用 or 回退）。
     """
     try:

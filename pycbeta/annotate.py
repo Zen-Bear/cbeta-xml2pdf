@@ -173,10 +173,11 @@ def _norm_alts(char):
     return _NORM_ALT.get(char, ())
 
 
-def auto_reading(char, scheme="pinyin"):
+def auto_reading(char, scheme="pinyin", review=True):
     """生僻字读音（pypinyin 按字取音）：未知字 → 规范化字回退 → None。
     多音字取最常用读音，可能不准（词表优先于此）。结果进程级常驻缓存
-    （全文模式同字高频复用，避免重复查询）。"""
+    （全文模式同字高频复用，避免重复查询）。
+    review=True 时登记待审字（多音/未知，见 `_record_review`；全文模式不登记）。"""
     key = (char, scheme)
     if key in _READING_CACHE:
         return _READING_CACHE[key]
@@ -187,7 +188,69 @@ def auto_reading(char, scheme="pinyin"):
             if rd:
                 break
     _READING_CACHE[key] = rd
+    if review:
+        _record_review(char, scheme)
     return rd
+
+
+# 待审字登记（注音模式自动收集，供 CLI/GUI 落盘告知；渲染器零 IO，只记内存）
+_REVIEW = {}  # char -> "unknown" | "polyphonic"
+_REVIEW_CHECKED = set()  # 已评估过的 (char, scheme)，避免重复查 heteronym
+
+
+def _record_review(char, scheme="pinyin"):
+    """登记待审字：pypinyin 多音（heteronym>1，保留最常用读音行为）或无收录。
+    pypinyin 缺失时无法判断，静默跳过。"""
+    key = (char, scheme)
+    if key in _REVIEW_CHECKED:
+        return
+    _REVIEW_CHECKED.add(key)
+    try:
+        from pypinyin import pinyin, Style
+    except ImportError:
+        return
+    try:
+        style = Style.BOPOMOFO if scheme == "zhuyin" else Style.TONE
+        rows = pinyin(char, style=style, heteronym=True)
+        rds = [r.strip() for r in (rows[0] if rows else [])]
+    except Exception:
+        return
+    if not rds or all(r.replace("˙", "") == char for r in rds):
+        _REVIEW.setdefault(char, "unknown")
+    elif len(set(rds)) > 1:
+        _REVIEW.setdefault(char, "polyphonic")
+
+
+def pending_review():
+    """当前待审字（{字: unknown|polyphonic} 副本）。"""
+    return dict(_REVIEW)
+
+
+def clear_reviewed():
+    """清空待审登记（单测/多轮运行时隔离用）。"""
+    _REVIEW.clear()
+    _REVIEW_CHECKED.clear()
+
+
+def append_review_stubs(table_path):
+    """待审字写入词表：空读音 stub 行（`字\\t\\t`；load_table 天然跳过空读音，
+    零行为变化，用户填读音后下次生效）。已在表内不写；返回本次新增字符表。
+    写失败返回 []，不抛异常（渲染器零 IO 约定：只由此入口落盘）。"""
+    try:
+        chars = [c for c, s in _REVIEW.items()
+                 if s in ("unknown", "polyphonic")]
+        if not chars or not table_path:
+            return []
+        have = set(load_table(table_path))
+        new = [c for c in chars if c not in have]
+        if not new:
+            return []
+        with open(table_path, "a", encoding="utf-8") as f:
+            for c in new:
+                f.write(f"{c}\t\t\n")
+        return new
+    except Exception:
+        return []
 
 
 def _auto_reading_uncached(char, scheme="pinyin"):
@@ -452,8 +515,9 @@ def split_annotated(text, table, scheme="pinyin", rare_zones=frozenset(),
     return _dedup(_expand_chars(out, scheme, allow), seen)
 
 
-def _expand_chars(out, scheme, allow):
-    """未匹配片段按 allow(c) 逐字取音展开（词表匹配段原样保留）。"""
+def _expand_chars(out, scheme, allow, review=True):
+    """未匹配片段按 allow(c) 逐字取音展开（词表匹配段原样保留）。
+    review=False 时不登记待审字（全文模式：量大，专音必错已全局告知）。"""
     final = []
     for seg, reading in out:
         if reading is not None or not seg:
@@ -463,7 +527,7 @@ def _expand_chars(out, scheme, allow):
         buf = []
         for c in seg:
             if allow(c):
-                rd = auto_reading(c, scheme)
+                rd = auto_reading(c, scheme, review=review)
                 if rd:
                     if buf:
                         final.append(("".join(buf), None))
@@ -493,4 +557,5 @@ def _split_full(text, table, scheme):
             out.append((text[pos:], None))
         out = [(s, r) for s, r in out if s]
     return _expand_chars(out, scheme,
-                         lambda c: unicodedata.category(c) == "Lo")
+                         lambda c: unicodedata.category(c) == "Lo",
+                         review=False)

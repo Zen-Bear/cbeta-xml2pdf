@@ -1,0 +1,4 @@
+/* 可视化编辑器生成：只覆盖字体四属性，后定义优先 */
+:root { --font-p: 霞鶩文楷 TC, LXGW WenKai TC; --font-title: 朝华标题B, ZhaohuaMinB; }
+html[lang="zh-Hans"] { --font-title: 朝华标题B, ZhaohuaMinB; --font-p: 霞鹜文楷 GB, LXGW WenKai GB; }
+/* 我的样式：用户定制。覆盖块（出厂+本块层叠，本块胜出）。 */

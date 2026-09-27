@@ -623,19 +623,23 @@ class TestRunConfig(unittest.TestCase):
             import shutil
             shutil.rmtree(root, ignore_errors=True)
 
-    def test_html_user_theme_warns_only_explicit(self):
-        import io
-        from contextlib import redirect_stdout
+    def test_html_user_theme_appends(self):
+        import tempfile
         from pycbeta.theme import resolve_html_base_css
-        buf = io.StringIO()
-        with redirect_stdout(buf):
-            css = resolve_html_base_css({}, None, user="x.css")
-        self.assertIn("尚未接线", buf.getvalue())
-        self.assertIn("cbetarc", css)
-        buf2 = io.StringIO()
-        with redirect_stdout(buf2):
-            resolve_html_base_css({}, None)
-        self.assertNotIn("尚未接线", buf2.getvalue())
+        d = tempfile.mkdtemp()
+        try:
+            up = os.path.join(d, "u.css")
+            with open(up, "w", encoding="utf-8") as f:
+                f.write("div.lg-cell{display:block}")
+            css = resolve_html_base_css({}, None, user=up)
+            self.assertIn("cbetarc", css)  # 官方基底仍在
+            self.assertIn("div.lg-cell{display:block}", css)  # 增量追加在后
+            css2 = resolve_html_base_css({}, None)
+            self.assertIn("cbetarc", css2)
+            self.assertNotIn("lg-cell{display:block}", css2)
+        finally:
+            import shutil
+            shutil.rmtree(d, ignore_errors=True)
 
     def test_html_base_defaults_official(self):
         from pycbeta.theme import resolve_html_base_css
@@ -645,18 +649,15 @@ class TestRunConfig(unittest.TestCase):
         # 标题内正文夹注不跟标题放大/加粗（与 pdf_docx.css 同口径）
         self.assertIn(".head .doube-line-note", css)
 
-    def test_placeholder_warns(self):
+    def test_placeholder_noop(self):
         import io
         from contextlib import redirect_stdout
         from pycbeta.theme import check_run_placeholders
         buf = io.StringIO()
         with redirect_stdout(buf):
-            check_run_placeholders({"html-epub-user-theme": "x.css"})
-        self.assertIn("尚未接线", buf.getvalue())
-        buf2 = io.StringIO()
-        with redirect_stdout(buf2):
-            check_run_placeholders({})
-        self.assertEqual(buf2.getvalue(), "")
+            self.assertIsNone(
+                check_run_placeholders({"html-epub-user-theme": "x.css"}))
+        self.assertEqual(buf.getvalue(), "")
 
     def test_set_run_slot(self):
         import shutil
@@ -989,6 +990,98 @@ class TestEnsurePageTypography(unittest.TestCase):
         self.assertEqual(FALLBACKS["line_height"], 1.5)
         self.assertEqual(FALLBACKS["verse_hang_em"], 2.0)
         self.assertTrue(FALLBACKS["body_font"])
+
+
+class TestPresetThemeKeys(unittest.TestCase):
+    """预设主题键：显式开关 > 预设键 > run.json 槽 > 内置（pdf/docx + html/epub）。"""
+
+    def _root(self):
+        import shutil
+        root = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, root, True)
+        css = os.path.join(root, "mark.css")
+        with open(css, "w", encoding="utf-8") as f:
+            f.write("p.presetmark{color:#123456}")
+        return root, css
+
+    def _run(self, root, preset_data):
+        base = os.path.join(root, "p.json")
+        with open(base, "w", encoding="utf-8") as f:
+            json.dump(preset_data, f, ensure_ascii=False)
+        return {"config-json": base}, root
+
+    def test_pdf_user_preset_beats_run_slot(self):
+        from pycbeta.theme import resolve_pdf_docx_css
+        root, css = self._root()
+        run, rdir = self._run(root, {"pdf-docx-user-theme": css})
+        run["pdf-docx-user-theme"] = "nonexistent-slot.css"
+        got = resolve_pdf_docx_css(run, rdir)
+        self.assertIn("#123456", got)  # 预设键胜（run 槽文件不存在也会回内置）
+
+    def test_pdf_explicit_beats_preset(self):
+        from pycbeta.theme import resolve_pdf_docx_css
+        root, css = self._root()
+        run, rdir = self._run(root, {"pdf-docx-user-theme": css})
+        got = resolve_pdf_docx_css(run, rdir, user="")
+        self.assertNotIn("#123456", got)
+
+    def test_pdf_preset_empty_and_nonstring_fall_through(self):
+        from pycbeta.theme import resolve_pdf_docx_css, preset_theme_value
+        root, _css = self._root()
+        run, rdir = self._run(root, {"pdf-docx-user-theme": ""})
+        self.assertEqual(preset_theme_value(run, rdir, "pdf-docx-user-theme"), "")
+        run2, _r2 = self._run(root, {"pdf-docx-user-theme": 123})
+        self.assertEqual(preset_theme_value(run2, rdir, "pdf-docx-user-theme"), "")
+        self.assertEqual(preset_theme_value(run, rdir, "no-such-key"), "")
+        css = resolve_pdf_docx_css(run, rdir)
+        self.assertNotIn("presetmark", css)
+
+    def test_pdf_std_preset_full_replace(self):
+        from pycbeta.theme import resolve_pdf_docx_css
+        root, _css = self._root()
+        std = os.path.join(root, "std.css")
+        with open(std, "w", encoding="utf-8") as f:
+            f.write("p.onlystd{color:red}")
+        run, rdir = self._run(root, {"pdf-docx-theme": std})
+        got = resolve_pdf_docx_css(run, rdir)
+        self.assertIn("onlystd", got)
+        self.assertNotIn("--font-body", got)  # 整套替换，出厂全文不在
+    def test_html_user_preset_appends(self):
+        from pycbeta.theme import resolve_html_base_css
+        root, css = self._root()
+        run, rdir = self._run(root, {"html-epub-user-theme": css})
+        got = resolve_html_base_css(run, rdir)
+        self.assertIn("cbetarc", got)  # 官方基底仍在
+        self.assertIn("#123456", got)  # 预设增量追加在后
+        got2 = resolve_html_base_css(run, rdir, user="")
+        self.assertNotIn("#123456", got2)  # 显式空胜预设
+
+    def test_std_preset_override_warns(self):
+        import io
+        from contextlib import redirect_stdout
+        from pycbeta.theme import resolve_pdf_docx_css, resolve_html_base_css
+        root, _css = self._root()
+        std = os.path.join(root, "std.css")
+        with open(std, "w", encoding="utf-8") as f:
+            f.write("p.onlystd{color:red}")
+        run, rdir = self._run(root, {"pdf-docx-theme": std})
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            resolve_pdf_docx_css(run, rdir)
+        self.assertIn("整套替换", buf.getvalue())
+        run2, _r2 = self._run(root, {"pdf-docx-user-theme": "my.css"})
+        buf2 = io.StringIO()
+        with redirect_stdout(buf2):
+            resolve_pdf_docx_css(run2, rdir)
+        self.assertNotIn("整套替换", buf2.getvalue())  # 增量键不警告
+        hstd = os.path.join(root, "hstd.css")
+        with open(hstd, "w", encoding="utf-8") as f:
+            f.write("p.h{color:red}")
+        run3, _r3 = self._run(root, {"html-epub-theme": hstd})
+        buf3 = io.StringIO()
+        with redirect_stdout(buf3):
+            resolve_html_base_css(run3, rdir)
+        self.assertIn("官方基底", buf3.getvalue())
 
 
 if __name__ == "__main__":

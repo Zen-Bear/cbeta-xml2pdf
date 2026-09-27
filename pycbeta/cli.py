@@ -83,6 +83,26 @@ def _annotations_source(config_path, presets):
         return None, None
 
 
+def _drain_review_stubs(config_path, presets):
+    """注音待审字落盘（P6）：本轮渲染收集的多音/无收录生僻字写入词表 stub 行
+    （空读音，load_table 天然跳过，零行为变化），并返回 (新增字符表, 词表路径)。
+    渲染器零 IO，只此一处落盘；失败/无待审返回 ([], "")，不抛异常。"""
+    try:
+        from .annotate import pending_review, append_review_stubs, \
+            _resolve_table_path
+        if not pending_review():
+            return [], ""
+        spec, base = _annotations_source(config_path, presets)
+        if not isinstance(spec, dict):
+            return [], ""
+        path = _resolve_table_path(spec.get("file"), base)
+        if not path:
+            return [], ""
+        return append_review_stubs(path), path
+    except Exception:
+        return [], ""
+
+
 def _report_missing_figures(wid, fmt, renderer):
     """图片缺失汇总（警告 + 占位，不中断；txt/md 本就只出【圖】标记，不在此列）。"""
     miss = list(getattr(renderer, "missing_figures", None) or [])
@@ -111,6 +131,8 @@ def render_one(w, fmt, out_dir, out_name, args, theme, html_base=None, figure_ba
                          annotations=ann,
                          strip_head_no=getattr(args, "strip_head_no", False),
                          corr_cbeta=getattr(args, "corr_cbeta", False),
+                         siddham_text=getattr(args, "siddham_text", False),
+                         title_t2s=getattr(args, "title_t2s", True),
                          figure_base=figure_base)
         files = r.render_work(w, out_dir)
         _report_missing_figures(w.id, fmt, r)
@@ -163,10 +185,11 @@ def render_one(w, fmt, out_dir, out_name, args, theme, html_base=None, figure_ba
                         show_notes=args.show_notes,
                         inline_brackets=args.inline_brackets,
                         note_inline_brackets=getattr(args, "note_inline_brackets", None),
-                        annotations=ann,
-                        strip_head_no=getattr(args, "strip_head_no", False),
-                        show_dharani_transliteration=getattr(
-                            args, "show_dharani_transliteration", False)).render_work(w, out_dir, filename=out_name)
+                         annotations=ann,
+                         strip_head_no=getattr(args, "strip_head_no", False),
+                         show_dharani_transliteration=getattr(
+                             args, "show_dharani_transliteration", False),
+                         siddham_text=getattr(args, "siddham_text", False)).render_work(w, out_dir, filename=out_name)
         print(f"{w.id}: md({note_mode}) -> {fn}")
 
     elif fmt == "txt":
@@ -174,10 +197,11 @@ def render_one(w, fmt, out_dir, out_name, args, theme, html_base=None, figure_ba
                          show_notes=args.show_notes,
                          inline_brackets=args.inline_brackets,
                          note_inline_brackets=getattr(args, "note_inline_brackets", None),
-                         annotations=ann,
-                         strip_head_no=getattr(args, "strip_head_no", False),
-                         show_dharani_transliteration=getattr(
-                             args, "show_dharani_transliteration", False)).render_work(w, out_dir, filename=out_name)
+                          annotations=ann,
+                          strip_head_no=getattr(args, "strip_head_no", False),
+                          show_dharani_transliteration=getattr(
+                              args, "show_dharani_transliteration", False),
+                          siddham_text=getattr(args, "siddham_text", False)).render_work(w, out_dir, filename=out_name)
         print(f"{w.id}: txt({note_mode}) -> {fn}")
 
     elif fmt == "epub":
@@ -191,6 +215,7 @@ def render_one(w, fmt, out_dir, out_name, args, theme, html_base=None, figure_ba
                          annotations=ann,
                          strip_head_no=getattr(args, "strip_head_no", False),
                          corr_cbeta=getattr(args, "corr_cbeta", False),
+                         siddham_text=getattr(args, "siddham_text", False),
                          figure_base=figure_base)
         fn = r.render_work(w, out_dir, filename=out_name)
         _report_missing_figures(w.id, fmt, r)
@@ -456,15 +481,18 @@ def main(argv=None):
                              "（pdf/docx）；html/epub 默认纯官方样式")
     shared.add_argument("--pdf-docx-theme", default=None,
                         help="pdf/docx 标准 CSS（整套替换出厂 pdf_docx.css 全文；"
-                             "缺省 run.json 的 pdf-docx-theme 槽）")
+                             "缺省预设键 pdf-docx-theme，再缺省 run.json 同名槽）")
     shared.add_argument("--pdf-docx-user-theme", default=None,
                         help="pdf/docx 增量 CSS（名走 presets/ 双目录或路径，"
-                             "追加在标准之后；缺省 run.json 的 pdf-docx-user-theme 槽）")
+                             "追加在标准之后；缺省预设键 pdf-docx-user-theme，"
+                             "再缺省 run.json 同名槽）")
     shared.add_argument("--html-epub-theme", default=None,
-                        help="html/epub 基底 CSS 全文（缺省 run.json 的 "
-                             "html-epub-theme 槽，即官方 html_epub_official.css）")
+                        help="html/epub 基底 CSS 全文（缺省预设键 html-epub-theme，"
+                             "再缺省 run.json 同名槽，即官方 html_epub_official.css）")
     shared.add_argument("--html-epub-user-theme", default=None,
-                        help="html/epub 增量 CSS（占位，尚未接线；传入只警告忽略）")
+                        help="html/epub 增量 CSS（名走 presets/ 双目录或路径，"
+                             "纯文本追加在官方基底之后；缺省预设键 "
+                             "html-epub-user-theme，再缺省 run.json 同名槽）")
     shared.add_argument("--font-lang", choices=["zh-Hant", "zh-Hans"],
                         default=None,
                         help="字库：zh-Hant 繁体 / zh-Hans 简体（CSS :root 双栏变量切换）。"
@@ -485,7 +513,8 @@ def main(argv=None):
                         help="run.json 组合单（5 槽：config-json/html-epub-theme/"
                              "html-epub-user-theme/pdf-docx-theme/pdf-docx-user-theme），"
                              "或基础配置 JSON（config.user.json / presets 快照，当作 "
-                             "config-json 槽）；缺省仓库根 run.json，没有就全出厂")
+                             "config-json 槽；其顶层主题键优先于 run.json 同名槽）；"
+                             "缺省仓库根 run.json，没有就全出厂")
     shared.add_argument("--xml-dir", default=None,
                         help="本地 XML 候选源（只读，角色同远端 URL；默认 config source.xml_dir）")
     shared.add_argument("--cbeta-ebook", default=None,
@@ -637,6 +666,7 @@ def main(argv=None):
         _n = str(out_defaults.get("notes") or "").strip().lower()
         args.notes = _n if _n in ("footnote", "endnote", "inline") else None
     args.show_body_siddham = bool(out_defaults.get("show_body_siddham", True))
+    args.siddham_text = bool(out_defaults.get("siddham_text", False))  # 有读音悉昙字形+读音文本形（docx 同款；默认关，开则偏离官方基线）
     args.show_dharani_transliteration = bool(out_defaults.get("show_dharani_transliteration", False))
     args.print_mode = bool(out_defaults.get("print_mode"))
     args.pagination = out_defaults.get("pagination") or {}
@@ -689,13 +719,13 @@ def main(argv=None):
         args.t2s = args.t2s_flag
     # 引擎/竖排/字库：显式开关 > 配置（presets.engine / output.vertical / font_lang）> 默认
     args.engine, args.vertical, font_lang = resolve_engine_vertical_lang(args, presets)
-    # pdf/docx 主题必建（显式开关 > run.json 槽 > 内置出厂）
+    # pdf/docx 主题必建（显式开关 > 预设键 > run.json 槽 > 内置出厂）
     pdf_css = resolve_pdf_docx_css(run, run_dir, std=args.pdf_docx_theme,
                                    user=args.pdf_docx_user_theme)
     theme = Theme.from_css(pdf_css, font_lang)
     # 纸张绑字号（pages 条目 body_* 覆盖 theme body；font_scale 之前先定基准）
     apply_page_typography(theme, args.page, args.page_presets)
-    # html/epub 基底（显式开关 > run.json 槽 > 内置官方基底）；html/epub 纯基底
+    # html/epub 基底（显式开关 > 预设键 > run.json 槽 > 内置官方基底）；html/epub 纯基底
     html_base = resolve_html_base_css(run, run_dir, std=args.html_epub_theme,
                                       user=args.html_epub_user_theme)
     # 西文字体随语言切换（页面方案显式 latin_font 仍优先，见 DocxRenderer）
@@ -822,12 +852,21 @@ def main(argv=None):
                 raw = _v_tnorm(raw)
             return v_norm(_t2s(raw) if _t2s else raw, _rb)
         _theirs_norm.toks = []
+        # 配置基线目录（数据源面板「校验基线」tab：source.baselines{txt_notes,docx,epub}）；
+        # 缺键/空=未配置，直走旧行为（只查输入相邻目录）
+        _bl_cfg = ((_presets_full.get("source") or {}).get("baselines") or {})
+
+        def _bl_roots(kind):
+            v = (_bl_cfg.get(kind) or "").strip() \
+                if isinstance(_bl_cfg, dict) else ""
+            return [v] if v else []
         # 目录/work id：用上面已收集/materialize 的 xmls；仅「单个 XML 文件」用原输入
         xmls_v = [args.input] if os.path.isfile(args.input) else xmls
         for xml_fn in xmls_v:
             name = os.path.basename(xml_fn)
             block = [f"=== {name}"]
             block_failed = False
+            summ = []  # 本经书各格式 (fmt, status, mi, ex)，末尾组总结行
             # 为本文件确定每个格式的生成路径（与 resolve_output 一致）
             try:
                 from .parser import P5Parser as _P
@@ -876,6 +915,7 @@ def main(argv=None):
                                           getattr(args, "vertical", False))
                     if _src in formats:
                         block.append(f"  [--]  pdf 已覆盖（已由 {_src} 校验）")
+                        summ.append((fmt_raw, "covered", None, None, _src))
                         continue
                     fmt = _src
                     disp = f"pdf→{_src}"
@@ -901,6 +941,7 @@ def main(argv=None):
                         gen_path = ""
                 if not gen_path or not os.path.isfile(gen_path):
                     block.append(f"  [--]  {disp} gen not found: {gen_path}")
+                    summ.append((fmt_raw, "nogen", None, None))
                     if args.verify_only:
                         # 只校验模式：缺失产物计失败（退出码非零）
                         grand_total += 1; grand_fail += 1; block_failed = True
@@ -914,38 +955,37 @@ def main(argv=None):
                     _juan = work_juan_numbers(w)
                 official = {}
                 for kind in ("html","txt_notes","docx","epub","odt"):
-                    found = v_find(src, stem, kind, juan=_juan if kind in ("html", "docx", "txt_notes") else None)
+                    found = v_find(src, stem, kind, juan=_juan if kind in ("html", "docx", "txt_notes") else None,
+                                   extra_roots=_bl_roots(kind))
                     if found: official[kind] = found
-                base_kind = {"md":"txt_notes","docx":"docx","html":"html","epub":"epub","txt":"txt_notes"}.get(fmt,"html")
+                from .verify import chain_for as _v_chain, resolve_bases as _v_bases, need_for_base as _v_need
+                _chains = (_vp or {}).get("bases")
+                _chain = _v_chain(fmt, _chains)
+                base_kind = _chain[0]
 
                 def _cli_bases(official):
-                    b = []
-                    if base_kind in official:
-                        b.append((base_kind, official[base_kind]))
-                    if fmt != "txt":
-                        fb = official.get("html")
-                        if fb and all(p != fb for _, p in b):
-                            b.append(("html", fb))
-                    return b
+                    return _v_bases(fmt, official, _chains)
 
                 bases = _cli_bases(official)
                 if base_kind not in official and v_auto_fetch:
                     # 首选基线缺失：按需调用 fetch 下载（docx/odt 非 T/X 等 404 静默跳过）
                     from .fetch import ensure_baselines
-                    need = {"md": ["txt_notes"], "docx": ["docx", "html"], "txt": ["txt_notes"],
-                            "html": ["html"], "epub": ["epub"]}.get(fmt, ["html"])
+                    need = _v_need(base_kind)
                     _presets_af = load_effective_presets(args.config)
                     _ebook_af = resolve_verify_ebook(args, _presets_af, src)
                     ensure_baselines(w.id, need, _presets_af, _ebook_af)
                     official = {}
                     for kind in ("html","txt_notes","docx","epub","odt"):
-                        found = v_find(src, stem, kind, juan=_juan if kind in ("html", "docx", "txt_notes") else None)
+                        found = v_find(src, stem, kind, juan=_juan if kind in ("html", "docx", "txt_notes") else None,
+                                       extra_roots=_bl_roots(kind))
                         if found: official[kind] = found
                     bases = _cli_bases(official)
                 if not bases:
                     block.append(f"  [--]  {disp} no baseline")
+                    summ.append((fmt_raw, "no_baseline", None, None))
                     continue
-                ours_raw_all = "".join(v_extract(p) for p in gen_paths)
+                ours_raw_all = "".join(v_extract(p, strip_jiaozhu=(fmt not in ("html", "epub")))
+                                         for p in gen_paths)
                 docnumber = (w.metadata.get("docNumber") or "").strip()
                 series = (w.metadata.get("series") or "").strip()
                 if fmt == "docx":
@@ -958,9 +998,24 @@ def main(argv=None):
                 ours = v_norm(ours_raw_all, _rb)
                 if not v_compare_infos:
                     ours = v_norm(v_strip_infos(ours_raw_all), _rb)
+                if fmt_raw == "epub":
+                    # epub→txt trial 专用形：正文全接+注记全接（与官方 txt 同构）；
+                    # html/epub trial 沿用原交错形（官方同形）。注意 pdf→源委托
+                    # 后 fmt 已改，只认原始 fmt
+                    from .verify import _join_epub_ours as _jeo
+                    _t_raw = _jeo(gen_paths)
+                    if not v_compare_infos:
+                        from .verify import strip_infos as _si
+                        _t_raw = _si(_t_raw)
+                    ours_t = v_norm(_t_raw, _rb)
+                else:
+                    ours_t = ours
                 ok_any = False; best = None
                 detail_lines = []
                 for bkind, bpath in bases:
+                    # epub→txt trial 用重组形，其余沿用原形（见上）
+                    t_ours = ours_t if (fmt_raw == "epub"
+                                        and bkind == "txt_notes") else ours
                     if isinstance(bpath, list):
                         if bkind == "docx" and len(bpath) > 1:
                             # 多卷官方 docx：与 verify_one 同口径，先 merge_docx 合并
@@ -998,7 +1053,7 @@ def main(argv=None):
                                 from .verify import strip_docx_head as _sdh2
                                 parts = []
                                 for p in bpath:
-                                    txt = v_extract(p)
+                                    txt = v_extract(p, strip_jiaozhu=(fmt not in ("html", "epub")))
                                     if bkind == "docx" or (bkind == "html" and fmt == "docx"):
                                         title = t_title
                                         txt = _sdh2(txt, title, t_docnumber, t_series)
@@ -1008,7 +1063,7 @@ def main(argv=None):
                                 theirs_n = _theirs_norm("".join(parts), bkind)
                             bpath_disp = f"{bpath[0]} (+{len(bpath)-1})"
                         else:
-                            _raw = v_extract(bpath[0])
+                            _raw = v_extract(bpath[0], strip_jiaozhu=(fmt not in ("html", "epub")))
                             if bkind == "docx":
                                 from .verify import strip_docx_head as _sdh
                                 title = t_title
@@ -1022,7 +1077,7 @@ def main(argv=None):
                             theirs_n = _theirs_norm(_raw, bkind)
                             bpath_disp = bpath[0]
                     else:
-                        _raw = v_extract(bpath)
+                        _raw = v_extract(bpath, strip_jiaozhu=(fmt not in ("html", "epub")))
                         if bkind == "docx" or (bkind == "html" and fmt == "docx"):
                             from .verify import strip_docx_head as _sdh
                             title = t_title
@@ -1031,7 +1086,7 @@ def main(argv=None):
                             _raw = v_strip_infos(_raw)
                         theirs_n = _theirs_norm(_raw, bkind)
                         bpath_disp = bpath
-                    m, mi, ex, ctx = v_diff(ours, theirs_n)
+                    m, mi, ex, ctx = v_diff(t_ours, theirs_n)
                     total = mi + ex
                     cur = (bkind,bpath_disp,m,mi,ex,ctx)
                     if best is None or total < (best[3]+best[4]):
@@ -1042,16 +1097,16 @@ def main(argv=None):
                         detail = f"      → {bkind} 通过: {why}"
                         if total>0 and ctx:
                             for idx,(tag,i1,i2,j1,j2) in enumerate(ctx[:args.verify_diff_lines],1):
-                                a_snip = _v_mark(ours, i1, i2)
-                                b_snip = _v_mark(theirs_n, j1, j2)
+                                a_snip = _v_mark(t_ours, i1, i2, pad=j2 - j1)
+                                b_snip = _v_mark(theirs_n, j1, j2, pad=i2 - i1)
                                 detail += f"\n      {idx}. 【源】{b_snip}\n         【新】{a_snip}"
                         detail_lines = [detail]
                         break
                     else:
                         lines=[]
                         for idx,(tag,i1,i2,j1,j2) in enumerate(ctx[:args.verify_diff_lines],1):
-                            a_snip = _v_mark(ours, i1, i2)
-                            b_snip = _v_mark(theirs_n, j1, j2)
+                            a_snip = _v_mark(t_ours, i1, i2, pad=j2 - j1)
+                            b_snip = _v_mark(theirs_n, j1, j2, pad=i2 - i1)
                             lines.append(f"      {idx}. 【源】{b_snip}\n         【新】{a_snip}")
                         snippet = "\n".join(lines) if lines else ""
                         detail = f"      → {bkind} 失败: 缺{mi}字(生成档缺失) / 多{ex}字(生成档多出) 合计{total} >阈值{args.verify_max_diff}"
@@ -1068,6 +1123,10 @@ def main(argv=None):
                 block.append(f"  {disp} 【源】{bpath}")
                 block.append(f"  {disp} 【新】{gen_path}")
                 block.extend(detail_lines)
+                summ.append((fmt_raw, "ok" if ok_any else "fail", best_mi, best_ex))
+            if summ:
+                from .verify import format_work_summary as _v_summ
+                block.insert(1, "  " + _v_summ(os.path.splitext(name)[0], summ))
             results.append((block_failed, name, block))
             # 每经书独立报告：{输出}/{id 书名}（验证）/report.txt
             try:
@@ -1085,6 +1144,25 @@ def main(argv=None):
         summary = f"{grand_total} compared, {grand_fail} failed (阈值 max-diff={args.verify_max_diff})"
         vlog(f"\n{summary}")
         vlog(f"完成时间: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    try:
+        _new_review, _review_path = _drain_review_stubs(args.config, presets)
+    except Exception:
+        _new_review, _review_path = [], ""
+    if _new_review:
+        from .annotate import pending_review as _pending_review
+        _flags = _pending_review()
+        _poly = sorted(c for c in _new_review if _flags.get(c) == "polyphonic")
+        _unk = sorted(c for c in _new_review if _flags.get(c) != "polyphonic")
+        _show = "".join(sorted(_new_review)[:20])
+        _more = f"，等共{len(_new_review)}字" if len(_new_review) > 20 else ""
+        _msg = (f"注音待审已写入词表（多音：{''.join(_poly) or '无'}；"
+                f"无收录：{''.join(_unk) or '无'}）：{_review_path} "
+                f"[{_show}{_more}]，请填写读音后重跑")
+        try:
+            print(_msg)
+        except UnicodeEncodeError:
+            # Windows gbk 控制台：生僻字超出 gbk 范围时降级输出，不断链（同 vlog）
+            print(str(_msg).encode("gbk", "replace").decode("gbk", "replace"))
     if args.verify_only:
         # 只校验模式：未渲染（render_failed 恒 0），退出码由校验结果决定
         return 1 if grand_fail else 0

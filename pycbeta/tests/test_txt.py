@@ -22,6 +22,26 @@ def _note(text, ntype="mod", place="foot"):
 
 
 class TestTxtRenderer(unittest.TestCase):
+    def test_docnumber_own_line(self):
+        # No. 独立一行 + 空一行，后接卷名（对齐官方 txt）
+        body = [E(tag="docNumber", attrs={}, children=[Text(text="No. 349")]),
+                E(tag="juan", attrs={}, children=[
+                    E(tag="jhead", attrs={}, children=[Text(text="某經")])])]
+        out = TxtRenderer().render_work(_work(body), tempfile.mkdtemp(), "t.txt")
+        with open(out, encoding="utf-8") as f:
+            t = f.read()
+        self.assertTrue(t.startswith("No.349\n\n某經"))
+
+    def test_no_title_author_head(self):
+        # 卷首不对齐官方 txt：书名/作者名不重复输出，直接从正文开始
+        body = [E(tag="p", attrs={}, children=[Text(text="正文")])]
+        out = TxtRenderer().render_work(_work(body), tempfile.mkdtemp(), "t.txt")
+        with open(out, encoding="utf-8") as f:
+            t = f.read()
+        self.assertTrue(t.startswith("正文"))
+        self.assertNotIn("測試經", t)
+        self.assertNotIn("譯者", t)
+
     def test_bare_no_markers(self):
         body = [
             E(tag="head", attrs={}, children=[Text(text="序品")]),
@@ -311,7 +331,7 @@ class TestAuxEntry(unittest.TestCase):
         fake_html = os.path.join(d, "SAMPLE_001.html")
         with open(fake_html, "w", encoding="utf-8") as f:
             f.write("<p>x</p>")
-        def _find(source, stem, kind, juan=None):
+        def _find(source, stem, kind, juan=None, **kw):
             return [fake_html] if kind == "html" else []
         with mock.patch("pycbeta.verify.generate_formal", return_value=[gen]), \
                 mock.patch("pycbeta.verify.find_official", side_effect=_find), \

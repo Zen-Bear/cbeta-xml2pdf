@@ -192,7 +192,14 @@
     "maxDiff": 10,                       // 默认阈值
     "diffLines": 5,                      // 默认差异行数
     "auto_fetch": true,                  // 基线缺失默认自动从官方下载（缺键也下载；设 false 关闭；失败静默跳过）
-    "scope_juan": true                   // true=官方基线限定到 XML 实际卷数（milestone n 对应 _NNN 文件，如 TX07n0006→TX0006_001..006.html 而非整编 49 文件）
+    "scope_juan": true,                  // true=官方基线限定到 XML 实际卷数（milestone n 对应 _NNN 文件，如 TX07n0006→TX0006_001..006.html 而非整编 49 文件）
+    "bases": {                           // 各格式基线链（首选→回退；官方有变改这里，不改代码；缺键/非法回退内置默认）
+      "md": ["txt_notes", "html"],
+      "docx": ["docx", "html"],
+      "html": ["html"],
+      "txt": ["txt_notes"],
+      "epub": ["txt_notes", "epub", "html"]
+    }
   },
 
   "annotations": {

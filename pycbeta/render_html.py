@@ -3,6 +3,7 @@
 import html
 import os
 import re
+import unicodedata
 from contextlib import contextmanager
 from typing import List, Optional
 
@@ -96,7 +97,7 @@ class HtmlRenderer:
     def __init__(self, gaiji_db=None, figure_base=None, theme=None, notes="endnote",
                  name_template=None, base_css=None, ignore_xml_style=False,
                  ignore_xml_space=False, show_notes=True, grayscale=False, inline_brackets="fullwidth",
-                 note_inline_brackets=None, title_t2s=True,
+                 note_inline_brackets=None, title_t2s=True, siddham_text=False,
                  annotations=None, strip_head_no=False, corr_cbeta=False):
         self.gaiji_db = gaiji_db if gaiji_db is not None else GaijiDb()
         self.theme = theme
@@ -116,6 +117,7 @@ class HtmlRenderer:
         self.title_t2s = title_t2s  # 输出文件名书名转简（与其他格式 default_output_name 同口径）
         self.strip_head_no = strip_head_no  # 去 head/jhead 行首 No. 令牌（默认 false 保留）
         self.corr_cbeta = corr_cbeta        # CBETA 校改字标红（corr-cbeta；默认 false）
+        self.siddham_text = siddham_text  # 悉昙字形+读音文本形（docx 同款；默认 false 走官方空元素）
         # 难字注音（P6）：None 或 {"table", "scheme"}（CLI 已由 resolve_annotations 装载；渲染器内不做 IO）
         self._annotations = _ann_active(annotations)
         self._ann_seen = set()  # repeat first/page 已注词集合（render_work 起始终置零）
@@ -127,6 +129,7 @@ class HtmlRenderer:
         self._lb = None
         self._div_stack = 0
         self._in_pre = False
+        self._drop_sa_tt = False  # 块级 <cb:tt> 内悉昙消音（_render_tt 置位）
 
     @contextmanager
     def _no_ann(self):
@@ -327,7 +330,7 @@ class HtmlRenderer:
         if isinstance(node, Note):
             return self._render_note(node)
         if isinstance(node, App):
-            return ""
+            return self._render_star_app(node)
         if isinstance(node, E):
             return self._render_e(node)
         return ""
@@ -399,6 +402,9 @@ class HtmlRenderer:
         return (rec.get("roman") or rec.get("roman_cbeta") or "").strip()
 
     def _render_gaiji(self, node: Gaiji) -> str:
+        if getattr(self, "_drop_sa_tt", False) and (node.code or "").startswith("RJ"):
+            # 块级对照表内悉昙缺字整行不显示（官方 html/txt 同款；注记锚点不受影响）
+            return ""
         raw = node.char or node.code
         roman = self._gaiji_roman(node.code)
         if roman:
@@ -407,10 +413,20 @@ class HtmlRenderer:
             chard = (self._work.metadata.get("charDecl") or {}) if self._work else {}
             glyph = ((chard.get(node.code) or {}).get("rjchar")
                      or self._resolve_gaiji(node.code, raw))
+            if self.siddham_text:
+                # docx 同款文本形：字形(读音)；默认关（开则偏离官方基线，校验必挂，见文档）
+                g = self._ann_text(glyph) if self._annotations is not None \
+                    else _esc(glyph)
+                return f"{g}({_esc(roman)})"
             return (f"<span class='ranja' roman='{_esc(roman)}' "
                     f"code='{_esc(node.code)}' char='{_esc(glyph)}'/>")
         if raw and ord(raw[0]) >= 0x2A700:
             char = self._resolve_gaiji(node.code, raw)
+            if char and all(unicodedata.category(c) == "Co"
+                            for c in char):
+                # 无解 PUA：官方 html 置空（文本抽取为空），官方 txt 作 ◇；
+                # 空 span 留 data-gid 供 `_join_epub_ours` 补 □（txt 形）
+                return f'<span class="gaiji" data-gid="{_esc(node.code)}"></span>'
             if self._annotations is not None:
                 inner = self._ann_text(char)
                 return f'<span class="gaiji" data-gid="{_esc(node.code)}">{inner}</span>'
@@ -478,7 +494,7 @@ class HtmlRenderer:
             return f'<p class="form">{self._render_nodes(e.children)}</p>\n'
         if tag in ("entry", "def", "term", "foreign", "hi", "seg", "quote", "ref", "title",
                    "yin", "zi", "sg", "unclear", "choice", "corr", "corr-cbeta", "sic", "reg",
-                   "table", "row", "cell",
+                   "table", "row", "cell", "tt",
                    "figure", "graphic", "anchor", "bibl", "biblScope", "sp", "event", "date", "idno",
                    "space", "pb", "lb", "mulu", "milestone"):
             return self._render_misc(e)
@@ -518,16 +534,24 @@ class HtmlRenderer:
 
     def _render_tt(self, e: E) -> str:
         """对照块：转写行（sa-x-rj）包 transliteration span（官方朱砂色）；
-        文本与泛型扁平渲染一致，不影响逐字校验。"""
-        out = []
-        for c in e.children:
-            if isinstance(c, E) and c.tag == "t" and \
-                    (c.attrs.get("xml:lang") or "").startswith("sa"):
-                out.append("<span class='transliteration'>"
-                           + self._render_nodes(c.children) + "</span>")
-            else:
-                out.append(self._render_node(c))
-        return "".join(out)
+        文本与泛型扁平渲染一致，不影响逐字校验。
+        无 place="inline" 的块级对照表：悉昙缺字整行不显示（官方 html/txt 同款；
+        仅 Gaiji 消音，注记锚点照常渲染，txt `_drop_sa` 同语义）。"""
+        inline = (e.attrs.get("place") or "") == "inline"
+        prev = self._drop_sa_tt
+        self._drop_sa_tt = not inline
+        try:
+            out = []
+            for c in e.children:
+                if isinstance(c, E) and c.tag == "t" and \
+                        (c.attrs.get("xml:lang") or "").startswith("sa"):
+                    out.append("<span class='transliteration'>"
+                               + self._render_nodes(c.children) + "</span>")
+                else:
+                    out.append(self._render_node(c))
+            return "".join(out)
+        finally:
+            self._drop_sa_tt = prev
 
     def _render_lg(self, e: E) -> str:
         a = e.attrs
@@ -590,7 +614,13 @@ class HtmlRenderer:
         if not notes:
             return ""
         note = self._pick_note(notes)
-        content = self._render_nodes(note.children).strip()
+        # 注内容独立作用域：即使引用锚点落在块级对照表内，注记悉昙照常出读音/占位
+        prev_sa = self._drop_sa_tt
+        self._drop_sa_tt = False
+        try:
+            content = self._render_nodes(note.children).strip()
+        finally:
+            self._drop_sa_tt = prev_sa
         if self.notes == "inline":
             app = self._app_by_n.get(note.n or "")
             if app is not None and app.lem is not None:
@@ -624,6 +654,40 @@ class HtmlRenderer:
             f"<span class='footnote' id='n{_esc(n)}'><a href='#note_anchor_{_esc(n)}'>[{_esc(n)}]</a> {content}</span>\n"
         )
         return f'<a id="note_anchor_{_esc(n)}" class="noteAnchor" href="#n{_esc(n)}">[{seq}]</a>'
+
+    def _render_star_app(self, app: App) -> str:
+        """星号位校勘（有 corresp 的 App，如 `<anchor type="star"/>` 锚定的注记）：
+        txt/md 在此渲染注记（与常规位各一次，官方 txt 注块按引用位点重复）；
+        html/epub 正文官方无标记——只留空位标记供 `_join_epub_ours` 按位复注块
+        （标签剥离后为空，html 比对不受影响）。无 corresp 的常规 App 仍无声
+        （其注记由 NoteRef 渲染，避免重复）。"""
+        if not self.show_notes:
+            return ""
+        if app.atype == "star_removed":
+            return ""
+        corresp = (app.attrs or {}).get("corresp") or ""
+        n = corresp.lstrip("#")
+        if not n:
+            return ""
+        notes = (self._work.notes_by_n or {}).get(n) if self._work else None
+        if not notes:
+            return ""
+        if self.notes == "inline":
+            note = self._pick_note(notes)
+            prev_sa = self._drop_sa_tt
+            self._drop_sa_tt = False
+            try:
+                content = self._render_nodes(note.children).strip()
+            finally:
+                self._drop_sa_tt = prev_sa
+            cfs = [c for c in (app.lem.children if app.lem else [])
+                   if isinstance(c, Note) and (c.ntype or "").startswith("cf")]
+            if cfs:
+                refs = "; ".join(self._render_cf(app, c) for c in cfs)
+                content += f"(cf. {refs})"
+            lb, rb = bracket_pair(self.note_inline_brackets)
+            return f"<span class='note-inline'>{lb}{content}{rb}</span>"
+        return f"<span class='note-star' data-n='{_esc(n)}'></span>"
 
     @staticmethod
     def _render_cf(app: Optional[App], note: Note) -> str:
@@ -694,7 +758,9 @@ class HtmlRenderer:
                 import base64
                 data = base64.b64encode(open(path, "rb").read()).decode("ascii")
                 mime = path.rsplit(".", 1)[-1].lower() or "png"
-                return f'<img src="data:image/{_esc(mime)};base64,{data}" />'
+                # alt 留文件名（文本抽取无视属性；`_join_epub_ours` 物化官方 txt 图注 `【圖：x】`）
+                return (f'<img src="data:image/{_esc(mime)};base64,{data}" '
+                        f'alt="{_esc(base)}" />')
             if base not in self.missing_figures:
                 self.missing_figures.append(base)
         return f"<span imgsrc='{_esc(os.path.basename(url))}' class='graphic'></span>"

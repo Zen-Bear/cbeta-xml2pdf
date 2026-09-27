@@ -238,6 +238,69 @@ class TestRare(unittest.TestCase):
         self.assertEqual(segs, [("楞", "léng")])
 
 
+class TestReview(unittest.TestCase):
+    """待审字登记/落盘（多音/无收录写入词表 stub 行并告知）。"""
+
+    def setUp(self):
+        from pycbeta import annotate as _a
+        _a.clear_reviewed()
+        _a._READING_CACHE.clear()
+
+    def tearDown(self):
+        from pycbeta import annotate as _a
+        _a.clear_reviewed()
+        _a._READING_CACHE.clear()
+
+    def test_unknown_recorded(self):
+        from pycbeta.annotate import auto_reading, pending_review
+        # 𫬠（U+2BB20）：pypinyin 无收录 → 登记 unknown（返回值仍 None）
+        self.assertIsNone(auto_reading("𫬠"))
+        self.assertEqual(pending_review().get("𫬠"), "unknown")
+
+    def test_polyphonic_recorded(self):
+        from pycbeta.annotate import auto_reading, pending_review
+        # 嚙：niè/yǎo 多音 → 登记 polyphonic（仍注最常用读音）
+        self.assertEqual(auto_reading("嚙"), "niè")
+        self.assertEqual(pending_review().get("嚙"), "polyphonic")
+
+    def test_monophonic_not_recorded(self):
+        from pycbeta.annotate import auto_reading, pending_review
+        self.assertEqual(auto_reading("三"), "sān")
+        self.assertNotIn("三", pending_review())
+
+    def test_full_mode_not_recorded(self):
+        from pycbeta.annotate import pending_review, split_annotated
+        split_annotated("𫬠嚙", {"X": {"pinyin": "x", "zhuyin": ""}},
+                        rare_zones=frozenset({"B", "E"}), full=True)
+        self.assertEqual(pending_review(), {})
+
+    def test_append_stubs(self):
+        import tempfile
+        from pycbeta.annotate import auto_reading, append_review_stubs, \
+            load_table, pending_review
+        auto_reading("𫬠")
+        auto_reading("嚙")
+        d = tempfile.mkdtemp()
+        fn = os.path.join(d, "t.tsv")
+        with open(fn, "w", encoding="utf-8") as f:
+            f.write("般若\tbō rě\tㄅㄛ ㄖㄜˇ\n")
+        added = append_review_stubs(fn)
+        self.assertEqual(sorted(added), ["嚙", "𫬠"])
+        # stub 行空读音：重载后不参与匹配（零行为变化）
+        table = load_table(fn)
+        self.assertEqual(table["𫬠"], {"pinyin": "", "zhuyin": ""})
+        # 幂等：已有不重写
+        self.assertEqual(append_review_stubs(fn), [])
+        self.assertEqual(len(pending_review()), 2)
+        # 失败安全：坏路径返回 []
+        self.assertEqual(
+            append_review_stubs(os.path.join(d, "no", "such.tsv")), [])
+
+    def test_bundled_nie_entry(self):
+        # X1077 嚙：内置表提供读音（pypinyin 可知但 BMP 无分区覆盖，需词表）
+        self.assertEqual(load_table()["嚙"]["pinyin"], "niè")
+
+
 class TestSupplement(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

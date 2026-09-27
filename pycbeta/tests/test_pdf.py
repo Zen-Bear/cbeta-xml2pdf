@@ -2,6 +2,7 @@ import os
 import sys
 import tempfile
 import unittest
+import unittest.mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -182,6 +183,7 @@ class TestComConvert(unittest.TestCase):
             self.Options = SimpleNamespace(SaveInterval=save_interval)
             self.doc = doc or TestComConvert._Doc()
             self.Documents = self
+            self.Count = 1  # 活性探针（Documents.Count）：健康实例不断言
             self.quit_calls = []
             self.open_kwargs = None
             self.open_args = None
@@ -235,7 +237,7 @@ class TestComConvert(unittest.TestCase):
         r = _com_convert("x.docx", os.path.abspath("out.pdf"),
                          ("KWPS.Application",),
                          dispatch=dsp, dispatch_ex=dex,
-                         get_active=lambda progid: object())
+                         get_active=lambda progid: a)  # 探针验活走同一对象
         self.assertTrue(r.endswith("out.pdf"))
         self.assertEqual(a.quit_calls, [])            # 不退出用户实例
         self.assertIsNone(getattr(a, "Visible", None))  # 不动 Visible
@@ -306,6 +308,103 @@ class TestComConvert(unittest.TestCase):
         self.assertIsNone(_com_convert(
             "x.docx", os.path.abspath("out.pdf"), ("A", "B"),
             dispatch=bad, dispatch_ex=bad, get_active=self._no_active))
+
+    def _rpc_dead(self, msg="RPC failed"):
+        e = RuntimeError(msg)
+        e.hresult = 0x800706BE  # RPC_S_CALL_FAILED（pywintypes.com_error 同款载荷）
+        return e
+
+    def _clean_dead(self):
+        import pycbeta.render_pdf as R
+        saved = set(R._DEAD_PROGIDS)
+        R._DEAD_PROGIDS.clear()
+        self.addCleanup(R._DEAD_PROGIDS.update, saved)
+        self.addCleanup(R._DEAD_PROGIDS.difference_update,
+                        set(R._DEAD_PROGIDS) - saved)
+
+    def test_zombie_probe_falls_back_to_new_instance(self):
+        # ROT 残留僵尸：探针抛 RPC 死 → 不附着，转 DispatchEx 新实例且成功
+        import pycbeta.render_pdf as R
+        self._clean_dead()
+        zombie = self._App()
+
+        class _ZombieDocs:
+            @property
+            def Count(self):
+                raise self._err
+
+        _z = _ZombieDocs()
+        _z._err = self._rpc_dead()
+        zombie.Documents = _z
+        fresh = self._App()
+        r = _com_convert("x.docx", os.path.abspath("out.pdf"),
+                         ("KWPS.Application",),
+                         dispatch=lambda p: zombie,
+                         dispatch_ex=lambda p: fresh,
+                         get_active=lambda p: zombie)
+        self.assertTrue(r.endswith("out.pdf"))
+        self.assertEqual(fresh.quit_calls, [(0,)])  # 新实例照常 Quit
+        self.assertIn("KWPS.Application", R._DEAD_PROGIDS)
+
+    def test_rpc_death_skips_progid_and_returns_none(self):
+        # COM 全灭（RPC 死码）：该 progid 返回 None 走链，不抛回 CLI
+        import pycbeta.render_pdf as R
+        self._clean_dead()
+
+        def dead(progid):
+            raise self._rpc_dead()
+
+        r = _com_convert("x.docx", os.path.abspath("out.pdf"),
+                         ("GONE-APP",),
+                         dispatch=dead, dispatch_ex=dead,
+                         get_active=self._no_active)
+        self.assertIsNone(r)
+        self.assertIn("GONE-APP", R._DEAD_PROGIDS)
+
+    def test_dead_progid_skipped_on_retry(self):
+        # 死亡名单命中：第二次调用不再碰 dispatch，直接跳过
+        import pycbeta.render_pdf as R
+        self._clean_dead()
+        R._DEAD_PROGIDS.add("ZOMBIE-APP")
+        calls = []
+
+        def dsp(progid):
+            calls.append(progid)
+            return self._App()
+
+        r = _com_convert("x.docx", os.path.abspath("out.pdf"),
+                         ("ZOMBIE-APP",),
+                         dispatch=dsp, dispatch_ex=dsp,
+                         get_active=self._no_active)
+        self.assertIsNone(r)
+        self.assertEqual(calls, [])
+
+    def test_apartment_helper_tolerates_missing_pythoncom(self):
+        import builtins
+        import pycbeta.render_pdf as R
+        real_import = builtins.__import__
+
+        def fake_import(name, *a, **k):
+            if name == "pythoncom":
+                raise ImportError("no pywin32")
+            return real_import(name, *a, **k)
+
+        with unittest.mock.patch.object(builtins, "__import__",
+                                        side_effect=fake_import):
+            mod, inited = R._ensure_com_apartment()
+        self.assertIsNone(mod)
+        self.assertFalse(inited)
+
+    def test_is_rpc_dead_signed_and_plain(self):
+        import pycbeta.render_pdf as R
+        e = RuntimeError("x")
+        e.hresult = -2147023170  # 0x800706BE 有符号形态
+        self.assertTrue(R._is_rpc_dead(e))
+        e2 = RuntimeError("y")
+        e2.hresult = 0x800706BA
+        self.assertTrue(R._is_rpc_dead(e2))
+        self.assertFalse(R._is_rpc_dead(RuntimeError("z")))
+        self.assertFalse(R._is_rpc_dead(None))
 
 
 class TestPdfPageTypography(unittest.TestCase):

@@ -26,7 +26,8 @@ class EpubRenderer:
     def __init__(self, gaiji_db=None, theme=None, notes="endnote", base_css=None,
                  ignore_xml_style=False, ignore_xml_space=False, show_notes=True,
                  annotations=None, strip_head_no=False, inline_brackets="fullwidth",
-                 note_inline_brackets=None, figure_base=None, corr_cbeta=False):
+                 note_inline_brackets=None, figure_base=None, corr_cbeta=False,
+                 siddham_text=False):
         # theme=None → 纯基底（官方基底默认）；pdf_docx 主题不再进 epub
         #（render_html 章节与 style.css 同源 base_css）。
         self.theme = theme
@@ -43,6 +44,7 @@ class EpubRenderer:
         self.inline_brackets = inline_brackets
         self.note_inline_brackets = note_inline_brackets or inline_brackets
         self.figure_base = figure_base
+        self.siddham_text = siddham_text  # 转内部 HtmlRenderer（有读音悉昙字形+读音，默认关）
         self.missing_figures = []
 
     def render_work(self, work: Work, out_dir: str, filename: str = "") -> str:
@@ -56,10 +58,11 @@ class EpubRenderer:
                                  show_notes=self.show_notes,
                                  annotations=self._annotations,
                                  strip_head_no=self.strip_head_no,
-                                 inline_brackets=self.inline_brackets,
-                                 note_inline_brackets=self.note_inline_brackets,
-                                 figure_base=self.figure_base,
-                                 corr_cbeta=self.corr_cbeta)
+                                  inline_brackets=self.inline_brackets,
+                                  note_inline_brackets=self.note_inline_brackets,
+                                  figure_base=self.figure_base,
+                                  siddham_text=self.siddham_text,
+                                  corr_cbeta=self.corr_cbeta)
             html_files = inner.render_work(work, tmp)
             self.missing_figures = list(inner.missing_figures)
             md = work.metadata

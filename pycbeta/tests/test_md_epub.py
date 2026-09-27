@@ -35,10 +35,24 @@ class TestMd(unittest.TestCase):
         t2 = MdRenderer()._render_node(head)
         self.assertIn("No.1116-B", t2)  # md 归一化无空格；默认保留令牌
 
+    def test_md_docnumber_own_line(self):
+        from pycbeta.model import E, Text
+        body = [E(tag="docNumber", attrs={}, children=[Text(text="No. 349")]),
+                E(tag="juan", attrs={}, children=[
+                    E(tag="jhead", attrs={}, children=[Text(text="某經")])])]
+        from pycbeta.model import Work
+        w = Work(id="T", source_file="", metadata={}, body=body,
+                 notes_by_n={}, apps=[], simplified=False)
+        text = open(MdRenderer().render_work(w, self.tmp, "n.md"),
+                    encoding="utf-8").read()
+        self.assertTrue(text.startswith("No.349\n\n## 某經"))
+
     def test_md(self):
         fn = MdRenderer(notes="endnote").render_work(self.work, self.tmp)
         text = open(fn, encoding="utf-8").read()
-        self.assertIn("# 彌勒", text)
+        # 卷首不对齐官方 txt：无 `# 书名/作者` 头，直接从 No. 行开始
+        self.assertTrue(text.startswith("No."))
+        self.assertNotIn("\n# ", text)  # 无一级标题（卷首 `## ` 不计）
         self.assertIn("[^1]", text)
         self.assertIn("[^1]:", text)
         self.assertIn("## 校注", text)

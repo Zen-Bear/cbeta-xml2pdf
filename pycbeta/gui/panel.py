@@ -292,6 +292,26 @@ def load_config_preset(name_or_path, root=None):
     return _read_json(path)
 
 
+def set_config_preset_theme(path, value):
+    """预设主题键写入：下拉值（如“霞鹜文楷”/“pdf_docx.css”）→ 预设文件
+    pdf-docx-user-theme 键；出厂值则删键（该预设回退 run 槽）。其余键原样保留
+    （// 注释会丢，json.dump 重写，与保存预设一致）。返回路径。"""
+    data = load_config_preset(path)
+    if not isinstance(data, dict):
+        raise ValueError(f"配置预设顶层非对象：{path}")
+    v = (value or "").strip()
+    if not v or v == "pdf_docx.css":
+        data.pop("pdf-docx-user-theme", None)
+    else:
+        data["pdf-docx-user-theme"] = \
+            v if v.lower().endswith(".css") else v + ".css"
+    ap = os.path.abspath(_config_preset_path(path))
+    with open(ap, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+    return ap
+
+
 def delete_config_preset(name_or_path, root=None):
     """删除 presets/ 内 .json 快照；目录外/不存在抛 ValueError。"""
     d = os.path.abspath(config_presets_dir(root))
@@ -411,7 +431,8 @@ def write_temp_presets(base, opts, path=None):
     以 base（当前槽）为底，合并 output/pagination/series_title/annotations/verify
     与页面边距；调用方用后删除。返回路径。"""
     data = copy.deepcopy(base)
-    data.pop("theme", None)  # 遗留 theme 键退役（主题唯一来源是 run.json 槽）
+    data.pop("theme", None)  # 遗留 theme 键退役；新式 PRESET_THEME_KEYS 键保留，
+    # 随快照进子进程（显式开关 > 预设键 > run.json 槽，见 theme.resolve_*）
     data.setdefault("output", {}).update(copy.deepcopy(opts.output or {}))
     if opts.pagination:
         data["output"]["pagination"] = copy.deepcopy(opts.pagination)
@@ -812,9 +833,13 @@ class XmlOptionsPanel(QWidget):
         self._changed()
 
     def _on_page_changed(self, _i):
-        # 跟随中切纸张：spin 显示刷新为新预设（disabled 仅展示）
+        # 切纸张永远刷新 spin 显示（跟随态显示预设；取消跟随显示本纸 custom，
+        # 无 custom 以预设为编辑起点）。否则取消跟随下框里滞留上一张纸的值，
+        # 看似当前纸张的值，保存即串写（A5/手机边距串扰即此）。
         if self.margin_follow.isChecked():
             self._fill_margin_spins()
+        else:
+            self._fill_margin_spins(use_custom=True)
         self._refresh_typo_display()
         self._changed()
 
@@ -962,10 +987,14 @@ class XmlOptionsPanel(QWidget):
         from pycbeta.gui.css_editor import CssComboBox, set_user_theme
         trow = QHBoxLayout()
         self.theme_box = CssComboBox()
-        self.theme_box.setToolTip("默认样式（run.json 的 pdf-docx-user-theme 槽；出厂默认第一）")
+        self.theme_box.setToolTip(
+            "有效默认：预设键 > run.json 的 pdf-docx-user-theme 槽 > 出厂默认；"
+            "下拉只选中，落盘走右侧“设为默认”")
         trow.addWidget(self.theme_box, 1)
         self.theme_default_btn = QPushButton("设为默认")
-        self.theme_default_btn.setToolTip("选中项写入 run.json 主题槽（永久生效）")
+        self.theme_default_btn.setToolTip(
+            "选中命名预设 → 写入该预设的 pdf-docx-user-theme 键；"
+            "出厂默认项 → 写入 run.json 主题槽（永久生效）")
         self.theme_default_btn.clicked.connect(self._on_theme_default)
         trow.addWidget(self.theme_default_btn)
         self.theme_dir_btn = QPushButton("打开用户预设目录")
@@ -1010,22 +1039,39 @@ class XmlOptionsPanel(QWidget):
 
     def _refresh_theme_box(self, keep_value=None):
         from pycbeta.theme import resolve_theme_css
-        from pycbeta.gui.css_editor import current_theme_value
-        cur = keep_value if keep_value is not None else current_theme_value()
+        from pycbeta.gui.css_editor import current_theme_source
+        if keep_value is not None:
+            cur, src = keep_value, ""
+        else:
+            cur, src = current_theme_source()
         self.theme_box.refresh(cur)
         _path, label = resolve_theme_css(cur)
         shown = _path or "内置 pdf_docx.css"
         if len(shown) > 60:
             shown = shown[:25] + "…" + shown[-30:]
-        self.theme_status.setText(f"当前默认：{label}（{shown}）")
+        tail = f"（来自{src}）" if src else ""
+        self.theme_status.setText(f"当前默认：{label}（{shown}）{tail}")
         if "缺失" in label or "不存在" in label:
             self.theme_status.setStyleSheet("color: red")
         else:
             self.theme_status.setStyleSheet("color: gray")
 
     def _on_theme_default(self):
+        """默认样式落盘：选中命名预设 → 写该预设的 pdf-docx-user-theme 键
+        （预设自带主题，切换预设即跟走）；出厂默认项 → 写 run.json 主题槽。"""
         from pycbeta.gui.css_editor import set_user_theme
         value = self.theme_box.selected_value()
+        preset = self._selected_preset()
+        if preset:
+            try:
+                set_config_preset_theme(preset, value)
+            except (OSError, ValueError) as exc:
+                self.theme_status.setText(f"写入预设失败：{exc}")
+                self.theme_status.setStyleSheet("color: red")
+                return
+            self._refresh_theme_box(keep_value=value)
+            self._changed()
+            return
         try:
             set_user_theme(value)
         except OSError as exc:
@@ -1184,6 +1230,12 @@ class XmlOptionsPanel(QWidget):
             "未安装悉昙字体Ranjana时显示替代字形（如歾）。"
             "不勾选则正文不显示，脚注不受影响")
         form.addRow("", self.siddham_box)
+        self.siddham_text_box = self._check("悉昙字形+读音文本形（docx 同款）", checked=False)
+        self.siddham_text_box.setToolTip(
+            "勾选后 html/epub/txt/md 有读音悉昙输出字形(读音)文本（如 誆(raṃ)），与 docx 一致；"
+            "默认关闭走官方形态（html 空元素、txt 裸读音）。"
+            "开启后偏离官方基线，校验必挂，阅读版专用")
+        form.addRow("", self.siddham_text_box)
 
         # 注释总开关及其从属项
         self.notes_on = self._check("显示注释", checked=True)
@@ -1448,6 +1500,7 @@ class XmlOptionsPanel(QWidget):
         self.refresh_slot_label()
         self._set_cfg_title()
         self._update_preset_buttons()
+        self._refresh_theme_box()  # 预设自带主题键时跟走显示
         self._changed()
 
     def _on_preset_save_as(self):
@@ -1537,6 +1590,16 @@ class XmlOptionsPanel(QWidget):
         data["output"]["t2s"] = bool(opts.t2s)
         data["output"]["vertical"] = bool(opts.vertical)
         data["output"]["font_scale"] = float(opts.font_scale or 1.0)
+        box = getattr(self, "theme_box", None)  # 所见即所得：当前样式选择跟进预设
+        try:
+            sel = box.selected_value() if box is not None else ""
+        except Exception:
+            sel = ""
+        if sel and sel != "pdf_docx.css":
+            data["pdf-docx-user-theme"] = \
+                sel if sel.lower().endswith(".css") else sel + ".css"
+        else:
+            data.pop("pdf-docx-user-theme", None)
         return data
 
     def _on_reset(self):
@@ -1617,6 +1680,7 @@ class XmlOptionsPanel(QWidget):
                 "footnote_per_page": self.per_page_box.isChecked(),
                 "suppress_title_notes": self.title_notes_box.isChecked(),
                 "show_body_siddham": self.siddham_box.isChecked(),
+                "siddham_text": self.siddham_text_box.isChecked(),
                 "inline_brackets": self.brackets_box.currentData(),
                 "note_inline_brackets": self.note_brackets_box.currentData(),
                 "split_juan": self.split_box.isChecked(),
@@ -1722,6 +1786,7 @@ class XmlOptionsPanel(QWidget):
             self.per_page_box.setChecked(bool(o.get("footnote_per_page", True)))
             self.title_notes_box.setChecked(bool(o.get("suppress_title_notes", False)))
             self.siddham_box.setChecked(bool(o.get("show_body_siddham", True)))
+            self.siddham_text_box.setChecked(bool(o.get("siddham_text", False)))
             i = self.brackets_box.findData(o.get("inline_brackets", "fullwidth"))
             if i >= 0:
                 self.brackets_box.setCurrentIndex(i)
@@ -1830,11 +1895,12 @@ class SourceDialog(QDialog):
     确定 = 合并进目标预设（默认 `presets/config.user.json`；可指定当前选中预设，
     即本次命中的"未配置"错误来源）；取消 = 丢弃。"""
 
-    def __init__(self, parent=None, preset_path=None):
+    def __init__(self, parent=None, preset_path=None, out_dir=None):
         super().__init__(parent)
         self._preset_path = preset_path or ""
+        self._init_out_dir = out_dir or ""
         name = os.path.basename(self._preset_path) or USER_PRESET_NAME
-        self.setWindowTitle(f"数据源（{name}）")
+        self.setWindowTitle(f"设置（{name}）")
         self.resize(760, 560)
         layout = QVBoxLayout(self)
         if self._preset_path and os.path.isfile(self._preset_path):
@@ -1845,26 +1911,140 @@ class SourceDialog(QDialog):
         else:
             data, _actual = load_slot("user")
         src = (data.get("source") or {})
-        form = QFormLayout()
+        # 路径 edits 均为隐藏数据载体，可见行在各 tab（输入输出/本地官方电子书）；
+        # 保存/测试口径不变（path_edits 键齐全）
         self.path_edits = {}
         for key, label in SOURCE_LABELS:
-            row = QHBoxLayout()
             edit = QLineEdit(str(src.get(key, "")))
             edit.setReadOnly(True)  # 只能浏览选择，不可手输（与注音词表行一致）
             edit.setToolTip("只读；点「浏览…」修改")
+            self.path_edits[key] = edit
+        self.title_t2s_box = QCheckBox("工作目录书名转简体（t2s）")
+        self.title_t2s_box.setChecked(bool(src.get("title_t2s", True)))
+        self.src_tabs = QTabWidget()
+        # 输入输出 tab（排第一）：XML 及电子书 + 输出目录 + 转简体
+        tab_io = QWidget()
+        tio = QVBoxLayout(tab_io)
+        tio.addWidget(QLabel("XML及电子书"))
+        row_eb = QHBoxLayout()
+        eb_edit = self.path_edits["cbeta_ebook"]
+        eb_browse = QPushButton("浏览…")
+        eb_browse.clicked.connect(lambda _v, e=eb_edit: self._browse_dir(e))
+        row_eb.addWidget(eb_edit, 1)
+        row_eb.addWidget(eb_browse)
+        tio.addLayout(row_eb)
+        eb_lab = QLabel("官方下载保存平展目录  source.cbeta_ebook")
+        eb_lab.setStyleSheet("color: gray")
+        tio.addWidget(eb_lab)
+        tio.addWidget(QLabel("输出目录"))
+        row_out = QHBoxLayout()
+        self.io_out_edit = QLineEdit(out_dir or "")
+        out_browse = QPushButton("浏览…")
+        out_browse.clicked.connect(lambda _v: self._browse_dir(self.io_out_edit))
+        out_open = QPushButton("打开目录")
+        out_open.clicked.connect(self._open_out_dir)
+        row_out.addWidget(self.io_out_edit, 1)
+        row_out.addWidget(out_browse)
+        row_out.addWidget(out_open)
+        tio.addLayout(row_out)
+        out_lab = QLabel("source.out_dir（输出成品目录，存入配置）")
+        out_lab.setStyleSheet("color: gray")
+        tio.addWidget(out_lab)
+        tio.addWidget(self.title_t2s_box)
+        t2s_lab = QLabel(
+            "source.title_t2s：工作目录与输出成品文件名中的书名是否转简体"
+            "（默认开；只影响新建名字，不改已存在目录/文件，不改文件内容）")
+        t2s_lab.setStyleSheet("color: gray")
+        t2s_lab.setWordWrap(True)
+        tio.addWidget(t2s_lab)
+        tio.addStretch(1)
+        self.src_tabs.addTab(tab_io, "输入输出")
+        # 本地官方电子书 tab（排第一）：本地 XML 候选源 + 三格式官方基线目录；
+        # 为空=未配置（该格式回退旧行为：只查输入相邻目录）
+        tab_base = QWidget()
+        t0 = QVBoxLayout(tab_base)
+        _base_info = QLabel(
+            "<a href='https://cbeta.org/ebooks'>官方</a>整套电子书，"
+            "可用于校验（可选）：")
+        _base_info.setTextFormat(Qt.RichText)
+        _base_info.setOpenExternalLinks(True)
+        t0.addWidget(_base_info)
+        _bl = src.get("baselines") if isinstance(src.get("baselines"), dict) else {}
+        self.base_edits = {}
+        self._syncing_base = False
+        # 官方电子书根目录（如 CBETA 2026r2）：一键自动检测子目录对应格式
+        rrow = QHBoxLayout()
+        self.base_root_edit = QLineEdit(str(src.get("baselines_root", "")))
+        self.base_root_edit.setReadOnly(True)
+        self.base_root_edit.setToolTip("只读；点「浏览…」修改")
+        rbowse = QPushButton("浏览…")
+        rbowse.clicked.connect(
+            lambda _v: self._browse_dir(self.base_root_edit))
+        self.btn_detect_base = QPushButton("自动检测")
+        self.btn_detect_base.setToolTip(
+            "按子目录名识别格式（text-with-notes/docx/epub…），填入下方三行；"
+            "只填能识别的，其余不动")
+        self.btn_detect_base.clicked.connect(self._on_detect_baselines)
+        rrow.addWidget(self.base_root_edit, 1)
+        rrow.addWidget(rbowse)
+        rrow.addWidget(self.btn_detect_base)
+        t0.addLayout(rrow)
+        rlab = QLabel("官方电子书根目录  source.baselines_root（选填，仅用于自动检测）")
+        rlab.setStyleSheet("color: gray")
+        t0.addWidget(rlab)
+        for key, label in (("xml_dir", "本地XML候选源"),
+                           ("txt", "TXT 无注释"),
+                           ("txt_notes", "TXT 带注释"),
+                           ("docx", "DOCX"),
+                           ("epub", "EPUB"),
+                           ("pdf", "PDF")):
+            row = QHBoxLayout()
+            edit = QLineEdit(str(src.get(key, "") if key == "xml_dir"
+                                 else _bl.get(key, "")))
+            edit.setReadOnly(True)  # 只能浏览选择，不可手输（与主表一致）
+            edit.setToolTip("只读；点「浏览…」修改")
             browse = QPushButton("浏览…")
             browse.clicked.connect(lambda _v, e=edit: self._browse_dir(e))
+            clear = QPushButton("清空")
+            clear.setToolTip("清空=未配置，该格式回退旧行为")
+            clear.clicked.connect(lambda _v, e=edit: e.setText(""))
             row.addWidget(edit, 1)
             row.addWidget(browse)
-            form.addRow(f"{label}\nsource.{key}", row)
-            self.path_edits[key] = edit
-        layout.addLayout(form)
-        self.title_t2s_box = QCheckBox("工作目录书名转简体（t2s）")
-        self.title_t2s_box.setToolTip(
-            "source.title_t2s：电子书工作目录名 `{id} {书名}` 的书名是否转简体（默认开）")
-        self.title_t2s_box.setChecked(bool(src.get("title_t2s", True)))
-        layout.addWidget(self.title_t2s_box)
-        self.src_tabs = QTabWidget()
+            row.addWidget(clear)
+            t0.addLayout(row)
+            lab = QLabel(f"{label}  " +
+                         ("source.xml_dir" if key == "xml_dir"
+                          else f"source.baselines.{key}"))
+            lab.setStyleSheet("color: gray")
+            t0.addWidget(lab)
+            self.base_edits[key] = edit
+        # xml_dir 与隐藏主表 edit 同键双向同步（保存口径不变）
+        _main_xml = self.path_edits.get("xml_dir")
+
+        def _sync_xml_from_tab(text):
+            if self._syncing_base:
+                return
+            self._syncing_base = True
+            try:
+                if _main_xml is not None and _main_xml.text() != text:
+                    _main_xml.setText(text)
+            finally:
+                self._syncing_base = False
+
+        def _sync_xml_from_main(text):
+            if self._syncing_base:
+                return
+            self._syncing_base = True
+            try:
+                if self.base_edits["xml_dir"].text() != text:
+                    self.base_edits["xml_dir"].setText(text)
+            finally:
+                self._syncing_base = False
+
+        self.base_edits["xml_dir"].textChanged.connect(_sync_xml_from_tab)
+        if _main_xml is not None:
+            _main_xml.textChanged.connect(_sync_xml_from_main)
+        t0.addStretch(1)
         tab_dl = QWidget()
         t1 = QVBoxLayout(tab_dl)
         t1.addWidget(QLabel("官方下载 URL 模板（{canon}/{vol}/{file}/{id} 为占位符）："))
@@ -1921,7 +2101,14 @@ class SourceDialog(QDialog):
                     item.setToolTip(url)
                 self.upd_table.setItem(i, j, item)
         t2.addWidget(self.upd_table, 1)
-        # 更新源排第一，下载模板排第二
+        self.upd_table.itemDoubleClicked.connect(self._open_upd_url)
+        upd_hint = QLabel("双击「更新 URL」列可用浏览器打开链接；"
+                          "单元格可选中后 Ctrl+C 拷贝。")
+        upd_hint.setStyleSheet("color: gray")
+        upd_hint.setWordWrap(True)
+        t2.addWidget(upd_hint)
+        # 输入输出排第一，本地官方电子书排第二，更新源第三，下载模板第四
+        self.src_tabs.insertTab(1, tab_base, "本地官方电子书")
         self.src_tabs.addTab(tab_upd, "官方数据更新源")
         self.src_tabs.addTab(tab_dl, "电子书下载模板")
         layout.addWidget(self.src_tabs, 1)
@@ -1948,7 +2135,7 @@ class SourceDialog(QDialog):
         urow.addWidget(self.btn_check_update)
         urow.addWidget(self.ebook_base_box)
         urow.addWidget(self.update_status, 1)
-        layout.addLayout(urow)
+        t2.addLayout(urow)
         self._refresh_last_update()
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
@@ -1993,6 +2180,10 @@ class SourceDialog(QDialog):
         """以对话框当前编辑值构造 presets（未保存也能检查更新）。"""
         src = {k: e.text().strip() for k, e in self.path_edits.items()}
         src["title_t2s"] = bool(self.title_t2s_box.isChecked())
+        src["baselines"] = {k: self.base_edits[k].text().strip()
+                            for k in ("txt", "txt_notes", "docx", "epub",
+                                      "pdf")}
+        src["baselines_root"] = self.base_root_edit.text().strip()
         dl = {}
         for i in range(self.dl_table.rowCount()):
             k = self.dl_table.item(i, 0).text()
@@ -2027,10 +2218,47 @@ class SourceDialog(QDialog):
         dlg = EbookUpdateDialog(report or [], self)
         dlg.exec()
 
+    def _on_detect_baselines(self):
+        """官方电子书根目录一键检测：子目录名→格式，填入下方各行。
+        只填能识别的（未命中的行不动）；无命中弹提示。"""
+        from pycbeta.fetch import detect_baseline_dirs
+        root = self.base_root_edit.text().strip()
+        got = detect_baseline_dirs(root) if root else {}
+        filled = []
+        for key in ("txt", "txt_notes", "docx", "epub", "pdf"):
+            if got.get(key) and key in self.base_edits:
+                self.base_edits[key].setText(got[key])
+                filled.append(key)
+        if not filled:
+            QMessageBox.information(
+                self, "自动检测",
+                "该目录下未识别出已知格式子目录\n"
+                "（text-with-notes/docx/epub/pdf/txt），请检查根目录。")
+
+    def out_dir(self):
+        """对话框内输出目录当前值（仅本次运行，不存入预设）。"""
+        return self.io_out_edit.text().strip()
+
+    def _open_out_dir(self):
+        d = self.io_out_edit.text().strip() or os.path.join(os.getcwd(), "out")
+        os.makedirs(d, exist_ok=True)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.abspath(d)))
+
     def _browse_dir(self, edit):
         d = QFileDialog.getExistingDirectory(self, "选择目录", edit.text().strip() or "")
         if d:
             edit.setText(d)
+
+    def _open_upd_url(self, item):
+        """官方数据更新源表：双击「更新 URL」列用浏览器打开（仅 http/https）。"""
+        try:
+            if item is None or item.column() != 1:
+                return
+            url = (item.text() or "").strip()
+            if url.lower().startswith(("http://", "https://")):
+                QDesktopServices.openUrl(QUrl(url))
+        except (AttributeError, RuntimeError):
+            pass
 
     @staticmethod
     def _copy_table_selection(table):
@@ -2059,6 +2287,12 @@ class SourceDialog(QDialog):
         values = {"source": {k: e.text().strip() for k, e in self.path_edits.items()},
                   "downloads": {}}
         values["source"]["title_t2s"] = bool(self.title_t2s_box.isChecked())
+        values["source"]["baselines"] = {
+            k: self.base_edits[k].text().strip()
+            for k in ("txt", "txt_notes", "docx", "epub", "pdf")}
+        values["source"]["baselines_root"] = \
+            self.base_root_edit.text().strip()
+        values["source"]["out_dir"] = self.io_out_edit.text().strip()
         for i in range(self.dl_table.rowCount()):
             k = self.dl_table.item(i, 0).text()
             v = self.dl_table.item(i, 1).text() if self.dl_table.item(i, 1) else ""

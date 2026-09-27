@@ -220,6 +220,37 @@ class TestVerifyOnly(unittest.TestCase):
         finally:
             shutil.rmtree(d, ignore_errors=True)
 
+    def test_summary_line_lists_formats(self):
+        # 总结行 `[stem] N format: 1[txt=NOGEN], …` 紧跟 === 行之后
+        import io
+        import json
+        import shutil
+        from contextlib import redirect_stdout
+        from unittest import mock
+        from pycbeta.cli import main
+        d = tempfile.mkdtemp()
+        try:
+            xml = os.path.join(d, "T01n0001.xml")
+            with open(xml, "w", encoding="utf-8") as f:
+                f.write("<TEI/>")
+            cfgp = os.path.join(d, "cfg.json")
+            with open(cfgp, "w", encoding="utf-8") as f:
+                json.dump({"verify": {"auto_fetch": False}}, f)
+            out = io.StringIO()
+            with mock.patch("pycbeta.cli.process_file") as PF:
+                with redirect_stdout(out):
+                    rc = main(["--config", cfgp, "-i", xml, "-f", "txt,docx",
+                               "--verify-only"])
+            s = out.getvalue()
+            self.assertIn("[T01n0001] 2 format: 1[txt=NOGEN], 2[docx=NOGEN]",
+                          s)
+            self.assertLess(s.index("=== T01n0001.xml"),
+                            s.index("[T01n0001] 2 format:"))
+            self.assertEqual(rc, 1)
+            PF.assert_not_called()
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
     def test_present_gen_no_baseline_skips_render(self):
         import shutil
         from pycbeta.filename import default_output_name
@@ -382,10 +413,10 @@ class TestCliMultiDocxMerge(unittest.TestCase):
             work = SimpleNamespace(id="T0001", metadata={"title": "T"})
             seen = {}
 
-            def _find(source, stem, kind, juan=None):
+            def _find(source, stem, kind, juan=None, **kw):
                 return list(vols) if kind == "docx" else []
 
-            def _extract(path):
+            def _extract(path, strip_jiaozhu=True):
                 if path == merged:
                     seen["extracted_merged"] = True
                     return "OFFICIAL_TEXT"
@@ -412,6 +443,50 @@ class TestCliMultiDocxMerge(unittest.TestCase):
             self.assertTrue(M.call_args.args[1].endswith(
                 "_official_merged_docx.docx"))
             self.assertTrue(seen.get("extracted_merged"))
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+
+class TestEpubTxtNeed(unittest.TestCase):
+    """-f epub 缺基线时只拉 txt_notes（首选），epub/html 用现货。"""
+
+    def test_fetch_need_is_txt_notes(self):
+        import io
+        import json
+        import shutil
+        from contextlib import redirect_stdout
+        from types import SimpleNamespace
+        from unittest import mock
+        from pycbeta.cli import main
+        d = tempfile.mkdtemp()
+        try:
+            xml = os.path.join(d, "T01n0001.xml")
+            with open(xml, "w", encoding="utf-8") as f:
+                f.write("<TEI/>")
+            gen = os.path.join(d, "T0001.epub")
+            with open(gen, "w", encoding="utf-8") as f:
+                f.write("x")
+            cfgp = os.path.join(d, "cfg.json")
+            with open(cfgp, "w", encoding="utf-8") as f:
+                json.dump({"verify": {"auto_fetch": True}}, f)
+            work = SimpleNamespace(id="T0001", metadata={})
+            seen = {}
+            with mock.patch("pycbeta.parser.P5Parser") as P, \
+                    mock.patch("pycbeta.verify.work_juan_numbers",
+                               return_value=[]), \
+                    mock.patch("pycbeta.cli.process_file", return_value=0), \
+                    mock.patch("pycbeta.verify.generate_formal",
+                               return_value=[gen]), \
+                    mock.patch("pycbeta.verify.find_official",
+                               return_value=[]), \
+                    mock.patch("pycbeta.fetch.ensure_baselines",
+                               side_effect=lambda w, n, p, e:
+                               seen.update(need=n)):
+                P.return_value.parse.return_value = work
+                with redirect_stdout(io.StringIO()):
+                    main(["--config", cfgp, "-i", xml, "-f", "epub",
+                          "--verify"])
+            self.assertEqual(seen.get("need"), ["txt_notes"])
         finally:
             shutil.rmtree(d, ignore_errors=True)
 
