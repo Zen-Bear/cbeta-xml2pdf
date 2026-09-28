@@ -1387,7 +1387,9 @@ class CssComboBox(QComboBox):
         def label_of(value, path):
             for k, n, p in items:
                 if p == path:
-                    return f"［{'内置' if k == 'builtin' else '用户'}］{n}"
+                    # 除出厂默认外全是用户 CSS，［用户］前缀是噪音；
+                    # 仅残留内置（已退役，查找兼容）保留标记。
+                    return f"［内置］{n}" if k == "builtin" else n
             return "出厂默认样式（pdf_docx.css）"
 
         with QSignalBlocker(self):
@@ -1406,7 +1408,7 @@ class CssComboBox(QComboBox):
             self.model().item(self.count() - 1).setEnabled(False)
             for k, n, p in items:
                 if k == "user" and (not found or p != found[1]):
-                    add_row(f"［用户］{n}", {"value": n, "path": p}, p)
+                    add_row(n, {"value": n, "path": p}, p)
             self.setCurrentIndex(0)
 
     def selected_value(self):

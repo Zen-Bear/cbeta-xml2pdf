@@ -290,7 +290,8 @@
     "file": "e:\\dev\\cbeta\\xml2pdf\\pycbeta\\data\\annotations.txt"
   },
   "formats": [
-    "pdf"
+    "pdf",
+    "docx"
   ],
   "engine": "docx2pdf",
   "font_lang": "zh-Hant"

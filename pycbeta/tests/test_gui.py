@@ -289,6 +289,26 @@ class TestSourceBaselineTab(unittest.TestCase):
         finally:
             dlg.close()
 
+    def test_xml_dir_row_on_top(self):
+        from pycbeta.gui.panel import SourceDialog
+        dlg = SourceDialog()
+        try:
+            lay = dlg.src_tabs.widget(1).layout()
+
+            def pos(edit):
+                for i in range(lay.count()):
+                    sub = lay.itemAt(i).layout()
+                    if sub is not None and sub.indexOf(edit) >= 0:
+                        return i
+                return -1
+
+            p_xml = pos(dlg.base_edits["xml_dir"])
+            self.assertGreaterEqual(p_xml, 0)
+            self.assertLess(p_xml, pos(dlg.base_root_edit))
+            self.assertLess(p_xml, pos(dlg.base_edits["txt"]))
+        finally:
+            dlg.close()
+
     def test_presets_include_baselines(self):
         from pycbeta.gui.panel import SourceDialog
         dlg = SourceDialog()
@@ -608,6 +628,92 @@ class TestConfigBar(unittest.TestCase):
                 self.assertNotIn("pdf-docx-user-theme", d2)
         finally:
             panel.close() if hasattr(panel, "close") else None
+
+    def test_theme_button_follows_preset_selection(self):
+        import pycbeta.gui.panel as pm
+        panel = self._panel()
+        try:
+            box = panel.cfg_preset_box
+            box.blockSignals(True)
+            box.setCurrentIndex(0)  # 出厂默认
+            panel._update_theme_button()
+            self.assertEqual(panel.theme_default_btn.text(), "设为默认")
+            box.addItem("foo", os.path.join(pm.REPO_ROOT, "presets", "foo.json"))
+            box.setCurrentIndex(box.count() - 1)
+            panel._update_theme_button()
+            self.assertEqual(panel.theme_default_btn.text(), "存入预设")
+            box.blockSignals(False)
+        finally:
+            panel.close() if hasattr(panel, "close") else None
+
+    def test_theme_status_says_effective(self):
+        panel = self._panel()
+        try:
+            panel._refresh_theme_box()
+            self.assertIn("当前生效", panel.theme_status.text())
+        finally:
+            panel.close() if hasattr(panel, "close") else None
+
+    def test_theme_box_follows_selected_preset(self):
+        import json
+        import shutil
+        import unittest.mock as mock
+        import pycbeta.gui.panel as pm
+        root = tempfile.mkdtemp()
+        try:
+            pre = os.path.join(root, "A5.json")
+            with open(pre, "w", encoding="utf-8") as f:
+                json.dump({"pdf-docx-user-theme": "my.css"}, f)
+            panel = self._panel()
+            try:
+                with mock.patch.object(pm.XmlOptionsPanel, "_selected_preset",
+                                       return_value=pre):
+                    panel._refresh_theme_box()
+                    self.assertEqual(panel.theme_box.selected_value(), "my")
+                    self.assertIn("预设 A5", panel.theme_status.text())
+            finally:
+                panel.close() if hasattr(panel, "close") else None
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+    def test_theme_box_falls_back_without_preset_keys(self):
+        import json
+        import shutil
+        import unittest.mock as mock
+        import pycbeta.gui.panel as pm
+        root = tempfile.mkdtemp()
+        try:
+            pre = os.path.join(root, "plain.json")
+            with open(pre, "w", encoding="utf-8") as f:
+                json.dump({"output": {}}, f)
+            panel = self._panel()
+            try:
+                with mock.patch.object(pm.XmlOptionsPanel, "_selected_preset",
+                                       return_value=pre):
+                    panel._refresh_theme_box()  # 无键 → run 锚定，不崩
+                    self.assertIn("当前生效", panel.theme_status.text())
+            finally:
+                panel.close() if hasattr(panel, "close") else None
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+    def test_apply_selected_preset_theme(self):
+        import json
+        import shutil
+        from pycbeta.gui.panel import apply_selected_preset_theme
+        root = tempfile.mkdtemp()
+        try:
+            pre = os.path.join(root, "A5.json")
+            with open(pre, "w", encoding="utf-8") as f:
+                json.dump({"pdf-docx-user-theme": "x.css"}, f)
+            base = {"output": {}, "pdf-docx-user-theme": "old.css"}
+            out = apply_selected_preset_theme(base, pre)
+            self.assertEqual(out["pdf-docx-user-theme"], "x.css")
+            self.assertEqual(base["pdf-docx-user-theme"], "old.css")  # 不动原字典
+            out2 = apply_selected_preset_theme(base, "")
+            self.assertEqual(out2, base)
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
 
     def test_preset_widgets_present(self):
         panel = self._panel()
@@ -3465,7 +3571,7 @@ class TestCssEditor(unittest.TestCase):
                 box.refresh("mine")
                 texts = [box.itemText(i) for i in range(box.count())]
                 self.assertTrue(texts[0].startswith("（默认）"))
-                self.assertIn("［用户］mine", texts[0])
+                self.assertEqual(texts[0], "（默认）mine")
                 # 内置组已退役：不陈列（查找仍认旧名，向后兼容）
                 self.assertFalse(any("［内置］" in t for t in texts))
                 self.assertTrue(any("出厂默认样式" in t for t in texts))
@@ -3644,7 +3750,8 @@ class TestCssEditor(unittest.TestCase):
                              for i in range(dlg.preset_box.count())]
                     self.assertTrue(texts[0].startswith("（默认）"))
                     self.assertFalse(any("［内置］" in t for t in texts))
-                    self.assertIn("［用户］mine", texts)
+                    self.assertFalse(any("［用户］" in t for t in texts))
+                    self.assertIn("mine", texts)
                     # 装载用户预设 → 控件+touched 联动
                     dlg._load_preset_path(os.path.join(udir, "mine.css"))
                     self.assertEqual(

@@ -504,6 +504,76 @@ class TestJoinEpubOurs(unittest.TestCase):
         self.assertIn("注无尾", body)
         self.assertEqual(foot, "")
 
+    def test_footnote_spans_anchor_order(self):
+        # 顺序校注：分组注块按正文锚点遭遇序重排（官方 html 数字块+A 块 → 交错）
+        import pycbeta.verify as V
+        raw = ("<p>甲<a id=\"note_anchor_n1\" href=\"#nn1\">[1]</a>乙"
+               "<a id='cb_note_anchor1' href='#cb_note_1'>[A1]</a>丙"
+               "<a id=\"note_anchor_n2\" href=\"#nn2\">[2]</a>丁</p>"
+               "<span class='footnote' id='nn1'>注一</span>"
+               "<span class='footnote' id='nn2'>注二</span>"
+               "<div class='footnote' id='cb_note_1'>附加</div>")
+        body, foot = V._split_html_text(raw)
+        self.assertLess(foot.find("注一"), foot.find("附加"))
+        self.assertLess(foot.find("附加"), foot.find("注二"))
+        self.assertIn("甲", body)
+
+    def test_footnote_spans_no_anchor_stable(self):
+        # 无锚条目 stable 垫底；单注原样
+        import pycbeta.verify as V
+        raw = ("<p>甲<a id=\"note_anchor_n1\" href=\"#nn1\">[1]</a>乙</p>"
+               "<span class='footnote' id='nn1'>注一</span>"
+               "<div class='footnote'>无名注</div>")
+        body, foot = V._split_html_text(raw)
+        self.assertLess(foot.find("注一"), foot.find("无名注"))
+        one = V._split_html_text("<p>文</p><span class='footnote' id='n1'>注</span>")
+        self.assertIn("注", one[1])
+
+    def test_extract_text_html_reading_order(self):
+        # 抽取层遇序化：extract_text 对分组 html 按阅读顺序输出注块
+        import pycbeta.verify as V
+        d = tempfile.mkdtemp()
+        try:
+            p = os.path.join(d, "c.html")
+            with open(p, "w", encoding="utf-8") as f:
+                f.write(
+                    "<html><body><p>甲"
+                    "<a id=\"note_anchor_n1\" href=\"#nn1\">[1]</a>乙"
+                    "<a id='cb_note_anchor1' href='#cb_note_1'>[A1]</a>丙"
+                    "<a id=\"note_anchor_n2\" href=\"#nn2\">[2]</a>丁</p>"
+                    "<span class='footnote' id='nn1'>注一</span>"
+                    "<span class='footnote' id='nn2'>注二</span>"
+                    "<div class='footnote' id='cb_note_1'>附加</div>"
+                    "</body></html>")
+            out = V.extract_text(p)
+            self.assertLess(out.find("注一"), out.find("附加"))
+            self.assertLess(out.find("附加"), out.find("注二"))
+            self.assertIn("甲", out)
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_extract_text_html_already_ordered_stable(self):
+        # 已遇序的 html（我方形态）重排为幂等：顺序与内容不变
+        import pycbeta.verify as V
+        d = tempfile.mkdtemp()
+        try:
+            p = os.path.join(d, "c.html")
+            with open(p, "w", encoding="utf-8") as f:
+                f.write(
+                    "<html><body><p>甲"
+                    "<a id=\"note_anchor_n1\" href=\"#nn1\">[1]</a>乙"
+                    "<a id='cb_note_anchor1' href='#cb_note_1'>[A1]</a>丙"
+                    "<a id=\"note_anchor_n2\" href=\"#nn2\">[2]</a>丁</p>"
+                    "<span class='footnote' id='nn1'>注一</span>"
+                    "<div class='footnote' id='cb_note_1'>附加</div>"
+                    "<span class='footnote' id='nn2'>注二</span>"
+                    "</body></html>")
+            out = V.extract_text(p)
+            self.assertLess(out.find("注一"), out.find("附加"))
+            self.assertLess(out.find("附加"), out.find("注二"))
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
 
 class TestEpubTxtBaseline(unittest.TestCase):
     """epub→txt_notes 首选：命中顺序 txt/epub/html；epub 现货仍比。"""
@@ -912,6 +982,43 @@ class TestReportCtxLocation(unittest.TestCase):
         self.assertIn("1.\n", s)
         self.assertIn("【源】甲〖〓〗乙", s)
         self.assertNotIn("标出差异位置", s)
+
+    def test_report_full_lines_and_raw_files(self):
+        from pycbeta.verify import format_verify_report
+        root = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, root, True)
+        base = os.path.join(root, "b.html")
+        with open(base, "w", encoding="utf-8") as f:
+            f.write("<html><body><p>[0036004]锚</p><p>甲乙</p></body></html>")
+        sc = os.path.join(root, "s.txt")
+        with open(sc, "w", encoding="utf-8") as f:
+            f.write("甲乙\n")
+        gc = os.path.join(root, "g.txt")
+        with open(gc, "w", encoding="utf-8") as f:
+            f.write("甲X乙\n")
+        dp = os.path.join(root, "g.docx")
+        with zipfile.ZipFile(dp, "w") as z:
+            z.writestr("word/document.xml",
+                       "<w:document><w:body><w:p><w:t>甲X乙</w:t></w:p>"
+                       "</w:body></w:document>")
+            z.writestr("word/footnotes.xml", "<w:footnotes/>")
+        recs = [{
+            "xml": "T01n0001.xml", "fmt": "docx", "status": "fail",
+            "gen": [dp],
+            "trials": [{
+                "kind": "html", "official": base, "official_files": [base],
+                "missing": 0, "extra": 1, "total": 1, "ok": False,
+                "ctx": [("insert", 1, 2, 1, 1)],
+                "ctx_loc": [{"gen_line": 1, "src_line": 1}],
+                "src_cmp": sc, "gen_cmp": gc,
+                "norm_official": "甲乙", "norm_gen": "甲X乙",
+            }],
+        }]
+        s = "\n".join(format_verify_report(recs))
+        self.assertIn("【源整行】甲乙", s)
+        self.assertIn("【新整行】甲X乙", s)
+        self.assertIn("【源文件】b.html:2行（[0036004]后1行）", s)
+        self.assertIn("【新文件】正文第1段", s)
 
     def test_mark_span(self):
         from pycbeta.verify import _mark_span

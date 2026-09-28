@@ -110,6 +110,47 @@ def _report_missing_figures(wid, fmt, renderer):
         print(f"{wid}: {fmt} 图片缺失（占位）：{', '.join(miss)}")
 
 
+def _frag_lines(idx, tag, i1, i2, j1, j2, t_ours, theirs_n,
+                loc, o_rawln, t_rawln, src_loc="", gen_loc=""):
+    """单条差异片段：18 字窗口（旧行为）+ compare 文件整行（定位用）。
+    loc 为 ctx_locations 条目（源比较/新比较行号）；o_rawln/t_rawln 为
+    compare 文件行表（_display_text 形态）；行号不可得时回退提示语。
+    src_loc/gen_loc 为原始文件定位（分号分隔多命中；空则不打印该行）。"""
+    from .verify import _mark_span as _v_mark
+    a_snip = _v_mark(t_ours, i1, i2, pad=j2 - j1)
+    b_snip = _v_mark(theirs_n, j1, j2, pad=i2 - i1)
+    parts = []
+    if loc.get("src_line"):
+        parts.append(f"源比较第{loc['src_line']}行")
+    if loc.get("gen_line"):
+        parts.append(f"新比较第{loc['gen_line']}行")
+    where = f"（{'，'.join(parts)}）" if parts else ""
+    out = [f"      {idx}.{where}",
+           f"         【源】{b_snip}",
+           f"         【新】{a_snip}"]
+    sl = loc.get("src_line")
+    gl = loc.get("gen_line")
+    out.append("         【源整行】" + (
+        t_rawln[sl - 1] if sl and 0 < sl <= len(t_rawln)
+        else "（行号不可得）"))
+    out.append("         【新整行】" + (
+        o_rawln[gl - 1] if gl and 0 < gl <= len(o_rawln)
+        else "（行号不可得）"))
+    if src_loc:
+        out.append(f"         【源文件】{src_loc}")
+    if gen_loc:
+        out.append(f"         【新文件】{gen_loc}")
+    return out
+
+
+# 报告定位 helpers（_query_runs/_locate_hits/_official_locate_texts/
+# _gen_locate_index/_locate_gen_hits/_frag_locs）正本在 pycbeta/verify.py，
+# CLI 与 GUI 报告链共用；此处重导出供 trial 循环使用。
+from .verify import (_query_runs, _nearest_anchor, _locate_hits,
+                     _official_locate_texts, _gen_locate_index,
+                     _locate_gen_hits, _frag_locs)
+
+
 def render_one(w, fmt, out_dir, out_name, args, theme, html_base=None, figure_base=None):
     # pdf 默认 footnote：docx2pdf 中间 docx 用真页底脚注（html2pdf 下 HtmlRenderer 无分页，footnote 与 endnote 同归文末，无影响）
     note_mode = args.notes or ("footnote" if fmt in ("docx", "pdf") else "endnote")
@@ -799,7 +840,7 @@ def main(argv=None):
 
     # --verify：复用 pycbeta/verify.py 模块化能力，供 GUI 调用同一入口
     if args.verify:
-        from .verify import normalize as v_norm, extract_text as v_extract, diff_stats as v_diff, find_official as v_find, strip_infos as v_strip_infos, _extract_html_parts as _v_hparts, _norm_official_txt as _v_tnorm, _ann_brackets_from as _v_rb, _head_no_tokens as _v_htoks, _strip_official_no as _v_tstrip, _mark_span as _v_mark
+        from .verify import normalize as v_norm, extract_text as v_extract, diff_stats as v_diff, find_official as v_find, strip_infos as v_strip_infos, _extract_html_parts as _v_hparts, _norm_official_txt as _v_tnorm, _ann_brackets_from as _v_rb, _head_no_tokens as _v_htoks, _strip_official_no as _v_tstrip, _mark_span as _v_mark, normalize_with_lines as _v_nwl, ctx_locations as _v_loc, _display_text as _v_disp
         import datetime
         try:
             _presets_full = load_effective_presets(args.config)
@@ -843,15 +884,20 @@ def main(argv=None):
             # 简体校验：官方基线（繁体）经同一 t2s 管线转简体后再比对
             from .simplify import simplify_text as _t2s
 
-        def _theirs_norm(raw, bkind=None):
+        def _theirs_prep(raw, bkind=None):
             if getattr(_theirs_norm, "toks", ""):
                 # strip_head_no 联动：官方侧按行首精确令牌对等剥离（生成档已剥）
                 raw = _v_tstrip(raw, _theirs_norm.toks)
             if bkind == "txt_notes":
                 # text 族官方侧对齐（繁简通用）：版头剥离 + 注记块识别挪文末
                 raw = _v_tnorm(raw)
-            return v_norm(_t2s(raw) if _t2s else raw, _rb)
+            return _t2s(raw) if _t2s else raw
+
+        def _theirs_norm(raw, bkind=None):
+            _theirs_norm.last_prepped = _theirs_prep(raw, bkind)
+            return v_norm(_theirs_norm.last_prepped, _rb)
         _theirs_norm.toks = []
+        _theirs_norm.last_prepped = ""
         # 配置基线目录（数据源面板「校验基线」tab：source.baselines{txt_notes,docx,epub}）；
         # 缺键/空=未配置，直走旧行为（只查输入相邻目录）
         _bl_cfg = ((_presets_full.get("source") or {}).get("baselines") or {})
@@ -996,22 +1042,27 @@ def main(argv=None):
                     from .verify import _strip_md_marks as _smm
                     ours_raw_all = _smm(ours_raw_all)
                 ours = v_norm(ours_raw_all, _rb)
+                _ours_nsrc = ours_raw_all  # 进归一的原文（compare 文件+行表用）
                 if not v_compare_infos:
-                    ours = v_norm(v_strip_infos(ours_raw_all), _rb)
+                    _ours_nsrc = v_strip_infos(ours_raw_all)
+                    ours = v_norm(_ours_nsrc, _rb)
                 if fmt_raw == "epub":
                     # epub→txt trial 专用形：正文全接+注记全接（与官方 txt 同构）；
-                    # html/epub trial 沿用原交错形（官方同形）。注意 pdf→源委托
+                    # html/epub trial 沿用原形（官方同形）。注意 pdf→源委托
                     # 后 fmt 已改，只认原始 fmt
                     from .verify import _join_epub_ours as _jeo
                     _t_raw = _jeo(gen_paths)
                     if not v_compare_infos:
                         from .verify import strip_infos as _si
                         _t_raw = _si(_t_raw)
+                    _t_nsrc = _t_raw
                     ours_t = v_norm(_t_raw, _rb)
                 else:
+                    _t_nsrc = None
                     ours_t = ours
                 ok_any = False; best = None
                 detail_lines = []
+                _gen_index = _gen_locate_index(fmt, gen_paths)
                 for bkind, bpath in bases:
                     # epub→txt trial 用重组形，其余沿用原形（见上）
                     t_ours = ours_t if (fmt_raw == "epub"
@@ -1086,9 +1137,40 @@ def main(argv=None):
                             _raw = v_strip_infos(_raw)
                         theirs_n = _theirs_norm(_raw, bkind)
                         bpath_disp = bpath
-                    m, mi, ex, ctx = v_diff(t_ours, theirs_n)
+                    m, mi, ex, ctx = v_diff(t_ours, theirs_n,
+                                               args.verify_diff_lines)
                     total = mi + ex
-                    cur = (bkind,bpath_disp,m,mi,ex,ctx)
+                    # compare 文件 + 行表（报告定位用；比对数字不变；
+                    # 文件名与 verify_one 一字不差，行号体系一致）
+                    _o_nsrc = _t_nsrc if (fmt_raw == "epub"
+                                          and bkind == "txt_notes") else _ours_nsrc
+                    try:
+                        _cmp_dir = os.path.join(verify_dir, fmt)
+                        os.makedirs(_cmp_dir, exist_ok=True)
+                        _o_disp = _v_disp(_o_nsrc)
+                        _t_disp = _v_disp(_theirs_norm.last_prepped)
+                        src_cmp = os.path.join(
+                            _cmp_dir, f"{stem}_compare_{bkind}_official.txt")
+                        gen_cmp = os.path.join(
+                            _cmp_dir,
+                            f"{stem}_compare_{fmt}_{bkind}_generated.txt")
+                        with open(src_cmp, "w", encoding="utf-8") as _f:
+                            _f.write(_t_disp)
+                        with open(gen_cmp, "w", encoding="utf-8") as _f:
+                            _f.write(_o_disp)
+                    except Exception:
+                        src_cmp = gen_cmp = ""
+                        _o_disp = _t_disp = ""
+                    _o_n2, o_line, o_rawln = _v_nwl(_o_disp or _o_nsrc, _rb)
+                    _t_n2, t_line, t_rawln = _v_nwl(_t_disp or _theirs_norm.last_prepped, _rb)
+                    locs = _v_loc(ctx, o_line, t_line)
+                    # 原始文件定位（报告反查原文用；比对数字不变）：
+                    # 官方侧重抽取各基线文件（含 [n] 锚点），生成侧建段落/脚注索引
+                    _off_texts = _official_locate_texts(
+                        bkind, bpath, fmt, (fmt not in ("html", "epub")),
+                        prep=lambda t, k=bkind: _theirs_prep(t, k))
+                    cur = (bkind,bpath_disp,m,mi,ex,ctx,src_cmp,gen_cmp,
+                           locs,o_rawln,t_rawln)
                     if best is None or total < (best[3]+best[4]):
                         best = cur
                     if total <= args.verify_max_diff:
@@ -1097,23 +1179,29 @@ def main(argv=None):
                         detail = f"      → {bkind} 通过: {why}"
                         if total>0 and ctx:
                             for idx,(tag,i1,i2,j1,j2) in enumerate(ctx[:args.verify_diff_lines],1):
-                                a_snip = _v_mark(t_ours, i1, i2, pad=j2 - j1)
-                                b_snip = _v_mark(theirs_n, j1, j2, pad=i2 - i1)
-                                detail += f"\n      {idx}. 【源】{b_snip}\n         【新】{a_snip}"
+                                loc = locs[idx - 1] if idx - 1 < len(locs) else {}
+                                detail += "\n" + "\n".join(_frag_lines(
+                                    idx, tag, i1, i2, j1, j2, t_ours, theirs_n,
+                                    loc, o_rawln, t_rawln,
+                                    *_frag_locs(loc, o_rawln, t_rawln,
+                                                _off_texts, _gen_index, _o_nsrc)))
                         detail_lines = [detail]
                         break
                     else:
                         lines=[]
                         for idx,(tag,i1,i2,j1,j2) in enumerate(ctx[:args.verify_diff_lines],1):
-                            a_snip = _v_mark(t_ours, i1, i2, pad=j2 - j1)
-                            b_snip = _v_mark(theirs_n, j1, j2, pad=i2 - i1)
-                            lines.append(f"      {idx}. 【源】{b_snip}\n         【新】{a_snip}")
+                            loc = locs[idx - 1] if idx - 1 < len(locs) else {}
+                            lines.extend(_frag_lines(
+                                idx, tag, i1, i2, j1, j2, t_ours, theirs_n,
+                                loc, o_rawln, t_rawln,
+                                *_frag_locs(loc, o_rawln, t_rawln,
+                                            _off_texts, _gen_index, _o_nsrc)))
                         snippet = "\n".join(lines) if lines else ""
                         detail = f"      → {bkind} 失败: 缺{mi}字(生成档缺失) / 多{ex}字(生成档多出) 合计{total} >阈值{args.verify_max_diff}"
                         if snippet: detail += f"\n{snippet}"
                         detail_lines.append(detail)
                 if best is None: continue
-                bkind,bpath,_,best_mi,best_ex,_ = best
+                bkind,bpath,_,best_mi,best_ex,_,best_src,best_gen,_,_,_ = best
                 grand_total += 1
                 if not ok_any:
                     grand_fail += 1; block_failed = True
@@ -1122,6 +1210,10 @@ def main(argv=None):
                 block.append(f"  {mark} (缺{best_mi}/多{best_ex} {op}阈值{args.verify_max_diff})")
                 block.append(f"  {disp} 【源】{bpath}")
                 block.append(f"  {disp} 【新】{gen_path}")
+                if best_src:
+                    block.append(f"  {disp} 【源比较】{best_src}")
+                if best_gen:
+                    block.append(f"  {disp} 【新比较】{best_gen}")
                 block.extend(detail_lines)
                 summ.append((fmt_raw, "ok" if ok_any else "fail", best_mi, best_ex))
             if summ:

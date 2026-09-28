@@ -94,6 +94,145 @@ def _mark_span(text: str, a: int, b: int, before: int = 18, after: int = 18,
     return f"{pre}〖{mid}〗{post}"
 
 
+_ANCHOR_RE = re.compile(r"\[([A-Za-z0-9]{1,12})\]")
+
+
+def _query_runs(query):
+    """display 行 → 查询串列（由长到短）：原样/去标记/最长 CJK 节。
+    归一/展示层剥掉的标记（【】/[...]）在原文里可能还在，原样先试。"""
+    out = []
+    q = (query or "").strip()
+    if q:
+        out.append(q)
+    bare = re.sub(r"【[^】]*】", "", q)
+    bare = re.sub(r"\[[^\]\[]{1,12}\]", "", bare).strip()
+    if bare and bare != q:
+        out.append(bare)
+    runs = re.findall(r"[\u4e00-\u9fff]{2,}", bare)
+    out.extend(sorted(set(runs), key=len, reverse=True)[:3])
+    return [s for s in out if s]
+
+
+def _nearest_anchor(lines, idx, span=15):
+    """行表 idx 往前找最近的 [n]/[Ax] 锚点 → (锚, 相距行数)；无则 ("", -1)。"""
+    for i in range(idx, max(-1, idx - span), -1):
+        m = _ANCHOR_RE.search(lines[i])
+        if m:
+            return m.group(0), idx - i
+    return "", -1
+
+
+def _locate_hits(files_texts, query, max_hits=3):
+    """[(文件名, 原文)] 里找查询行 → ["文件:行（锚后n行）", ...]。
+    原文取定位用形态（含 [n] 锚点）；行号是该文件抽取文本的行号。"""
+    hits = []
+    for q in _query_runs(query):
+        for fname, raw in files_texts:
+            if q not in raw:
+                continue
+            lines = raw.split("\n")
+            for li, ln in enumerate(lines):
+                if q in ln:
+                    a, d = _nearest_anchor(lines, li)
+                    tail = f"（{a}后{d}行）" if a else ""
+                    hits.append(f"{fname}:{li + 1}行{tail}")
+                    if len(hits) >= max_hits:
+                        return hits
+        if hits:
+            break
+    return hits
+
+
+def _official_locate_texts(bkind, bpath, fmt, strip_jiaozhu, prep=None):
+    """trial 基线文件 → [(文件名, 定位用原文)]（重抽取，ms 级；含 [n] 锚点）。
+    保留换行结构与锚点标记；行号为本文件抽取文本行号。
+    prep 为可选后处理（toks/t2s/txtnorm 对齐比对侧文字）。"""
+    files = bpath if isinstance(bpath, list) else [bpath]
+    out = []
+    for p in files:
+        try:
+            label = os.path.basename(p) if isinstance(p, str) else str(p)
+            if bkind == "html" and fmt == "docx":
+                b, f = _extract_html_parts(p)
+                t = b + "\n" + f
+            else:
+                t = extract_text(p, strip_jiaozhu=strip_jiaozhu)
+            out.append((label, prep(t, bkind) if prep else t))
+        except Exception:
+            continue
+    return out
+
+
+def _gen_locate_index(fmt, gen_paths):
+    """生成档定位索引：docx → ("docx", 正文段落[], [(w:id, 注文)])；
+    其余 → ("text", 全文行表)。段落按 </w:p> 切分，与 Word 段落序号一致；
+    脚注按 footnotes.xml 顺序（w:id 即 Word 脚注号）。"""
+    if fmt == "docx" and gen_paths:
+        try:
+            with zipfile.ZipFile(gen_paths[0]) as z:
+                doc = z.read("word/document.xml").decode("utf-8", "replace")
+                try:
+                    fn = z.read("word/footnotes.xml").decode("utf-8", "replace")
+                except KeyError:
+                    fn = ""
+            paras = [re.sub(r"<[^>]+>", "", p) for p in doc.split("</w:p>")]
+            foots = []
+            for m in re.finditer(r'<w:footnote w:id="(\d+)"(.*?)</w:footnote>',
+                                 fn, re.S):
+                wid, body = m.group(1), m.group(2)
+                foots.append((wid, re.sub(r"<[^>]+>", "", body)))
+            return ("docx", paras, foots)
+        except Exception:
+            pass
+    return ("text", [], [])
+
+
+def _locate_gen_hits(gen_index, query, o_nsrc="", max_hits=3):
+    """生成侧定位：docx 按段落/脚注找；其余按生成原文行表找。"""
+    hits = []
+    queries = _query_runs(query)
+    kind = gen_index[0] if gen_index else "text"
+    if kind == "docx":
+        _, paras, foots = gen_index
+        for q in queries:
+            for pi, p in enumerate(paras):
+                if q and q in p:
+                    hits.append(f"正文第{pi + 1}段")
+                    if len(hits) >= max_hits:
+                        return hits
+            for wid, body in foots:
+                if q and q in body:
+                    hits.append(f"脚注{wid}")
+                    if len(hits) >= max_hits:
+                        return hits
+            if hits:
+                break
+        return hits
+    lines = (o_nsrc or "").split("\n")
+    for q in queries:
+        for li, ln in enumerate(lines):
+            if q and q in ln:
+                hits.append(f"生成文本第{li + 1}行")
+                if len(hits) >= max_hits:
+                    return hits
+        if hits:
+            break
+    return hits
+
+
+def _frag_locs(loc, o_rawln, t_rawln, off_texts, gen_index, o_nsrc):
+    """片段双侧原始文件定位 → (src_loc, gen_loc)（分号分隔多命中；空侧返回 ""）。
+    以 compare 整行为查询串，分别在官方基线文件文本（含 [n] 锚点）与生成档索引中找。"""
+    sl = loc.get("src_line")
+    gl = loc.get("gen_line")
+    t_full = t_rawln[sl - 1] if sl and 0 < sl <= len(t_rawln) else ""
+    o_full = o_rawln[gl - 1] if gl and 0 < gl <= len(o_rawln) else ""
+    src_loc = "; ".join(_locate_hits(off_texts, t_full)) if t_full.strip() else ""
+    gen_loc = "; ".join(_locate_gen_hits(gen_index, o_full, o_nsrc)) \
+        if o_full.strip() else ""
+    return src_loc, gen_loc
+
+
 def format_work_summary(work_id, items) -> str:
     """单经书校验总结行（下游速读哪个格式过/不过及程度）：
     `[T45n1859] 3 format: 1[docx=OK(0/0)], 2[pdf=1], 3[epub=FAIL(48/97)]`。
@@ -242,6 +381,7 @@ def extract_text(path: str, strip_jiaozhu: bool = True) -> str:
     if ext in (".html", ".xhtml", ".htm"):
         raw = open(path, encoding="utf-8", errors="replace").read()
         raw = _body_only(raw)
+        raw = _reorder_html_footnotes(raw)  # 顺序校注：注块按阅读顺序（双侧同规）
         raw = _STYLE_RE.sub("", raw)
         raw = _RUBY_RE.sub("", raw)
         if strip_jiaozhu:
@@ -460,15 +600,18 @@ def _split_html_text(raw: str, body_only: bool = False):
     拆 (正文, 脚注)，去校注头。body_only=True 时先取 <body> 内容
     （去掉 <title>/nav 头文本；epub 重组专用，官方 txt 侧无此文本）。
     注记块按栈配平匹配（可含嵌套 div/span，如缺字 ruby），非嵌套输入下
-    与旧非贪婪正则逐字节一致；未闭合的不收录（留正文）。"""
+    与旧非贪婪正则逐字节一致；未闭合的不收录（留正文）。
+    注块按正文锚点遭遇序重排（顺序校注：官方 html 尾注数字块+A 块分组，
+    与遭遇序产品对齐；单注/无锚输入原样返回，零回归）。"""
     raw = _prep_html_blob(raw, body_only=body_only)
     spans = _footnote_spans(raw)
+    ordered = _reorder_footnote_spans(raw, spans)
     foot_text = ""
-    for s, e in spans:
+    for s, e in ordered:  # 注块按阅读顺序串联
         t = re.sub(r"</(p|div|h[1-6]|li|tr)[^>]*>", "\n", raw[s:e], flags=re.I)
         foot_text += _TAG_RE.sub("", t) + "\n"
     parts, prev = [], 0
-    for s, e in spans:
+    for s, e in spans:  # 正文按原始位置剔除注块（顺序无关）
         parts.append(raw[prev:s])
         prev = e
     parts.append(raw[prev:])
@@ -507,6 +650,65 @@ def _footnote_spans(raw: str):
         if ofoot and not any(s[3] for s in stack):
             spans.append((opos, end))
     return spans
+
+
+def _reorder_footnote_spans(raw: str, spans: list) -> list:
+    """注块 (start, end) 按正文锚点遭遇序重排（顺序校注）。
+
+    官方 html 尾注按数字注块 + A 注块分组，与遭遇序产品不对齐；
+    按正文锚点（`note_anchor_{n}`/`cb_note_anchor{seq}`）出现顺序重排注块，
+    键口径与 `_join_epub_blob_star` 一致（reg→n，add→seq）。
+    无锚条目 stable 垫底；少于 2 块或正文无锚时原样返回。"""
+    if len(spans) < 2:
+        return spans
+    parts, prev = [], 0
+    for s, e in spans:
+        parts.append(raw[prev:s])
+        prev = e
+    parts.append(raw[prev:])
+    body = "".join(parts)
+    order = []
+    for m in _BODY_ANCHOR_RE.finditer(body):
+        if m.group(2) is not None:
+            order.append(("reg", m.group(2)))
+        else:
+            order.append(("add", m.group(3)))
+    if not order:
+        return spans
+    pos = {k: i for i, k in enumerate(order)}
+
+    def key_of(span):
+        s, e = span
+        head = raw[s:s + 400]  # id 在开标签内
+        im = _FOOT_ID_RE.search(head)
+        if not im:
+            return (len(order), s)
+        k = ("reg", im.group(3)) if im.group(3) is not None \
+            else ("add", im.group(4))
+        return (pos.get(k, len(order)), s)
+
+    return sorted(spans, key=key_of)
+
+
+def _reorder_html_footnotes(raw: str) -> str:
+    """html 注块物理重排为阅读顺序（抽取用；双侧同规，产品文件不动）。
+
+    仅当注块连续（间隔纯空白）时就地重排（CBETA html 均如此）；
+    否则原样返回（交由 `_split_html_text` 的 body/foot 拆分侧处理）。
+    """
+    spans = _footnote_spans(raw)
+    if len(spans) < 2:
+        return raw
+    ordered = _reorder_footnote_spans(raw, spans)
+    if ordered == spans:
+        return raw
+    for i in range(len(spans) - 1):
+        if raw[spans[i][1]:spans[i + 1][0]].strip():
+            return raw
+    blocks = {sp: raw[sp[0]:sp[1]] for sp in spans}
+    sep = raw[spans[0][1]:spans[1][0]]
+    rebuilt = sep.join(blocks[sp] for sp in ordered)
+    return raw[:spans[0][0]] + rebuilt + raw[spans[-1][1]:]
 
 
 _INFO_MARKS = ("【版本記錄】", "【編輯說明】", "【原始資料】", "【版權宣告】", "【製作說明】", "【其他事項】")
@@ -598,14 +800,15 @@ def merge_docx(paths: List[str], out_path: str) -> str:
                 zo.writestr(n, z0.read(n))
     return out_path
 
-def diff_stats(ours: str, theirs: str):
+def diff_stats(ours: str, theirs: str, max_ctx: int = 5):
     """ours=生成档文本, theirs=官方文本。
-    missing=生成档缺失（官方有而生成档无），extra=生成档多出（生成档有而官方无）。"""
+    missing=生成档缺失（官方有而生成档无），extra=生成档多出（生成档有而官方无）。
+    ctx 只取前 max_ctx 条非 equal opcode（报告片段数；缺/多计数不受影响）。"""
     sm = difflib.SequenceMatcher(None, ours, theirs, autojunk=False)
     matched = sum(op.size for op in sm.get_matching_blocks())
     missing = len(theirs) - matched
     extra = len(ours) - matched
-    ctx = [(op[0], op[1], op[2], op[3], op[4]) for op in sm.get_opcodes() if op[0] != "equal"][:5]
+    ctx = [(op[0], op[1], op[2], op[3], op[4]) for op in sm.get_opcodes() if op[0] != "equal"][:max_ctx]
     return matched, missing, extra, ctx
 
 def work_juan_numbers(work) -> set:
@@ -1334,7 +1537,7 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
                 f.write(ours_disp)
         except Exception:
             src_cmp = gen_cmp = ""
-        m, mi, ex, ctx = diff_stats(ours, theirs)
+        m, mi, ex, ctx = diff_stats(ours, theirs, diff_lines)
         total = mi + ex
         status = "ok" if total <= max_diff else "fail"
         return {"xml": xml_fn, "fmt": fmt, "status": status, "gen": gen_path,
@@ -1484,10 +1687,12 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
                 f.write(t_disp)
         except Exception:
             src_cmp = gen_cmp = ""
-        m, mi, ex, ctx = diff_stats(t_ours, theirs)
+        m, mi, ex, ctx = diff_stats(t_ours, theirs, diff_lines)
         total = mi + ex
         trials.append({"kind": bkind, "official": bpath_disp, "missing": mi,
                        "extra": ex, "total": total, "ok": total <= max_diff,
+                       "official_files": list(bpath) if isinstance(bpath, list)
+                       else ([bpath] if isinstance(bpath, str) else []),
                        "ctx": ctx, "norm_official": theirs,
                        "norm_gen": t_ours,
                        "ctx_loc": ctx_locations(ctx, t_line, theirs_line),
@@ -1571,13 +1776,11 @@ def _format_verify_record(r, diff_lines: int = 5, max_diff: int = 10):
         if t.get("official"):
             lines.append(f"  {fmt} 【源】{t['official']}")
             if t.get("src_cmp"):
-                lines.append("       【源比较】行号对齐 "
-                             + os.path.basename(t["src_cmp"]))
+                lines.append("       【源比较】行号对齐 " + t["src_cmp"])
         if gen:
             lines.append(f"  {fmt} 【新】{gen}")
             if t.get("gen_cmp"):
-                lines.append("       【新比较】行号对齐 "
-                             + os.path.basename(t["gen_cmp"]))
+                lines.append("       【新比较】行号对齐 " + t["gen_cmp"])
         # 有差异就列前 diff_lines 条（含绿灯但非 缺0/多0 的情况）
         if not ok or (t.get("missing") or 0) + (t.get("extra") or 0) > 0:
             theirs = t.get("norm_official") or ""
@@ -1585,6 +1788,23 @@ def _format_verify_record(r, diff_lines: int = 5, max_diff: int = 10):
             # 用 trial 自带的 norm_gen（缺失回退整记录级）
             t_ours = t.get("norm_gen") or ours
             locs = t.get("ctx_loc") or []
+            # compare 文件整行 + 原始文件定位（CLI 报告同口径；读不到回退）
+            try:
+                _t_rawln = open(t["src_cmp"], encoding="utf-8").read().split("\n") \
+                    if t.get("src_cmp") else []
+            except (OSError, ValueError):
+                _t_rawln = []
+            try:
+                _o_rawln = open(t["gen_cmp"], encoding="utf-8").read().split("\n") \
+                    if t.get("gen_cmp") else []
+            except (OSError, ValueError):
+                _o_rawln = []
+            _off_texts = _official_locate_texts(
+                t.get("kind"), t.get("official_files") or [], fmt,
+                (fmt not in ("html", "epub")))
+            _gen_index = _gen_locate_index(
+                fmt, r.get("gen") if isinstance(r.get("gen"), list)
+                else ([r.get("gen")] if r.get("gen") else []))
             for idx, (_tag, i1, i2, j1, j2) in enumerate(
                     (t.get("ctx") or [])[:diff_lines], 1):
                 loc = locs[idx - 1] if idx - 1 < len(locs) else {}
@@ -1597,4 +1817,19 @@ def _format_verify_record(r, diff_lines: int = 5, max_diff: int = 10):
                 lines.append(f"      {idx}.{where}")
                 lines.append(f"         【源】{_mark_span(theirs, j1, j2, pad=i2 - i1)}")
                 lines.append(f"         【新】{_mark_span(t_ours, i1, i2, pad=j2 - j1)}")
+                sl = loc.get("src_line")
+                gl = loc.get("gen_line")
+                lines.append("         【源整行】" + (
+                    _t_rawln[sl - 1] if sl and 0 < sl <= len(_t_rawln)
+                    else "（行号不可得）"))
+                lines.append("         【新整行】" + (
+                    _o_rawln[gl - 1] if gl and 0 < gl <= len(_o_rawln)
+                    else "（行号不可得）"))
+                src_loc, gen_loc = _frag_locs(
+                    loc, _o_rawln, _t_rawln, _off_texts, _gen_index,
+                    "\n".join(_o_rawln))
+                if src_loc:
+                    lines.append(f"         【源文件】{src_loc}")
+                if gen_loc:
+                    lines.append(f"         【新文件】{gen_loc}")
     return lines

@@ -47,28 +47,68 @@ def _normalize(name: str) -> str:
     return "".join(buf)
 
 
+def _has_cjk(s: str) -> bool:
+    return any(ord(c) > 0x2E80 for c in (s or ""))
+
+
+_syslang_cache = {"env": None, "lang": "unset"}
+
+
+def _system_lang():
+    """本机系统语言 ID（如简体中文 Windows → 0x804；取不到 → None）。
+    PYCBETA_UI_LANG 可覆盖（0x804 或 804，单测用）；带缓存，env 变则重取。"""
+    ov = os.environ.get("PYCBETA_UI_LANG", "").strip()
+    if _syslang_cache["env"] == ov and _syslang_cache["lang"] != "unset":
+        return _syslang_cache["lang"]
+    lang = None
+    if ov:
+        try:
+            lang = int(ov, 16) if ov.lower().startswith("0x") else int(ov)
+        except ValueError:
+            lang = None
+    if lang is None:
+        try:
+            import ctypes
+            lang = ctypes.windll.kernel32.GetSystemDefaultUILanguage()
+        except Exception:
+            lang = None
+    _syslang_cache.update(env=ov, lang=lang)
+    return lang
+
+
+_WARNED_CANON = set()
+
+
+def _note_canon(orig, new):
+    if new != orig and (orig, new) not in _WARNED_CANON:
+        _WARNED_CANON.add((orig, new))
+        print(f"字体：{orig!r} 按本机 GDI 可见名归一为 {new!r}")
+    return new
+
+
 def read_family_names(path: str) -> list:
-    """解析 TTF/TTC 的 name 表，返回家族名列表（nameId 1/16）。"""
-    families = []
+    """解析 TTF/TTC 的 name 表，返回家族名列表（nameId 1/16）。
+    取名优先级（逐字重）：nameId 16(全名) > 1(家族)；platform 3(Windows) > 0 > 1；
+    TTC 按字重拼接（与旧行为一致）。"""
     with open(path, "rb") as f:
         data = f.read()
-    if len(data) < 12:
-        return families
-    magic = struct.unpack_from(">I", data, 0)[0]
-    try:
-        if magic == 0x74746366:  # 'ttcf'
-            count = struct.unpack_from(">I", data, 8)[0]
-            for i in range(min(count, 64)):
-                offset = struct.unpack_from(">I", data, 12 + 4 * i)[0]
-                families += _read_names_at(data, offset)
-        else:
-            families = _read_names_at(data, 0)
-    except Exception:
-        pass
-    return families
+    # 取名优先级：nameId 16(全名) > 1(家族)；platform 3(Windows) > 0 > 1
+    results = []
+    for off in _face_offsets(data):
+        try:
+            records = _read_names_at(data, off)
+        except Exception:
+            continue
+        for nid in (16, 1):
+            for pid in (3, 0, 1):
+                for r_name, r_pid, _lang, r_val in records:
+                    if r_name == nid and r_pid == pid and r_val not in results:
+                        results.append(r_val)
+    return results
 
 
 def _read_names_at(data: bytes, header_offset: int) -> list:
+    """单字体 name 表原始记录 → [(nameId, platformId, langId, value)]，保文件序。"""
     num_tables = struct.unpack_from(">H", data, header_offset + 4)[0]
     name_off = 0
     for i in range(num_tables):
@@ -83,12 +123,12 @@ def _read_names_at(data: bytes, header_offset: int) -> list:
 
     count = struct.unpack_from(">H", data, name_off + 2)[0]
     storage = name_off + struct.unpack_from(">H", data, name_off + 4)[0]
-    records = []  # (nameId, platformId, value)
+    records = []  # (nameId, platformId, langId, value)，保文件序
     for i in range(count):
         rec = name_off + 6 + 12 * i
         if rec + 12 > len(data):
             break
-        platform_id, _enc, _lang, name_id, length, off = struct.unpack_from(">6H", data, rec)
+        platform_id, _enc, lang_id, name_id, length, off = struct.unpack_from(">6H", data, rec)
         if name_id not in (1, 16):
             continue
         raw = data[storage + off: storage + off + length]
@@ -98,16 +138,52 @@ def _read_names_at(data: bytes, header_offset: int) -> list:
         except Exception:
             continue
         if value:
-            records.append((name_id, platform_id, value))
+            records.append((name_id, platform_id, lang_id, value))
+    return records
 
-    # 取名优先级：nameId 16(全名) > 1(家族)；platform 3(Windows) > 0 > 1
-    results = []
-    for nid in (16, 1):
-        for pid in (3, 0, 1):
-            for r_name, r_pid, r_val in records:
-                if r_name == nid and r_pid == pid and r_val not in results:
-                    results.append(r_val)
-    return results
+
+def _face_offsets(data: bytes) -> list:
+    """TTF → [0]；TTC → 各字重表头偏移（坏文件 → []，不抛）。"""
+    if len(data) < 12:
+        return []
+    try:
+        if struct.unpack_from(">I", data, 0)[0] == 0x74746366:  # 'ttcf'
+            count = struct.unpack_from(">I", data, 8)[0]
+            return [struct.unpack_from(">I", data, 12 + 4 * i)[0]
+                    for i in range(min(count, 64))]
+        return [0]
+    except Exception:
+        return []
+
+
+def _font_records(data: bytes) -> list:
+    """TTF/TTC 全字重 name 原始记录 → [(face, nameId, platformId, langId, value)]
+    （坏文件 → []，不抛）。face 为字重序号（TTF 恒 0）。"""
+    out = []
+    for face, off in enumerate(_face_offsets(data)):
+        try:
+            for nid, pid, lang, val in _read_names_at(data, off):
+                out.append((face, nid, pid, lang, val))
+        except Exception:
+            pass
+    return out
+
+
+def read_family_lang_names(path: str) -> list:
+    """nameId 1 → [(face, langId, value)]（保文件序，去重；供 GDI 可见名归一）。
+    同一字体繁/简拼写并存时（如霞鹜文楷 TC 的 0x404 鶩 U+9DA9 与 0x804 鹜 U+9E5C），
+    OOXML 精确匹配要求写 GDI 实际暴露的那个，否则 Word/WPS 回退宋体。
+    face 用于同字重取英文名（多字重 TTC 不能串字重）。"""
+    with open(path, "rb") as f:
+        data = f.read()
+    seen = set()
+    ret = []
+    for face, nid, _pid, lang, val in _font_records(data):
+        if nid != 1 or (face, lang, val) in seen:
+            continue
+        seen.add((face, lang, val))
+        ret.append((face, lang, val))
+    return ret
 
 
 class FontLocator:
@@ -120,6 +196,7 @@ class FontLocator:
     def __init__(self, extra_dirs=(), scan_system=True):
         self._index = {}          # 规范化名 -> 路径
         self._families_by_path = {}
+        self._lang_families_by_path = {}  # 路径 -> [(face, langId, nameId1)]
         dirs = list(extra_dirs)
         if scan_system:
             windir = os.environ.get("WINDIR", r"C:\Windows")
@@ -154,6 +231,12 @@ class FontLocator:
                         self._add(_normalize(zh), path, overwrite)
                 if families:
                     self._families_by_path[path] = families
+                    try:
+                        _langs = read_family_lang_names(path)
+                    except (OSError, ValueError):
+                        _langs = []
+                    if _langs:
+                        self._lang_families_by_path[path] = _langs
 
     def _add(self, key, path, overwrite):
         if overwrite or key not in self._index:
@@ -169,8 +252,13 @@ class FontLocator:
         return self._index.get(_normalize(family))
 
     def preferred_family(self, family: str) -> str:
-        """返回该字体在中文 Windows 上最易被 WPS/LO 匹配的家族名；
-        字体不存在时原样返回。"""
+        """返回该字体在本机最易被 Word/WPS 匹配的家族名；字体不存在时原样返回。
+
+        OOXML 字体匹配是精确字符串比对：同一字体繁/简拼写并存时（如霞鹜文楷 TC
+        的 0x404 鶩 U+9DA9 与 0x804 鹜 U+9E5C），必须写 GDI 实际暴露的那个
+        （跟系统语言走），否则回退宋体——WPS 字名框照抄 run 值，看着对、渲不对。
+        显式经验对照（DFKai-SB 类）优先；纯英文名原样返回（各地都可解）。
+        改名时打印一次（stdout），方便发现 CSS 名与本机拼写不一致。"""
         if not family:
             return family
         path = self._index.get(_normalize(family))
@@ -182,12 +270,51 @@ class FontLocator:
         for c in candidates:
             canon = _CANONICAL_NAMES.get(_normalize(c))
             if canon:
-                return canon
+                return _note_canon(family, canon)
+        recs = self._lang_families_by_path.get(path, [])
+        norm = _normalize(family)
+        infaces = {f for f, _l, v in recs if _normalize(v) == norm}
+        sysname = self._system_lang_name(path, family)
+        if sysname and _normalize(sysname) != norm and _has_cjk(family):
+            return _note_canon(family, sysname)
         for c in candidates:
+            # 別名只看输入命中的字重，防止 TTC 串字重（如 MingLiU/PMingLiU）；
+            # 输入未命中任何字重（如纯文件名解析）时不限。
+            if infaces and not {f for f, _l, v in recs
+                                if _normalize(v) == _normalize(c)} & infaces:
+                continue
             zh = _ZH_ALIASES.get(_normalize(c))
-            if zh:
-                return zh
+            if not zh:
+                continue
+            # 別名必须在文件中有记录（否则 GDI 不可见，写了比原文更糟）
+            if not any(_normalize(v) == _normalize(zh) for _f, _l, v in recs):
+                continue
+            _zh_sys = self._system_lang_name(path, zh)
+            if _has_cjk(zh) and _zh_sys \
+                    and _normalize(_zh_sys) != _normalize(zh):
+                return _note_canon(family, _zh_sys)  # 別名繁简与本机不一致时跟本机
+            return _note_canon(family, zh)
         return family
+
+    def _system_lang_name(self, path, family):
+        """该字体与本机系统语言对应的 nameId1（无 → None）。
+
+        同字重优先：输入命中的字重内找系统语言名（如 PMingLiU 字重不出 MingLiU），
+        命中字重内无时才回退全文件首个（单字重 TTF 无此问题）。"""
+        syslang = _system_lang()
+        if syslang is None:
+            return None
+        recs = self._lang_families_by_path.get(path, [])
+        norm = _normalize(family)
+        faces = {f for f, _l, v in recs if _normalize(v) == norm}
+        cands = [(f, v) for f, l, v in recs
+                 if l == syslang and (not faces or f in faces)]
+        if not cands and faces:
+            cands = [(f, v) for f, l, v in recs if l == syslang]
+        for _f, v in cands:
+            if v:
+                return v
+        return None
 
 
 _locator = None
@@ -231,7 +358,11 @@ def search_fonts(keyword: str = "", loc=None):
 
 
 def preferred_family(family: str) -> str:
-    return locator().preferred_family(family)
+    """本机最易匹配的家族名（单测 mock locator 时原样返回，保证 hermetic）。"""
+    loc = locator()
+    if not isinstance(loc, FontLocator):
+        return family
+    return loc.preferred_family(family)
 
 
 def word_line_height_ratio(path: str):

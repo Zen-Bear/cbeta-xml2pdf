@@ -24,6 +24,20 @@ CBETA = r"E:\dev\cbeta\cbeta_ebook"
 CUSTOM_TABLE = "彌勒\tmí lè\tㄇㄧˊ ㄌㄜˋ\n菩薩\tpú sà\tㄆㄨˊ ㄙㄚˋ\n月氏國\tyuè shì guó\tㄩㄝˋ ㄕˋ ㄍㄨㄛˊ\n"
 
 
+def _pin_uilang_404(testcase):
+    """钉系统语言为繁中（0x404），使注音 rt 字体等中文名保持原拼写；自动恢复。"""
+    old = os.environ.get("PYCBETA_UI_LANG")
+    os.environ["PYCBETA_UI_LANG"] = "0x404"
+
+    def _restore():
+        if old is None:
+            os.environ.pop("PYCBETA_UI_LANG", None)
+        else:
+            os.environ["PYCBETA_UI_LANG"] = old
+
+    testcase.addCleanup(_restore)
+
+
 class TestLoadTable(unittest.TestCase):
     def test_bundled(self):
         # 内置表用户可自行增删：只断言形状（非空，每行 pinyin/zhuyin 双列）
@@ -503,6 +517,7 @@ class TestRender(unittest.TestCase):
         self.assertIn('font-family: "楷体"', text)
 
     def test_docx_ruby_enriched(self):
+        _pin_uilang_404(self)  # rt 楷体在 0x404 下保持原拼写（simkai 无 0x404 名）
         # rubyPr 补完（WPS 拼音指南同款结构）+ rt 独立字号
         from pycbeta.annotate import resolve_annotations as _res
         ann = _res({"enabled": True, "scheme": "pinyin", "style": "ruby",

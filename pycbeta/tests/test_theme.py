@@ -994,7 +994,6 @@ class TestEnsurePageTypography(unittest.TestCase):
 
 class TestPresetThemeKeys(unittest.TestCase):
     """预设主题键：显式开关 > 预设键 > run.json 槽 > 内置（pdf/docx + html/epub）。"""
-
     def _root(self):
         import shutil
         root = tempfile.mkdtemp()
@@ -1009,6 +1008,40 @@ class TestPresetThemeKeys(unittest.TestCase):
         with open(base, "w", encoding="utf-8") as f:
             json.dump(preset_data, f, ensure_ascii=False)
         return {"config-json": base}, root
+
+    def test_preset_file_theme_keys(self):
+        import shutil
+        from pycbeta.theme import preset_file_theme_keys
+        root = tempfile.mkdtemp()
+        try:
+            p = os.path.join(root, "a.json")
+            with open(p, "w", encoding="utf-8") as f:
+                json.dump({"pdf-docx-user-theme": "x.css",
+                           "html-epub-theme": "",
+                           "pdf-docx-theme": 123,
+                           "output": {}}, f)
+            self.assertEqual(preset_file_theme_keys(p),
+                             {"pdf-docx-user-theme": "x.css"})
+            self.assertEqual(
+                preset_file_theme_keys(os.path.join(root, "nope.json")), {})
+            bad = os.path.join(root, "bad.json")
+            with open(bad, "w", encoding="utf-8") as f:
+                f.write("{oops")
+            self.assertEqual(preset_file_theme_keys(bad), {})
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+    def test_docx_run_eastasia_canonicalized(self):
+        import unittest.mock as mock
+        from pycbeta.theme import Theme
+        t = Theme.from_css(':root { --font-p: FooTC, FooEN; }\n'
+                           'p { font-family: var(--font-p); }\n')
+        with mock.patch("pycbeta.theme.preferred_family",
+                        side_effect=lambda x: "CANON-" + x) as m:
+            out = t.docx_run("p")
+        m.assert_called_with("FooTC")
+        self.assertIn('w:eastAsia="CANON-FooTC"', out)
+        self.assertIn('w:ascii="FooTC"', out)  # 西文槽不动，只归一 eastAsia
 
     def test_pdf_user_preset_beats_run_slot(self):
         from pycbeta.theme import resolve_pdf_docx_css

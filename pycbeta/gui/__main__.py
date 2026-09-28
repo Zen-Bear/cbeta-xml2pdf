@@ -734,6 +734,10 @@ class MainWindow(QMainWindow):
         os.makedirs(out_dir, exist_ok=True)
         opts = self.panel.get_options()
         _run, presets = load_run_and_presets()
+        from pycbeta.gui.panel import apply_selected_preset_theme
+        presets = apply_selected_preset_theme(
+            presets, self.panel._selected_preset()
+            if hasattr(self, "panel") else "")
         presets = self._warn_xml_dir(presets)
         if presets is None:
             return

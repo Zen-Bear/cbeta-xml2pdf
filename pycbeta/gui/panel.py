@@ -312,6 +312,20 @@ def set_config_preset_theme(path, value):
     return ap
 
 
+def apply_selected_preset_theme(presets, preset_path):
+    """运行时快照用：选中预设的主题键叠到底座有效配置上（同键覆盖）。
+
+    显示（_refresh_theme_box）与渲染（子进程快照）同锚定“当前选中预设”，
+    否则选预设换主题只亮不生效。无选中/无键 → 原样返回（可测纯函数，
+    不碰 Qt/文件写）。"""
+    from pycbeta.theme import preset_file_theme_keys
+    keys = preset_file_theme_keys(preset_path) if preset_path else {}
+    if keys and isinstance(presets, dict):
+        presets = copy.deepcopy(presets)
+        presets.update(keys)
+    return presets
+
+
 def delete_config_preset(name_or_path, root=None):
     """删除 presets/ 内 .json 快照；目录外/不存在抛 ValueError。"""
     d = os.path.abspath(config_presets_dir(root))
@@ -988,25 +1002,23 @@ class XmlOptionsPanel(QWidget):
         trow = QHBoxLayout()
         self.theme_box = CssComboBox()
         self.theme_box.setToolTip(
-            "有效默认：预设键 > run.json 的 pdf-docx-user-theme 槽 > 出厂默认；"
-            "下拉只选中，落盘走右侧“设为默认”")
+            "生效样式：预设键 > run.json 的 pdf-docx-user-theme 槽 > 出厂默认；"
+            "下拉只选中，落盘走右侧按钮")
         trow.addWidget(self.theme_box, 1)
         self.theme_default_btn = QPushButton("设为默认")
-        self.theme_default_btn.setToolTip(
-            "选中命名预设 → 写入该预设的 pdf-docx-user-theme 键；"
-            "出厂默认项 → 写入 run.json 主题槽（永久生效）")
         self.theme_default_btn.clicked.connect(self._on_theme_default)
         trow.addWidget(self.theme_default_btn)
         self.theme_dir_btn = QPushButton("打开用户预设目录")
         self.theme_dir_btn.clicked.connect(lambda _v: self._open_local_file(
             self._user_presets_path()))
         trow.addWidget(self.theme_dir_btn)
-        form.addRow("默认样式", trow)
+        form.addRow("生效样式", trow)
         self.theme_status = QLabel()
         self.theme_status.setWordWrap(True)
         self.theme_status.setStyleSheet("color: gray")
         form.addRow("", self.theme_status)
         self._refresh_theme_box()
+        self._update_theme_button()
         self.style_rows = {}
         for name, desc in STYLE_FILES:
             path = os.path.abspath(os.path.join(_STYLES_DIR, name))
@@ -1037,28 +1049,58 @@ class XmlOptionsPanel(QWidget):
         os.makedirs(d, exist_ok=True)
         return d
 
+    def _selected_preset_theme(self):
+        """当前选中预设的生效主题 → (value, 来源)；无选中/无键 → ("", "")。
+        显示锚定选中预设（而非 run.json 槽），否则换预设不跟走主题。"""
+        from pycbeta.theme import preset_file_theme_keys
+        path = self._selected_preset()
+        if not path:
+            return "", ""
+        keys = preset_file_theme_keys(path)
+        for k in ("pdf-docx-user-theme", "pdf-docx-theme"):
+            if keys.get(k):
+                stem = os.path.splitext(os.path.basename(path))[0]
+                return keys[k], f"预设 {stem}"
+        return "", ""
+
     def _refresh_theme_box(self, keep_value=None):
         from pycbeta.theme import resolve_theme_css
         from pycbeta.gui.css_editor import current_theme_source
         if keep_value is not None:
             cur, src = keep_value, ""
         else:
-            cur, src = current_theme_source()
+            cur, src = self._selected_preset_theme()
+            if not cur:
+                cur, src = current_theme_source()
         self.theme_box.refresh(cur)
         _path, label = resolve_theme_css(cur)
         shown = _path or "内置 pdf_docx.css"
         if len(shown) > 60:
             shown = shown[:25] + "…" + shown[-30:]
         tail = f"（来自{src}）" if src else ""
-        self.theme_status.setText(f"当前默认：{label}（{shown}）{tail}")
+        self.theme_status.setText(f"当前生效：{label}（{shown}）{tail}")
         if "缺失" in label or "不存在" in label:
             self.theme_status.setStyleSheet("color: red")
         else:
             self.theme_status.setStyleSheet("color: gray")
 
+    def _update_theme_button(self):
+        """样式落盘按钮双文案：命名预设→“存入预设”，出厂项→“设为默认”。
+
+        与 _on_theme_default 的分流目标一致；预设切换/下拉重填后刷新。"""
+        if self._selected_preset():
+            self.theme_default_btn.setText("存入预设")
+            self.theme_default_btn.setToolTip(
+                "写入所选预设的 pdf-docx-user-theme 键（永久生效）")
+        else:
+            self.theme_default_btn.setText("设为默认")
+            self.theme_default_btn.setToolTip(
+                "写入 run.json 主题槽（永久生效）")
+
     def _on_theme_default(self):
-        """默认样式落盘：选中命名预设 → 写该预设的 pdf-docx-user-theme 键
-        （预设自带主题，切换预设即跟走）；出厂默认项 → 写 run.json 主题槽。"""
+        """生效样式落盘：选中命名预设 → 写该预设的 pdf-docx-user-theme 键
+        （预设自带主题，切换预设即跟走）；出厂默认项 → 写 run.json 主题槽。
+        按钮文案由 _update_theme_button 同步（存入预设/设为默认）。"""
         from pycbeta.gui.css_editor import set_user_theme
         value = self.theme_box.selected_value()
         preset = self._selected_preset()
@@ -1465,6 +1507,8 @@ class XmlOptionsPanel(QWidget):
         finally:
             box.blockSignals(False)
         self._update_preset_buttons()
+        if hasattr(self, "theme_default_btn"):  # 初始化时样式表卡尚未建
+            self._update_theme_button()
 
     def _run_default_preset_path(self):
         """run.json 的 config-json 槽解析出的文件路径（未指向预设时 None）。"""
@@ -1501,6 +1545,7 @@ class XmlOptionsPanel(QWidget):
         self._set_cfg_title()
         self._update_preset_buttons()
         self._refresh_theme_box()  # 预设自带主题键时跟走显示
+        self._update_theme_button()  # 落盘目标跟走（存入预设/设为默认）
         self._changed()
 
     def _on_preset_save_as(self):
@@ -1959,48 +2004,17 @@ class SourceDialog(QDialog):
         tio.addWidget(t2s_lab)
         tio.addStretch(1)
         self.src_tabs.addTab(tab_io, "输入输出")
-        # 本地官方电子书 tab（排第一）：本地 XML 候选源 + 三格式官方基线目录；
+        # 本地官方电子书 tab（排第二）：本地 XML 候选源置顶 + 三格式官方基线目录；
         # 为空=未配置（该格式回退旧行为：只查输入相邻目录）
         tab_base = QWidget()
         t0 = QVBoxLayout(tab_base)
-        _base_info = QLabel(
-            "<a href='https://cbeta.org/ebooks'>官方</a>整套电子书，"
-            "可用于校验（可选）：")
-        _base_info.setTextFormat(Qt.RichText)
-        _base_info.setOpenExternalLinks(True)
-        t0.addWidget(_base_info)
         _bl = src.get("baselines") if isinstance(src.get("baselines"), dict) else {}
         self.base_edits = {}
         self._syncing_base = False
-        # 官方电子书根目录（如 CBETA 2026r2）：一键自动检测子目录对应格式
-        rrow = QHBoxLayout()
-        self.base_root_edit = QLineEdit(str(src.get("baselines_root", "")))
-        self.base_root_edit.setReadOnly(True)
-        self.base_root_edit.setToolTip("只读；点「浏览…」修改")
-        rbowse = QPushButton("浏览…")
-        rbowse.clicked.connect(
-            lambda _v: self._browse_dir(self.base_root_edit))
-        self.btn_detect_base = QPushButton("自动检测")
-        self.btn_detect_base.setToolTip(
-            "按子目录名识别格式（text-with-notes/docx/epub…），填入下方三行；"
-            "只填能识别的，其余不动")
-        self.btn_detect_base.clicked.connect(self._on_detect_baselines)
-        rrow.addWidget(self.base_root_edit, 1)
-        rrow.addWidget(rbowse)
-        rrow.addWidget(self.btn_detect_base)
-        t0.addLayout(rrow)
-        rlab = QLabel("官方电子书根目录  source.baselines_root（选填，仅用于自动检测）")
-        rlab.setStyleSheet("color: gray")
-        t0.addWidget(rlab)
-        for key, label in (("xml_dir", "本地XML候选源"),
-                           ("txt", "TXT 无注释"),
-                           ("txt_notes", "TXT 带注释"),
-                           ("docx", "DOCX"),
-                           ("epub", "EPUB"),
-                           ("pdf", "PDF")):
+
+        def _add_base_row(key, label, initial):
             row = QHBoxLayout()
-            edit = QLineEdit(str(src.get(key, "") if key == "xml_dir"
-                                 else _bl.get(key, "")))
+            edit = QLineEdit(str(initial))
             edit.setReadOnly(True)  # 只能浏览选择，不可手输（与主表一致）
             edit.setToolTip("只读；点「浏览…」修改")
             browse = QPushButton("浏览…")
@@ -2018,6 +2032,41 @@ class SourceDialog(QDialog):
             lab.setStyleSheet("color: gray")
             t0.addWidget(lab)
             self.base_edits[key] = edit
+
+        # 本地 XML 候选源置顶
+        _add_base_row("xml_dir", "本地XML候选源", src.get("xml_dir", ""))
+        _base_info = QLabel(
+            "<a href='https://cbeta.org/ebooks'>官方</a>整套电子书，"
+            "可用于校验（可选）：")
+        _base_info.setTextFormat(Qt.RichText)
+        _base_info.setOpenExternalLinks(True)
+        t0.addWidget(_base_info)
+        # 官方电子书根目录（如 CBETA 2026r2）：一键自动检测子目录对应格式
+        rrow = QHBoxLayout()
+        self.base_root_edit = QLineEdit(str(src.get("baselines_root", "")))
+        self.base_root_edit.setReadOnly(True)
+        self.base_root_edit.setToolTip("只读；点「浏览…」修改")
+        rbowse = QPushButton("浏览…")
+        rbowse.clicked.connect(
+            lambda _v: self._browse_dir(self.base_root_edit))
+        self.btn_detect_base = QPushButton("自动检测")
+        self.btn_detect_base.setToolTip(
+            "按子目录名识别格式（text-with-notes/docx/epub…），填入下方各行；"
+            "只填能识别的，其余不动")
+        self.btn_detect_base.clicked.connect(self._on_detect_baselines)
+        rrow.addWidget(self.base_root_edit, 1)
+        rrow.addWidget(rbowse)
+        rrow.addWidget(self.btn_detect_base)
+        t0.addLayout(rrow)
+        rlab = QLabel("官方电子书根目录  source.baselines_root（选填，仅用于自动检测）")
+        rlab.setStyleSheet("color: gray")
+        t0.addWidget(rlab)
+        for key, label in (("txt", "TXT 无注释"),
+                           ("txt_notes", "TXT 带注释"),
+                           ("docx", "DOCX"),
+                           ("epub", "EPUB"),
+                           ("pdf", "PDF")):
+            _add_base_row(key, label, _bl.get(key, ""))
         # xml_dir 与隐藏主表 edit 同键双向同步（保存口径不变）
         _main_xml = self.path_edits.get("xml_dir")
 

@@ -15,6 +15,29 @@ CBETA = r"E:\dev\cbeta\cbeta_ebook"
 TESTDATA = r"E:\dev\cbeta\cbeta_ebook"
 
 
+def _pin_uilang(testcase, lang="0x404"):
+    """钉系统语言（默认繁中 0x404），使 preferred_family 地域归一确定性输出
+    （中文名保持文件原拼写）；用完自动恢复（实例/类级通吃）。"""
+    old = os.environ.get("PYCBETA_UI_LANG")
+    os.environ["PYCBETA_UI_LANG"] = lang
+
+    def _restore():
+        if old is None:
+            os.environ.pop("PYCBETA_UI_LANG", None)
+        else:
+            os.environ["PYCBETA_UI_LANG"] = old
+
+    import inspect
+    if inspect.isclass(testcase):
+        testcase.addClassCleanup(_restore)
+    else:
+        testcase.addCleanup(_restore)
+
+
+def _pin_uilang_404(testcase):
+    _pin_uilang(testcase, "0x404")
+
+
 def _ops_text(ops):
     """收集 ops（含 open/close/div 标记）中全部 Text 文本，用于断言节归属。"""
     out = []
@@ -182,6 +205,7 @@ class TestDocxPagination(unittest.TestCase):
 class TestDocx(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        _pin_uilang(cls, "0x804")  # 仿宋等在简中下保持原拼写（GDI 归一确定性）
         xml = os.path.join(CBETA, "T0349 彌勒菩薩所問本願經", "T12n0349.xml")
         cls.work = P5Parser().parse(xml)
         cls.tmp = tempfile.mkdtemp()
@@ -397,6 +421,7 @@ class TestDocxBookmarksSplit(unittest.TestCase):
         self.assertIn('w:styleId="series-title"', styles)
 
     def test_def_run_carries_def_style(self):
+        _pin_uilang_404(self)  # 新細明體在 0x404 下保持原拼写
         from pycbeta.model import Work, E, Text
         from pycbeta.theme import Theme
         css = (":root { --font-def: 新細明體, PMingLiU; }\n"
@@ -708,8 +733,18 @@ class TestRenderFallback(unittest.TestCase):
 
     def test_verse_end_to_end(self):
         import tempfile
+        import unittest.mock as mock
         import zipfile
         from pycbeta.model import Work, E, Text
+        # 主题只测回退拆分：preferred_family 双处身份短路（本测与 GDI 归一无关；
+        # 归一由 test_fonts.TestPreferredFamilyLocale 覆盖）
+        m1 = mock.patch("pycbeta.theme.preferred_family", side_effect=lambda x: x)
+        m2 = mock.patch("pycbeta.render_docx.preferred_family",
+                        side_effect=lambda x: x)
+        m1.start()
+        m2.start()
+        self.addCleanup(m1.stop)
+        self.addCleanup(m2.stop)
         r = self._renderer({"標楷體": "/kai.ttf", "SimSun": "/song.ttf",
                             "新細明體": "/pm.ttf"})
         w = Work(id="T", source_file="", metadata={"title": "t"},
@@ -1407,7 +1442,6 @@ class TestSuppressedOrigNotes(unittest.TestCase):
 class TestAncestorInheritance(unittest.TestCase):
     """run 级逐层继承（外→内，属性各自最近优先，body 兜底）：并列标签同时生效、
     非 div 祖先字号可继承、body 颜色可继承、三段后代选择器生效。"""
-
     def _rpr(self, css, body, needle):
         import shutil, zipfile, re as _re
         from pycbeta.theme import Theme
@@ -1433,7 +1467,10 @@ class TestAncestorInheritance(unittest.TestCase):
         rpr = self._rpr("", body, "偈文")
         self.assertIn('w:sz w:val="24"', rpr)      # verse 12pt
         self.assertIn("008040", rpr)               # verse 绿
-        self.assertIn("標楷體", rpr)                # kaiti 字体
+        # 標楷體按 GDI 可见名归一 DFKai-SB（文件缺失时保持原名）
+        from pycbeta.fonts import locator as _loc
+        exp = "DFKai-SB" if _loc().path("標楷體") else "標楷體"
+        self.assertIn(exp, rpr)                    # kaiti 字体
 
     def test_non_div_ancestor_size_inherited(self):
         # li 字号 → 内层 p run（CSS 继承；此前 item 不在 run 祖先链）
@@ -1495,6 +1532,61 @@ class TestAncestorInheritance(unittest.TestCase):
         self.assertIn('w:sz w:val="21"', xml)   # 10.5pt
 
 
+class TestFootnoteEncounterOrder(unittest.TestCase):
+    """顺序校注：注条目一律遭遇序（数字/A 交错保持），与官方 txt/docx 同构；
+    官方 html 的分组在抽取时归位（verify 侧），产品不动。"""
+
+    def test_mixed_notes_keep_encounter_order(self):
+        import shutil
+        from pycbeta.model import E, Note, NoteRef, Text, Work
+        kids = [Text("文")]
+        for n, nt, body in [("a1", "add", "又文"), ("n1", "orig", "数字注一"),
+                            ("a2", "add", "及文"), ("n2", "orig", "数字注二")]:
+            kids.append(NoteRef(n=n, notes=[
+                Note(tag="note", attrs={}, n=n, ntype=nt, place="foot text",
+                     children=[Text(body)])]))
+        w = Work(id="T", source_file="", metadata={"title": "t", "author": ""},
+                 body=[E(tag="p", attrs={}, children=kids)],
+                 notes_by_n={}, apps=[], simplified=False)
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
+        fn = DocxRenderer().render_work(w, tmp, "g.docx")
+        import re
+        with zipfile.ZipFile(fn) as z:
+            fxml = z.read("word/footnotes.xml").decode("utf-8")
+        bodies = re.findall(r'<w:footnote w:id="(\d+)"[^>]*>(.*?)</w:footnote>',
+                            fxml, re.S)
+        bodies = [(i, b) for i, b in bodies if i != "0"]  # 剔分隔符条目
+        texts = ["".join(re.findall(r"<w:t[^>]*>(.*?)</w:t>", b)).strip()
+                 for _, b in bodies]
+        self.assertEqual(texts, ["又文", "数字注一", "及文", "数字注二"])
+
+
+class TestEaHint(unittest.TestCase):
+    """东亚模糊符（□/㈠ 等）强制 eastAsia：避免 Word 落西文字体（Calibri）。"""
+
+    def test_needs_ea_hint(self):
+        from pycbeta.render_docx import _needs_ea_hint
+        self.assertTrue(_needs_ea_hint("□□"))
+        self.assertTrue(_needs_ea_hint("正文□"))
+        self.assertFalse(_needs_ea_hint("完全中文"))  # 纯 CJK 不触发（字节不变）
+        self.assertFalse(_needs_ea_hint("Sāvatthī"))  # 拉丁字母不加 hint
+        self.assertFalse(_needs_ea_hint("ā"))         # A 类拉丁字母不算
+        self.assertFalse(_needs_ea_hint("A中"))
+        self.assertFalse(_needs_ea_hint(""))
+
+    def test_placeholder_run_hint(self):
+        import re
+        r = DocxRenderer()
+        out = r._run("□□", "p")
+        m = re.search(r"<w:rFonts[^>]*/>", out)
+        self.assertIn('w:hint="eastAsia"', m.group(0))
+        self.assertIn("w:eastAsia=", m.group(0))
+        # 纯 CJK / 拉丁不带 hint（旧行为）
+        self.assertNotIn("w:hint", r._run("正文", "p"))
+        self.assertNotIn("w:hint", r._run("Sāvatthī", "p"))
+
+
 class TestLatinFont(unittest.TestCase):
     """西文字体（--font-latin）落到 run 的 w:ascii/hAnsi；eastAsia 仍中文名。
 
@@ -1503,6 +1595,7 @@ class TestLatinFont(unittest.TestCase):
     """
 
     def test_run_rfonts(self):
+        _pin_uilang_404(self)  # eastAsia 中文名在 0x404 下保持原拼写
         r = DocxRenderer(latin_font="Calibri")
         out = r._run("Sāvatthī K17n abc", "footnote")
         self.assertIn('w:ascii="Calibri"', out)
@@ -1515,6 +1608,7 @@ class TestLatinFont(unittest.TestCase):
         self.assertNotIn("w:hint", out_p)
 
     def test_styles_footnote_rfonts(self):
+        _pin_uilang_404(self)  # eastAsia 中文名在 0x404 下保持原拼写
         from pycbeta.model import Work
         w = Work(id="T", source_file="", metadata={"title": "t", "author": ""},
                  body=[], notes_by_n={}, apps=[], simplified=False)

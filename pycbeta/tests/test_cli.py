@@ -505,5 +505,82 @@ class TestVersion(unittest.TestCase):
         self.assertIn(__version__, out.getvalue())
 
 
+class TestFragLines(unittest.TestCase):
+    """校验报告片段：18 字窗口（旧行为）+ compare 文件行号 + 整行原文。"""
+
+    def test_full_lines_and_numbers(self):
+        from pycbeta.cli import _frag_lines
+        out = _frag_lines(2, "replace", 1, 2, 1, 2, "甲乙丙", "甲丁丙",
+                          {"gen_line": 5, "src_line": 7},
+                          ["n1", "n2", "n3", "n4", "新行完整文本"],
+                          ["s1", "s2", "s3", "s4", "s5", "s6", "源行完整文本"])
+        text = "\n".join(out)
+        self.assertIn("2.（源比较第7行，新比较第5行）", text)
+        self.assertIn("【源】甲〖丁〗丙", text)  # 旧窗口行为不变
+        self.assertIn("【新】甲〖乙〗丙", text)
+        self.assertIn("【源整行】源行完整文本", text)
+        self.assertIn("【新整行】新行完整文本", text)
+
+    def test_missing_loc_falls_back(self):
+        from pycbeta.cli import _frag_lines
+        out = _frag_lines(1, "insert", 1, 1, 1, 4, "甲乙", "甲XYZ乙",
+                          {}, ["甲乙"], ["甲XYZ乙"])
+        text = "\n".join(out)
+        self.assertTrue(text.startswith("      1."))
+        self.assertNotIn("比较第", text)
+        self.assertIn("（行号不可得）", text)
+
+    def test_out_of_range_line_falls_back(self):
+        from pycbeta.cli import _frag_lines
+        out = _frag_lines(1, "replace", 0, 1, 0, 1, "甲", "乙",
+                          {"gen_line": 99, "src_line": 0}, ["甲"], ["乙"])
+        text = "\n".join(out)
+        self.assertIn("（行号不可得）", text)
+
+    def test_frag_locs_both_sides(self):
+        from pycbeta.verify import _frag_locs
+        off = [("base.html", "甲[0036004]行\n又【CB】，及【選集】\n尾行")]
+        gen_index = ("text", [], [])
+        src, gen = _frag_locs({"gen_line": 2, "src_line": 2},
+                              ["甲行", "又【CB】，及【選集】"],
+                              ["甲行", "又【CB】，及【選集】"],
+                              off, gen_index, "甲行\n又【CB】，及【選集】")
+        self.assertIn("base.html:2行", src)
+        self.assertIn("生成文本第2行", gen)
+
+    def test_query_runs_and_anchors(self):
+        from pycbeta.verify import _query_runs, _nearest_anchor, _locate_hits
+        qs = _query_runs("又【CB】，及【選集】")
+        self.assertEqual(qs[0], "又【CB】，及【選集】")
+        self.assertIn("又，及", qs)
+        lines = ["甲[0036004]行", "中间", "目标行"]
+        a, d = _nearest_anchor(lines, 2)
+        self.assertEqual((a, d), ("[0036004]", 2))
+        self.assertEqual(_nearest_anchor(["甲", "乙"], 1), ("", -1))
+        hits = _locate_hits([("f.html", "甲[0036004]行\n目标行")], "目标行")
+        self.assertEqual(hits, ["f.html:2行（[0036004]后1行）"])
+        self.assertEqual(_locate_hits([("f.html", "甲")], "不存在串"), [])
+
+    def test_gen_docx_index(self):
+        import zipfile
+        from pycbeta.verify import _gen_locate_index, _locate_gen_hits
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(__import__("shutil").rmtree, tmp, True)
+        dp = os.path.join(tmp, "a.docx")
+        with zipfile.ZipFile(dp, "w") as z:
+            z.writestr("word/document.xml",
+                       "<w:body><w:p><w:t>第一段</w:t></w:p>"
+                       "<w:p><w:t>第二段</w:t></w:p></w:body>")
+            z.writestr("word/footnotes.xml",
+                       '<w:footnotes><w:footnote w:id="7"><w:p><w:t>注文七</w:t></w:p>'
+                       "</w:footnote></w:footnotes>")
+        idx = _gen_locate_index("docx", [dp])
+        self.assertEqual(idx[0], "docx")
+        self.assertEqual(_locate_gen_hits(idx, "第二段"), ["正文第2段"])
+        self.assertEqual(_locate_gen_hits(idx, "注文七"), ["脚注7"])
+        self.assertEqual(_locate_gen_hits(idx, "没有串"), [])
+        self.assertEqual(_gen_locate_index("txt", [])[0], "text")
+
+
 if __name__ == "__main__":
     unittest.main()

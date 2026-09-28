@@ -146,5 +146,131 @@ class TestCoverage(unittest.TestCase):
         self.assertIn("fallback", text)
 
 
+def _mini_name_table(records):
+    """records: [(platform, lang, nameId, text)] → name 表字节（仅单测造字用）。"""
+    import struct
+    blobs, recs = [], []
+    head = 6 + 12 * len(records)
+    off = head
+    for plat, lang, nid, text in records:
+        raw = text.encode("utf-16-be") if plat in (0, 3) else text.encode("latin-1")
+        recs.append(struct.pack(">6H", plat, 1, lang, nid, len(raw), off - head))
+        blobs.append(raw)
+        off += len(raw)
+    return struct.pack(">HHH", 0, len(recs), head) + b"".join(recs) + b"".join(blobs)
+
+
+def _mini_ttf(path, records):
+    """最小 TTF（仅 name 表，供地域归一测试；不依赖系统字体）。"""
+    import struct
+    name_tab = _mini_name_table(records)
+    header = struct.pack(">IHHHH", 0x00010000, 1, 16, 0, 0)
+    entry = struct.pack(">4sIII", b"name", 0, 12 + 16, len(name_tab))
+    with open(path, "wb") as f:
+        f.write(header + entry + name_tab)
+
+
+def _mini_ttc(path, faces_records):
+    """最小 TTC（多字重同文件，供串字重测试；表偏移为绝对偏移，与真实文件一致）。"""
+    import struct
+    name_tabs = [_mini_name_table(r) for r in faces_records]
+    n = len(name_tabs)
+    base = 12 + 4 * n
+    bodies, entries = [], []
+    off = base
+    for name_tab in name_tabs:
+        entries.append((off, name_tab))
+        off += 12 + 16 + len(name_tab)
+    out = [struct.pack(">4sII", b"ttcf", 0x00010000, n)]
+    for body_off, _tab in entries:
+        out.append(struct.pack(">I", body_off))
+    with open(path, "wb") as f:
+        f.write(b"".join(out))
+        for body_off, name_tab in entries:
+            f.write(struct.pack(">IHHHH", 0x00010000, 1, 16, 0, 0)
+                    + struct.pack(">4sIII", b"name", 0, body_off + 12 + 16,
+                                  len(name_tab))
+                    + name_tab)
+
+
+class TestPreferredFamilyLocale(unittest.TestCase):
+    """preferred_family 地域归一（自造字体，不依赖系统字体装了什么）。
+
+    背景：霞鹜文楷 TC 的 0x404 名用鶩 U+9DA9、0x804 名用鹜 U+9E5C；
+    OOXML 精确匹配要求写 GDI 可见的那个，否则 Word/WPS 回退宋体。
+    """
+
+    TRAD = "A鶩B"  # U+9DA9
+    SIMP = "A鹜B"  # U+9E5C
+    LAT = "ALatB"
+
+    def _loc(self, tmp):
+        import pycbeta.fonts as F
+        _mini_ttf(os.path.join(tmp, "t.ttf"), [
+            (3, 0x404, 1, self.TRAD),
+            (3, 0x409, 1, self.LAT),
+            (3, 0x804, 1, self.SIMP),
+        ])
+        return F.FontLocator(extra_dirs=[tmp], scan_system=False)
+
+    def _use(self, loc):
+        import pycbeta.fonts as F
+        old = F._locator
+        F._locator = loc
+        self.addCleanup(setattr, F, "_locator", old)
+        old_env = os.environ.get("PYCBETA_UI_LANG")
+        self.addCleanup(lambda: (os.environ.pop("PYCBETA_UI_LANG", None)
+                                 if old_env is None
+                                 else os.environ.update(
+                                     PYCBETA_UI_LANG=old_env)))
+
+    def test_trad_input_simplified_system(self):
+        import shutil
+        import pycbeta.fonts as F
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
+        self._use(self._loc(tmp))
+        os.environ["PYCBETA_UI_LANG"] = "0x804"
+        self.assertEqual(F.preferred_family(self.TRAD), self.SIMP)
+
+    def test_trad_input_trad_system_keeps(self):
+        import shutil
+        import pycbeta.fonts as F
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
+        self._use(self._loc(tmp))
+        os.environ["PYCBETA_UI_LANG"] = "0x404"
+        self.assertEqual(F.preferred_family(self.TRAD), self.TRAD)
+
+    def test_ascii_input_keeps(self):
+        import shutil
+        import pycbeta.fonts as F
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
+        self._use(self._loc(tmp))
+        os.environ["PYCBETA_UI_LANG"] = "0x804"
+        self.assertEqual(F.preferred_family(self.LAT), self.LAT)
+
+    def test_missing_font_keeps(self):
+        import pycbeta.fonts as F
+        self._use(F.FontLocator(extra_dirs=[], scan_system=False))
+        os.environ["PYCBETA_UI_LANG"] = "0x804"
+        self.assertEqual(F.preferred_family("NoSuchFontXYZ"), "NoSuchFontXYZ")
+
+    def test_ttc_same_face(self):
+        """多字重：PMingLiU 字重不出 MingLiU（同字重取英文名）。"""
+        import shutil
+        import pycbeta.fonts as F
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
+        _mini_ttc(os.path.join(tmp, "m.ttc"), [
+            [(3, 0x409, 1, "MingLiU"), (3, 0x404, 1, "細明體")],
+            [(3, 0x409, 1, "PMingLiU"), (3, 0x404, 1, "新細明體")],
+        ])
+        self._use(F.FontLocator(extra_dirs=[tmp], scan_system=False))
+        os.environ["PYCBETA_UI_LANG"] = "0x409"
+        self.assertEqual(F.preferred_family("新細明體"), "PMingLiU")
+
+
 if __name__ == "__main__":
     unittest.main()

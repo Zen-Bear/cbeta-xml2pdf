@@ -19,6 +19,8 @@ import os
 import re
 from typing import Dict, List, Optional
 
+from .fonts import preferred_family
+
 _DEFAULT_CSS = os.path.join(os.path.dirname(__file__), "styles", "pdf_docx.css")
 
 # CSS properties we can translate to OOXML for DOCX.
@@ -735,6 +737,25 @@ def preset_theme_value(run, run_dir=None, key="pdf-docx-user-theme"):
     return v.strip() if isinstance(v, str) and v.strip() else ""
 
 
+def preset_file_theme_keys(path):
+    """预设文件 → {主题键: 值}（仅 PRESET_THEME_KEYS 中的非空字符串）。
+    供 GUI 跟随“当前选中预设”（而非 run.json 的 config-json 槽）；
+    缺失/非法/顶层非对象 → {}（不崩，调用方回退 run 锚定）。纯读。"""
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.loads(_strip_json_comments(f.read()))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    out = {}
+    for k in PRESET_THEME_KEYS:
+        v = data.get(k, "")
+        if isinstance(v, str) and v.strip():
+            out[k] = v.strip()
+    return out
+
+
 def _builtin_text(path):
     try:
         return _read_text(path)
@@ -1217,7 +1238,8 @@ class Theme:
 
         base_pt: 所在段落字号，用于把 em 字号换算成 pt（1em == base_pt）。
         latin: 西文字体（w:ascii/w:hAnsi，默认 --font-latin）；缺省回落首个
-        font-family 名（旧行为，供不经渲染器的调用方）。eastAsia 恒取首个中文字体名，
+        font-family 名（旧行为，供不经渲染器的调用方）。eastAsia 取首个中文字体名
+        再经 preferred_family 地域归一（本机 GDI 可见拼写），
         与 pdf_docx.css 头注释「DOCX 只取首个中文字体作 eastAsia，西文另走 --font-latin」
         一致。不加 w:hint="eastAsia"：带附加符号的拉丁字母（ā ī 等 EAW=A，
         见「舍衛【大】，～Sāvatthī」）会因 hint 被判给 eastAsia 而落中文字体；
@@ -1243,7 +1265,11 @@ class Theme:
             names = [n for n in names if n]
             if names:
                 latin_name = (latin or "").strip().strip('"').strip("'") or names[0]
-                out.append(f'<w:rFonts w:ascii="{latin_name}" w:eastAsia="{names[0]}" '
+                # eastAsia 写本机 GDI 可见名（preferred_family 地域归一）：
+                # 中文拼写繁简并存时（如霞鹜文楷 TC 鶩 U+9DA9/鹜 U+9E5C），
+                # OOXML 精确匹配要求与 GDI 一致，否则 Word/WPS 回退宋体。
+                east = preferred_family(names[0])
+                out.append(f'<w:rFonts w:ascii="{latin_name}" w:eastAsia="{east}" '
                            f'w:hAnsi="{latin_name}"/>')
         return "".join(out)
 

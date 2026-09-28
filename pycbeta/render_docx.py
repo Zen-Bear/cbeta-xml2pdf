@@ -8,6 +8,7 @@ Styling comes from the shared Theme (semantic tags -> OOXML props).
 import io
 import os
 import re
+import unicodedata
 import zipfile
 from contextlib import contextmanager
 from typing import List, Optional
@@ -17,11 +18,33 @@ from .model import App, E, Gaiji, Lb, Note, NoteRef, Pb, Text, Work, \
 from .gaiji import GaijiDb
 from .theme import (Theme, resolve_page, _hex6, strip_head_no, bracket_pair,
                     VERTICAL_UNCENTER, ensure_page_typography, FALLBACKS)
+from .fonts import preferred_family
 from .render_html import split_juans
 from .filename import apply_template
 from .annotate import active as _ann_active, split_annotated as _split_ann, parse_rt_size as _parse_rt_size, split_eq_reading as _split_eq, track_seen as _track_seen, page_repeat as _page_repeat
 
 _REND_TAGS = ("kaiti", "heiti", "mingti", "fangsong")
+
+
+def _needs_ea_hint(text: str) -> bool:
+    """文本是否应强制走 eastAsia（中文字体）。
+
+    仅当文本含**东亚宽度模糊（A）的非拉丁字符**（如虚缺符 □ U+25A1、圈码 ㈠）
+    且不含其它拉丁/半角字符（A 类拉丁字母 ā ī 不算，需走西文字体）时为真——
+    这类字符在 Word 无 hint 时会落 w:ascii（Calibri）而显示错字体。
+    纯 CJK（W/F）文本不触发（无 hint 也走 eastAsia），保证旧输出字节不变。"""
+    has_ambiguous = False
+    for c in text:
+        if c.isspace():
+            continue
+        w = unicodedata.east_asian_width(c)
+        if w in ("W", "F"):
+            continue
+        if w == "A" and not unicodedata.category(c).startswith("L"):
+            has_ambiguous = True
+            continue
+        return False
+    return has_ambiguous
 
 
 def split_sections(body, rules: dict) -> list:
@@ -247,8 +270,8 @@ class DocxRenderer:
         self.notes = notes  # 'footnote' | 'endnote' | 'inline'
         self._work = None
         self._fn_seq = 0
-        self._fns: List[str] = []
-        self._en_notes: List[str] = []
+        self._fns = []
+        self._en_notes = []
         self._tag_stack: List[str] = []
         self._div_stack: List[str] = []
         self._list_stack: List[int] = []
@@ -306,7 +329,7 @@ class DocxRenderer:
         if fonts:
             # 显式字体优先：去掉主题带来的 rFonts 再追加（同一 rPr 内重复 w:rFonts 时 Word 取首个，不去会失效）
             rpr = re.sub(r"<w:rFonts[^>]*/>", "", rpr)
-            rpr += f'<w:rFonts w:ascii="{fonts}" w:eastAsia="{fonts}" w:hint="eastAsia"/>'
+            rpr += f'<w:rFonts w:ascii="{fonts}" w:eastAsia="{preferred_family(fonts)}" w:hint="eastAsia"/>'
         if rpr:
             rpr = f"<w:rPr>{rpr}</w:rPr>"
         return rpr
@@ -324,7 +347,11 @@ class DocxRenderer:
         """单文本 run 发射（含按字回退）：主字体缺字形的字拆出，用回退字体另起 run。
 
         无缺字/无法验证（字体文件缺失）时输出与旧路径字节一致，保证零回归。
+        东亚模糊符（□/㈠ 等）补 w:hint="eastAsia"，避免落西文字体（Calibri）。
         """
+        if _needs_ea_hint(text) and "w:hint" not in rpr:
+            rpr = re.sub(r'(<w:rFonts\b[^>]*?)(/>)', r'\1 w:hint="eastAsia"\2',
+                         rpr, count=1)
         m = _EASTASIA_RE.search(rpr)
         chunks = self._split_covered(text, m.group(1)) if m else None
         if not chunks:
@@ -333,7 +360,8 @@ class DocxRenderer:
         out = []
         for chunk, fb in chunks:
             rr = rpr if not fb else re.sub(
-                f'w:eastAsia="[^"]+"', f'w:eastAsia="{fb}"', rpr, count=1)
+                f'w:eastAsia="[^"]+"', f'w:eastAsia="{preferred_family(fb)}"',
+                rpr, count=1)
             out.append(f"<w:r>{rr}<w:t xml:space=\"preserve\">"
                        f"{_x(chunk)}</w:t></w:r>")
         return "".join(out)
@@ -408,7 +436,7 @@ class DocxRenderer:
         rpr += f"<w:sz w:val=\"{hps}\"/><w:szCs w:val=\"{hps}\"/>"
         font = (rt_font or props.get("fonts") or "").replace('"', "")
         if font:
-            rpr += f"<w:rFonts w:ascii=\"{font}\" w:eastAsia=\"{font}\" w:hint=\"eastAsia\"/>"
+            rpr += f"<w:rFonts w:ascii=\"{font}\" w:eastAsia=\"{preferred_family(font)}\" w:hint=\"eastAsia\"/>"
         if rpr:
             rpr = f"<w:rPr>{rpr}</w:rPr>"
         return rpr
@@ -1665,7 +1693,7 @@ class DocxRenderer:
                     ff = [n.strip().strip('"').strip("'") for n in ff.split(",")][0]
                 size = self._series_size_pt(st)
                 _srpr = (
-                    f'<w:rPr><w:rFonts w:ascii="{self.latin_font}" w:eastAsia="{ff}" w:hAnsi="{self.latin_font}"/>'
+                    f'<w:rPr><w:rFonts w:ascii="{self.latin_font}" w:eastAsia="{preferred_family(ff)}" w:hAnsi="{self.latin_font}"/>'
                     f'<w:sz w:val="{size}"/><w:szCs w:val="{size}"/></w:rPr>')
                 series_para = (
                     f'<w:p><w:pPr><w:pStyle w:val="series-title"/>'
@@ -1764,7 +1792,7 @@ class DocxRenderer:
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
             '<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="'
-            f'{self.latin_font}" w:eastAsia="{self._body_font()}" w:hAnsi="{self.latin_font}"/>'
+            f'{self.latin_font}" w:eastAsia="{preferred_family(self._body_font())}" w:hAnsi="{self.latin_font}"/>'
             f'<w:sz w:val="{int(self.doc_size * 2)}"/></w:rPr></w:rPrDefault></w:docDefaults>'
             '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/>'
             f'<w:pPr>{self._normal_spacing()}</w:pPr></w:style>'
