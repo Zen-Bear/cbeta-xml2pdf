@@ -37,6 +37,17 @@ def _esc(s: str) -> str:
     return html.escape(s, quote=False)
 
 
+def _plain_text(n) -> str:
+    """节点纯文本（递归 Text 子，供 mulu 断页标记携带章节标题）。"""
+    out = []
+    for c in getattr(n, "children", None) or []:
+        if isinstance(c, Text):
+            out.append(c.text or "")
+        elif getattr(c, "children", None):
+            out.append(_plain_text(c))
+    return "".join(out)
+
+
 def split_juans(body) -> List[tuple]:
     """把 body 按 <milestone unit="juan"/> 切成 [(卷号, ops)]，ops 为
     ('open'/'close'/'node'/'milestone', node) 扁平事件流（跨卷 div 会补 close/open）。
@@ -98,7 +109,8 @@ class HtmlRenderer:
                  name_template=None, base_css=None, ignore_xml_style=False,
                  ignore_xml_space=False, show_notes=True, grayscale=False, inline_brackets="fullwidth",
                  note_inline_brackets=None, title_t2s=True, siddham_text=False,
-                 annotations=None, strip_head_no=False, corr_cbeta=False):
+                 annotations=None, strip_head_no=False, corr_cbeta=False,
+                 mulu_break=False):
         self.gaiji_db = gaiji_db if gaiji_db is not None else GaijiDb()
         self.theme = theme
         # 图片搜索目录：str | list[str]（{work}/figures → {work}/txt → 仓库 figures）
@@ -117,6 +129,7 @@ class HtmlRenderer:
         self.title_t2s = title_t2s  # 输出文件名书名转简（与其他格式 default_output_name 同口径）
         self.strip_head_no = strip_head_no  # 去 head/jhead 行首 No. 令牌（默认 false 保留）
         self.corr_cbeta = corr_cbeta        # CBETA 校改字标红（corr-cbeta；默认 false）
+        self.mulu_break = mulu_break        # level-1 非「卷」mulu 断页标记（epub 拆 spine 用；默认 false）
         self.siddham_text = siddham_text  # 悉昙字形+读音文本形（docx 同款；默认 false 走官方空元素）
         # 难字注音（P6）：None 或 {"table", "scheme"}（CLI 已由 resolve_annotations 装载；渲染器内不做 IO）
         self._annotations = _ann_active(annotations)
@@ -720,6 +733,15 @@ class HtmlRenderer:
                 q = 1
             return "　" * q
         if tag == "mulu":
+            # epub：level-1 非「卷」mulu 断页标记（含标题），供拆 spine 章节；
+            # html/pdf 不开（产品与官方 html 同形、不插标记）
+            if getattr(self, "mulu_break", False) \
+                    and e.attrs.get("level") == "1" \
+                    and e.attrs.get("type") != "卷":
+                t = _plain_text(e).strip()
+                if t:
+                    return ('<div class="mulu-break" data-title="'
+                            + _esc(t).replace('"', "&quot;") + '"></div>')
             return ""
         if tag == "graphic":
             return self._render_graphic(e)

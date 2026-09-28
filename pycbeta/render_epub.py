@@ -27,7 +27,7 @@ class EpubRenderer:
                  ignore_xml_style=False, ignore_xml_space=False, show_notes=True,
                  annotations=None, strip_head_no=False, inline_brackets="fullwidth",
                  note_inline_brackets=None, figure_base=None, corr_cbeta=False,
-                 siddham_text=False):
+                 siddham_text=False, mulu_break=True):
         # theme=None → 纯基底（官方基底默认）；pdf_docx 主题不再进 epub
         #（render_html 章节与 style.css 同源 base_css）。
         self.theme = theme
@@ -45,6 +45,7 @@ class EpubRenderer:
         self.note_inline_brackets = note_inline_brackets or inline_brackets
         self.figure_base = figure_base
         self.siddham_text = siddham_text  # 转内部 HtmlRenderer（有读音悉昙字形+读音，默认关）
+        self.mulu_break = mulu_break      # level-1 非「卷」mulu 拆 spine（与 docx mulu_level1 分页同口径）
         self.missing_figures = []
 
     def render_work(self, work: Work, out_dir: str, filename: str = "") -> str:
@@ -62,7 +63,8 @@ class EpubRenderer:
                                   note_inline_brackets=self.note_inline_brackets,
                                   figure_base=self.figure_base,
                                   siddham_text=self.siddham_text,
-                                  corr_cbeta=self.corr_cbeta)
+                                  corr_cbeta=self.corr_cbeta,
+                                  mulu_break=self.mulu_break)
             html_files = inner.render_work(work, tmp)
             self.missing_figures = list(inner.missing_figures)
             md = work.metadata
@@ -88,6 +90,28 @@ class EpubRenderer:
             # 中间 HTML 目录随包生成后清理（成功/失败都清，避免污染输出/校验目录）
             shutil.rmtree(tmp, ignore_errors=True)
 
+    _MULU_BREAK_RE = re.compile(
+        r'<div class="mulu-break" data-title="([^"]*)"></div>')
+
+    @classmethod
+    def _split_mulu_breaks(cls, body: str) -> List[tuple]:
+        """按 level-1 非「卷」mulu 断页标记把一卷正文切成 [(标题|None, html)]。
+        与 docx `split_sections` 口径一致：首个标记前无可见内容则不切
+        （镜像「首个序/品不切」）。无标记 → 原样单段。"""
+        parts = []
+        cur_title = None
+        last = 0
+        for m in cls._MULU_BREAK_RE.finditer(body):
+            seg = body[last:m.start()]
+            if parts or re.sub(r"<[^>]+>", "", seg).strip():
+                parts.append((cur_title, seg))
+            cur_title = m.group(1) or None
+            last = m.end()
+        tail = body[last:]
+        if parts or re.sub(r"<[^>]+>", "", tail).strip():
+            parts.append((cur_title, tail))
+        return parts or [(None, body)]
+
     def _build_chapters(self, tmp: str, html_files: List[str], title: str) -> List[dict]:
         chapters = []
         for fn in html_files:
@@ -95,9 +119,11 @@ class EpubRenderer:
             body = self._extract_body(html)
             m = re.search(r"_(\d+)\.html$", fn)
             juan = int(m.group(1)) if m else len(chapters) + 1
-            cid = f"ch{len(chapters) + 1}"
-            chapters.append({"id": cid, "file": f"{cid}.xhtml",
-                             "title": f"{title} 卷{juan:03d}", "body": body})
+            for ctitle, seg in self._split_mulu_breaks(body):
+                cid = f"ch{len(chapters) + 1}"
+                chapters.append({"id": cid, "file": f"{cid}.xhtml",
+                                 "title": ctitle or f"{title} 卷{juan:03d}",
+                                 "body": seg})
         return chapters
 
     @staticmethod

@@ -1587,6 +1587,54 @@ class TestEaHint(unittest.TestCase):
         self.assertNotIn("w:hint", r._run("Sāvatthī", "p"))
 
 
+class TestListNestingDocx(unittest.TestCase):
+    """列表项内嵌列表：不得段中段（Word/WPS 丢弃）；官方口径层级左缩进，
+    无 numbering（numPr/numId）；父项/子项文字都在。"""
+
+    def _render(self):
+        import shutil
+        from pycbeta.model import E, Text, Work
+        body = [E(tag="list", attrs={"rend": "no-marker"}, children=[
+            E(tag="item", attrs={}, children=[
+                Text("卷上"),
+                E(tag="list", attrs={"rend": "no-marker"}, children=[
+                    E(tag="item", attrs={}, children=[Text("條目甲")]),
+                    E(tag="item", attrs={}, children=[Text("條目乙")]),
+                ]),
+            ]),
+        ])]
+        w = Work(id="T", source_file="", metadata={"title": "t", "author": ""},
+                 body=body, notes_by_n={}, apps=[], simplified=False)
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
+        fn = DocxRenderer().render_work(w, tmp, "l.docx")
+        with zipfile.ZipFile(fn) as z:
+            return z.read("word/document.xml").decode("utf-8")
+
+    def _max_p_depth(self, xml):
+        import re
+        d = mx = 0
+        for m in re.finditer(r"<w:p[ >]|</w:p>", xml):
+            if m.group(0).startswith("</"):
+                d -= 1
+            else:
+                d += 1
+            mx = max(mx, d)
+        return mx
+
+    def test_no_nested_paragraph_and_official_indent(self):
+        doc = self._render()
+        self.assertEqual(self._max_p_depth(doc), 1)  # 无段中段
+        self.assertIn("卷上", doc)
+        self.assertIn("條目甲", doc)
+        self.assertIn("條目乙", doc)
+        self.assertNotIn("<w:numId", doc)            # 官方无编号
+        self.assertIn('w:leftChars="200"', doc)      # 层1 2 字
+        self.assertIn('w:leftChars="400"', doc)      # 层2 4 字
+        self.assertIn('w:left="480"', doc)
+        self.assertIn('w:left="960"', doc)
+
+
 class TestLatinFont(unittest.TestCase):
     """西文字体（--font-latin）落到 run 的 w:ascii/hAnsi；eastAsia 仍中文名。
 

@@ -25,6 +25,11 @@ from .annotate import active as _ann_active, split_annotated as _split_ann, pars
 
 _REND_TAGS = ("kaiti", "heiti", "mingti", "fangsong")
 
+#: <item> 内按块级处理的子标签（各自产出 <w:p>/<w:tbl>，须作为兄弟段落而非嵌套）
+_ITEM_BLOCK_TAGS = frozenset((
+    "list", "p", "lg", "head", "byline", "juan", "div", "table",
+    "form", "def", "pre", "milestone", "figure", "sp"))
+
 
 def _needs_ea_hint(text: str) -> bool:
     """文本是否应强制走 eastAsia（中文字体）。
@@ -988,6 +993,61 @@ class DocxRenderer:
         finally:
             self._in_para -= 1
 
+    def _item_ppr(self) -> str:
+        """列表项段落属性：官方口径——无编号（NUMPR），显式层级左缩进
+        `w:ind w:leftChars=200×(层+1) w:left=480×(层+1)` + `w:spacing before=180`
+        （官方 docx 无 numbering.xml，列表纯缩进；无首行缩进）。"""
+        level = max(len(self._list_stack) - 1, 0)
+        ppr = self.theme.docx_para("item")
+        ppr = re.sub(r"<w:ind[^>]*/>", "", ppr)  # 层级缩进用官方口径，弃主题 ind
+        if "<w:spacing" in ppr:
+            ppr = re.sub(r"<w:spacing\b", '<w:spacing w:before="180"', ppr,
+                         count=1)
+        else:
+            ppr = '<w:spacing w:before="180"/>' + ppr
+        ind = (f'<w:ind w:leftChars="{(level + 1) * 200}" '
+               f'w:left="{(level + 1) * 480}"/>')
+        if "<w:jc" in ppr:  # schema 顺序：spacing → ind → jc
+            ppr = ppr.replace("<w:jc", ind + "<w:jc", 1)
+        else:
+            ppr += ind
+        return f"<w:pPr>{ppr}</w:pPr>" if ppr else ""
+
+    def _render_item(self, e) -> str:
+        """列表项渲染：内联子收进本项 `<w:p>`；内嵌块级子（如嵌套 <list>）
+        作为**兄弟段落**接在其后，绝不生成 `<w:p>` 套 `<w:p>`（Word/WPS 会丢弃
+        嵌套段落，导致目录/列表在真实 docx 中消失而文本抽取假绿）。
+        全程保留 `item` 标签上下文（li 字号等 CSS 继承；块级子仍属本项）。"""
+        ppr = self._item_ppr()
+        out = []
+        buf = []
+        self._tag_stack.append("item")
+        try:
+            def flush():
+                if not buf:
+                    return
+                self._in_para = getattr(self, "_in_para", 0) + 1
+                try:
+                    runs = "".join(self._render_node(c) for c in buf)
+                finally:
+                    self._in_para -= 1
+                buf.clear()
+                if runs:
+                    out.append(f"<w:p>{ppr}{runs}</w:p>")
+
+            for c in e.children:
+                if isinstance(c, E) and c.tag in _ITEM_BLOCK_TAGS:
+                    flush()
+                    out.append(self._render_node(c))
+                else:
+                    buf.append(c)
+            flush()
+        finally:
+            self._tag_stack.pop()
+        if not out:
+            out.append(f"<w:p>{ppr}</w:p>")
+        return "".join(out)
+
     def _render_inline_mode(self, content: str) -> str:
         """注释方式=inline：校注用主题 note-inline 样式（括号走 note_inline_brackets）。
 
@@ -1333,19 +1393,12 @@ class DocxRenderer:
         if tag == "l":
             return self._render_children(e)
         if tag == "list":
-            self._list_stack.append(self._list_numid(a))
+            self._list_stack.append(0)  # 仅作层级计数（编号已退役，缩进走显式 w:ind）
             out = "".join(self._render_node(c) for c in e.children)
             self._list_stack.pop()
             return out
         if tag == "item":
-            level = max(len(self._list_stack) - 1, 0)
-            numid = self._list_stack[-1] if self._list_stack else 0
-            ppr = self.theme.docx_para("item")
-            if numid:
-                ppr = (f'<w:numPr><w:ilvl w:val="{level}"/>'
-                       f'<w:numId w:val="{numid}"/></w:numPr>') + ppr
-            ppr = f"<w:pPr>{ppr}</w:pPr>" if ppr else ""
-            return f"<w:p>{ppr}{self._render_para_children(e, 'item')}</w:p>"
+            return self._render_item(e)
         if tag == "div":
             dtype = a.get("type")
             if dtype:

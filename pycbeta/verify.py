@@ -711,6 +711,61 @@ def _reorder_html_footnotes(raw: str) -> str:
     return raw[:spans[0][0]] + rebuilt + raw[spans[-1][1]:]
 
 
+# 结构护栏：<w:p> 内层再开 <w:p>（或 <w:tbl> 落段内）为非法 OOXML，
+# Word/WPS 会丢弃嵌套段落/表 → 文字在 raw XML 里（文本抽取假绿）但成品丢内容。
+_WP_BLK_RE = re.compile(r"<w:p\b[^>]*?(/?)>|<w:tbl\b[^>]*?(/?)>|</w:p>|</w:tbl>")
+
+
+def _nested_block_hits(xml: str, limit: int = 5) -> list:
+    """document.xml/footnotes.xml 中非法嵌套块 → 上下文片段（最多 limit 条）。"""
+    out = []
+    p_depth = 0
+    for m in _WP_BLK_RE.finditer(xml):
+        tok = m.group(0)
+        if tok.startswith("</w:p"):
+            p_depth = max(0, p_depth - 1)
+        elif tok.startswith("</w:tbl"):
+            continue
+        elif tok.startswith("<w:p"):
+            if p_depth >= 1:
+                out.append(_nested_ctx(xml, m.start()))
+                if len(out) >= limit:
+                    return out
+            if not tok.endswith("/>"):
+                p_depth += 1
+        elif tok.startswith("<w:tbl") and p_depth >= 1:
+            out.append(_nested_ctx(xml, m.start()))
+            if len(out) >= limit:
+                return out
+    return out
+
+
+def _nested_ctx(xml: str, i: int, before: int = 60, after: int = 90) -> str:
+    """违规点上下文（压缩空白；含邻近文字，便于定位）。"""
+    return re.sub(r"\s+", " ", xml[max(0, i - before):i + after]).strip()
+
+
+def docx_nested_block_violations(path: str, limit: int = 5) -> list:
+    """docx 非法嵌套块（段中段/表中段）→ 定位片段列表。
+    扫描 word/document.xml + word/footnotes.xml；表格单元格内的 <w:p> 合法
+    （tbl 在 p 外），不误报。文件缺失/损坏 → []。"""
+    out = []
+    try:
+        with zipfile.ZipFile(path) as z:
+            for name in ("word/document.xml", "word/footnotes.xml"):
+                try:
+                    xml = z.read(name).decode("utf-8", "replace")
+                except KeyError:
+                    continue
+                hits = _nested_block_hits(xml, limit - len(out))
+                out.extend(f"{name}: {h}" for h in hits)
+                if len(out) >= limit:
+                    break
+    except (OSError, zipfile.BadZipFile):
+        return []
+    return out[:limit]
+
+
 _INFO_MARKS = ("【版本記錄】", "【編輯說明】", "【原始資料】", "【版權宣告】", "【製作說明】", "【其他事項】")
 
 def strip_infos(text: str) -> str:
@@ -956,9 +1011,13 @@ def _strip_official_no(text: str, tokens) -> str:
     横向空白一起吃掉，使官方侧余部与生成侧形状一致。空表时原样返回。"""
     if not tokens:
         return text
-    for token in tokens:
-        text = re.sub(r"(?m)^([ \t\u3000]*)" + re.escape(token) + r"[ \t\u3000]*",
-                      r"\1", text)
+    # 长 token 先剥（`No. 1651-10` 先于 `No. 1651-1`，否则短 token 会吃掉
+    # 长 token 前缀只剩 `0`）；词边界 `(?![0-9A-Za-z-])` 防部分匹配
+    for token in sorted(tokens, key=len, reverse=True):
+        text = re.sub(
+            r"(?m)^([ \t\u3000]*)" + re.escape(token)
+            + r"(?![0-9A-Za-z\-])[ \t\u3000]*",
+            r"\1", text)
     return text
 
 
@@ -1419,7 +1478,7 @@ def generate_formal(xml_fn: str, work, fmt: str, outdir: str, config_path: Optio
         files = HtmlRenderer(theme=theme, notes="endnote", ignore_xml_style=bool(p("ignore_xml_style")), ignore_xml_space=bool(p("ignore_xml_space")), show_notes=True, inline_brackets=p("inline_brackets", "halfwidth"), annotations=_ann, strip_head_no=_shn, siddham_text=bool(p("siddham_text", False)), title_t2s=bool(_tt(presets)), figure_base=_fig_dirs or None).render_work(work, out_dir=outdir)
         return [os.path.join(outdir, f) for f in files]
     if fmt == "docx":
-        return [os.path.join(outdir, DocxRenderer(theme=theme, notes="footnote", ignore_xml_style=bool(p("ignore_xml_style")), ignore_xml_space=bool(p("ignore_xml_space")), show_notes=True, suppress_jhead_dup=p("suppress_jhead_dup", True), show_close_juan=bool(p("show_close_juan", False)), inline_brackets=p("inline_brackets", "halfwidth"), series_title=p("series_title", {}), annotations=_ann, strip_head_no=_shn, show_body_siddham=bool(p("show_body_siddham", True)), figure_base=_fig_dirs or None).render_work(work, out_dir=outdir, filename=f"{stem}.docx"))]
+        return [os.path.join(outdir, DocxRenderer(theme=theme, notes="footnote", ignore_xml_style=bool(p("ignore_xml_style")), ignore_xml_space=bool(p("ignore_xml_space")), show_notes=True, suppress_jhead_dup=p("suppress_jhead_dup", True), show_close_juan=bool(p("show_close_juan", False)), inline_brackets=p("inline_brackets", "halfwidth"), note_inline_brackets=p("note_inline_brackets", None), series_title=p("series_title", {}), pagination=p("pagination", {}), verse_caesura=p("verse_caesura", "　　"), verse_strip_quotes=bool(p("verse_strip_quotes", False)), footnote_per_page=p("footnote_per_page", True), vertical=bool(p("vertical", False)), annotations=_ann, strip_head_no=_shn, show_body_siddham=bool(p("show_body_siddham", True)), figure_base=_fig_dirs or None).render_work(work, out_dir=outdir, filename=f"{stem}.docx"))]
     if fmt == "epub":
         return [os.path.join(outdir, EpubRenderer(theme=theme, notes="endnote", ignore_xml_style=bool(p("ignore_xml_style")), ignore_xml_space=bool(p("ignore_xml_space")), show_notes=True, inline_brackets=p("inline_brackets", "halfwidth"), annotations=_ann, strip_head_no=_shn, siddham_text=bool(p("siddham_text", False)), figure_base=_fig_dirs or None).render_work(work, out_dir=outdir, filename=f"{stem}.epub"))]
     if fmt == "md":
@@ -1450,6 +1509,14 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
                     "detail": "生成档缺失（--verify-only 未找到可比对文件）", "gen": []}
     else:
         gen_path = generate_formal(xml_fn, work, fmt, outdir, config_path=config_path)
+    # 结构护栏：docx（含 pdf→docx 委托产物）不得含段中段/表中段（否则 Word 丢内容）
+    struct_issues = []
+    if fmt == "docx":
+        for _p in gen_path:
+            struct_issues += docx_nested_block_violations(_p)
+            if len(struct_issues) >= 5:
+                break
+        struct_issues = struct_issues[:5]
     ours_raw = "".join(extract_text(p, strip_jiaozhu=(fmt not in ("html", "epub")))
                        for p in gen_path)
     try:
@@ -1702,9 +1769,10 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
         if best is None or total < best[6]:
             best = cur
         if total <= max_diff:
-            return {"xml": xml_fn, "fmt": fmt, "status": "ok", "gen": gen_path, "official": bpath_disp, "official_kind": bkind, "matched": m, "missing": mi, "extra": ex, "total": total, "ctx": ctx, "src_cmp": src_cmp, "gen_cmp": gen_cmp, "norm_gen": t_ours, "norm_official": theirs, "trials": trials}
+            st = "fail" if struct_issues else "ok"
+            return {"xml": xml_fn, "fmt": fmt, "status": st, "gen": gen_path, "official": bpath_disp, "official_kind": bkind, "matched": m, "missing": mi, "extra": ex, "total": total, "ctx": ctx, "src_cmp": src_cmp, "gen_cmp": gen_cmp, "norm_gen": t_ours, "norm_official": theirs, "trials": trials, "struct_issues": struct_issues}
     bkind, bpath, m, mi, ex, ctx, total, src_cmp, gen_cmp, best_theirs, best_loc, best_ours = best
-    return {"xml": xml_fn, "fmt": fmt, "status": "fail", "gen": gen_path, "official": bpath, "official_kind": bkind, "matched": m, "missing": mi, "extra": ex, "total": total, "ctx": ctx, "ctx_loc": best_loc, "src_cmp": src_cmp, "gen_cmp": gen_cmp, "norm_gen": best_ours, "norm_official": best_theirs, "trials": trials}
+    return {"xml": xml_fn, "fmt": fmt, "status": "fail", "gen": gen_path, "official": bpath, "official_kind": bkind, "matched": m, "missing": mi, "extra": ex, "total": total, "ctx": ctx, "ctx_loc": best_loc, "src_cmp": src_cmp, "gen_cmp": gen_cmp, "norm_gen": best_ours, "norm_official": best_theirs, "trials": trials, "struct_issues": struct_issues}
 
 
 def format_verify_report(records, diff_lines: int = 5, max_diff: int = 10):
@@ -1743,6 +1811,12 @@ def _format_verify_record(r, diff_lines: int = 5, max_diff: int = 10):
     fmt = r.get("fmt", "")
     st = r.get("status")
     lines.append(f"=== {name}")
+    _struct = r.get("struct_issues") or []
+    if _struct:
+        lines.append(f"  [FAIL] {fmt} 结构非法（段中段/表中段 {len(_struct)} 处，"
+                     "Word/WPS 会丢弃；文字抽取假绿）：")
+        for s in _struct[:5]:
+            lines.append(f"         {s}")
     if st == "no_baseline":
         detail = r.get("detail")
         lines.append(f"  [--]  {fmt} no baseline"

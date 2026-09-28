@@ -451,5 +451,35 @@ class TestAddFootnoteIndent(unittest.TestCase):
         self.assertNotIn("  [A1]", out)
 
 
+class TestMuluBreakMarker(unittest.TestCase):
+    """html/epub 断页标记：level-1 非「卷」mulu → `<div class="mulu-break" data-title>`；
+    默认关（html/pdf 产品与官方同形），epub 开。"""
+
+    def _work(self):
+        return Work(id="T", source_file="", metadata={"title": "t", "author": ""},
+                    body=[E(tag="p", attrs={}, children=[Text("前文")]),
+                          E(tag="mulu", attrs={"level": "1", "type": "其他"},
+                            children=[Text("附錄一")]),
+                          E(tag="p", attrs={}, children=[Text("後文")]),
+                          E(tag="mulu", attrs={"level": "1", "type": "卷"},
+                            children=[Text("不切")])],
+                    notes_by_n={}, apps=[], simplified=False)
+
+    def _render(self, **kw):
+        d = tempfile.mkdtemp()
+        self.addCleanup(__import__("shutil").rmtree, d, True)
+        files = HtmlRenderer(**kw).render_work(self._work(), d)
+        return "".join(open(os.path.join(d, f), encoding="utf-8").read()
+                       for f in files)
+
+    def test_marker_off_by_default(self):
+        self.assertNotIn("mulu-break", self._render())
+
+    def test_marker_on(self):
+        blob = self._render(mulu_break=True)
+        self.assertIn('<div class="mulu-break" data-title="附錄一"></div>', blob)
+        self.assertEqual(blob.count("mulu-break"), 1)  # 「卷」型不标记
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

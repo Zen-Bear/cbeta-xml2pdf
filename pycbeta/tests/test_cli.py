@@ -582,5 +582,31 @@ class TestFragLines(unittest.TestCase):
         self.assertEqual(_gen_locate_index("txt", [])[0], "text")
 
 
+class TestBuildDocxRenderer(unittest.TestCase):
+    """统一 docx 构造：docx 产物 / pdf 中间档共用一份参数（含 pagination）。"""
+
+    def _args(self, pagination):
+        import argparse
+        return argparse.Namespace(
+            page="a4", page_presets={}, latin_font="Calibri",
+            ignore_xml_style=False, ignore_xml_space=False,
+            verse_caesura="　　", verse_strip_quotes=False,
+            grayscale=False, page_border=False, bookmarks=True,
+            split_juan=False, show_close_juan=False, suppress_jhead_dup=True,
+            inline_brackets="fullwidth", footnote_per_page=True,
+            show_notes=True, pagination=pagination,
+            suppress_title_notes=False, footnote_separator=None,
+            series_title={})
+
+    def test_pagination_passed(self):
+        from pycbeta.cli import build_docx_renderer
+        pg = {"enabled": True, "mulu_level1": True, "juan": True}
+        r = build_docx_renderer(self._args(pg), None, None, "footnote")
+        self.assertEqual(r.pagination, pg)
+        r2 = build_docx_renderer(self._args({"enabled": False}), None, None,
+                                 "footnote")
+        self.assertFalse(r2.pagination.get("enabled"))
+
+
 if __name__ == "__main__":
     unittest.main()

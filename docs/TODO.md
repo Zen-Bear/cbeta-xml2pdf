@@ -586,3 +586,5 @@
     需入词表（单字行）才注
   - 测试：`test_annotate`（规范化回退、去重含自动）、`test_docx.TestNoteAnnDedup`
     （正文注/脚注不重）、`test_gui`（三选一互斥+回读、词表只读+默认路径）；真机 T0032 实证
+
+- [ ] **html2pdf 管线分页未对齐 docx**（2026-09-28 用户确认「写进 todo，不做」）：`render_pdf.py` 目前只在 `juan` 边界 `break-before: page`，无 `mulu_level1`；如需 HTML 管线 PDF（及 html 成品）也按 level-1 非「卷」mulu 分页，应复用 `render_docx.split_sections` 同口径插断页。（epub 已对齐：`EpubRenderer` 按 mulu 拆 spine 章节，见 `render_epub._split_mulu_breaks`。）

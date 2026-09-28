@@ -8,7 +8,9 @@ import argparse
 import json
 import os
 import re
+import shutil
 import sys
+import tempfile
 
 from .parser import P5Parser
 from .render_html import HtmlRenderer
@@ -151,6 +153,45 @@ from .verify import (_query_runs, _nearest_anchor, _locate_hits,
                      _locate_gen_hits, _frag_locs)
 
 
+def build_docx_renderer(args, theme, figure_base, note_mode):
+    """**唯一一份** DocxRenderer 参数清单（docx 产物 / pdf 中间档 / 校验档共用，
+    防止各分支漂移——历史上 pdf 分支自建遗漏 `pagination` 等项）。"""
+    return DocxRenderer(
+        theme=theme, page=args.page, notes=note_mode,
+        page_presets=args.page_presets,
+        latin_font=args.latin_font,
+        ignore_xml_style=args.ignore_xml_style,
+        ignore_xml_space=args.ignore_xml_space,
+        verse_caesura=args.verse_caesura,
+        verse_strip_quotes=args.verse_strip_quotes,
+        grayscale=args.grayscale,
+        page_border=args.page_border,
+        bookmarks=args.bookmarks,
+        split=args.split_juan,
+        show_close_juan=args.show_close_juan,
+        suppress_jhead_dup=args.suppress_jhead_dup,
+        inline_brackets=args.inline_brackets,
+        note_inline_brackets=getattr(args, "note_inline_brackets", None),
+        footnote_per_page=args.footnote_per_page,
+        show_notes=args.show_notes,
+        pagination=args.pagination,
+        suppress_title_notes=args.suppress_title_notes,
+        footnote_separator=args.footnote_separator,
+        series_title=args.series_title,
+        gaiji_fonts=getattr(args, "gaiji_fonts", None),
+        gaiji_lang=getattr(args, "gaiji_lang", "zh-Hant"),
+        fallback_fonts=getattr(args, "fallback_fonts", None),
+        siddham_fonts=getattr(args, "siddham_fonts", None),
+        vertical=getattr(args, "vertical", False),
+        notes_marker_font=getattr(args, "notes_marker_font",
+                                  getattr(args, "marker_font", None)),
+        annotations=getattr(args, "annotations", None),
+        strip_head_no=getattr(args, "strip_head_no", False),
+        show_body_siddham=getattr(args, "show_body_siddham", True),
+        corr_cbeta=getattr(args, "corr_cbeta", False),
+        figure_base=figure_base)
+
+
 def render_one(w, fmt, out_dir, out_name, args, theme, html_base=None, figure_base=None):
     # pdf 默认 footnote：docx2pdf 中间 docx 用真页底脚注（html2pdf 下 HtmlRenderer 无分页，footnote 与 endnote 同归文末，无影响）
     note_mode = args.notes or ("footnote" if fmt in ("docx", "pdf") else "endnote")
@@ -180,40 +221,7 @@ def render_one(w, fmt, out_dir, out_name, args, theme, html_base=None, figure_ba
         print(f"{w.id}: html({note_mode}) -> {len(files)} file(s) in {out_dir}")
 
     elif fmt == "docx":
-        r = DocxRenderer(theme=theme, page=args.page, notes=note_mode,
-                           page_presets=args.page_presets,
-                           latin_font=args.latin_font,
-                           ignore_xml_style=args.ignore_xml_style,
-                           ignore_xml_space=args.ignore_xml_space,
-                           verse_caesura=args.verse_caesura,
-                           verse_strip_quotes=args.verse_strip_quotes,
-                           grayscale=args.grayscale,
-                           page_border=args.page_border,
-                           bookmarks=args.bookmarks,
-                           split=args.split_juan,
-                           show_close_juan=args.show_close_juan,
-                           suppress_jhead_dup=args.suppress_jhead_dup,
-                           inline_brackets=args.inline_brackets,
-                           note_inline_brackets=getattr(args, "note_inline_brackets", None),
-                           footnote_per_page=args.footnote_per_page,
-                           show_notes=args.show_notes,
-                           pagination=args.pagination,
-                           suppress_title_notes=args.suppress_title_notes,
-                            footnote_separator=args.footnote_separator,
-                            series_title=args.series_title,
-                            gaiji_fonts=getattr(args, "gaiji_fonts", None),
-                            gaiji_lang=getattr(args, "gaiji_lang", "zh-Hant"),
-                            fallback_fonts=getattr(args, "fallback_fonts", None),
-                            siddham_fonts=getattr(args, "siddham_fonts", None),
-                           vertical=getattr(args, "vertical", False),
-                           notes_marker_font=getattr(args, "notes_marker_font",
-                               getattr(args, "marker_font", None)),
-                           annotations=ann,
-                           strip_head_no=getattr(args, "strip_head_no", False),
-                           show_body_siddham=getattr(
-                               args, "show_body_siddham", True),
-                           corr_cbeta=getattr(args, "corr_cbeta", False),
-                           figure_base=figure_base)
+        r = build_docx_renderer(args, theme, figure_base, note_mode)
         res = r.render_work(w, out_dir, filename=out_name)
         _report_missing_figures(w.id, fmt, r)
         if isinstance(res, list):
@@ -276,54 +284,37 @@ def render_one(w, fmt, out_dir, out_name, args, theme, html_base=None, figure_ba
 
         if pipeline == "docx2pdf":
             chain = ([single] if single else None) or args.docx_pdf_chain
-            _pdf_docx = DocxRenderer(theme=theme, page=args.page,
-                                    page_presets=args.page_presets,
-                                    latin_font=args.latin_font,
-                                    ignore_xml_style=args.ignore_xml_style,
-                                    ignore_xml_space=args.ignore_xml_space,
-                                    notes=note_mode if note_mode != "footnote" else "footnote",
-                                    grayscale=args.grayscale,
-                                    page_border=args.page_border,
-                                    bookmarks=args.bookmarks,
-                                    split=args.split_juan,
-                                    show_notes=args.show_notes,
-                                    suppress_title_notes=args.suppress_title_notes,
-                                    footnote_separator=args.footnote_separator,
-                                    series_title=args.series_title,
-                                    gaiji_fonts=getattr(args, "gaiji_fonts", None),
-                                    gaiji_lang=getattr(args, "gaiji_lang", "zh-Hant"),
-                                    fallback_fonts=getattr(args, "fallback_fonts", None),
-                                    siddham_fonts=getattr(args, "siddham_fonts", None),
-                                    vertical=getattr(args, "vertical", False),
-                                    notes_marker_font=getattr(args, "notes_marker_font",
-                                        getattr(args, "marker_font", None)),
-                                    annotations=ann,
-                                    strip_head_no=getattr(args, "strip_head_no", False),
-                                    show_body_siddham=getattr(
-                                        args, "show_body_siddham", True),
-                                    corr_cbeta=getattr(args, "corr_cbeta", False),
-                                    figure_base=figure_base)
-            docx_res = _pdf_docx.render_work(w, out_dir, filename=base + ".docx")
-            _report_missing_figures(w.id, fmt, _pdf_docx)
+            # 与 docx 产物同一条渲染路径/同一份参数：先渲 docx 到临时目录，再转 PDF，
+            # 转换后把同内容 docx 留一份到输出根（保 --verify-only pdf 定位）。
+            tmp = tempfile.mkdtemp(prefix="xml2pdf-pdfdocx-")
+            try:
+                _pdf_docx = build_docx_renderer(args, theme, figure_base, note_mode)
+                docx_res = _pdf_docx.render_work(w, tmp, filename=base + ".docx")
+                _report_missing_figures(w.id, fmt, _pdf_docx)
 
+                def emit(pdf, backend):
+                    if args.engine_tag:
+                        want = os.path.join(out_dir, f"{base}_{backend}.pdf")
+                        if os.path.abspath(want) != os.path.abspath(pdf):
+                            os.rename(pdf, want)
+                        pdf = want
+                    print(f"{w.id}: pdf({backend},{note_mode}) -> {pdf}")
 
-            def emit(pdf, backend):
-                if args.engine_tag:
-                    want = os.path.join(out_dir, f"{base}_{backend}.pdf")
-                    if os.path.abspath(want) != os.path.abspath(pdf):
-                        os.rename(pdf, want)
-                    pdf = want
-                print(f"{w.id}: pdf({backend},{note_mode}) -> {pdf}")
-
-            if isinstance(docx_res, list):
-                for d in docx_res:
-                    u = {}
-                    pdf = docx_to_pdf(d, os.path.splitext(d)[0] + ".pdf",
-                                      chain=chain, used=u)
-                    emit(pdf, u.get("backend", "docx2pdf"))
-            else:
-                pdf = docx_to_pdf(docx_res, target, chain=chain, used=used)
-                emit(pdf, used.get("backend", "docx2pdf"))
+                if isinstance(docx_res, list):
+                    for d in docx_res:
+                        stem = os.path.splitext(os.path.basename(d))[0]
+                        u = {}
+                        pdf = docx_to_pdf(d, os.path.join(out_dir, stem + ".pdf"),
+                                          chain=chain, used=u)
+                        shutil.copy2(d, os.path.join(out_dir,
+                                                     os.path.basename(d)))
+                        emit(pdf, u.get("backend", "docx2pdf"))
+                else:
+                    pdf = docx_to_pdf(docx_res, target, chain=chain, used=used)
+                    shutil.copy2(docx_res, os.path.join(out_dir, base + ".docx"))
+                    emit(pdf, used.get("backend", "docx2pdf"))
+            finally:
+                shutil.rmtree(tmp, ignore_errors=True)
         else:
             # HTML 管线：chromium/prince/weasyprint/cbetapdf/外部注册引擎
             chain = ([single] if single else None) or args.html_engine_chain
@@ -992,6 +983,15 @@ def main(argv=None):
                         # 只校验模式：缺失产物计失败（退出码非零）
                         grand_total += 1; grand_fail += 1; block_failed = True
                     continue
+                # 结构护栏：docx（含 pdf→docx 委托产物）不得含段中段/表中段
+                _struct_issues = []
+                if fmt == "docx":
+                    from .verify import docx_nested_block_violations as _dnbv
+                    for _p in gen_paths:
+                        _struct_issues += _dnbv(_p)
+                        if len(_struct_issues) >= 5:
+                            break
+                    _struct_issues = _struct_issues[:5]
                 # 找官方
                 stem = os.path.splitext(name)[0]
                 scope_juan = bool(_vp.get("scope_juan", True))
@@ -1202,6 +1202,8 @@ def main(argv=None):
                         detail_lines.append(detail)
                 if best is None: continue
                 bkind,bpath,_,best_mi,best_ex,_,best_src,best_gen,_,_,_ = best
+                if _struct_issues:
+                    ok_any = False  # 结构非法一律判失败（防止文字抽取假绿）
                 grand_total += 1
                 if not ok_any:
                     grand_fail += 1; block_failed = True
@@ -1215,6 +1217,12 @@ def main(argv=None):
                 if best_gen:
                     block.append(f"  {disp} 【新比较】{best_gen}")
                 block.extend(detail_lines)
+                if _struct_issues:
+                    block.append(
+                        f"  [FAIL] 结构非法（段中段/表中段 {len(_struct_issues)} 处，"
+                        "Word/WPS 会丢弃；文字抽取假绿）:")
+                    for _s in _struct_issues[:5]:
+                        block.append(f"         {_s}")
                 summ.append((fmt_raw, "ok" if ok_any else "fail", best_mi, best_ex))
             if summ:
                 from .verify import format_work_summary as _v_summ

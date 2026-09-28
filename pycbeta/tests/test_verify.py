@@ -739,6 +739,16 @@ class TestStripOfficialNo(unittest.TestCase):
         self.assertTrue(out.startswith("  重刻准提淨業序"))
         self.assertIn("No. 1077准提淨業卷之一", out)  # docNumber 不在令牌表，不动
 
+    def test_longer_token_first_no_residue(self):
+        # 令牌互为前缀（No. 1651-1 ⊂ No. 1651-10）：长先剥 + 词边界，
+        # 不得把 "No. 1651-10" 剥成 "0"
+        s = "No. 1651-10 大周西明寺故大德圓測法師佛舍利塔銘\n"
+        out = _strip_official_no(s, ["No. 1651-1", "No. 1651-10"])
+        self.assertTrue(out.startswith("大周西明寺"))
+        self.assertNotIn("0 ", out)
+        self.assertEqual(
+            _strip_official_no("No. 1651-1 卷上\n", ["No. 1651-1"]), "卷上\n")
+
     def test_strip_no_from_dual_shape(self):
         import json
         import tempfile
@@ -1029,6 +1039,52 @@ class TestReportCtxLocation(unittest.TestCase):
         self.assertEqual(_mark_span("甲乙", 1, 1, pad=1), "甲〖〓〗乙")
         self.assertEqual(_mark_span("甲乙", 1, 1, pad=3), "甲〖〓〓〓〗乙")
         self.assertEqual(_mark_span("甲X乙", 1, 2, pad=5), "甲〖X〗乙")
+
+
+class TestDocxStructureGuard(unittest.TestCase):
+    """结构护栏：docx 段中段/表中段 → 判结构非法（防文字抽取假绿）。"""
+
+    def test_nested_paragraph_detected(self):
+        from pycbeta.verify import _nested_block_hits
+        self.assertEqual(len(_nested_block_hits(
+            "<w:body><w:p><w:p>x</w:p></w:p></w:body>")), 1)
+        self.assertEqual(len(_nested_block_hits(
+            "<w:body><w:p><w:r/><w:tbl/></w:p></w:body>")), 1)
+
+    def test_clean_and_table_cell_ok(self):
+        from pycbeta.verify import _nested_block_hits
+        self.assertEqual(_nested_block_hits("<w:body><w:p>a</w:p><w:p>b</w:p></w:body>"), [])
+        # 表格单元格内的 <w:p> 合法（tbl 在 p 外）
+        self.assertEqual(_nested_block_hits(
+            "<w:body><w:tbl><w:tr><w:tc><w:p>a</w:p></w:tc></w:tr></w:tbl></w:body>"), [])
+        # <w:pPr>/<w:pict> 不误判
+        self.assertEqual(_nested_block_hits("<w:p><w:pPr><w:pict/></w:pPr></w:p>"), [])
+
+    def test_docx_nested_block_violations_zip(self):
+        import zipfile
+        from pycbeta.verify import docx_nested_block_violations
+        d = tempfile.mkdtemp()
+        try:
+            p = os.path.join(d, "bad.docx")
+            with zipfile.ZipFile(p, "w") as z:
+                z.writestr("word/document.xml",
+                           "<w:body><w:p><w:p>x</w:p></w:p></w:body>")
+            hits = docx_nested_block_violations(p)
+            self.assertTrue(hits)
+            self.assertTrue(hits[0].startswith("word/document.xml:"))
+            self.assertEqual(docx_nested_block_violations(
+                os.path.join(d, "missing.docx")), [])
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_report_prints_struct_issue(self):
+        from pycbeta.verify import format_verify_report
+        recs = [{"xml": "X.xml", "fmt": "docx", "status": "fail",
+                 "gen": "X.docx", "missing": 0, "extra": 0, "total": 0,
+                 "ctx": [], "struct_issues": ["word/document.xml: <w:p><w:p>x"]}]
+        s = "\n".join(format_verify_report(recs))
+        self.assertIn("结构非法", s)
+        self.assertIn("段中段/表中段 1 处", s)
 
 
 class TestWorkSummary(unittest.TestCase):

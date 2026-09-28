@@ -93,6 +93,39 @@ class TestEpub(unittest.TestCase):
         self.assertFalse(os.path.isdir(os.path.join(self.tmp, "_epub_tmp")))
 
 
+class TestEpubMuluSplit(unittest.TestCase):
+    """epub 与 docx 同口径分页：level-1 非「卷」mulu 拆 spine 章节（nav 同步），
+    标记不残留成品。"""
+
+    def _work(self):
+        from pycbeta.model import E, Text, Work
+        return Work(id="T", source_file="", metadata={"title": "t", "author": ""},
+                    body=[E(tag="p", attrs={}, children=[Text("卷首")]),
+                          E(tag="mulu", attrs={"level": "1", "type": "其他"},
+                            children=[Text("節甲")]),
+                          E(tag="p", attrs={}, children=[Text("甲文")]),
+                          E(tag="mulu", attrs={"level": "1", "type": "其他"},
+                            children=[Text("節乙")]),
+                          E(tag="p", attrs={}, children=[Text("乙文")])],
+                    notes_by_n={}, apps=[], simplified=False)
+
+    def test_split_spine_by_mulu(self):
+        import re
+        d = tempfile.mkdtemp()
+        self.addCleanup(__import__("shutil").rmtree, d, True)
+        fn = EpubRenderer().render_work(self._work(), d)
+        z = zipfile.ZipFile(fn)
+        ch = sorted(n for n in z.namelist()
+                    if n.endswith(".xhtml") and n.startswith("OEBPS/ch"))
+        self.assertEqual(len(ch), 3)
+        nav = z.read("OEBPS/nav.xhtml").decode("utf-8")
+        titles = re.findall(r"<li><a [^>]*>([^<]*)</a>", nav)
+        self.assertIn("節甲", titles)
+        self.assertIn("節乙", titles)
+        blob = "".join(z.read(n).decode("utf-8") for n in ch)
+        self.assertNotIn("mulu-break", blob)  # 标记不残留
+
+
 class TestCorrCbetaRender(unittest.TestCase):
     """corr-cbeta：html 开门控 span.corr；md 始终透明（排除）。"""
 
