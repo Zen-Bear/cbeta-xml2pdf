@@ -643,6 +643,7 @@ class XmlOptionsPanel(QWidget):
         super().__init__(parent)
         self._presets = presets or {}
         self._emitting = False
+        self._theme_dirty = False     # 「生效样式」下拉被手动改过（本次运行覆盖，未落盘）
         self._series_extra = {}       # series_title 旧 font/size 键透传保留
         self._emitting = True
         try:
@@ -794,7 +795,10 @@ class XmlOptionsPanel(QWidget):
         form.addRow("正文", trow)
         self.typo_info = QLabel("")
         self.typo_info.setStyleSheet("color: gray")
-        self.typo_info.setWordWrap(True)
+        # 不折行 + 固定单行高：行距数字宽度变化时若随内容折行/收缩，本行（及下方
+        # 控件）会上下小幅跳动（字号不跨折行阈值故不跳，行距跳）。文案很短，无需折行。
+        self.typo_info.setWordWrap(False)
+        self.typo_info.setFixedHeight(self.fontMetrics().lineSpacing())
         form.addRow("", self.typo_info)
         self.grayscale_box = self._check("黑白输出")
         self.border_box = self._check("页面边框")
@@ -878,11 +882,12 @@ class XmlOptionsPanel(QWidget):
     def _refresh_typo_display(self):
         """正文行显示：跟随 CSS body，或纸张绑定的当前框值（只显示，不写配置）。"""
         if self.typo_follow.isChecked():
-            self.typo_info.setText("跟随 CSS body")
+            text = "跟随 CSS body"
         else:
-            self.typo_info.setText(
-                f"纸张绑定：{self.typo_size_spin.value():g}pt／"
-                f"{self.typo_lh_spin.value():g}")
+            text = (f"纸张绑定：{self.typo_size_spin.value():g}pt／"
+                    f"{self.typo_lh_spin.value():g}")
+        if text != self.typo_info.text():
+            self.typo_info.setText(text)
 
     def _on_typo_follow(self, follow, fill=False):
         self.typo_size_spin.setEnabled(not follow)
@@ -1003,12 +1008,17 @@ class XmlOptionsPanel(QWidget):
         self.theme_box = CssComboBox()
         self.theme_box.setToolTip(
             "生效样式：预设键 > run.json 的 pdf-docx-user-theme 槽 > 出厂默认；"
-            "下拉只选中，落盘走右侧按钮")
+            "下拉选中即本次转换生效（不落盘），右侧按钮永久保存")
+        self.theme_box.currentIndexChanged.connect(self._on_theme_box_changed)
         trow.addWidget(self.theme_box, 1)
         self.theme_default_btn = QPushButton("设为默认")
         self.theme_default_btn.clicked.connect(self._on_theme_default)
         trow.addWidget(self.theme_default_btn)
-        self.theme_dir_btn = QPushButton("打开用户预设目录")
+        self.btn_editor = QPushButton("编辑CSS")
+        self.btn_editor.setToolTip("DOCX 所见即所得调样式（左改参/右预览），存预设进 presets/")
+        self.btn_editor.clicked.connect(self._open_style_editor)
+        trow.addWidget(self.btn_editor)
+        self.theme_dir_btn = QPushButton("用户预设目录")
         self.theme_dir_btn.clicked.connect(lambda _v: self._open_local_file(
             self._user_presets_path()))
         trow.addWidget(self.theme_dir_btn)
@@ -1037,10 +1047,6 @@ class XmlOptionsPanel(QWidget):
             row.addWidget(open_btn)
             form.addRow(f"{name}\n{desc}", row)
             self.style_rows[name] = (edit, open_btn)
-        self.btn_editor = QPushButton("打开 CSS 编辑器…")
-        self.btn_editor.setToolTip("DOCX 所见即所得调样式（左改参/右预览），存预设进 presets/")
-        self.btn_editor.clicked.connect(self._open_style_editor)
-        form.addRow("", self.btn_editor)
         return w
 
     def _user_presets_path(self):
@@ -1073,6 +1079,7 @@ class XmlOptionsPanel(QWidget):
             if not cur:
                 cur, src = current_theme_source()
         self.theme_box.refresh(cur)
+        self._theme_dirty = False
         _path, label = resolve_theme_css(cur)
         shown = _path or "内置 pdf_docx.css"
         if len(shown) > 60:
@@ -1083,6 +1090,25 @@ class XmlOptionsPanel(QWidget):
             self.theme_status.setStyleSheet("color: red")
         else:
             self.theme_status.setStyleSheet("color: gray")
+
+    def _on_theme_box_changed(self, _index):
+        """下拉改选：本次运行即时生效（不落盘），右侧按钮仍用于永久保存。"""
+        self._theme_dirty = True
+        self.theme_status.setStyleSheet("color: gray")
+        self.theme_status.setText("已改选：本次转换即生效；点右侧按钮可永久保存")
+        self._changed()
+
+    def theme_override(self):
+        """本次运行的主题覆盖值（未改选 → None，沿用预设键/run 槽/出厂）。
+
+        改选后返回归一化 `.css` 值；选中「出厂默认样式」→ ""（清除预设用户主题键，
+        回退到标准槽/内置）。供 `_start` 叠进运行快照。"""
+        if not self._theme_dirty:
+            return None
+        v = (self.theme_box.selected_value() or "").strip()
+        if not v or v == "pdf_docx.css":
+            return ""
+        return v if v.lower().endswith(".css") else v + ".css"
 
     def _update_theme_button(self):
         """样式落盘按钮双文案：命名预设→“存入预设”，出厂项→“设为默认”。
@@ -1127,9 +1153,20 @@ class XmlOptionsPanel(QWidget):
         from pycbeta.gui.css_editor import CssEditorDialog
         single = self.single_box.currentData() or ""
         chain = [single] if single else None
-        dlg = CssEditorDialog(sample_xml=None, engine_chain=chain, parent=self)
+        cur = self.theme_box.selected_value()
+        cur_path = self.theme_box.selected_path()
+        dirty = self._theme_dirty
+        dlg = CssEditorDialog(sample_xml=None, engine_chain=chain, parent=self,
+                              initial_theme=cur)
         dlg.exec()
-        self._refresh_theme_box()  # 编辑器内可能改了默认
+        # 退出只刷新预设列表（编辑器内可能新增/删除预设），**保持当前选择与未落盘改选**：
+        # 先按真实默认重锚（首项「（默认）」= 预设键/run 槽/出厂），再把选择重新定位到
+        # 原来那一项——否则把用户选的样式直接当默认刷新，会平白多出「（默认）」二字。
+        self._refresh_theme_box()
+        if cur_path:
+            self.theme_box.select_path(cur_path)
+        if dirty:
+            self._on_theme_box_changed(None)
 
     def _pipe(self):
         return "html2pdf" if self.engine_html.isChecked() else "docx2pdf"

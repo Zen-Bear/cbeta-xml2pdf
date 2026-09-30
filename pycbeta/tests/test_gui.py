@@ -697,6 +697,66 @@ class TestConfigBar(unittest.TestCase):
         finally:
             shutil.rmtree(root, ignore_errors=True)
 
+    def test_theme_override_effective_until_refresh(self):
+        # 「生效样式」下拉改选 → 本次运行覆盖值；刷新（回到锚定）后清空。
+        panel = self._panel()
+        try:
+            self.assertIsNone(panel.theme_override())
+            if panel.theme_box.count() < 2:
+                self.skipTest("无可选样式项")
+            panel.theme_box.setCurrentIndex(1)
+            ov = panel.theme_override()
+            self.assertIsNotNone(ov)
+            self.assertTrue(ov == "" or ov.endswith(".css"))
+            self.assertIn("本次", panel.theme_status.text())
+            panel._refresh_theme_box()
+            self.assertIsNone(panel.theme_override())
+        finally:
+            panel.close() if hasattr(panel, "close") else None
+
+    def test_open_style_editor_keeps_selection(self):
+        # 打开/关闭 CSS 编辑器后，主面板「生效样式」选择与未落盘改选不得被重置回默认，
+        # 也不得把已选样式平白标成「（默认）」。
+        import unittest.mock as mock
+        panel = self._panel()
+        try:
+            # 选一个非「（默认）」首项、带路径的项（用户预设，或退而求其次的出厂项）
+            idx = -1
+            for i in range(panel.theme_box.count() - 1, 0, -1):
+                if (panel.theme_box.itemData(i) or {}).get("path"):
+                    idx = i
+                    break
+            if idx < 0:
+                self.skipTest("无可选样式项")
+            panel.theme_box.setCurrentIndex(idx)
+            sel = panel.theme_box.selected_value()
+            sel_path = panel.theme_box.selected_path()
+            self.assertTrue(sel_path)
+            self.assertTrue(panel._theme_dirty)
+            with mock.patch("pycbeta.gui.css_editor.CssEditorDialog") as M:
+                M.return_value.exec.return_value = 0
+                panel._open_style_editor()
+                self.assertEqual(M.call_args.kwargs.get("initial_theme"), sel)
+            self.assertEqual(panel.theme_box.selected_value(), sel)
+            self.assertTrue(panel._theme_dirty)
+            self.assertFalse(panel.theme_box.currentText().startswith("（默认）"))
+        finally:
+            panel.close() if hasattr(panel, "close") else None
+
+    def test_typo_info_fixed_height_no_jump(self):
+        # 灰字行不折行 + 固定单行高：改行距时行高不再上下跳动。
+        panel = self._panel()
+        try:
+            self.assertFalse(panel.typo_info.wordWrap())
+            h0 = panel.typo_info.height()
+            self.assertEqual(h0, panel.typo_info.minimumHeight())
+            panel.typo_follow.setChecked(False)
+            for v in (1.5, 1.55, 1.6, 1.65):
+                panel.typo_lh_spin.setValue(v)
+                self.assertEqual(panel.typo_info.height(), h0)
+        finally:
+            panel.close() if hasattr(panel, "close") else None
+
     def test_apply_selected_preset_theme(self):
         import json
         import shutil
@@ -3766,6 +3826,47 @@ class TestCssEditor(unittest.TestCase):
                     dlg.close()
         finally:
             shutil.rmtree(root, ignore_errors=True)
+    def test_dialog_initial_theme_selects_preset(self):
+        # 主面板「生效样式」传入 initial_theme：弹窗应选中并载入该预设，
+        # 而非永远落在 run 槽/出厂（改的才是当前选中样式）。
+        import shutil
+        import unittest.mock as mock
+        import pycbeta.gui.css_editor as ce
+        import pycbeta.theme as _theme
+        root = tempfile.mkdtemp()
+        try:
+            udir = os.path.join(root, "presets")
+            os.makedirs(udir)
+            full = "/* base */\n" + ce.build_override_block(
+                {"h1.title": {"font-size": "40pt"}})
+            with open(os.path.join(udir, "mine.css"), "w",
+                      encoding="utf-8") as f:
+                f.write(full)
+            with mock.patch.object(_theme, "user_presets_dir",
+                                   lambda root=None: udir), \
+                    mock.patch.object(ce, "REPO_ROOT", root):
+                dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml",
+                                         initial_theme="mine")
+                try:
+                    self.assertEqual(dlg.preset_box.selected_value(), "mine")
+                    self.assertTrue(dlg._preset_path
+                                    and dlg._preset_path.endswith("mine.css"))
+                    self.assertEqual(
+                        dlg._rows["h1.title"]["size"].text(), "40pt")
+                    self.assertIn("mine", dlg.status.text())
+                finally:
+                    dlg.close()
+                # 出厂/空初值：不载预设（保持出厂缓冲）
+                for init in ("pdf_docx.css", ""):
+                    d = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml",
+                                           initial_theme=init)
+                    try:
+                        self.assertIsNone(d._preset_path)
+                    finally:
+                        d.close()
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
     def test_user_theme_slot(self):
         import shutil
         from pycbeta.gui.css_editor import current_theme_value, set_user_theme
@@ -4135,7 +4236,8 @@ class TestCssEditor(unittest.TestCase):
     def test_styles_tab_opens_editor(self):
         from pycbeta.gui.panel import XmlOptionsPanel
         panel = XmlOptionsPanel(load_presets())
-        self.assertEqual(panel.btn_editor.text(), "打开 CSS 编辑器…")
+        self.assertEqual(panel.btn_editor.text(), "编辑CSS")
+        self.assertEqual(panel.theme_dir_btn.text(), "用户预设目录")
 
 
 class TestFontStacks(unittest.TestCase):

@@ -1473,7 +1473,8 @@ def _flat_keys(values):
 class CssEditorDialog(QDialog):
     """所见即所得样式编辑器：左调参 / 右预览 / 底导出。"""
 
-    def __init__(self, sample_xml=None, engine_chain=None, parent=None):
+    def __init__(self, sample_xml=None, engine_chain=None, parent=None,
+                 initial_theme=""):
         super().__init__(parent)
         self.setWindowTitle("CSS 编辑器（DOCX 所见即所得）")
         self.setWindowFlags(self.windowFlags()
@@ -1497,6 +1498,7 @@ class CssEditorDialog(QDialog):
         self._report_dlg = None          # 检查窗（打开检查时懒建）
         self._thread = None
         self._rows = {}              # selector -> 控件组
+        self._initial_theme = (initial_theme or "").strip()
         self._build(sample_xml or default_sample())
 
     # ----- 构造 -----
@@ -1593,7 +1595,8 @@ class CssEditorDialog(QDialog):
         self._timer.setInterval(400)
         self._timer.timeout.connect(self.refresh_preview)
         # 初始值：有效默认 CSS；控件预填（不算 touched，源码块保持空）
-        self._base_css, self._base_label = self._effective_base_css()
+        _theme = self._initial_theme or current_theme_value()
+        self._base_css, self._base_label = self._effective_base_css(_theme)
         self._passthrough = ""
         self._touched = set()
         self._loaded_block = ""
@@ -1601,9 +1604,20 @@ class CssEditorDialog(QDialog):
         base_values, _, _ = split_override_block(self._base_css)
         self._base_values = base_values
         self._sync_controls_from_block(base_values)
+        # 预设下拉的「（默认）」项锚定**真实运行默认**（run 槽），上级选中样式
+        # 只作为**选中项**（列表里的用户预设），不冒充“默认”——否则退出/再打开时
+        # 会让人以为被临时设成了默认。
         self.preset_box.refresh(current_theme_value())
         self.status.setText(f"基于：{self._base_label}")
-        self._maybe_load_user_theme()
+        if self._initial_theme and self._initial_theme != "pdf_docx.css":
+            # 主面板「生效样式」传入选中的预设：定位并载入该预设（改的就是它）。
+            from pycbeta.theme import resolve_theme_css
+            _path, _lbl = resolve_theme_css(self._initial_theme)
+            if _path:
+                self.preset_box.select_path(_path)
+                self._load_preset_path(_path)
+        else:
+            self._maybe_load_user_theme()
         self._refresh_save_enabled()
         # 回车不误触：全部按钮取消 autoDefault/default（设为默认是静默永久写入，
         # 必须点，不能回车）。刻意按键仍可用空格触发聚焦按钮。
@@ -1612,14 +1626,17 @@ class CssEditorDialog(QDialog):
             _b.setDefault(False)
         self.refresh_preview()
 
-    def _effective_base_css(self):
+    def _effective_base_css(self, theme_value=None):
         """有效默认 CSS → (全文, 说明)：出厂 + theme 文件（层叠，后者胜）。
 
+        theme_value 缺省（None）= 当前有效默认（run 槽，current_theme_value）；
+        传入则按该值解析（主面板「生效样式」打开时用）。
         预设只存覆盖块，不存出厂快照——出厂进化（行距/边距修复）自动跟随，
         不会像旧全快照那样腐烂（2026-09-06 字義边距实锤）。"""
         from pycbeta.theme import resolve_theme_css, theme_file_text
         factory = factory_css_text()
-        path, label = resolve_theme_css(current_theme_value())
+        _v = current_theme_value() if theme_value is None else theme_value
+        path, label = resolve_theme_css(_v)
         if path:
             try:
                 return (theme_file_text(path, factory),

@@ -738,6 +738,15 @@ class MainWindow(QMainWindow):
         presets = apply_selected_preset_theme(
             presets, self.panel._selected_preset()
             if hasattr(self, "panel") else "")
+        if hasattr(self, "panel"):
+            # 「生效样式」下拉若被改选：本次运行即时生效（不落盘），盖过预设键/run 槽
+            _ov = self.panel.theme_override()
+            if _ov is not None:
+                presets["pdf-docx-user-theme"] = _ov
+                if _ov == "":
+                    # 选「出厂默认」：连同 run 槽一起清空，否则回退 run 槽又套上
+                    _run = dict(_run or {})
+                    _run["pdf-docx-user-theme"] = ""
         presets = self._warn_xml_dir(presets)
         if presets is None:
             return
