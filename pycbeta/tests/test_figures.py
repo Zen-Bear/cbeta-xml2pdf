@@ -246,6 +246,47 @@ class TestDocxGraphic(unittest.TestCase):
             os.remove(fn)
         self.assertEqual(r.missing_figures, [])
 
+    def test_footnote_figure_rels_and_unique_ids(self):
+        # CC0003 0185 复现：同一图正文+脚注各一处。曾有两 defect：
+        # 1) footnotes.xml 无配套 rels，正文作用域的 rId 在脚注悬空，全 viewer 空白；
+        # 2) 媒体复用不涨 _media_seq，两处 drawing docPr id 重复（同为 102）。
+        from pycbeta.model import Note, NoteRef
+        d = tempfile.mkdtemp()
+        _write(os.path.join(d, "t.gif"), GIF_1PX)
+        body = [E(tag="p", attrs={}, children=[
+            Text(text="文"), _fig_e(),
+            NoteRef(notes=[Note(children=[Text(text="注"), _fig_e()])])])]
+        fn = DocxRenderer(notes="footnote", figure_base=[d]).render_work(
+            _work(body), d, "fn.docx")
+        z = zipfile.ZipFile(fn)
+        try:
+            names = z.namelist()
+            self.assertIn("word/_rels/footnotes.xml.rels", names)
+            doc = z.read("word/document.xml").decode("utf-8")
+            fxml = z.read("word/footnotes.xml").decode("utf-8")
+            frels = z.read("word/_rels/footnotes.xml.rels").decode("utf-8")
+            self.assertIn("<w:drawing", fxml)
+            # 脚注内每个 r:embed 在本部件 rels 可解且媒体存在
+            for rid in re.findall(r'r:embed="(rId[^"]+)"', fxml):
+                self.assertIn('Id="%s"' % rid, frels)
+                m = re.search(r'Id="%s"[^>]*Target="([^"]+)"' % rid, frels)
+                self.assertIsNotNone(m)
+                self.assertIn("word/" + m.group(1), names)
+            # docPr/cNvPr id 各自全包唯一（同一 drawing 内两者同值为 Word 惯例）
+            doc_ids = re.findall(r'docPr id="(\d+)"', doc + fxml)
+            cnv_ids = re.findall(r'cNvPr id="(\d+)"', doc + fxml)
+            self.assertGreater(len(doc_ids), 1)
+            self.assertEqual(len(doc_ids), len(set(doc_ids)))
+            self.assertEqual(len(cnv_ids), len(set(cnv_ids)))
+            from lxml import etree
+            for part in ("word/document.xml", "word/footnotes.xml",
+                         "word/_rels/document.xml.rels",
+                         "word/_rels/footnotes.xml.rels",
+                         "[Content_Types].xml"):
+                etree.fromstring(z.read(part))
+        finally:
+            z.close()
+
     def test_missing_fallback(self):
         r = self._renderer(tempfile.mkdtemp())
         out = r._render_e(_fig_e("../figures/X/m.gif"))

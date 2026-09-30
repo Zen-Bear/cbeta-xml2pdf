@@ -319,6 +319,17 @@ class TestPreNoFirstLine(unittest.TestCase):
         out = r._render_e(E(tag="p", attrs={}, children=[Text(text="序文")]))
         self.assertIn('w:val="p"', out)  # 正文走 p 命名样式（缩进在 styles.xml）
 
+    def test_pre_left_aligned_not_justified(self):
+        # 预排段不两端对齐（X 科目大纲全角空格手工对位，justify 会拉伸错位；
+        # HTML 侧 <pre> 不受 p 规则影响，DOCX 侧是 w:p 会继承 p 的 justify）。
+        ppr = self._para_of(E(tag="p", attrs={"cb:type": "pre"},
+                              children=[Text(text="序文")]))
+        self.assertIn('w:jc w:val="left"', ppr)
+        self.assertNotIn('w:val="both"', ppr)
+        ppr2 = self._para_of(E(tag="pre", attrs={}, children=[Text(text="序文")]))
+        self.assertIn('w:jc w:val="left"', ppr2)
+        self.assertNotIn('w:val="both"', ppr2)
+
 
 class TestStripHeadNo(unittest.TestCase):
     """head/jhead 行首 No. 令牌剥离（默认关，开后余部 lstrip）。"""

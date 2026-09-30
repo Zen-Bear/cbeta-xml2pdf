@@ -484,7 +484,7 @@
   - 验证：X1077 实渲 `（呪文節略）` 由 sz=32/b 变 sz=24/无 b、紫 800080，标题本体仍 20pt 加粗；`test_docx.TestAncestorInheritance.test_head_inline_note_not_scaled` + `test_theme.TestDescendantSelector.test_head_inline_note_rule` + golden 断言；全量 682 OK（skipped=1）
 - [x] **已完成** pdf_docx.css 去冗余（单源化）：删与被 body 重复/等价继承的声明（2026-09-13 用户点档）
   - 删：`p.author/translator/byline`、`div.lg`(verse) 的 `font-size:12pt`（跟 body）；`p` 的 `line-height:1.4`（跟 body；且修「纸张 body_line_height 被 p 钉死」）；`p.form`/`cb:def` 的 `font-size:1em`（等价继承）
-  - 保留（防误删）：`p.form`/`p.figure` 的 `text-indent:0`（压 p 的 2em）、`cb:def` 的 `font-weight:normal`（压 div-note 加粗）、**`p.series-title` 的 `text-align:left`（压 p 的 justify；曾被我误列为可省，已更正）**、脚注 `line-height:1`、`li{text-indent:0}`、`pre{text-indent:0}`（REQUIRED 要求）
+  - 保留（防误删）：`p.form`/`p.figure` 的 `text-indent:0`（压 p 的 2em）、`cb:def` 的 `font-weight:normal`（压 div-note 加粗）、**`p.series-title` 的 `text-align:left`（压 p 的 justify；曾被我误列为可省，已更正）**、脚注 `line-height:1`、`li{text-indent:0}`、`pre{text-indent:0;text-align:left}`（REQUIRED 要求；`text-align:left` 见 2026-09-30 预排段修复）
   - 连带：`REQUIRED_THEME_TAGS` 放宽（author/translator/byline/verse→()、p→("text-indent",)）；`render_docx._para` 的 div 行距剥离条件改为「元素自带行距或所有 div 祖先未写行距」→ 去掉 docx_para 经 body 回退带进 div_extra 的重复 `w:line`（含空 `<w:spacing/>` 清理）
   - 语义：纸张 `body_font_size/line_height` 现能下传到 p/署名/偈颂；默认页输出视觉等价
   - 验证：T01/X59 对照——文本零变化、rPr 仅少 `w:sz=24`（T01 1017、X59 5，改为 docDefaults 继承）、行距由内联重复移到命名样式（同值 336）；test_theme 缩放/工厂合并、test_docx TestDivExtraLineHeight、TestRequiredThemeTags 更新；全量 683 OK（skipped=1）
@@ -588,3 +588,9 @@
     （正文注/脚注不重）、`test_gui`（三选一互斥+回读、词表只读+默认路径）；真机 T0032 实证
 
 - [ ] **html2pdf 管线分页未对齐 docx**（2026-09-28 用户确认「写进 todo，不做」）：`render_pdf.py` 目前只在 `juan` 边界 `break-before: page`，无 `mulu_level1`；如需 HTML 管线 PDF（及 html 成品）也按 level-1 非「卷」mulu 分页，应复用 `render_docx.split_sections` 同口径插断页。（epub 已对齐：`EpubRenderer` 按 mulu 拆 spine 章节，见 `render_epub._split_mulu_breaks`。）
+
+- [x] **已完成** 预排段（`<pre>`/`<p cb:type="pre">`）不两端对齐（2026-09-30 CC0003 实锤）
+  - 现象：CC0003「卷第三十五科目」等预排大纲（全角空格手工对位 + 点线 + 页码）在 docx 里长行被**拉伸**（字距撑开、缩进错位），短行正常；官方 PDF 同页为「换行但左对齐、无拉伸」
+  - 根因：`pdf_docx.css` 的 `p{text-align:justify}` 透传给预排段（`pre` 只设 `text-indent:0`）；HTML 侧是 `<pre>` 元素不受 `p` 规则影响，DOCX 侧是 `w:p` 会继承 → `w:jc="both"` 对换行后的行两端对齐，把全角空格/点线拉伸
+  - 修法：`pdf_docx.css`/`epub_print.css` 的 `pre{text-indent:0;text-align:left}`；**并**在 `render_docx._para` 加 `align` 参数，预排两处调用传 `align="left"` —— 因 `theme.docx_para` 是「靠前标签优先」（`reversed(tags)`），`("p","pre")` 里 p 的 justify 会压过 pre 的 left，仅改 CSS 在 DOCX 不生效
+  - 验证：真实 CC0003 重渲→WPS 转 PDF，第 9 页与官方 PDF 第 7 页逐行一致；`test_docx.TestPreNoFirstLine.test_pre_left_aligned_not_justified`；全量 913 OK（9 环境 error 与基线一致）

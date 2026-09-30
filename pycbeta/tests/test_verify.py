@@ -332,6 +332,28 @@ class TestJoinEpubStarNotes(unittest.TestCase):
         finally:
             shutil.rmtree(d, ignore_errors=True)
 
+    def test_cross_file_anchor_block_reading_order(self):
+        # 跨文件：正文锚点在 ch1，注块却在 ch2（mulu 拆分致背节整体落末章）。
+        # 旧逐块逻辑在 ch2 只看 ch2 锚点 → add 块丢失、reg 块垫底；
+        # 全局遇序后按 ch1 锚点位置归位（X1077 母佛疑倒实锤）。
+        import pycbeta.verify as V
+        d = tempfile.mkdtemp()
+        try:
+            body1 = ("<p>甲<a id=\"note_anchor_n1\" class=\"noteAnchor\" "
+                     "href=\"#nn1\">[1]</a>乙"
+                     "<a id='cb_note_anchor1' class='noteAnchor add' "
+                     "href='#cb_note_1'>[A1]</a>丙</p>")
+            body2 = "<p>丁</p>"
+            notes = ("<span class='footnote' id='nn1'>注一</span>"
+                     "<div class='footnote' id='cb_note_1'>附加</div>")
+            f1 = self._xhtml(d, "ch1.xhtml", body1)
+            f2 = self._xhtml(d, "ch2.xhtml", body2, notes)
+            out = V._join_epub_ours([f1, f2])
+            self.assertNotEqual(out.find("附加"), -1)
+            self.assertLess(out.find("注一"), out.find("附加"))
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
     def test_no_star_byte_identical_to_split(self):
         import pycbeta.verify as V
         d = tempfile.mkdtemp()
@@ -387,6 +409,29 @@ class TestJoinEpubOurs(unittest.TestCase):
             out = V._join_epub_ours([ep])
             self.assertIn("正文", out)
             self.assertNotIn("导航", out)
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_extract_text_epub_reading_order(self):
+        # html trial：epub 抽取按全局正文锚点遭遇序归位（锚在前章、块在后章）。
+        # 旧逻辑不重排 → 分组序（reg 先）与官方 html 阅读序错位（X1077 实锤）。
+        import pycbeta.verify as V
+        import zipfile
+        d = tempfile.mkdtemp()
+        try:
+            ep = os.path.join(d, "a.epub")
+            ch1 = ("<html><body><p>甲"
+                   "<a id='cb_note_anchor1' class='noteAnchor add' href='#cb_note_1'>[A1]</a>"
+                   "<a id=\"note_anchor_n1\" class=\"noteAnchor\" href=\"#nn1\">[1]</a>"
+                   "乙</p></body></html>")
+            ch2 = ("<html><body><p>丙</p><hr><h1>校注</h1>"
+                   "<span class='footnote' id='nn1'>注一</span>"
+                   "<div class='footnote' id='cb_note_1'>附加</div></body></html>")
+            with zipfile.ZipFile(ep, "w") as z:
+                z.writestr("OEBPS/ch1.xhtml", ch1)
+                z.writestr("OEBPS/ch2.xhtml", ch2)
+            out = V.extract_text(ep, strip_jiaozhu=False)
+            self.assertLess(out.find("附加"), out.find("注一"))
         finally:
             shutil.rmtree(d, ignore_errors=True)
 
@@ -938,6 +983,47 @@ class TestPdfNoBaseline(unittest.TestCase):
         r = verify_one("nonexistent.xml", "pdf", "", tempfile.mkdtemp())
         self.assertEqual(r["status"], "no_baseline")
         self.assertIn("PDF", r["detail"])
+
+
+class TestDiffStats(unittest.TestCase):
+    """diff_stats 前后缀裁剪优化：计数/ctx 与全文 difflib 一致（同作品高相似）。"""
+
+    def test_identical(self):
+        from pycbeta.verify import diff_stats
+        m, mi, ex, ctx = diff_stats("甲" * 5000, "甲" * 5000)
+        self.assertEqual((mi, ex, ctx), (0, 0, []))
+        self.assertEqual(m, 5000)
+
+    def test_localized_diff_offsets(self):
+        # 差异在中段：ctx 索引须为全文绝对位置（+前缀）
+        from pycbeta.verify import diff_stats
+        ours = "A" * 1000 + "X" + "B" * 1000
+        theirs = "A" * 1000 + "Y" + "B" * 1000
+        m, mi, ex, ctx = diff_stats(ours, theirs)
+        self.assertEqual((mi, ex), (1, 1))
+        self.assertEqual(len(ctx), 1)
+        tag, i1, i2, j1, j2 = ctx[0]
+        self.assertEqual((i1, i2, j1, j2), (1000, 1001, 1000, 1001))
+
+    def test_matches_full_difflib_on_similar(self):
+        # 高相似（同作品场景）：裁剪结果 == 全文 difflib
+        import difflib
+        from pycbeta.verify import diff_stats
+        base = ("经文内容重复出现测试。" * 300)
+        ours = "首" + base + "甲" * 5 + "尾"
+        theirs = "首" + base + "乙" * 5 + "尾"
+        sm = difflib.SequenceMatcher(None, ours, theirs, autojunk=False)
+        matched = sum(b.size for b in sm.get_matching_blocks())
+        m, mi, ex, _ = diff_stats(ours, theirs)
+        self.assertEqual((m, mi, ex),
+                         (matched, len(theirs) - matched, len(ours) - matched))
+
+    def test_prefix_suffix_only(self):
+        from pycbeta.verify import diff_stats
+        # theirs（官方）末尾多两字 → missing=2（生成档缺失）
+        m, mi, ex, ctx = diff_stats("甲乙丙丁", "甲乙丙丁戊己")
+        self.assertEqual((mi, ex), (2, 0))
+        self.assertEqual(ctx, [("insert", 4, 4, 4, 6)])
 
 
 class TestNormalizeWithLines(unittest.TestCase):

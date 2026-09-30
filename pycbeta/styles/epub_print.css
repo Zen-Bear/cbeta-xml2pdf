@@ -277,9 +277,11 @@ p.figure {
   margin-top: 0.5em;
   margin-bottom: 0.5em;
 }
-/* 预排段（<pre>）：保留源换行，不缩进（DOCX 拆成多 run + <w:br/>）。 */
+/* 预排段（<pre>）：保留源换行，不缩进、不两端对齐（DOCX 拆成多 run + <w:br/>）。
+   text-align:left 必须显式设：否则透传 p 的 justify，全角空格/点线被拉伸错位。 */
 pre {
   text-indent: 0;
+  text-align: left;
 }
 
 /* ============ 偈颂 ============ */

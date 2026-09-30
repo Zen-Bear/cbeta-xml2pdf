@@ -606,7 +606,8 @@ class DocxRenderer:
             return 18
 
     def _para(self, runs: str, *tags: str, indent: float = 0, hang=None,
-              page_break: bool = False, count: bool = True, no_first_line: bool = False) -> str:
+              page_break: bool = False, count: bool = True, no_first_line: bool = False,
+              align: str = "") -> str:
         tags = tuple(t for t in tags if t)
         # div 祖先上下文并入：多数调用点只传本标签（如 juan/table/pin），在此统一补上，
         # 否则 div 属性（如 div-xu 边距）到不了命名样式段落；已含 div 的调用去重后合并幂等
@@ -658,6 +659,11 @@ class DocxRenderer:
             p = f"<w:p><w:pPr>{ppr}</w:pPr>{runs}</w:p>"
             return self._with_bookmark(p)
         ppr = self.theme.docx_para(*tags, indent_em=indent, no_first_line=no_first_line)
+        # 强制对齐（预排段 pre）：theme 的 docx_para 是「靠前标签优先」，pre 调用传
+        # ("p","pre") 时 p 的 justify 会压过 pre 的 left（HTML 侧 <pre> 不受 p 规则影响，
+        # 无此问题）；故在此显式覆盖，避免全角空格/点线被两端对齐拉伸错位。
+        if align:
+            ppr = re.sub(r"<w:jc[^>]*/>", "", ppr) + f'<w:jc w:val="{align}"/>'
         ppr = self._with_vertical_jc(ppr, para)
         # 内联路径也挂命名样式（直接属性照旧覆盖样式，视觉不变；
         # Word 样式窗格/预览标签可识别，如 def>p 的“释义”）
@@ -744,6 +750,7 @@ class DocxRenderer:
         self._in_para = 0             # 段落上下文深度（>0 时 figure 只出 run，避免 <w:p> 嵌套）
         self._media = []              # 内嵌图片 [{path, ext, rid, name}]（_build_docx 落盘）
         self._media_seq = 0
+        self._drawing_seq = 0         # drawing 递增 id（docPr/cNvPr 全包唯一；媒体复用不涨 _media_seq）
         self.missing_figures = []
         # 注（note.n）→ app：追加 cf（confer 参考，见 _cf_run）；与 html/txt/md 同构
         self._app_by_n = {}
@@ -1208,18 +1215,22 @@ class DocxRenderer:
                 w = max_w_px
             cx, cy = w * EMU_PER_PX, h * EMU_PER_PX
             nm = _x(base)
+            # drawing id 按 drawing 发号（全包唯一）；媒体复用（脚注重引正文图）不涨
+            # _media_seq，曾致正文/脚注同图 docPr id 重复（CC0003 0185 两处同为 102）。
+            self._drawing_seq += 1
+            did = self._drawing_seq + 100
             drawing = (
                 f'<w:drawing><wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" '
                 f'distT="0" distB="0" distL="0" distR="0">'
                 f'<wp:extent cx="{cx}" cy="{cy}"/>'
-                f'<wp:docPr id="{self._media_seq + 100}" name="{nm}"/>'
+                f'<wp:docPr id="{did}" name="{nm}"/>'
                 f'<wp:cNvGraphicFramePr>'
                 '<a:graphicFrameLocks xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" noChangeAspect="1"/>'
                 "</wp:cNvGraphicFramePr>"
                 '<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">'
                 '<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">'
                 '<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">'
-                f'<pic:nvPicPr><pic:cNvPr id="{self._media_seq + 100}" name="{nm}"/>'
+                f'<pic:nvPicPr><pic:cNvPr id="{did}" name="{nm}"/>'
                 "<pic:cNvPicPr/></pic:nvPicPr>"
                 f'<pic:blipFill><a:blip r:embed="{rid}" '
                 'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/>'
@@ -1252,8 +1263,8 @@ class DocxRenderer:
                 self._in_pre = True
                 runs = self._render_para_children(e, "p")
                 self._in_pre = prev
-                # 预排不缩进（CSS pre/text-indent:0；只掐首行，段间距/行距跟 p 不变）
-                return self._para(runs, "p", "pre", no_first_line=True)
+                # 预排不缩进、不两端对齐（CSS pre/text-indent:0；只掐首行，段间距/行距跟 p 不变）
+                return self._para(runs, "p", "pre", no_first_line=True, align="left")
             # p/@type 映射到主题标签（dharani 等），对齐 HTML 的 class="dharani"
             ptag = ptype if ptype in self.theme.tags else None
             style = a.get("style") or ""
@@ -1275,7 +1286,7 @@ class DocxRenderer:
             self._in_pre = True
             runs = self._render_para_children(e, "p", "pre")
             self._in_pre = prev
-            return self._para(runs, "p", "pre", no_first_line=True)
+            return self._para(runs, "p", "pre", no_first_line=True, align="left")
         if tag == "head":
             # 仅 jhead 去重，head 保留书名；若有 pending mulu（紧随的 cb:mulu），则以 mulu 的 level/text 作隐形书签（段内避免空白页）
             nodes = e.children
@@ -1883,6 +1894,14 @@ class DocxRenderer:
             + media_rels
             + "</Relationships>"
         )
+        # 脚注含图时配独立 rels：关系按部件隔离，脚注解不出正文作用域的 rId
+        # （曾致 CC0003 0185 脚注图悬空全 viewer 空白）。Target 相对 word/，与正文复用同一串。
+        footnotes_rels = (
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            + media_rels
+            + "</Relationships>"
+        ) if "<w:drawing" in footnotes else ""
         numbering = self._build_numbering()
         zio = io.BytesIO()
         with zipfile.ZipFile(zio, "w", zipfile.ZIP_DEFLATED) as z:
@@ -1893,6 +1912,8 @@ class DocxRenderer:
             z.writestr("word/styles.xml", styles)
             z.writestr("word/numbering.xml", numbering)
             z.writestr("word/_rels/document.xml.rels", doc_rels)
+            if footnotes_rels:
+                z.writestr("word/_rels/footnotes.xml.rels", footnotes_rels)
             if header_xml:
                 z.writestr("word/header1.xml", header_xml)
             for i, m in enumerate(media):
