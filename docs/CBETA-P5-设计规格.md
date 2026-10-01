@@ -1,5 +1,8 @@
 # CBETA XML P5 → 多格式转换工具 · 设计规格书
 
+> ⚠️ **历史文档**（2026-08-13 草案）：实现与本文已有演进，CLI/配置以当前 `python -m pycbeta --help`
+> 与 `docs/安装说明.md` 为准（如 `--theme` → `--pdf-docx-theme`/`--pdf-docx-user-theme`）。
+
 | 项 | 内容 |
 |---|---|
 | 版本 | v0.1（草案） |

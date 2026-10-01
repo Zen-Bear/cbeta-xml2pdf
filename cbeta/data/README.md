@@ -5,7 +5,7 @@
 | 文件 | 来源（官方上游） | 更新办法 |
 |---|---|---|
 | `cbeta_gaiji.json`、`cbeta_sanskrit.json` | CBETA 缺字資料庫 https://github.com/cbeta-org/cbeta_gaiji | `python -m pycbeta --update-data`（先校验再覆盖，一致跳过） |
-| `sutra_mapping.txt` | heavenchou/cbwork-bin `cbreader2X/sutralist/sutralist.txt`（URL 见 publish/mulu/REMOTE_SOURCES.md §1） | 同上（publish 原件 `E:\dev\cbeta\publish\mulu\sutra_mapping.txt` 为另一份本地备份，非更新源） |
+| `sutra_mapping.txt` | heavenchou/cbwork-bin `cbreader2X/sutralist/sutralist.txt`（下载源见 `cbeta/data/remote_sources.json`） | 同上 |
 
 已删（2026-09-06，无代码引用）：`html-for-pdf.css` + `pdf-template.htm`（Prince 旧管线残留，互为唯一引用）；
 `canons.csv`、`categories.json`、`unicode-1.1.json`（ruby-cbeta 旧数据；要用去上游 cbeta_gaiji 仓取）。

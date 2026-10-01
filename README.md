@@ -41,7 +41,7 @@ python -m pycbeta -i 经文.xml -f docx,pdf --config my.json
 | 参数 | 说明 |
 |---|---|
 | `-i` / `-o` / `-f` | 输入、输出、格式（docx,pdf,html,epub,md,all）|
-| `--theme` | 自定义主题 CSS/JSON（替换 pdf_docx.css）|
+| `--pdf-docx-theme` / `--pdf-docx-user-theme` | PDF/DOCX 主题：标准槽（整套替换 `pdf_docx.css`）/ 增量槽（追加，层叠后胜）；HTML/EPUB 对应 `--html-epub-theme` / `--html-epub-user-theme` |
 | `--font-lang {zh-Hant,zh-Hans}` | 字库语言，如 `zh-Hans` 一键简体字库（只换字库，不转文字） |
 | `--t2s` / `--no-t2s` | 简体输出（OpenCC t2s 正文/注释/元数据；未指定 `--font-lang` 时自动套 `default:zh-Hans` 字体；校验时官方文档同步转简体后比对）|
 | `--font-scale 1.5` | 字号等比缩放（重排式大字，老人版推荐 1.33/1.5；字号不影响逐字校验）|
@@ -85,14 +85,15 @@ python -m pycbeta -i 经文.xml -f docx,pdf --config my.json
 
 ## 配置文件
 
-- **`pycbeta/config.json`** — 全局配置：字体方案（font_sets）、页面方案（pages）、
-  输出处理（output）、转换引擎与后端链（engines）、DOCX 字体映射/行高（docx）。
-  支持 `//` 注释；复制后用 `--config` 指定。
+- **`pycbeta/config.json`** — 全局配置：字库语言（font_lang）、页面方案（pages）、
+  输出处理（output，含 docx 脚注分隔/字体回退/悉昙字体）、注音（annotations）、校验（verify）、
+  转换引擎与后端链（engines）。支持 `//` 注释；复制后用 `--config` 指定。
 - **`pycbeta/styles/pdf_docx.css`** — PDF/DOCX 默认主题（各语义标签的观感）。
 - **`pycbeta/styles/html_epub_official.css`** — HTML/EPUB 官方格式基底（逐字节对齐官方）。
+- **`presets/`** — 用户预设：配置 `*.json`（可自带主题键）+ 样式 `*.css` + 样张。
 
-想改样式直接编辑对应文件；`--theme` 用于整体替换主题层。
-详见 `docs/设计报告-代码评审.md` §8。
+想改样式直接编辑对应文件；`--pdf-docx-theme`（整套替换）/`--pdf-docx-user-theme`（增量追加）用于主题层。
+详见 `docs/主题与样式.md`。
 
 ## PDF 转换方案
 

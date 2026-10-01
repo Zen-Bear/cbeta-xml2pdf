@@ -8,7 +8,7 @@
 ## 1. 目标与分工
 
 - `xml2pdf` 侧交付**可复用 UI 组件** + 独立转换窗；`publish` 侧集成（右栏面板/中栏来源列/合成分流）。
-- 纸张/字体/引擎等**单一逻辑归属 `xml2pdf`**（`config.json pages/font_sets/engines`），publish 不重复实现。
+- 纸张/字体/引擎等**单一逻辑归属 `xml2pdf`**（`config.json pages/font_lang/engines`），publish 不重复实现。
 - 模块化钩子已就绪：`pycbeta/fetch.py:230 fetch_work`、`pycbeta/verify.py:278 verify_one`、`pycbeta/cli.py:51 render_one`（见 `docs/第三方调用说明.md`）。
 
 ## 2. 数据模型 `XmlOptions`（扩展版）
