@@ -179,5 +179,5 @@ CBETA 佛典編號/册号规则（`pycbeta/names.py`）移植自
 其余为独立重写；与上游无 fork 关系、无共享历史。本仓代码采用 **GNU GPL v3**（见根 `LICENSE`）。
 
 > 注：`cbeta/fonts/` 下的 `CBETASupplement.ttf`、`Ranjana.ttf`、`Siddam.ttf`
-> 均由 CBETA 官方提供（下载页 https://cbeta.org/downloads）；字体按各自原始授权分发，
+> 均由 CBETA 官方提供（下载页 [cbeta.org/downloads](https://cbeta.org/downloads)）；字体按各自原始授权分发，
 > 不受本仓 GPL 变更影响（`CBETASupplement.ttf` 注明供非营利/研究使用）。
