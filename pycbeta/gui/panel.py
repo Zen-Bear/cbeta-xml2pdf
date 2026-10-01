@@ -58,11 +58,11 @@ INSTALL_HINTS = {
     "wps": "需安装 WPS Office",
     "docbuilder": "需安装 ONLYOFFICE DocBuilder",
     "libreoffice": "需安装 LibreOffice",
-    "minipdf": "随包 engines/minipdf.exe",
+    "minipdf": "从 GitHub Releases 下载 minipdf.exe 放入 engines/",
     "chromium": "需 playwright install chromium",
     "prince": "需安装 Prince",
     "weasyprint": "需 pip install weasyprint",
-    "cbetapdf": "随包 engines/cbetapdf.exe",
+    "cbetapdf": "从 GitHub Releases 下载 cbetapdf.exe 放入 engines/",
 }
 
 

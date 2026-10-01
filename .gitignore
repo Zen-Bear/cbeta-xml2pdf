@@ -10,6 +10,10 @@ test/out*/
 test/X1077/
 [Ee]gg-info/
 
+# 外部 PDF 引擎可执行文件（体积大，改由 GitHub Releases 分发；
+# 自行放入 engines/ 目录即可，不入库）
+engines/*.exe
+
 # 预设库 presets/（样式 *.css + 配置 *.json + 样张，随仓库发布给用户）
 # 仅本机默认用户预设/旧槽不入库：
 presets/config.user.json

@@ -1,5 +1,7 @@
 # pycbeta — CBETA XML P5 多格式转换器
 
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+
 CBETA XML P5 → **HTML / PDF / DOCX / EPUB / Markdown**
 
 单一解析器（IR 中间表示）+ 多渲染器，样式由共享主题驱动，
@@ -24,14 +26,14 @@ python -m pycbeta -i 经文.xml -f all
 # 指定格式与输出
 python -m pycbeta -i 经文.xml -f docx,pdf -o outdir
 
-# 简体字体方案
-python -m pycbeta -i 经文.xml -f docx --font-set zh-Hans
+# 简体字体方案（只换字库，不转文字）
+python -m pycbeta -i 经文.xml -f docx --font-lang zh-Hans
 
-# 简体输出（OpenCC t2s 文本转换；未指定 --font-set 时自动套简体字库）
+# 简体输出（OpenCC t2s 文本转换；未指定 --font-lang 时自动套简体字库）
 python -m pycbeta -i 经文.xml -f docx --t2s
 
 # 打印模式（每卷从单数页开始）+ 页边框
-python -m pycbeta -i 经文.xml -f docx,pdf --presets-file my.json
+python -m pycbeta -i 经文.xml -f docx,pdf --config my.json
 ```
 
 ## 命令行参数
@@ -40,8 +42,8 @@ python -m pycbeta -i 经文.xml -f docx,pdf --presets-file my.json
 |---|---|
 | `-i` / `-o` / `-f` | 输入、输出、格式（docx,pdf,html,epub,md,all）|
 | `--theme` | 自定义主题 CSS/JSON（替换 pdf_docx.css）|
-| `--font-set 组合:语言` | 字体方案，如 `zh-Hans` 一键简体字库（只换字库，不转文字） |
-| `--t2s` / `--no-t2s` | 简体输出（OpenCC t2s 正文/注释/元数据；未指定 `--font-set` 时自动套 `default:zh-Hans` 字体；校验时官方文档同步转简体后比对）|
+| `--font-lang {zh-Hant,zh-Hans}` | 字库语言，如 `zh-Hans` 一键简体字库（只换字库，不转文字） |
+| `--t2s` / `--no-t2s` | 简体输出（OpenCC t2s 正文/注释/元数据；未指定 `--font-lang` 时自动套 `default:zh-Hans` 字体；校验时官方文档同步转简体后比对）|
 | `--font-scale 1.5` | 字号等比缩放（重排式大字，老人版推荐 1.33/1.5；字号不影响逐字校验）|
 | `--config` | 自定义全局配置 JSON（别名 --presets-file）|
 | `--page` | 页面方案名（a4/a5/book…或 config.json 的 pages；pdf/docx 适用）|
@@ -79,7 +81,7 @@ python -m pycbeta -i 经文.xml -f docx,pdf --presets-file my.json
 | msword / word | MS Word COM 导出（保真度最高，需 Office + pywin32）|
 | wps | WPS Office COM 导出（需 WPS + pywin32）|
 | libreoffice | soffice 命令行（自定义路径在 engines.paths 配置）|
-| minipdf / docbuilder | 外部引擎（engines.external 注册，未安装自动跳过）|
+| minipdf / docbuilder | 外部引擎（engines.external 注册，未安装自动跳过）；`minipdf.exe` / `cbetapdf.exe` 从 **Releases** 下载放入 `engines/` |
 
 ## 配置文件
 
@@ -139,7 +141,7 @@ Word/WPS 走 COM 导出（需 pywin32），LibreOffice 走命令行。
 
 ```bash
 # 单元测试
-python -m unittest discover pycbeta.tests
+python -m unittest discover -t . -s pycbeta.tests
 
 # 端到端转换测试（test/*.xml -> test/out/<格式>/）
 python test\run_tests.py                 # 全部 XML 全格式
@@ -171,4 +173,7 @@ test/              run_tests.py 端到端测试 + 样例 XML
 CBETA 佛典編號/册号规则（`pycbeta/names.py`）移植自
 [RayCHOU/ruby-cbeta](https://github.com/RayCHOU/ruby-cbeta) 的 `cbeta.rb`
 （Copyright (c) 2016 Dharma Drum Institute of Liberal Arts, MIT License），
-其余为独立重写；与上游无 fork 关系、无共享历史。本仓代码同样采用 MIT License（见根 `LICENSE`）。
+其余为独立重写；与上游无 fork 关系、无共享历史。本仓代码采用 **GNU GPL v3**（见根 `LICENSE`）。
+
+> 注：`cbeta/fonts/` 下的 `CBETASupplement.ttf` 由 CBETA 提供（供非营利/研究使用），
+> `Ranjana.ttf` / `Siddam.ttf` 来源待查；字体按各自原始授权分发，不受本仓 GPL 变更影响。

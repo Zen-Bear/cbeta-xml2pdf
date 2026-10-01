@@ -1240,9 +1240,8 @@ class TestEngineSingles(unittest.TestCase):
         self.assertEqual(set(status.keys()),
                          set(DOCX_SINGLES) | set(HTML_SINGLES))
         self.assertTrue(all(isinstance(v, bool) for v in status.values()))
-        # 随包引擎在本仓一定存在
-        self.assertTrue(status["minipdf"])
-        self.assertTrue(status["cbetapdf"])
+        # 本机实际可用性不硬断言（随包 exe 已移出仓库，改由 Releases 分发；
+        # 是否安装随环境而异）
 
     def test_items_per_pipe(self):
         from pycbeta.gui.panel import XmlOptionsPanel
