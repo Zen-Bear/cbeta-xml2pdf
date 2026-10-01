@@ -10,9 +10,11 @@ from pycbeta.parser import P5Parser
 from pycbeta.render_md import MdRenderer
 from pycbeta.render_epub import EpubRenderer
 
-CBETA = r"E:\dev\cbeta\cbeta_ebook"
+from pycbeta.tests._data import DATA_ROOT as CBETA
+from pycbeta.tests._data import requires_data
 
 
+@requires_data
 class TestMd(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -64,6 +66,7 @@ class TestMd(unittest.TestCase):
         self.assertIn("（月氏國", text)
 
 
+@requires_data
 class TestEpub(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -165,6 +168,7 @@ class TestCorrCbetaRender(unittest.TestCase):
         self.assertNotIn("corr", text)
 
 
+@requires_data
 class TestEpubSongCss(unittest.TestCase):
     """epub 字体落实：派生基底 epub_print.css 含繁简正文实规则；成品注入生效。"""
 
@@ -231,6 +235,7 @@ class TestEpubSongCss(unittest.TestCase):
             shutil.rmtree(d, ignore_errors=True)
 
 
+@requires_data
 class TestEpubCopyrightPage(unittest.TestCase):
     """版权块独立成页：各章抽走去重，spine 末项 copyright.xhtml（必另起一页）。"""
 

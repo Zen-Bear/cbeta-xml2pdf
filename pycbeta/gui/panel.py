@@ -78,10 +78,9 @@ WPS_DIRS = [
     r"C:\Program Files\Kingsoft\WPS Office",
     r"C:\Program Files (x86)\Kingsoft\WPS Office",
 ]
-# 版本号子目录安装（如 C:\Apps\WPS Office\12.1.0.21915\office6\wps.exe，
-# 与 C:\Apps\LibreOffice 同一习惯）：glob 兜底，which/PATH 查不到时命中
+# 版本号子目录安装（如 ...\WPS Office\<版本>\office6\wps.exe）：glob 兜底，
+# which/PATH 查不到时命中
 WPS_ROOTS = [
-    r"C:\Apps\WPS Office",
     r"C:\Program Files\Kingsoft\WPS Office",
     r"C:\Program Files (x86)\Kingsoft\WPS Office",
 ]

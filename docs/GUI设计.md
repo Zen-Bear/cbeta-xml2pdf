@@ -1,6 +1,6 @@
 # GUI 设计（xml2pdf 侧）
 
-> 依据 `E:\dev\cbeta\publish\docs\链路B-设计契约.md`（唯一契约）。本文件仅设计，**不包含代码**；
+> 依据外部下游项目（publish）的「链路B-设计契约」（唯一契约）。本文件仅设计，**不包含代码**；
 > 实施阶段产出：`pycbeta/gui/panel.py`、`pycbeta/gui/__main__.py`，依赖 `PySide6>=6.6`。
 
 ---
@@ -205,7 +205,7 @@ class XmlOptions:
 ```json
 {
   "default_source": "official",          // official | xml
-  "xml2pdf": { "path": "E:/dev/cbeta/xml2pdf",
+  "xml2pdf": { "path": "D:/xml2pdf",
                "options": { "page": "a4", "font_lang": "zh-Hant", "engine": "docx2pdf",
                             "output": {"grayscale": false, "show_notes": true},
                             "pagination": {"enabled": false, "duplex": false},
@@ -261,7 +261,7 @@ requirements.txt       # 追加 PySide6>=6.6（publish 侧已含）
 
 1. `pycbeta/gui/panel.py`：`XmlOptions`（含 output/pagination/series_title/verify 覆盖）+ 选项卡 Panel + Dialog（复用 `load_presets()`）
 2. `pycbeta/gui/__main__.py`：独立窗（目录/文件 + 佛典編號列表两种输入；find_local_xml → fetch_work 下载 XML → 可选 ensure_baselines → 批量转换 + 进度/取消）
-3. 冒烟：`python -m pycbeta.gui` 单文件/ID 列表转 pdf/epub；ID 列表含未下载经（如 A1057）验证自动下载；publish 侧 `sys.path += ["E:/dev/cbeta/xml2pdf"]` 引入 `XmlOptionsPanel`
+3. 冒烟：`python -m pycbeta.gui` 单文件/ID 列表转 pdf/epub；ID 列表含未下载经（如 A1057）验证自动下载；publish 侧 `sys.path += ["<xml2pdf 仓库路径>"]` 引入 `XmlOptionsPanel`
 4. publish 侧（契约 `publish/TODO.md:P1 链路B`）：config/collection 字段、bridge、中栏/右栏、[合成] 分流
 5. 验收：链路 B 端到端（XML 源 → pdf/epub → 合并）；`default_source`/`work_sources` 逐书覆盖生效；`xml_options` 全量回存后重启一致
 

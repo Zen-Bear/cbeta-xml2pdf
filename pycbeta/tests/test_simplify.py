@@ -9,7 +9,8 @@ from pycbeta.parser import P5Parser
 from pycbeta.simplify import _Converter, simplify_text, simplify_work
 from pycbeta.verify import t2s_baseline
 
-CBETA = r"E:\dev\cbeta\cbeta_ebook"
+from pycbeta.tests._data import DATA_ROOT as CBETA
+from pycbeta.tests._data import requires_data
 
 
 class TestConvertUnit(unittest.TestCase):
@@ -84,6 +85,7 @@ class TestPlainTextPipeline(unittest.TestCase):
         self.assertEqual(len(simplify_text(s)), len(s))
 
 
+@requires_data
 class TestRenderTimeGaiji(unittest.TestCase):
     """渲染时解析的缺字：简体模式同样过 t2s 管线（与官方侧 t2s_baseline 对齐）。"""
 
@@ -115,6 +117,7 @@ class TestRenderTimeGaiji(unittest.TestCase):
         self.assertTrue(w.simplified)
 
 
+@requires_data
 class TestSimplifyWork(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

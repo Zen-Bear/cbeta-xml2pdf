@@ -11,8 +11,9 @@ from pycbeta.parser import P5Parser
 from pycbeta.model import App, E, Text
 from pycbeta.render_docx import DocxRenderer, split_sections
 
-CBETA = r"E:\dev\cbeta\cbeta_ebook"
-TESTDATA = r"E:\dev\cbeta\cbeta_ebook"
+from pycbeta.tests._data import DATA_ROOT as CBETA
+from pycbeta.tests._data import requires_data
+from pycbeta.tests._data import DATA_ROOT as TESTDATA
 
 
 def _pin_uilang(testcase, lang="0x404"):
@@ -60,6 +61,7 @@ def _ops_text(ops):
     return "".join(out)
 
 
+@requires_data
 class TestDocxPagination(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -202,6 +204,7 @@ class TestDocxPagination(unittest.TestCase):
         self.assertRegex(head, r"</w:sectPr></w:pPr>")
 
 
+@requires_data
 class TestDocx(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -348,6 +351,7 @@ class TestStripHeadNo(unittest.TestCase):
         self.assertIn("序", out)
 
 
+@requires_data
 class TestDocxOptions(unittest.TestCase):
     """presets.json output 段的 grayscale / page_border 参数。"""
 
@@ -386,6 +390,7 @@ class TestDocxOptions(unittest.TestCase):
         self.assertNotIn("<w:pgBorders", z2.read("word/document.xml").decode("utf-8"))
 
 
+@requires_data
 class TestDocxBookmarksSplit(unittest.TestCase):
     """目录书签（默认卷号）与按卷输出。"""
 
@@ -513,6 +518,7 @@ class TestDocxBookmarksSplit(unittest.TestCase):
         self.assertIn("卷第二", z.read("word/document.xml").decode("utf-8"))
 
 
+@requires_data
 class TestGaijiFonts(unittest.TestCase):
     """缺字字体链（output.docx.gaijiFonts）：>0xFFFF 缺字取本机已装首个，懒解析。"""
 
@@ -899,6 +905,7 @@ class TestVerticalMarkers(unittest.TestCase):
         marks = re.findall(r"<w:t[^>]*>\[(\d+)\]", xml)
         self.assertTrue(len(marks) >= 2)  # 正文注码 + 文末校注区序号都在
         self.assertIn('<w:textDirection w:val="tbRl"/>', xml)  # 纵排本身不受影响
+@requires_data
 class TestSiddhamReading(unittest.TestCase):
     """悉昙读音（官方 docx 同款）：正文/脚注 `<g>` RJ 均附 `(roman)`。
 

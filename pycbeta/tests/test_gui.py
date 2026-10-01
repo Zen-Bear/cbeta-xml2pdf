@@ -1317,7 +1317,7 @@ class TestOfficeDetect(unittest.TestCase):
 
     def test_versioned_dir_glob(self):
         from pycbeta.gui.panel import _office_ready
-        hit = [r"C:\Apps\WPS Office\12.1.0.21915\office6\wps.exe"]
+        hit = [r"C:\WPS\12.1.0.21915\office6\wps.exe"]
         fake_glob = lambda pat: hit if pat.endswith("wps.exe") else []
         self.assertTrue(_office_ready(["wps.exe"], [], [],
                                       has_com=True,
@@ -1325,14 +1325,14 @@ class TestOfficeDetect(unittest.TestCase):
                                       isfile=lambda p: False,
                                       isdir=lambda p: False,
                                       glob=fake_glob,
-                                      extra_globs=[r"C:\Apps\WPS Office\*\office6\wps.exe"]))
+                                      extra_globs=[r"C:\WPS\*\office6\wps.exe"]))
         self.assertFalse(_office_ready(["wps.exe"], [], [],
                                        has_com=True,
                                        which=lambda n: None,
                                        isfile=lambda p: False,
                                        isdir=lambda p: False,
                                        glob=lambda pat: [],
-                                       extra_globs=[r"C:\Apps\WPS Office\*\office6\wps.exe"]))
+                                       extra_globs=[r"C:\WPS\*\office6\wps.exe"]))
 
 
 class TestWorkIdCase(unittest.TestCase):
@@ -2798,7 +2798,7 @@ class TestCssEditor(unittest.TestCase):
     def test_editor_t2s_renders_simplified(self):
         import glob
         import pycbeta.gui.css_editor as ce
-        sample = glob.glob(r"E:\dev\cbeta\xml2pdf\presets\sample.xml")
+        sample = glob.glob(os.path.join(ce.REPO_ROOT, "presets", "sample.xml"))
         self.assertTrue(sample, "sample.xml 缺失")
         dlg = ce.CssEditorDialog(sample_xml=sample[0])
         try:
@@ -3679,10 +3679,12 @@ class TestCssEditor(unittest.TestCase):
     def test_font_set_arg_gone(self):
         import subprocess
         import sys
+        import pycbeta
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(pycbeta.__file__)))
         r = subprocess.run(
             [sys.executable, "-m", "pycbeta.cli", "--font-set", "default",
              "-i", "x", "-f", "docx"],
-            capture_output=True, text=True, cwd=r"E:\dev\cbeta\xml2pdf")
+            capture_output=True, text=True, cwd=repo_root)
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("--font-set", r.stderr.lower().replace("_", "-"))
 

@@ -847,8 +847,11 @@ class TestExtractTxtParts(unittest.TestCase):
         self.assertEqual(body, s)
 
     def test_real_file_anchor(self):
-        p = os.path.join(r"E:\dev\cbeta\cbeta_ebook", "T0349 彌勒菩薩所問本願經",
+        from pycbeta.tests._data import DATA_ROOT
+        p = os.path.join(DATA_ROOT, "T0349 彌勒菩薩所問本願經",
                          "T0349.txt", "T0349_001.txt")
+        if not os.path.isfile(p):
+            self.skipTest("缺少外部测试数据：设 PYCBETA_TEST_DATA")
         with open(p, encoding="utf-8") as f:
             s = f.read()
         expect = NOTE_RE.findall(s)

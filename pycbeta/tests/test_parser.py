@@ -7,7 +7,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from pycbeta.model import App, Gaiji, Note, NoteRef, Text
 from pycbeta.parser import P5Parser
 
-CBETA = r"E:\dev\cbeta\cbeta_ebook"
+from pycbeta.tests._data import DATA_ROOT as CBETA
+from pycbeta.tests._data import requires_data
 
 
 def iter_nodes(nodes):
@@ -49,6 +50,7 @@ class TestCharDeclRjchar(unittest.TestCase):
                          {"rjchar": "屇", "pua": "U+10CCBA"})
 
 
+@requires_data
 class TestT0349(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -96,6 +98,7 @@ class TestT0349(unittest.TestCase):
         self.assertTrue(len(text) > 1000)
 
 
+@requires_data
 class TestX1116(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -118,6 +121,7 @@ class TestX1116(unittest.TestCase):
         self.assertTrue(all(g.char for g in gaijis), "P5 <g> should carry char content")
 
 
+@requires_data
 class TestT0452(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

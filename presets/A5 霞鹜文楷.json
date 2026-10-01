@@ -170,8 +170,8 @@
       }
     },
     "paths": {
-      "docbuilder": "C:\\Dev\\DocBuilder8.2\\docbuilder.exe",
-      "libreoffice": "C:\\Apps\\LibreOffice\\program\\soffice.com"
+      "docbuilder": "",
+      "libreoffice": ""
     }
   },
   "output": {
@@ -287,7 +287,7 @@
       "〕"
     ],
     "repeat": "page",
-    "file": "e:\\dev\\cbeta\\xml2pdf\\pycbeta\\data\\annotations.txt"
+    "file": ""
   },
   "formats": [
     "pdf",

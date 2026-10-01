@@ -15,7 +15,8 @@ from pycbeta.render_html import HtmlRenderer
 from pycbeta.render_md import MdRenderer
 from pycbeta.verify import normalize
 
-CBETA = r"E:\dev\cbeta\cbeta_ebook"
+from pycbeta.tests._data import DATA_ROOT as CBETA
+from pycbeta.tests._data import requires_data
 
 
 def _body(html):
@@ -29,6 +30,7 @@ def _body(html):
     return html.split("<div id='cbeta-copyright'>")[0]
 
 
+@requires_data
 class TestRenderX1116(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -61,6 +63,7 @@ class TestRenderX1116(unittest.TestCase):
             self.assertEqual(mine_body, off_body, f"body differs from official for {f}")
 
 
+@requires_data
 class TestRenderYP0019(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -130,6 +133,7 @@ class TestHtmlSingleNoSuffix(unittest.TestCase):
         self.assertEqual(files, ["T0349 彌勒菩薩所問本願經.html"])
 
 
+@requires_data
 class TestStripHeadNoX1116(unittest.TestCase):
     """X60n1116 真例：head 行首 `No. 1116-B` 开剥离、余部去空格（默认保留）。"""
 

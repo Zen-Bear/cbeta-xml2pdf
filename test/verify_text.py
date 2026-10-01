@@ -20,7 +20,8 @@ from pycbeta.theme import load_presets
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description="内容逐字校验")
-    ap.add_argument("--source", default=r"E:\dev\cbeta\cbeta_ebook")
+    ap.add_argument("--source", default=os.environ.get("PYCBETA_TEST_DATA", ""),
+                    help="官方基线/XML 库根目录（默认取环境变量 PYCBETA_TEST_DATA）")
     ap.add_argument("-f", "--formats", default="html,md,docx,epub")
     ap.add_argument("--out", default=None)
     ap.add_argument("--max-diff", type=int, default=None)

@@ -24,6 +24,9 @@ config.last.json
 # run.json（一次运行的组合单，常改，不入库；模板见 docs/主题与样式.md）
 run.json
 
+# 测试数据根：本机 CBETA 电子书库路径存这里（不入库，避免机器路径进仓库）
+pycbeta/tests/.data_root
+
 # 系统
 .DS_Store
 Thumbs.db

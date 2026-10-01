@@ -9,17 +9,17 @@
 
 - [x] **已完成 P1** GUI 链路 B（2026-09-17 用户销项：设计文档 `docs/GUI设计.md`、可复用模块边界 `docs/第三方调用说明.md` §6.1、publish 链路B 契约均落地；面板/独立窗/一键送校验已上线。遗留小项 `output.pdf_zoom` 待后续版本移除，见下条）
   - 目录清理执行（2026-09-04）：git 首提交 3168e76（安全网，.gitignore 覆盖 out*/__pycache__/用户槽）→ 缺字库搬家 ruby-cbeta→cbeta/data（gaiji.py 改道，三处文档引用同步；data 与原逐字节一致；names.py 出处注释保留）→ 删 ruby-cbeta 整目录/engines僵尸config/out产物/test/out*/__pycache__/空pycbeta/fonts → docs 三 txt 转 md（无交叉引用）→ 清 tmp 调试残留；验证：缺字冒烟（33893 条，𤬪正常解析）+ 单测 217 OK + T0349 端到端；第二提交 3eb588b；1.75GB 两 zip 用户已移走冷盘（从未入库，工作区干净，无需提交）
-  - 落地 panel（2026-09-04）：`pycbeta/gui/panel.py`（XmlOptions 七卡：输出格式/页面/分页/排版/注释/注音/校验；字体并入输出格式卡t2s在上字体在下自动切zh-Hans；纸张下拉`名（宽×高mm）`+定宽220；分页含佛典丛书名右列+双列说明小字；排版双列；引擎组仅pdf启用；注音卡常用六项括号预设下拉；校验文案基线→官方文档；边距四输入；保存/还原出厂三槽 `config.user/last.json`；临时 presets 写入器）+ `__main__.py` 独立窗（目录/編號列表/自动下载/批量表/QThread/取消）+ requirements PySide6；单测 test_gui 23 项（含引擎单引擎 5 项+布局 3 项+产物路径 2 项）；单引擎按管线动态填项+可用性探测（COM+主程序双条件，修 pywin32 误报）+安装提示（缺失红字），配置框置顶；文件列显示产物名链接（UserRole 存全路径，单击打开）；单引擎探测修 pywin32 误报（COM+主程序双条件）并支持版本号目录 glob（C:\Apps\WPS Office\12.1.0.21915 实证 wps 已安装）；编号列表大小写不敏感（fetch 层归一化大写，CLI 同样受益）；窗口标题 CBETA XML 格式转换 v1.0；官方基线改名官方电子书；输出行加打开目录按钮；数据源窗口（source 三路径 + downloads 八模板可视编辑，走三槽保存，apply_source_edits 纯函数可测）；catalog 备份到 cbeta/data/sutra_mapping.txt（默认仍指 publish 原件）；输入来源双向自动切换（同行 HBox 左对齐相邻）；复选框同行相邻；标题带 GUI 日期（gui/*.py 最新 mtime）；输出框默认 cwd/out；文件列多产物菜单选择打开（_on_file/_open_cell 分离）；pdf 默认 footnote（中间 docx 53 真脚注，修 render_one pdf 分支 endnote 默认）；页面边距上下/左右两列；排版两脏数据开关归第二列；全量 200 OK；独立窗 offscreen 实例化通过
+  - 落地 panel（2026-09-04）：`pycbeta/gui/panel.py`（XmlOptions 七卡：输出格式/页面/分页/排版/注释/注音/校验；字体并入输出格式卡t2s在上字体在下自动切zh-Hans；纸张下拉`名（宽×高mm）`+定宽220；分页含佛典丛书名右列+双列说明小字；排版双列；引擎组仅pdf启用；注音卡常用六项括号预设下拉；校验文案基线→官方文档；边距四输入；保存/还原出厂三槽 `config.user/last.json`；临时 presets 写入器）+ `__main__.py` 独立窗（目录/編號列表/自动下载/批量表/QThread/取消）+ requirements PySide6；单测 test_gui 23 项（含引擎单引擎 5 项+布局 3 项+产物路径 2 项）；单引擎按管线动态填项+可用性探测（COM+主程序双条件，修 pywin32 误报）+安装提示（缺失红字），配置框置顶；文件列显示产物名链接（UserRole 存全路径，单击打开）；单引擎探测修 pywin32 误报（COM+主程序双条件）并支持版本号目录 glob（D:\WPS Office\12.1.0.21915 实证 wps 已安装）；编号列表大小写不敏感（fetch 层归一化大写，CLI 同样受益）；窗口标题 CBETA XML 格式转换 v1.0；官方基线改名官方电子书；输出行加打开目录按钮；数据源窗口（source 三路径 + downloads 八模板可视编辑，走三槽保存，apply_source_edits 纯函数可测）；catalog 备份到 cbeta/data/sutra_mapping.txt（默认仍指 publish 原件）；输入来源双向自动切换（同行 HBox 左对齐相邻）；复选框同行相邻；标题带 GUI 日期（gui/*.py 最新 mtime）；输出框默认 cwd/out；文件列多产物菜单选择打开（_on_file/_open_cell 分离）；pdf 默认 footnote（中间 docx 53 真脚注，修 render_one pdf 分支 endnote 默认）；页面边距上下/左右两列；排版两脏数据开关归第二列；全量 200 OK；独立窗 offscreen 实例化通过
   - 待废弃 `output.pdf_zoom`（2026-09-04 用户确认）：GUI 不暴露；config 保留；后续版本移除
   - 适配 cbeta/ 目录重组（2026-09-04）：`CBETA 補充字型/`→`cbeta/fonts/`，9 处引用改道（fonts.supplement_path/render_pdf._font_data_uri 改走共用函数/双测试改 supplement_path()/config 注释/两份设计文档）；补 test_fonts 缺失的 model 导入；全量 200 OK + verify 16/0
   - `pycbeta/gui/panel.py`：`XmlOptions`（page/font_set/engine/margins/formats + output/pagination/series_title/verify 覆盖） + `XmlOptionsPanel(QWidget)`（页面/字体/输出格式/注释/排版/分页/经藏名/校验 八选项卡，get_options/set_options）+ `XmlOptionsDialog(QDialog)`（exec→XmlOptions|None）
   - `pycbeta/gui/__main__.py`：`python -m pycbeta.gui` 独立窗（输入=目录/文件 或 佛典編號列表；find_local_xml→fetch_work 下载 XML→可选 ensure_baselines 下载官方基线→批量转换；QThread 进度/取消；sys.path 无侵入）
   - `requirements.txt` 追加 `PySide6>=6.6`
   - publish 侧（契约 `publish/docs/链路B-设计契约.md`，`publish/TODO.md:P1`）：config/app.json `default_source`+`xml2pdf.options`、collection `work_sources/xml_options`、`src/books/xml2pdf_bridge.py batch_convert`、中栏来源列/右栏三单选/[合成]按源分流
-  - 验收：独立窗目录/ID 列表转换（含未下载经自动下载 XML+基线）；publish `sys.path+=["E:/dev/cbeta/xml2pdf"]` 引入 `XmlOptionsPanel`；`xml_options` 全量回存重启一致；端到端 XML→pdf/epub→合并
+  - 验收：独立窗目录/ID 列表转换（含未下载经自动下载 XML+基线）；publish `sys.path+=["D:/xml2pdf"]` 引入 `XmlOptionsPanel`；`xml_options` 全量回存重启一致；端到端 XML→pdf/epub→合并
 
 - [x] **已完成 P2** LibreOffice（2026-09-04 复检：`soffice.com --version` 26.2.5.2 ✓；2026-09-05 用户升级至 26.8.0.3，复测 `--engine docx2pdf:libreoffice` 实转 T0672 出 2.05MB PDF ✓，见 `test/out_lo/`（用户指正后改测 `--notes footnote` 脚注版，已覆盖同目录））
-  - 现状：`C:\Apps\LibreOffice` 26.2.5.2（非默认 Program Files），`pycbeta/config.json:110` 与 `engines/config.json:20` `engines.paths.libreoffice` 指向其 `soffice.com`；`pycbeta/render_pdf.py:20 _find_soffice` 优先读该路径
+  - 现状：`D:\LibreOffice` 26.2.5.2（非默认 Program Files），`pycbeta/config.json:110` 与 `engines/config.json:20` `engines.paths.libreoffice` 指向其 `soffice.com`；`pycbeta/render_pdf.py:20 _find_soffice` 优先读该路径
   - 用户手工安装后：验证 `soffice.com --version`、`_find_soffice()`、`python -m pycbeta -i <xml> -f docx --engine libreoffice` 出 PDF
   - 若改安装路径：同步更新两处 config 的 `engines.paths.libreoffice`
   - 注意：安装前 `taskkill /F /IM soffice.bin`（`render_pdf.py:89 --headless` 常驻会锁安装目录）
@@ -36,7 +36,7 @@
   - fetch 纯下载不要求 xml_dir（`need_xml=False`；download 空仍报错，堵 cwd 落盘保留）
   - 材料化模型重构（2026-09-10 用户定稿）：`download_dir` 改名 **`cbeta_ebook`**（唯一可写工作根；平展 `{id} {书名}/`，书名取 catalog 经 `source.title_t2s` 转简+净化）；`xml_dir` 定位为**只读候选源**（角色同远端 URL，两者相同即报错）；`fetch.materialize_work` 三源解析（cbeta_ebook → xml_dir 拷贝/碎片按册合册 → 官方下载，mtime 刷新）；`work_dir/_find_work_dir`（`{id}*` 复用，排除 T0349a 类误命中）；基线按需落 work 目录；**删除 git sparse clone 兜底与 `downloads.xml_repo`**；`merge_groups_to_tmpdir`→`merge_groups_to_dir`（平展 `{stem}.xml`），删 `merge.resolve_work_files`；CLI `--download-dir`→`--cbeta-ebook`、編號流改用 run.json 有效配置（原误用出厂 `load_presets`，材料化看不到用户槽）；GUI 三源接线+来源标签、数据源窗口 `title_t2s` 复选；verify 基线自动下载落 cbeta_ebook；`config.user.json`/测试语料迁 `<repo>/cbeta_ebook`；全量 493 OK
   - Phase 2 更新检查（2026-09-10）：`fetch.check_ebook_updates`（遍历 cbeta_ebook work 目录，逐 XML 条件下载 `If-Modified-Since`（304 免下载）+ 字节比对，不改项不落盘；无 sidecar，按日期/体积判定；**只走远程源，不涉本地 CBReader 候选源**）+ `format_update_report`（已更新/无变化/失败/跳过 + 需重新生成 ID 段）；**XML 有更新的 work，本地已有基线一并强制刷新**（`with_baselines`，仅已存在格式，GUI 复选「同时更新已有基线」默认开）；GUI 数据源窗口「检查电子书更新」按钮（`EbookUpdateWorker` 后台线程 + `EbookUpdateDialog` 弹窗，**一键拷贝已更新 ID** 到剪贴板）；字节详情去掉 `B` 后缀；单测 `TestCheckUpdates` 6 项 + GUI 2 项 + `_fetch_baseline_flat force` 1 项
-- [x] **已完成** 单元测试数据路径迁移（`CBETA` 常量 → `E:\dev\cbeta\test`；`TestRenderYP0012` → `TestRenderYP0019`；`_body` 归一化剥 `<style>`/border span/style 属性/标签空白）
+- [x] **已完成** 单元测试数据路径迁移（`CBETA` 常量 → `D:\CBETA\test`；`TestRenderYP0012` → `TestRenderYP0019`；`_body` 归一化剥 `<style>`/border span/style 属性/标签空白）
 - [x] **已完成** `parser.py:221` charDecl `xml:id` 命名空间缺陷修复（`{NS_XML}id`）；并调整 `_resolve_gaiji` 优先级为 **gaiji_db → charDecl → raw**（官方 html 与 gaiji_db 一致，charDecl composition 非真实字符，仅作兜底）
 - [x] **P8 低** 官方数据更新（2026-09-09 落实：上游 cbeta_gaiji 8/12 新增 CB35027-CB35032
   ［IDS composition + PUA U+F88D3-D8，管线照 uni_char or composition 走］；cbeta_gaiji.json
@@ -505,7 +505,7 @@
   - 测试：`test_fetch.TestLetterSuffixId` 3（不敏感命中保原大小写 / canonical / URL 拼装）；全量 693 OK（skipped=1）
   - 文档：`第三方调用说明.md` §2.3/2.3b
 - [x] **已完成** 抽出共享下载/元数据层 `cbeta-fetch`（纯标准库）并 vendor 进 xml2pdf（2026-09-13 用户立项：与 publish 共享下载，A 方案）
-  - 新仓库 `E:\dev\cbeta\cbeta-fetch`（`cbeta_fetch.py` 单文件、纯标准库）：`is_work_id`/`parse_work_id`（canon 大写、no 原样）/`canonical_work_id`/`catalog_lookup`/`DEFAULT_DOWNLOADS`（含新 `pdf`）/`REMOTE_URLS`（元数据单源）/`download`（原子·可 `unzip`）/`unzip_flat`/`fetch_if_changed`/`probe`；`pyproject.toml`（发行名 `cbeta-fetch`）、README/API/CHANGELOG/LICENSE、`tools/sync_into.py`、`docs/对接单-publish.md`
+  - 新仓库 `D:\cbeta-fetch`（`cbeta_fetch.py` 单文件、纯标准库）：`is_work_id`/`parse_work_id`（canon 大写、no 原样）/`canonical_work_id`/`catalog_lookup`/`DEFAULT_DOWNLOADS`（含新 `pdf`）/`REMOTE_URLS`（元数据单源）/`download`（原子·可 `unzip`）/`unzip_flat`/`fetch_if_changed`/`probe`；`pyproject.toml`（发行名 `cbeta-fetch`）、README/API/CHANGELOG/LICENSE、`tools/sync_into.py`、`docs/对接单-publish.md`
   - xml2pdf：新增 `pycbeta/_vendor/{cbeta_fetch.py,SOURCE.txt,__init__.py}`；`fetch.py` 四函数 + `_http_download`/`_unzip_flat`/`_download_if_changed` 全委托共享（保存签名/行为；`DEFAULT_DOWNLOADS` = 共享表 + 专有 `figures`）；`update_data.py` 的 `_conditional_probe` 委托 `fetch_if_changed`；`remote_sources.json` 省略 url、改 `"source"` 引用 `REMOTE_URLS`（URL 单源）
   - 测试：cbeta-fetch 13 项（file:// 离线下载/解压/大小写/catalog）；xml2pdf 新增 `test_vendor_sync` 3（sha256/version/API/id 语法对账）；全量 696 OK（skipped=1）
   - 分发：publish 单发 GitHub 自包含（vendored 副本 + sha256 校验）；publish 侧改动见 `cbeta-fetch/docs/对接单-publish.md`（含 `src→cbeta_publish` 具名包、去 requests、官方电子书/remote_manager 迁移）
@@ -519,7 +519,7 @@
     `resolve_source` 抛“未配置”。修：`SourceDialog(preset_path=…)` 读写目标预设文件
     （默认用户预设）；主窗 `_edit_source`/`clear_xml_dir` 透传当前选中；标题显示文件名
   - 改名：`电子书工作根`→`电子书输出目录`（SOURCE_LABELS/CLI/fetch/panel 弹窗/config.json/README/docs）
-  - 已把激活预设缺的 source 块回填（现 `resolve_source` → `('', 'E:\dev\cbeta\cbeta_ebook')`）
+  - 已把激活预设缺的 source 块回填（现 `resolve_source` → `('', 'D:\CBETA\cbeta_ebook')`）
 - [x] **已完成** 修 jhead 内校勘注的 docx 脚注变小三加粗（2026-09-16）
   - 根因：`_footnote_content` 只清 `_div_stack`、没清 `_tag_stack`，注文带着外层
     juan/jhead 标签 → footnote 的 0.75em 按标题 20pt 解成 15pt（小三）+ 粗体/蓝色泄漏
@@ -616,5 +616,5 @@
 - [ ] **待办** 发布 v0.1 Release + 上传外部引擎（2026-10-01 用户立项）
   - 仓库已公开：https://github.com/Zen-Bear/cbeta-xml2pdf（Public、GPL-3.0、分支 `main`、tag `v0.1`）
   - `engines/*.exe`（`cbetapdf.exe` ~90MB、`minipdf.exe` ~10MB）体积大，已从 git 历史移除（`git-filter-repo`）、`.gitignore` 忽略，改由 **GitHub Releases** 分发
-  - **待办**：创建 `v0.1` Release，并上传 `engines/cbetapdf.exe`、`engines/minipdf.exe` 作附件（本机路径 `E:\dev\cbeta\xml2pdf\engines\`）；上传前先实测两 exe 可用
+  - **待办**：创建 `v0.1` Release，并上传 `engines/cbetapdf.exe`、`engines/minipdf.exe` 作附件（本机 `engines/` 目录下）；上传前先实测两 exe 可用
   - 发布页：https://github.com/Zen-Bear/cbeta-xml2pdf/releases/new

@@ -19,7 +19,8 @@ from pycbeta.render_html import HtmlRenderer
 from pycbeta.render_md import MdRenderer
 from pycbeta.verify import extract_text, normalize
 
-CBETA = r"E:\dev\cbeta\cbeta_ebook"
+from pycbeta.tests._data import DATA_ROOT as CBETA
+from pycbeta.tests._data import requires_data
 
 CUSTOM_TABLE = "彌勒\tmí lè\tㄇㄧˊ ㄌㄜˋ\n菩薩\tpú sà\tㄆㄨˊ ㄙㄚˋ\n月氏國\tyuè shì guó\tㄩㄝˋ ㄕˋ ㄍㄨㄛˊ\n"
 
@@ -315,6 +316,7 @@ class TestReview(unittest.TestCase):
         self.assertEqual(load_table()["嚙"]["pinyin"], "niè")
 
 
+@requires_data
 class TestSupplement(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -418,6 +420,7 @@ class TestSplit(unittest.TestCase):
         self.assertEqual(split_annotated("般若", table, scheme="zhuyin"), [("般若", None)])
 
 
+@requires_data
 class TestRender(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -705,6 +708,7 @@ class TestRender(unittest.TestCase):
         self.assertIn("彌勒〔mí lè〕", md)  # 正文注音保留
 
 
+@requires_data
 class TestVerifyStrip(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

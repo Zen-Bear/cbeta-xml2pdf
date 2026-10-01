@@ -33,12 +33,11 @@ _STYLES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                            "..", "styles")
 FACTORY_CSS = os.path.join(_STYLES_DIR, "pdf_docx.css")
 
-# 样张候选（首选用户精简样本 presets/sample.xml；glob，按序取首个命中者）
-SAMPLE_CANDIDATES = (
+# 样张候选（首选仓库内精简样本 presets/sample.xml；可用环境变量 PYCBETA_SAMPLE_XML 另指定）
+SAMPLE_CANDIDATES = tuple(x for x in (
     os.path.join(REPO_ROOT, "presets", "sample.xml"),
-    r"E:\dev\cbeta\cbeta_ebook\T0349*\T12n0349.xml",
-    r"E:\dev\cbeta\cbeta_ebook\T1144*\T20n1144.xml",
-)
+    (os.environ.get("PYCBETA_SAMPLE_XML") or "").strip() or None,
+) if x)
 
 # 左侧可调行（书本排版顺序）：(覆盖块选择器, 显示名)
 EDITABLE_ROWS = (

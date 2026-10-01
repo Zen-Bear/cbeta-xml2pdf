@@ -141,7 +141,9 @@ Word/WPS 走 COM 导出（需 pywin32），LibreOffice 走命令行。
 ## 测试
 
 ```bash
-# 单元测试
+# 单元测试（外部数据用例需指向 CBETA 电子书库，缺失则自动跳过）
+#   开发机可把路径写 pycbeta/tests/.data_root（已 gitignore），或设环境变量：
+set PYCBETA_TEST_DATA=D:\CBETA\cbeta_ebook
 python -m unittest discover -t . -s pycbeta.tests
 
 # 端到端转换测试（test/*.xml -> test/out/<格式>/）

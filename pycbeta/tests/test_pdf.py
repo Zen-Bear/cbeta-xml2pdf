@@ -11,7 +11,8 @@ from pycbeta.render_pdf import PdfRenderer, _draw_page_borders, _add_pdf_bookmar
     _com_convert
 from types import SimpleNamespace
 
-CBETA = r"E:\dev\cbeta\cbeta_ebook"
+from pycbeta.tests._data import DATA_ROOT as CBETA
+from pycbeta.tests._data import requires_data
 
 
 def extract_text(pdf):
@@ -20,6 +21,7 @@ def extract_text(pdf):
     return len(doc), "".join(p.get_text() for p in doc)
 
 
+@requires_data
 class TestPdfHorizontal(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
