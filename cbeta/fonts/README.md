@@ -33,6 +33,9 @@
 `["Ranjana","Siddam"]`）取本机已装且覆盖该字者写入 `w:rFonts`
 （官方 docx 同款 `eastAsia="Ranjana"`）。
 
+来源：CBETA 官方字体下载页 <https://cbeta.org/downloads>（与 CBETA 官方
+电子书所用悉昙字型同源）。
+
 ## 安装与行为
 
 - 把 TTF 拷入本目录或系统字体目录并右键安装（本机已装即用，无需配置）。
