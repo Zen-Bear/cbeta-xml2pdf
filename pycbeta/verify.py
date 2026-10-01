@@ -407,7 +407,7 @@ def _extract_html_parts(path: str):
     """抽取 html 为 (正文, 脚注) 两段，用于多卷合并时将脚注统一放文末（与 docx 合并对齐）。
     同时剥离尾注上方的 <hr><h1>校注</h1> 标题（与 docx 校注区标题对齐）。
     脚注判定以 class='footnote' 为准（div/span 均处理），正文中的校注锚点 [A1]/[0164001] 等
-    由 normalize 的 r"\[[^\]\[]{1,8}\]" 统一剥离（不依赖 class）。
+    由 normalize 的方括号规则 [..] 统一剥离（不依赖 class）。
     只取 <body> 内容（<title> 等头文本非正文，官方/生成不对称，见 _body_only）；
     无 body 标签回退全文。"""
     raw = open(path, encoding="utf-8", errors="replace").read()

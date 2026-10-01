@@ -1,0 +1,22 @@
+# 统一换行为 LF：跨平台字节一致
+# _vendor/cbeta_fetch.py 的 sha256 与 SOURCE.txt 对账，依赖检出的字节与暂存内容一致；
+# 若在 Windows 上按 autocrlf 检出为 CRLF，会导致 test_vendor_sync 失败。
+*.py     text eol=lf
+*.md     text eol=lf
+*.txt    text eol=lf
+*.css    text eol=lf
+*.js     text eol=lf
+*.json   text eol=lf
+*.xml    text eol=lf
+*.yml    text eol=lf
+*.yaml   text eol=lf
+.gitattributes text eol=lf
+.gitignore     text eol=lf
+
+# 二进制：不做任何换行转换
+*.exe    binary
+*.ttf    binary
+*.png    binary
+*.jpg    binary
+*.gif    binary
+*.woff2  binary
