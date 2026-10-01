@@ -128,7 +128,19 @@ def _office_ready(exe_names, extra_files=(), extra_dirs=(), has_com=True,
     return False
 
 
-def detect_engines(presets=None, root=None):
+def _progid_registered(progid):
+    """COM ProgID 是否在注册表注册（不启动进程）。用于 Office/WPS 自定义安装
+    位置的就绪判定——渲染实际走 COM ProgID，与安装目录无关（`C:\\Apps\\...`
+    这类自定义路径不必写进代码）。"""
+    import winreg
+    try:
+        with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, progid):
+            return True
+    except OSError:
+        return False
+
+
+def detect_engines(presets=None, root=None, progid_check=None):
     """单引擎可用性探测（只读：不启动进程/浏览器）。
     返回 {单引擎名: bool}。presets 为空时读内置 config（取 engines.paths/external）。"""
     import shutil
@@ -177,11 +189,20 @@ def detect_engines(presets=None, root=None):
     if local_wps:
         wps_globs += [local_wps + "\\*\\office6\\" + exe
                       for exe in ("wps.exe", "et.exe", "wpp.exe")]
+    # WPS 就绪：路径命中 或 KWPS COM ProgID 已注册（自定义安装目录也能识别；
+    # 渲染链本身走 KWPS.Application，故以注册为准）；仍需 pywin32（has_com）
+    _pc = progid_check or _progid_registered
+    has_wps_com = False
+    if has_com:
+        try:
+            has_wps_com = bool(_pc("KWPS.Application")) or bool(_pc("wps.Application"))
+        except Exception:
+            has_wps_com = False
     return {
         "msword": _office_ready(MSWORD_EXES, MSWORD_PATHS, (), has_com,
                                 extra_globs=MSWORD_GLOBS),
         "wps": _office_ready(WPS_EXES, (), WPS_DIRS, has_com,
-                             extra_globs=wps_globs),
+                             extra_globs=wps_globs) or has_wps_com,
         "docbuilder": has_docbuilder, "libreoffice": has_lo,
         "minipdf": _exe_exists(mini_exe) or bool(shutil.which("minipdf")),
         "chromium": has_chromium,

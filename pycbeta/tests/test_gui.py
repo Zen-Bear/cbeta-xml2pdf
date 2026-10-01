@@ -1278,6 +1278,20 @@ class TestEngineSingles(unittest.TestCase):
         # 本机实际可用性不硬断言（随包 exe 已移出仓库，改由 Releases 分发；
         # 是否安装随环境而异）
 
+    def test_wps_detect_via_progid(self):
+        # 路径探测全假时，KWPS.Application 注册即可判 WPS 就绪（自定义安装目录）
+        import unittest.mock as mock
+        from pycbeta.gui.panel import detect_engines
+        try:
+            import win32com.client  # noqa: F401
+        except Exception:
+            self.skipTest("无 pywin32")
+        with mock.patch("pycbeta.gui.panel._office_ready", return_value=False):
+            st = detect_engines(progid_check=lambda n: n == "KWPS.Application")
+            self.assertTrue(st["wps"])
+            st2 = detect_engines(progid_check=lambda n: False)
+            self.assertFalse(st2["wps"])
+
     def test_items_per_pipe(self):
         from pycbeta.gui.panel import XmlOptionsPanel
         panel = XmlOptionsPanel(load_presets())
