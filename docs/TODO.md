@@ -612,3 +612,9 @@
   - 测试：新 `test_juan.py`（spec 正误例、合成 Work 过滤、注/app 裁剪、前置内容、空交集报错、label/模板）；X1077 e2e（`--juan 2-3` 带后缀 + 全范围 no-op 字节一致）；GUI job 解析；单卷下载 mock；全量回归
   - 文档：README/安装说明（CLI 参数）、`GUI设计`（编号后缀：`ID:范围`、多段 `+`、`--juan`）、`校验说明书`（子集语义/整包基线必红/P3 不支持/单卷下载）、`主题与样式`+`兜底值清单`（`output.juan_suffix_template`）
   - 非目标：品名选择（如“初序品”，另议）、XML 预过滤（先全量 parse，正确性优先）、按卷下载 XML（整包一次）
+
+- [ ] **待办** 发布 v0.1 Release + 上传外部引擎（2026-10-01 用户立项）
+  - 仓库已公开：https://github.com/Zen-Bear/cbeta-xml2pdf（Public、GPL-3.0、分支 `main`、tag `v0.1`）
+  - `engines/*.exe`（`cbetapdf.exe` ~90MB、`minipdf.exe` ~10MB）体积大，已从 git 历史移除（`git-filter-repo`）、`.gitignore` 忽略，改由 **GitHub Releases** 分发
+  - **待办**：创建 `v0.1` Release，并上传 `engines/cbetapdf.exe`、`engines/minipdf.exe` 作附件（本机路径 `E:\dev\cbeta\xml2pdf\engines\`）；上传前先实测两 exe 可用
+  - 发布页：https://github.com/Zen-Bear/cbeta-xml2pdf/releases/new
