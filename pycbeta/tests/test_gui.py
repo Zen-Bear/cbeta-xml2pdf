@@ -1228,6 +1228,38 @@ class TestConfigBar(unittest.TestCase):
             panel.close() if hasattr(panel, "close") else None
 
 
+    def test_pagination_hints_gray(self):
+        # 分页各选项的括号说明：存在、灰色、纯文本（含 <pb> 不被当 HTML）
+        from pycbeta.gui.panel import PAGINATION_KEYS, PAGINATION_HINTS
+        panel = self._panel()
+        try:
+            for k in PAGINATION_KEYS:
+                lab = panel.pg_hints[k]
+                self.assertTrue(lab.text().startswith("（")
+                                and lab.text().endswith("）"), k)
+                self.assertIn("gray", lab.styleSheet())
+            self.assertIn("<pb>", panel.pg_hints["pb"].text())
+        finally:
+            panel.close() if hasattr(panel, "close") else None
+
+    def test_parenthetical_hints_gray(self):
+        # 分页/排版两卡所有「（…）」说明均为灰色；旧的整行说明已移入选项后
+        panel = self._panel()
+        try:
+            labs = panel._paren_hint_labels
+            self.assertTrue(labs)
+            for l in labs:
+                self.assertTrue(l.text().startswith("（")
+                                and l.text().endswith("）"), l.text())
+                self.assertIn("gray", l.styleSheet())
+            from PySide6.QtWidgets import QLabel
+            texts = {l.text() for l in panel.findChildren(QLabel)}
+            self.assertNotIn("卷名去重默认开启；按卷分文件与分页联动", texts)
+            self.assertNotIn("脏数据开关默认关闭（保留原文）；偈颂分隔符填两个全角空格，引号指「『 』",
+                             texts)
+        finally:
+            panel.close() if hasattr(panel, "close") else None
+
     def test_clean_verify_button_present(self):
         panel = self._panel()
         try:
@@ -1955,8 +1987,11 @@ class TestNotesTab(unittest.TestCase):
         return XmlOptionsPanel(load_presets())
 
     def test_ann_three_way_mutual_exclusion(self):
+        from PySide6.QtWidgets import QRadioButton
         panel = self._panel()
         try:
+            for w in (panel.ann_none, panel.ann_hard, panel.ann_full):
+                self.assertIsInstance(w, QRadioButton)   # 三选一 → 单选按钮
             panel.ann_none.setChecked(True)                 # 无注音
             self.assertFalse(panel.ann_hard.isChecked())
             self.assertFalse(panel.ann_full.isChecked())

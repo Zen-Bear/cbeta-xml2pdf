@@ -49,17 +49,17 @@ class XmlOptions:
 | | `output.inline_brackets` | 下拉「正文夹注」全角/半角（`<note place="inline">` 原文夹注） | `output.inline_brackets` |
 | | `output.note_inline_brackets` | 下拉「校注内联括号」〔〕/[]/全角（）/半角()（`corner`/`square`/`fullwidth`/`halfwidth`，默认 fullwidth；〔〕[] 优先，与正文夹注区分；**注释方式≠括号内联时置灰**） | `output.note_inline_brackets` |
 | | `output.suppress_title_notes` | 复选「压制标题注码」 | `output.suppress_title_notes` |
-| 排版 | `output.split_juan` | 复选「按卷分文件」 | `output.split_juan` |
+| 排版 | `output.split_juan` | 复选（各选项右侧附**灰色括号说明**，短同行、长置下一行）：按卷分文件/显示结束卷标题/卷名去重/去掉标题行首 No./CBETA校改字标红/忽略 XML 样式·空格脏数据/偈颂分隔符/去掉偈颂首尾引号 | `output.split_juan` |
 | | `output.show_close_juan` | 复选「显示结束卷标题」 | `output.show_close_juan` |
 | | `output.suppress_jhead_dup` | 复选「卷名去重」 | `output.suppress_jhead_dup` |
 | | `output.strip_head_no` | 复选「去掉标题行首 No.」 | `output.strip_head_no` |
 | | `output.corr_cbeta` | 复选「CBETA校改字标红」（默认关） | `output.corr_cbeta` |
 | | `output.ignore_xml_style` / `ignore_xml_space` | 复选（脏数据忽略） | `output.*` |
 | | `output.verse_caesura` / `verse_strip_quotes` | 输入/复选（偈颂） | `output.*` |
-| 分页 | `output.pagination.*` | 分组复选（智能分页/双面/卷首/序品/pb/尾页） | `pagination.*` |
+| 分页 | `output.pagination.*` | 分组复选（各选项右侧**灰色括号说明**）：智能分页=总开关（关则下列全失效）；双面打印=每卷单数页起；卷首换页=每卷开头另起一页（第 1 卷默认与书名同页）；首卷换页=第 1 卷也另起一页、书名独占首页（需勾选卷首换页）；序/品 level1 换页=level-1 目录各自另起一页；按 pb 分页=按 `<pb>` 刻本页边界；尾页换页=末尾【經文資訊】另起一页 | `pagination.*` |
 | 经藏名 | `output.series_title.*` | 复选+字体+字号 | `series_title.*` |
 | 校验 | `verify.enabled/maxDiff/diffLines/auto_fetch/scope_juan` | 高级页（转换后校验开关**默认开**/阈值/报告差异行数/自动下载/卷限定 + 「清理校验产物…」按钮） | `verify.*` |
-| 注音 | `annotations.enabled` / `full_text` | 三选一「无注音 / 难字注音 / 全文注音」（全文含难字；互斥）+ 方案/位置/括号/频率/词表（词表**只读**，浏览选择，默认内置表）；`rare_zones`/`rare_font` 走 config | `annotations.*` |
+| 注音 | `annotations.enabled` / `full_text` | 三选一**单选按钮**「无注音 / 难字注音 / 全文注音」（全文含难字；`QRadioButton` 同组互斥）+ 方案/位置/括号/频率/词表（词表**只读**，浏览选择，默认内置表）；`rare_zones`/`rare_font` 走 config | `annotations.*` |
 
 **不适合 GUI 修改**：`source.xml_dir/cbeta_ebook`（路径，数据源窗口只读框走浏览；`catalog` 钉死内置）、`downloads.*` URL 模板（数据源窗口 tab1 可改，存当前选中预设）、`source.title_t2s`（数据源窗口复选）。
 
@@ -92,11 +92,23 @@ class XmlOptions:
 │       注释方式 [页底脚注 ▼]                                    │
 │       校注内联括号 [全角（） ▼]（非括号内联时置灰）            │
 ├───────────────────────────────────────────────────────────────┤
-│ 排版: ☐ 按卷分文件 ☐ 显示结束卷 ☑ 卷名去重 ☐ 忽略XML样式/空格    │
-│       偈颂分隔 [　　]  ☐ 去偈颂引号                            │
+│ 排版: ☐ 按卷分文件（每卷单独成文件）                          │
+│       ☐ 显示结束卷标题（打印卷末 close 标题；默认关）         │
+│       ☑ 卷名去重（卷头与书名重复时去重；默认开）              │
+│       ☐ 去掉标题行首 No.（如 No. 1116-B 序→序）               │
+│       ☐ CBETA校改字标红（默认关；与逐字校验无关）             │
+│       ☐ 忽略 XML 样式脏数据（默认关；保留原文）               │
+│       ☐ 忽略 XML 空格脏数据（默认关；保留原文）               │
+│       偈颂分隔 [　　]（<caesura/> 处分隔，默认两个全角空格）  │
+│       ☐ 去掉偈颂首尾引号（去掉「」『』）                      │
 ├───────────────────────────────────────────────────────────────┤
-│ 分页: ☐ 智能分页 ☐ 双面打印 ☑ 卷首换页 ☐ 首卷换页              │
-│       ☑ 序/品 level1 换页 ☐ 按 pb 分页 ☑ 尾页换页             │
+│ 分页: ☐ 智能分页（总开关）                                    │
+│       ☐ 双面打印（每卷单数页起）                              │
+│       ☑ 卷首换页（每卷开头另起一页）                          │
+│       ☐ 首卷换页（第1卷也另起一页，书名独占首页）             │
+│       ☑ 序/品 level1 换页（序/品各自另起一页）                │
+│       ☐ 按 pb 分页（按刻本页边界；默认关）                    │
+│       ☑ 尾页换页（【經文資訊】另起一页）                       │
 ├───────────────────────────────────────────────────────────────┤
 │ 经藏名: ☑ 打印  字体 [隸書, LiSu ▼]  字号 [9]                 │
 ├───────────────────────────────────────────────────────────────┤

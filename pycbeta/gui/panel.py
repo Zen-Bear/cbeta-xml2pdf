@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
     QDialogButtonBox, QDoubleSpinBox,
     QFileDialog, QFormLayout, QGridLayout, QGroupBox, QHBoxLayout, QInputDialog,
     QLabel, QLineEdit,
-    QMessageBox, QPlainTextEdit, QPushButton, QHeaderView, QSpinBox,
+    QMessageBox, QPlainTextEdit, QPushButton, QRadioButton, QHeaderView, QSpinBox,
     QTableWidget, QTableWidgetItem,
     QTabWidget, QVBoxLayout,
     QWidget,
@@ -46,9 +46,20 @@ SLOT_NAME_WIDTH = 220    # “当前配置：<名>”里名字的固定显示宽
 
 PAGINATION_KEYS = ["enabled", "duplex", "juan", "juan_first", "mulu_level1", "pb", "tei"]
 PAGINATION_LABELS = {
-    "enabled": "智能分页", "duplex": "双面打印", "juan": "卷首换页",
-    "juan_first": "首卷换页", "mulu_level1": "序/品 level1 换页",
+    "enabled": "智能分页", "duplex": "双面打印",
+    "juan": "卷首换页", "juan_first": "首卷换页",
+    "mulu_level1": "序/品 level1 换页",
     "pb": "按 pb 分页", "tei": "尾页换页",
+}
+# 各分页选项的补充说明（UI 以灰色括号显示在标签右侧）
+PAGINATION_HINTS = {
+    "enabled": "（总开关：关则下列分页规则全部失效，保持自然排版）",
+    "duplex": "（每卷从单数页开始，Word 自动补空白偶页；双面装订用）",
+    "juan": "（每卷开头另起一页；第 1 卷默认与书名同页）",
+    "juan_first": "（第 1 卷也另起一页，书名/题署独占一页；需勾选「卷首换页」）",
+    "mulu_level1": "（序、品等 level-1 目录各自另起一页；level≥2 不分）",
+    "pb": "（源 XML 的 <pb> 刻本页边界处换页；默认关）",
+    "tei": "（末尾【經文資訊】页另起一页）",
 }
 FORMATS = ["pdf", "docx", "html", "epub", "md", "txt"]
 DOCX_SINGLES = ["msword", "wps", "docbuilder", "libreoffice", "minipdf"]
@@ -685,6 +696,7 @@ class XmlOptionsPanel(QWidget):
         self._emitting = False
         self._theme_dirty = False     # 「生效样式」下拉被手动改过（本次运行覆盖，未落盘）
         self._series_extra = {}       # series_title 旧 font/size 键透传保留
+        self._paren_hint_labels = []  # 各选项右侧灰色括号说明标签（供测试/样式核对）
         self._emitting = True
         try:
             self._build()
@@ -757,6 +769,13 @@ class XmlOptionsPanel(QWidget):
 
     def _check(self, text, checked=False):
         box = QCheckBox(text)
+        box.setChecked(checked)
+        box.toggled.connect(lambda _v: self._changed())
+        return box
+
+    def _radio(self, text, checked=False):
+        # 同父单选组：QRadioButton 默认互斥（同 parent 自动 exclusive）
+        box = QRadioButton(text)
         box.setChecked(checked)
         box.toggled.connect(lambda _v: self._changed())
         return box
@@ -1263,16 +1282,59 @@ class XmlOptionsPanel(QWidget):
         label.setWordWrap(True)
         return label
 
+    def _gray_hint(self, text):
+        """灰色括号说明标签（纯文本，含 <> 不被当作 HTML）；登记供核对。"""
+        label = QLabel(text)
+        label.setStyleSheet("color: gray")
+        label.setWordWrap(True)
+        label.setTextFormat(Qt.PlainText)
+        self._paren_hint_labels.append(label)
+        return label
+
+    def _check_row(self, parent, text, hint="", checked=False):
+        """复选框 + 灰色括号说明：说明短则同行，长则置于选项下一行（缩进）。
+
+        parent 为 QVBoxLayout；返回复选框（供 get_options/set_options 读写）。"""
+        box = self._check(text, checked=checked)
+        if not hint:
+            parent.addWidget(box)
+            return box
+        lab = self._gray_hint(hint)
+        if len(hint) <= 24:
+            row = QHBoxLayout()
+            row.setContentsMargins(0, 0, 0, 0)
+            row.addWidget(box)
+            row.addWidget(lab, 1)
+            parent.addLayout(row)
+        else:
+            parent.addWidget(box)
+            lab.setContentsMargins(20, 0, 0, 0)
+            lab.setMaximumWidth(420)
+            parent.addWidget(lab)
+        return box
+
     def _tab_pagination(self):
         w = QWidget()
         grid = QGridLayout(w)
         left = QVBoxLayout()
         left.addWidget(self._hint("分节即分页单元：Word 里每节另起一页"))
         self.pg_boxes = {}
+        self.pg_hints = {}
         for key in PAGINATION_KEYS:
             box = self._check(PAGINATION_LABELS[key])
             self.pg_boxes[key] = box
-            left.addWidget(box)
+            hint = PAGINATION_HINTS.get(key, "")
+            if hint:
+                row = QHBoxLayout()
+                row.setContentsMargins(0, 0, 0, 0)
+                row.addWidget(box)
+                lab = self._gray_hint(hint)
+                lab.setMaximumWidth(380)
+                self.pg_hints[key] = lab
+                row.addWidget(lab, 1)
+                left.addLayout(row)
+            else:
+                left.addWidget(box)
         left.addStretch(1)
         grid.addLayout(left, 0, 0)
         right = QVBoxLayout()
@@ -1294,34 +1356,41 @@ class XmlOptionsPanel(QWidget):
         w = QWidget()
         grid = QGridLayout(w)
         left = QVBoxLayout()
-        left.addWidget(self._hint("卷名去重默认开启；按卷分文件与分页联动"))
-        self.split_box = self._check("按卷分文件")
-        self.close_juan_box = self._check("显示结束卷标题")
-        self.dedup_box = self._check("卷名去重", checked=True)
-        self.strip_no_box = self._check("去掉标题行首 No.")
+        self.split_box = self._check_row(
+            left, "按卷分文件", "（每卷单独成一个文件；与分页联动）")
+        self.close_juan_box = self._check_row(
+            left, "显示结束卷标题", "（打印卷末「卷终」等 close 标题；默认关）")
+        self.dedup_box = self._check_row(
+            left, "卷名去重", "（卷头标题与书名重复时去重；默认开）", checked=True)
+        self.strip_no_box = self._check_row(
+            left, "去掉标题行首 No.",
+            "（如「No. 1116-B 序」→「序」；正文内 No. 不动）")
         self.strip_no_box.setToolTip("去 head/jhead 行首 No. 令牌（如 No. 1116-B 序→序，余部去前导空格；正文内 No. 不动；书签保留原样）")
-        self.corr_box = self._check("CBETA校改字标红")
+        self.corr_box = self._check_row(
+            left, "CBETA校改字标红",
+            "（默认关：CBETA 校改用字标红；与逐字校验无关）")
         self.corr_box.setToolTip(
             "output.corr_cbeta（默认关）：app.lem 原始 wit 含 #wit.cbeta 的正文用字标红——"
             "docx 红 #FF0000、html/epub span.corr；md/txt 不标；与逐字校验无关")
-        for b in (self.split_box, self.close_juan_box, self.dedup_box,
-                  self.strip_no_box, self.corr_box):
-            left.addWidget(b)
         left.addStretch(1)
         grid.addLayout(left, 0, 0)
         right = QVBoxLayout()
-        right.addWidget(self._hint("脏数据开关默认关闭（保留原文）；偈颂分隔符填两个全角空格，引号指「『 』"))
-        self.ign_style_box = self._check("忽略 XML 样式脏数据")
-        self.ign_space_box = self._check("忽略 XML 空格脏数据")
-        self.strip_quotes_box = self._check("去掉偈颂首尾引号")
-        right.addWidget(self.ign_style_box)
-        right.addWidget(self.ign_space_box)
+        self.ign_style_box = self._check_row(
+            right, "忽略 XML 样式脏数据",
+            "（样式脏数据开关默认关；忽略源 XML 的 <p style> 缩进，保留原文）")
+        self.ign_space_box = self._check_row(
+            right, "忽略 XML 空格脏数据",
+            "（空格脏数据开关默认关；忽略源 XML 首尾空白，保留原文）")
         self.caesura_edit = QLineEdit("　　")
         self.caesura_edit.textChanged.connect(lambda _v: self._changed())
-        form = QFormLayout()
-        form.addRow("偈颂分隔符", self.caesura_edit)
-        right.addLayout(form)
-        right.addWidget(self.strip_quotes_box)
+        crow = QHBoxLayout()
+        crow.setContentsMargins(0, 0, 0, 0)
+        crow.addWidget(QLabel("偈颂分隔符"))
+        crow.addWidget(self.caesura_edit)
+        crow.addWidget(self._gray_hint("（<caesura/> 处分隔，默认两个全角空格）"), 1)
+        right.addLayout(crow)
+        self.strip_quotes_box = self._check_row(
+            right, "去掉偈颂首尾引号", "（去掉偈颂行首尾的「」『』）")
         right.addStretch(1)
         grid.addLayout(right, 0, 1)
         return w
@@ -1394,15 +1463,13 @@ class XmlOptionsPanel(QWidget):
         w = QWidget()
         form = QFormLayout(w)
         arow = QHBoxLayout()
-        self.ann_none = self._check("无注音", checked=True)
-        self.ann_hard = self._check("难字注音")
-        self.ann_full = self._check("全文注音")
-        self.ann_none.setToolTip("不注音（选中即取消后两项）")
+        # 三选一（互斥）：无注音 / 难字注音 / 全文注音 —— 单选按钮
+        self.ann_none = self._radio("无注音", checked=True)
+        self.ann_hard = self._radio("难字注音")
+        self.ann_full = self._radio("全文注音")
+        self.ann_none.setToolTip("不注音")
         self.ann_hard.setToolTip("只注难字：词表 + 分区/补充字形自动注音")
         self.ann_full.setToolTip("全文逐字注音（含难字注音；词表优先，忽略分区/频率）")
-        self.ann_none.toggled.connect(lambda on: on and self._on_ann_pick("none"))
-        self.ann_hard.toggled.connect(lambda on: on and self._on_ann_pick("hard"))
-        self.ann_full.toggled.connect(lambda on: on and self._on_ann_pick("full"))
         for b in (self.ann_none, self.ann_hard, self.ann_full):
             arow.addWidget(b)
         arow.addStretch(1)
@@ -1440,19 +1507,6 @@ class XmlOptionsPanel(QWidget):
         self.ann_file.textChanged.connect(lambda _v: self._refresh_ann_hint())
         self._refresh_ann_hint()
         return w
-
-    def _on_ann_pick(self, which):
-        """无注音/难字/全文 三选一（全文含难字）。"""
-        if getattr(self, "_emitting", False):
-            return
-        self._emitting = True
-        try:
-            self.ann_none.setChecked(which == "none")
-            self.ann_hard.setChecked(which == "hard")
-            self.ann_full.setChecked(which == "full")
-        finally:
-            self._emitting = False
-        self._changed()
 
     def _ann_table_path(self):
         """当前词表实际路径：空=内置表；否则按 annotate 规则解析（缺失→None）。"""
