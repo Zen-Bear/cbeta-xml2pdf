@@ -1228,6 +1228,41 @@ class TestConfigBar(unittest.TestCase):
             panel.close() if hasattr(panel, "close") else None
 
 
+    def test_clean_verify_button_present(self):
+        panel = self._panel()
+        try:
+            self.assertEqual(panel.clean_verify_btn.text(), "清理校验产物…")
+        finally:
+            panel.close() if hasattr(panel, "close") else None
+
+    def test_clean_verify_dirs(self):
+        # 只删 `*（验证）/（驗證）` 目录，成品文件不动
+        import shutil
+        import pycbeta.gui.panel as pm
+        root = tempfile.mkdtemp()
+        try:
+            for n in ("A（验证）", "B（驗證）"):
+                os.makedirs(os.path.join(root, n))
+                with open(os.path.join(root, n, "report.txt"),
+                          "w", encoding="utf-8") as f:
+                    f.write("x")
+            keep = os.path.join(root, "T0349 书.docx")
+            with open(keep, "w", encoding="utf-8") as f:
+                f.write("k")
+            removed, errs = pm.clean_verify_dirs(root)
+            self.assertEqual(removed, 2)
+            self.assertEqual(errs, [])
+            self.assertFalse(os.path.isdir(os.path.join(root, "A（验证）")))
+            self.assertFalse(os.path.isdir(os.path.join(root, "B（驗證）")))
+            self.assertTrue(os.path.isfile(keep))
+            # 空/不存在目录：0 不抛
+            self.assertEqual(pm.clean_verify_dirs(""), (0, []))
+            self.assertEqual(pm.clean_verify_dirs(os.path.join(root, "nope")),
+                             (0, []))
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+
 class TestEngineSingles(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

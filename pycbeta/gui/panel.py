@@ -634,6 +634,26 @@ class DataUpdateDialog(QDialog):
         self.status.setText("；".join(format_report(report or [])) or "无更新项")
 
 
+def clean_verify_dirs(out_dir):
+    """删除 `out_dir` 下的校验产物目录 `*（验证）`/`*（驗證）`（可重生成的中间产物）。
+
+    返回 (删除数, 失败列表[短说明])。目录不存在视为 0。
+    """
+    import glob as _glob
+    import shutil as _sh
+    removed, errs = 0, []
+    for pat in ("*（验证）", "*（驗證）"):
+        for d in _glob.glob(os.path.join(out_dir or "", pat)):
+            if not os.path.isdir(d):
+                continue
+            try:
+                _sh.rmtree(d)
+                removed += 1
+            except OSError as e:
+                errs.append(f"{os.path.basename(d)}: {e}")
+    return removed, errs
+
+
 class XmlOptionsPanel(QWidget):
     """七选项卡面板。get_options/set_options；值变更发 optionsChanged。"""
     optionsChanged = Signal(object)
@@ -1456,7 +1476,56 @@ class XmlOptionsPanel(QWidget):
         self.scope_box = self._check("按卷限定官方文档", checked=True)
         form.addRow("", self.autofetch_box)
         form.addRow("", self.scope_box)
+        self.clean_verify_btn = QPushButton("清理校验产物…")
+        self.clean_verify_btn.setToolTip(
+            "删除输出目录下的「*（验证）」校验中间产物（正式比对档/compare/报告）；"
+            "可重生成，不影响成品")
+        self.clean_verify_btn.clicked.connect(self._on_clean_verify)
+        form.addRow("", self.clean_verify_btn)
         return w
+
+    def _verify_output_dir(self):
+        """校验产物所在输出目录：优先主窗「输出目录」编辑框；取不到返回 ""。"""
+        win = self.window()
+        edit = getattr(win, "out_edit", None)
+        if edit is not None:
+            return (edit.text() or "").strip()
+        return ""
+
+    def _on_clean_verify(self):
+        out_dir = self._verify_output_dir()
+        if not out_dir:
+            out_dir = QFileDialog.getExistingDirectory(
+                self, "选择输出目录（清理其下的校验产物）")
+        out_dir = (out_dir or "").strip()
+        if not out_dir or not os.path.isdir(out_dir):
+            if out_dir:
+                QMessageBox.warning(self, "清理校验产物",
+                                    f"目录不存在：{out_dir}")
+            return
+        import glob as _glob
+        dirs = []
+        for pat in ("*（验证）", "*（驗證）"):
+            dirs += [d for d in _glob.glob(os.path.join(out_dir, pat))
+                     if os.path.isdir(d)]
+        if not dirs:
+            QMessageBox.information(self, "清理校验产物",
+                                    "未发现校验产物目录（*（验证））。")
+            return
+        names = "\n".join("  " + os.path.basename(d) for d in dirs[:12])
+        more = f"\n  …（共 {len(dirs)} 个）" if len(dirs) > 12 else ""
+        if QMessageBox.question(
+                self, "清理校验产物",
+                f"将删除以下 {len(dirs)} 个校验产物目录（不可撤销）：\n"
+                f"{names}{more}\n\n位置：{out_dir}\n删除后下次校验会重新生成。",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No) != QMessageBox.Yes:
+            return
+        removed, errs = clean_verify_dirs(out_dir)
+        msg = f"已删除 {removed} 个校验产物目录。"
+        if errs:
+            msg += "\n失败：\n" + "\n".join(errs[:5])
+        QMessageBox.information(self, "清理校验产物", msg)
 
     # ---------- 配置预设（一切按下拉选中项） ----------
     def _set_cfg_title(self, action=None):
