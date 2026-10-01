@@ -1111,11 +1111,11 @@ class XmlOptionsPanel(QWidget):
         return v if v.lower().endswith(".css") else v + ".css"
 
     def _update_theme_button(self):
-        """样式落盘按钮双文案：命名预设→“存入预设”，出厂项→“设为默认”。
+        """样式落盘按钮双文案：命名预设→“预设生效”，出厂项→“设为默认”。
 
         与 _on_theme_default 的分流目标一致；预设切换/下拉重填后刷新。"""
         if self._selected_preset():
-            self.theme_default_btn.setText("存入预设")
+            self.theme_default_btn.setText("预设生效")
             self.theme_default_btn.setToolTip(
                 "写入所选预设的 pdf-docx-user-theme 键（永久生效）")
         else:
@@ -1126,7 +1126,7 @@ class XmlOptionsPanel(QWidget):
     def _on_theme_default(self):
         """生效样式落盘：选中命名预设 → 写该预设的 pdf-docx-user-theme 键
         （预设自带主题，切换预设即跟走）；出厂默认项 → 写 run.json 主题槽。
-        按钮文案由 _update_theme_button 同步（存入预设/设为默认）。"""
+        按钮文案由 _update_theme_button 同步（预设生效/设为默认）。"""
         from pycbeta.gui.css_editor import set_user_theme
         value = self.theme_box.selected_value()
         preset = self._selected_preset()
@@ -1582,7 +1582,7 @@ class XmlOptionsPanel(QWidget):
         self._set_cfg_title()
         self._update_preset_buttons()
         self._refresh_theme_box()  # 预设自带主题键时跟走显示
-        self._update_theme_button()  # 落盘目标跟走（存入预设/设为默认）
+        self._update_theme_button()  # 落盘目标跟走（预设生效/设为默认）
         self._changed()
 
     def _on_preset_save_as(self):

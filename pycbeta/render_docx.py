@@ -1182,6 +1182,35 @@ class DocxRenderer:
                     return u
         return ""
 
+    # A4 基准尺寸（twips）：图片随纸张等比缩放的参照（官方 docx/pdf 为 A4）。
+    _A4_W_TW, _A4_H_TW = 11906, 16838
+
+    def _fit_image_px(self, size):
+        """图片原生像素 (w,h) → 显示像素。两段都只缩不放：
+
+        1) 随纸张等比缩放（A4 基准）：同图在 A5 等小页上按比例缩小，避免相对于
+           版面显得被放大（绝对尺寸与官方一致，但小页占页比过大、易独占一页）；
+        2) 适配正文区（宽、高都不超，防溢出）。
+
+        96dpi：1px = 15 twips。A4 及更大页第 1 段为 1，输出与旧版一致。
+        """
+        w, h = int(size[0]), int(size[1])
+        s = min(self.page_w / self._A4_W_TW,
+                self.page_h / self._A4_H_TW, 1.0)
+        if s > 0.995:  # A4（page 取整 11905/16837）不因四舍五入掉 1px
+            s = 1.0
+        w = max(1, int(w * s))
+        h = max(1, int(h * s))
+        max_w = max(1, (self.page_w - self.page_margins["left"]
+                        - self.page_margins["right"]) // 15)
+        max_h = max(1, (self.page_h - self.page_margins["top"]
+                        - self.page_margins["bottom"]) // 15)
+        f = min(1.0, max_w / w, max_h / h)
+        if f < 1.0:
+            w = max(1, int(w * f))
+            h = max(1, int(h * f))
+        return w, h
+
     def _render_graphic(self, e) -> str:
         """<figure><graphic url>：找到图片则内嵌（word/media + w:drawing run），
         缺失则输出【圖：basename】文本（与 txt 口径一致），并记入 missing_figures。
@@ -1206,13 +1235,7 @@ class DocxRenderer:
                 rid = f"rIdImg{self._media_seq}"
                 ext = (path.rsplit(".", 1)[-1].lower() if "." in path else "gif") or "gif"
                 self._media.append({"path": path, "ext": ext, "rid": rid, "name": base})
-            w, h = image_size(path) or (480, 360)
-            max_w_tw = self.page_w - self.page_margins["left"] - self.page_margins["right"]
-            # twips → px（96dpi：1px = 15 twips）；只缩小不放大（100% 上限，不足版心不拉伸）
-            max_w_px = max(1, max_w_tw // 15)
-            if w > max_w_px:
-                h = max(1, h * max_w_px // w)
-                w = max_w_px
+            w, h = self._fit_image_px(image_size(path) or (480, 360))
             cx, cy = w * EMU_PER_PX, h * EMU_PER_PX
             nm = _x(base)
             # drawing id 按 drawing 发号（全包唯一）；媒体复用（脚注重引正文图）不涨

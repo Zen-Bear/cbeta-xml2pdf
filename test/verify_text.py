@@ -13,7 +13,7 @@ from pycbeta.verify import (generate_formal, extract_text, normalize, diff_stats
                             find_official, strip_infos, strip_docx_head, merge_docx,
                             _extract_html_parts, _norm_official_txt, _strip_md_marks,
                             _head_no_tokens, _strip_official_no, _strip_no_from,
-                            t2s_baseline, _ann_brackets_from)
+                            t2s_baseline, _ann_brackets_from, trial_pass_line)
 from pycbeta.simplify import simplify_work
 from pycbeta.parser import P5Parser
 from pycbeta.theme import load_presets
@@ -349,8 +349,7 @@ def main(argv=None):
                     best = cur
                 if total <= max_diff:
                     ok_any = True
-                    why = "仅含CBETA版本日期/版权等元数据微小差异，已在normalize中部分剥离，剩余差值在阈值内视为一致" if total>0 else "逐字完全一致"
-                    detail = f"      → {bkind} 通过: {why}"
+                    detail = trial_pass_line(bkind, mi, ex, total, max_diff)
                     if total>0 and ctx:
                         for idx, (tag,i1,i2,j1,j2) in enumerate(ctx[:diff_lines], 1):
                             a_snip = ours[max(0,i1-10):i1+40].replace("\n","")

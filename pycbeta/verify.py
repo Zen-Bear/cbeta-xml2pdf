@@ -942,6 +942,17 @@ def diff_stats(ours: str, theirs: str, max_ctx: int = 5):
            for op in sm.get_opcodes() if op[0] != "equal"][:max_ctx]
     return matched, missing, extra, ctx
 
+
+def trial_pass_line(bkind: str, mi: int, ex: int, total: int, max_diff: int) -> str:
+    """trial 通过行（阈值内）：0/0 记逐字完全一致；非 0/0 如实打出缺/多数。
+
+    不再断言“仅含CBETA版本日期/版权等元数据微小差异”——差异性质由随后
+    的差异片段自行举证（调用方在 total>0 时照常附片段）。"""
+    if total > 0:
+        return (f"      → {bkind} 通过: 缺{mi}字(生成档缺失) / 多{ex}字"
+                f"(生成档多出)，合计{total} ≤阈值{max_diff}")
+    return f"      → {bkind} 通过: 逐字完全一致"
+
 def work_juan_numbers(work) -> set:
     """work.body 中 <milestone unit="juan" n="…"> 的卷号集合
     （用于把官方基线限定到 XML 实际覆盖的卷数，如 TX07n0006 → {1..6}）。"""

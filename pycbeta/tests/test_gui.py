@@ -641,7 +641,7 @@ class TestConfigBar(unittest.TestCase):
             box.addItem("foo", os.path.join(pm.REPO_ROOT, "presets", "foo.json"))
             box.setCurrentIndex(box.count() - 1)
             panel._update_theme_button()
-            self.assertEqual(panel.theme_default_btn.text(), "存入预设")
+            self.assertEqual(panel.theme_default_btn.text(), "预设生效")
             box.blockSignals(False)
         finally:
             panel.close() if hasattr(panel, "close") else None
@@ -659,15 +659,22 @@ class TestConfigBar(unittest.TestCase):
         import shutil
         import unittest.mock as mock
         import pycbeta.gui.panel as pm
+        import pycbeta.theme as _theme
         root = tempfile.mkdtemp()
         try:
+            # 自带临时预设，不依赖仓库 presets/ 里恰好有 my.css（本地数据可变）
+            mycss = os.path.join(root, "my.css")
+            with open(mycss, "w", encoding="utf-8") as f:
+                f.write("/* my */\n")
             pre = os.path.join(root, "A5.json")
             with open(pre, "w", encoding="utf-8") as f:
                 json.dump({"pdf-docx-user-theme": "my.css"}, f)
             panel = self._panel()
             try:
                 with mock.patch.object(pm.XmlOptionsPanel, "_selected_preset",
-                                       return_value=pre):
+                                       return_value=pre), \
+                        mock.patch.object(_theme, "list_presets",
+                                          return_value=[("user", "my", mycss)]):
                     panel._refresh_theme_box()
                     self.assertEqual(panel.theme_box.selected_value(), "my")
                     self.assertIn("预设 A5", panel.theme_status.text())
@@ -3826,6 +3833,40 @@ class TestCssEditor(unittest.TestCase):
                     dlg.close()
         finally:
             shutil.rmtree(root, ignore_errors=True)
+    def test_delete_preset_confirms(self):
+        # 删除用户预设前必须弹窗确认：取消保留文件，确认才删。
+        import shutil
+        import unittest.mock as mock
+        import pycbeta.gui.css_editor as ce
+        import pycbeta.theme as _theme
+        from PySide6.QtWidgets import QMessageBox
+        root = tempfile.mkdtemp()
+        try:
+            udir = os.path.join(root, "presets")
+            os.makedirs(udir)
+            up = os.path.join(udir, "mine.css")
+            with open(up, "w", encoding="utf-8") as f:
+                f.write("/* x */\n")
+            with mock.patch.object(_theme, "user_presets_dir",
+                                   lambda root=None: udir), \
+                    mock.patch.object(ce, "REPO_ROOT", root):
+                dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+                try:
+                    dlg.preset_box.select_path(up)
+                    with mock.patch.object(QMessageBox, "question",
+                                           return_value=QMessageBox.No) as q:
+                        dlg._delete_preset()
+                    q.assert_called_once()
+                    self.assertTrue(os.path.isfile(up))  # 取消不删
+                    with mock.patch.object(QMessageBox, "question",
+                                           return_value=QMessageBox.Yes):
+                        dlg._delete_preset()
+                    self.assertFalse(os.path.isfile(up))  # 确认才删
+                finally:
+                    dlg.close()
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
     def test_dialog_initial_theme_selects_preset(self):
         # 主面板「生效样式」传入 initial_theme：弹窗应选中并载入该预设，
         # 而非永远落在 run 槽/出厂（改的才是当前选中样式）。
@@ -4232,6 +4273,46 @@ class TestCssEditor(unittest.TestCase):
         self.assertIsNone(n1)  # 首个沿用默认
         self.assertEqual(n2, "TX08n0006.txt")
         self.assertIsNone(n3)  # html 照旧默认（残留）
+
+    def test_label_key_for_para_xu_head(self):
+        from pycbeta.gui.css_editor import label_key_for_para
+        para = {"style": "head", "runs": [{"font": "KaiTi", "text": "序"},
+                                          {"font": "KaiTi", "text": "標"}]}
+        self.assertEqual(label_key_for_para(para, "KaiTi", "SimHei"),
+                         "div-xu-head")
+        # 普通标题（同字体为 head）→ 标题
+        para2 = {"style": "head", "runs": [{"font": "SimHei", "text": "目"}]}
+        self.assertEqual(label_key_for_para(para2, "KaiTi", "SimHei"), "head")
+        # 无区分（xu==head 或缺字体）→ 原样式
+        self.assertEqual(label_key_for_para(para, "", ""), "head")
+
+    def test_show_spec_labels_xu_head(self):
+        # 端到端：div@type=xu 内 head 的 DOCX run 字体 != 普通 head，
+        # 标注应区分为 序标题（div-xu-head）。
+        import tempfile
+        from pycbeta.render_docx import DocxRenderer
+        from pycbeta.model import E, Text, Work
+        from pycbeta.gui.css_editor import docx_spec, label_key_for_para
+        body = [
+            E(tag="div", attrs={"type": "xu"}, children=[
+                E(tag="head", attrs={}, children=[Text("序標題")])]),
+            E(tag="div", attrs={"type": "other"}, children=[
+                E(tag="head", attrs={}, children=[Text("目錄標題")])]),
+        ]
+        w = Work(id="T", source_file="", metadata={"title": "t", "author": ""},
+                 body=body, notes_by_n={}, apps=[], simplified=False)
+        d = tempfile.mkdtemp()
+        self.addCleanup(__import__("shutil").rmtree, d, True)
+        fn = DocxRenderer(bookmarks=False).render_work(w, d, "x.docx")
+        spec = docx_spec(fn)
+        heads = [p for p in spec["paras"] if p.get("style") == "head"]
+        self.assertEqual(len(heads), 2)
+        xu, mu = heads
+        xu_font = next(r["font"] for r in xu["runs"] if r.get("font"))
+        mu_font = next(r["font"] for r in mu["runs"] if r.get("font"))
+        self.assertNotEqual(xu_font, mu_font)
+        self.assertEqual(label_key_for_para(xu, xu_font, mu_font), "div-xu-head")
+        self.assertEqual(label_key_for_para(mu, xu_font, mu_font), "head")
 
     def test_styles_tab_opens_editor(self):
         from pycbeta.gui.panel import XmlOptionsPanel

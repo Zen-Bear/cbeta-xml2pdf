@@ -217,10 +217,10 @@ div.div-orig { font-weight: bold; }         /* 原文（官方 golden 同样加�
 div.div-commentary { font-weight: normal; } /* 解釋 */
 div.div-xu { color: #000000; margin-top: 0.5em; margin-bottom: 1em; } /* 序：与正文同节奏（2026-09-06 前 1em/1em，序内每段大间距、正文忽宽忽挤；块分隔靠标题边距与分页）。PDF 按块生效；DOCX 对序内每个段落生效（命名样式不含 div 上下文，见 render_docx._para 内联追加） */
 /* 序内标题（<head> 在 div-xu 内，如"新譯大乘入楞伽經序"）：颜色覆盖 p.head 的蓝色；
-   font-family 换序标题字体（改这一行即可，如换宋体写 宋体, SimSun, serif）。
-   font-size 序标题字号（属性选择器 p.head[data-head-level] DOCX 不认，序标题走这行四格式通吃）。
-   后代选择器（仅两段）：DOCX 经 theme 后代匹配生效；HTML/PDF 浏览器原生支持。 */
-div.div-xu p.head { color: #0000a0; font-size: 20pt; }
+   字体走 var(--font-div-xu-head)（编辑器「序标题」行；繁 標楷體 / 简 楷体）——四格式同源，
+   改字体改该变量即可。font-size 序标题字号（属性选择器 p.head[data-head-level] DOCX
+   不认，序标题走这行四格式通吃）。后代选择器（仅两段）：DOCX 经 theme 后代匹配生效。 */
+div.div-xu p.head { color: #0000a0; font-size: 20pt; font-family: var(--font-div-xu-head); }
 /* div.div-jing 不加粗：经 = 正文主体，官方 golden 无此规则 */
 div.div-w { color: #777777; }                  /* 附文 */
 div.div-note { font-weight: bold; }              /* 字义：与正文同字号、无特殊色，加粗区分 */

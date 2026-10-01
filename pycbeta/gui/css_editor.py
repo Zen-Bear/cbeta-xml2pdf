@@ -671,7 +671,7 @@ STYLE_ROW_LABEL = {"title": "书名", "head": "标题", "juan": "卷名",
                    "pin": "品名", "p": "正文", "verse": "偈颂",
                    "footnote": "脚注", "byline": "题署", "author": "作者",
                    "translator": "译者", "div-note": "字义", "def": "释义",
-                   "series-title": "经藏名", "": "正文"}
+                   "series-title": "经藏名", "div-xu-head": "序标题", "": "正文"}
 
 
 def body_font_size(css_text):
@@ -725,8 +725,21 @@ _LABEL_TOUCHED_SEL = {"title": "h1.title", "head": "p.head",
                       "verse": "div.lg", "footnote": ".footnote",
                       "byline": "p.byline", "author": "p.author",
                       "translator": "p.translator", "div-note": "div.div-note",
-                      "def": "cb:def",
+                      "def": "cb:def", "div-xu-head": "div.div-xu p.head",
                       "series-title": "p.series-title", "": "p"}
+
+
+def label_key_for_para(para, xu_font, head_font):
+    """段落 → 预览标注键。序标题（div.div-xu p.head）与普通标题 DOCX 同为
+    pStyle="head"，差别只在 run 字体（序标题走 `--font-div-xu-head` 派生组合）；
+    按 run 字体区分，标注【序标题】而非【标题】（X1077 实锤）。"""
+    style = (para or {}).get("style", "")
+    if style == "head" and xu_font and head_font and xu_font != head_font:
+        fs = [r.get("font") for r in (para.get("runs") or [])
+              if r.get("font") and not r.get("br")]
+        if xu_font in fs and head_font not in fs:
+            return "div-xu-head"
+    return style
 
 
 def label_is_dirty(label_key, dirty_keys):
@@ -1904,6 +1917,13 @@ class CssEditorDialog(QDialog):
         if not path:
             QMessageBox.information(self, "删除预设", "出厂默认删不掉。")
             return
+        name = os.path.splitext(os.path.basename(path))[0]
+        ans = QMessageBox.question(
+            self, "删除预设",
+            f"确定删除用户预设「{name}」？\n{path}\n此操作不可撤销。",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        if ans != QMessageBox.Yes:
+            return
         try:
             delete_preset_file(path)
         except ValueError as exc:
@@ -2355,6 +2375,24 @@ class CssEditorDialog(QDialog):
         if spec:
             self._show_spec(spec, qt_aliases())
 
+    def _resolved_var_first(self, suffix):
+        """字体变量 `--font-<suffix>` 当前预览语言下首个字体名（GDI 归一，同 DOCX
+        run 的 eastAsia），用于预览标注区分序标题/标题。无 → ""。"""
+        try:
+            from pycbeta.theme import resolve_font_vars
+            from pycbeta.fonts import preferred_family
+            hant, hans = resolve_font_vars(self.work_css())
+            v = dict(hant)
+            if self.t2s_box.isChecked() or self._preview_lang() == "zh-Hans":
+                v.update(hans)
+            raw = v.get("--font-" + suffix, "")
+            names = [n.strip().strip('"').strip("'")
+                     for n in (raw or "").split(",")]
+            names = [n for n in names if n]
+            return preferred_family(names[0]) if names else ""
+        except Exception:  # noqa: BLE001 —— 预览标注尽力而为
+            return ""
+
     def _render_inline(self, css, lang=None):
         """同步重渲（单测/导出前保底用；界面走线程）。返回 docx 路径。"""
         import tempfile as _tf
@@ -2515,6 +2553,13 @@ class CssEditorDialog(QDialog):
         # 字义（div-note）无段落样式，DOCX 只留 run 灰色：颜色全中即推断
         note_gray = div_note_color(self.work_css()) if show_names else ""
         dirty_keys = self._dirty_keys() if show_names else set()
+        # 序标题（div.div-xu p.head）与普通标题 DOCX 同为 pStyle="head"，差别只在
+        # run 字体（序标题走 --font-div-xu-head 派生组合）。按字体区分标注，避免
+        # 同名不同字（X1077 实锤）。
+        _xu_font = _head_font = ""
+        if show_names:
+            _xu_font = self._resolved_var_first("div-xu-head")
+            _head_font = self._resolved_var_first("head")
         for para in spec["paras"]:
             fmt = QTextBlockFormat()
             if para["align"] == "center":
@@ -2527,7 +2572,7 @@ class CssEditorDialog(QDialog):
             _block_margins(fmt, para.get("margin"))
             cur.setBlockFormat(fmt)
             style = para.get("style", "")
-            label_key = style
+            label_key = label_key_for_para(para, _xu_font, _head_font)
             if style in ("p", "") and note_gray:
                 texts = [r for r in para["runs"]
                          if r.get("text") and not r.get("br")]

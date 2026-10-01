@@ -1175,8 +1175,9 @@ def main(argv=None):
                         best = cur
                     if total <= args.verify_max_diff:
                         ok_any = True
-                        why = "仅含CBETA版本日期/版权等元数据微小差异" if total>0 else "逐字完全一致"
-                        detail = f"      → {bkind} 通过: {why}"
+                        from .verify import trial_pass_line as _pass_line
+                        detail = _pass_line(bkind, mi, ex, total,
+                                            args.verify_max_diff)
                         if total>0 and ctx:
                             for idx,(tag,i1,i2,j1,j2) in enumerate(ctx[:args.verify_diff_lines],1):
                                 loc = locs[idx - 1] if idx - 1 < len(locs) else {}

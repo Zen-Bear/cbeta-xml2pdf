@@ -1026,6 +1026,27 @@ class TestDiffStats(unittest.TestCase):
         self.assertEqual(ctx, [("insert", 4, 4, 4, 6)])
 
 
+class TestTrialPassLine(unittest.TestCase):
+    """trial 通过行：0/0 记逐字一致；非 0/0 如实打出缺/多数。
+
+    不再断言“仅含CBETA版本日期/版权等元数据微小差异”（差异性质由片段举证）。"""
+
+    def test_zero(self):
+        from pycbeta.verify import trial_pass_line
+        s = trial_pass_line("txt_notes", 0, 0, 0, 10)
+        self.assertIn("逐字完全一致", s)
+        self.assertNotIn("缺", s)
+
+    def test_nonzero_reports_counts(self):
+        from pycbeta.verify import trial_pass_line
+        s = trial_pass_line("txt_notes", 3, 2, 5, 10)
+        self.assertIn("缺3字", s)
+        self.assertIn("多2字", s)
+        self.assertIn("合计5", s)
+        self.assertIn("≤阈值10", s)
+        self.assertNotIn("仅含CBETA", s)
+
+
 class TestNormalizeWithLines(unittest.TestCase):
     def test_line_map_aligns(self):
         from pycbeta.verify import normalize_with_lines, normalize

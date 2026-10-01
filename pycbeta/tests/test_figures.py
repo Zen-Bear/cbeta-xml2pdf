@@ -320,6 +320,32 @@ class TestDocxGraphic(unittest.TestCase):
         self.assertEqual(int(m.group(1)), max_px * 9525)
         self.assertEqual(int(m.group(2)), (1000 * max_px // 2000) * 9525)
 
+    def test_page_scaled_and_content_fit(self):
+        # 随纸张等比缩放（A4 基准）：A5 上按 page/11906 缩小；A4 原生不变。
+        import re
+        import struct
+        d = tempfile.mkdtemp()
+        _write(os.path.join(d, "a.gif"),
+               b"GIF89a" + struct.pack("<HH", 400, 200) + b"\x00" * 20)
+        presets = {"a5": {"size": [148, 210],
+                          "margins": {"top": 15, "bottom": 18,
+                                      "left": 10, "right": 10}}}
+        r = DocxRenderer(page="a5", page_presets=presets, figure_base=[d])
+        r._reset_state(_work([]))
+        out = r._render_e(_fig_e("../figures/X/a.gif"))
+        m = re.search(r'<a:ext cx="(\d+)" cy="(\d+)"', out)
+        s = min(r.page_w / 11906, r.page_h / 16838, 1.0)
+        if s > 0.995:
+            s = 1.0
+        self.assertEqual(int(m.group(1)), max(1, int(400 * s)) * 9525)
+        self.assertEqual(int(m.group(2)), max(1, int(200 * s)) * 9525)
+        # A4：原生尺寸（与官方 docx 一致）
+        r4 = self._renderer(d)
+        m4 = re.search(r'<a:ext cx="(\d+)" cy="(\d+)"',
+                       r4._render_e(_fig_e("../figures/X/a.gif")))
+        self.assertEqual((int(m4.group(1)), int(m4.group(2))),
+                         (400 * 9525, 200 * 9525))
+
     def test_inline_no_nested_para(self):
         # 段内 <figure> 只出 run 级 drawing，不嵌套 <w:p>（WPS 会丢弃嵌套段落图片）
         d = tempfile.mkdtemp()

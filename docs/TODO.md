@@ -594,3 +594,21 @@
   - 根因：`pdf_docx.css` 的 `p{text-align:justify}` 透传给预排段（`pre` 只设 `text-indent:0`）；HTML 侧是 `<pre>` 元素不受 `p` 规则影响，DOCX 侧是 `w:p` 会继承 → `w:jc="both"` 对换行后的行两端对齐，把全角空格/点线拉伸
   - 修法：`pdf_docx.css`/`epub_print.css` 的 `pre{text-indent:0;text-align:left}`；**并**在 `render_docx._para` 加 `align` 参数，预排两处调用传 `align="left"` —— 因 `theme.docx_para` 是「靠前标签优先」（`reversed(tags)`），`("p","pre")` 里 p 的 justify 会压过 pre 的 left，仅改 CSS 在 DOCX 不生效
   - 验证：真实 CC0003 重渲→WPS 转 PDF，第 9 页与官方 PDF 第 7 页逐行一致；`test_docx.TestPreNoFirstLine.test_pre_left_aligned_not_justified`；全量 913 OK（9 环境 error 与基线一致）
+
+- [x] **已完成** 图片随纸张等比缩放（A4 基准）+ 双向适配正文区（2026-09-30 X1077 实锤）
+  - 现象：X1077 图（368×680px）在 A5 上占页过大、独占一页、正文被挤走；而绝对尺寸与官方 A4 docx/pdf **逐值一致**（368px@96dpi / 276×510pt），差异纯来自纸张（官方 A4）
+  - 修法：`render_docx._fit_image_px`——① 先按 `min(page_w/11906, page_h/16838, 1)` 随纸张等比缩小（A4/license 更大页为 1，输出与旧版一致）；② 再宽、高双向适配正文区防溢出；全程只缩不放
+  - 验证：X1077 A5 重渲 docx 259×479px、PDF 194.3×359.3pt（占页宽 46%，与官方一致）；单测 `test_figures.test_page_scaled_and_content_fit`；全量 920 OK（9 环境 error 与基线一致）
+
+- [ ] **待办** 按卷范围选取某部经的某卷/几卷（2026-10-01 用户立项；方案已定，未实施）
+  - 目标：支持 `T25n1509:34-100`（大智度論 34–100 卷）这类子集，渲染六格式并按卷子集校验
+  - 卷范围语法（`--juan` 与 GUI 编号后缀 `:` 共用）：`34` / `34-100` / `34-36,40,42-45`；`-`/`~`/`～` 三认一（归一为 `-`）；多段用 `,`（CLI）/`+`（GUI 列表内，因 `,` 是任务分隔符）；闭区间、`lo<=hi`（`100-34` 报错不下调）；去重合并
+  - 长编号：`T25n1509`/`X59n1077` 现被 `is_work_id` 拒（只认短编号）；新增我方层解析 `T25n1509→(T,25,1509)`（catalog 已命中 vol 25，`T25n1509.xml`），vol 感知 `find_local_xml` + 下载/基线复用 catalog rec；不动 vendored `cbeta_fetch.py`
+  - 过滤（核心）：新 `pycbeta/juan.py`（纯函数）——`parse_juan_spec`/`split_id_juan`/`juan_spec_label`/`filter_work_juan`；在 IR 层按 `<milestone unit="juan">` 重放 body（div 壳浅拷贝、milestone 保留，保证分页/分文件/书签），裁剪 `notes_by_n`（按保留 NoteRef 引用）与 `apps`；`juan 0`（首 milestone 前）仅含全书最小卷时保留；无 milestone → 警告忽略；全覆盖 → no-op 不加后缀（字节一致）
+  - 命名：默认后缀 `（卷34-36、40）`（段间 `、`，非 `+`）；配置键 `output.juan_suffix_template` 默认 `"（卷{label}）"`，含 `{label}` 才生效（否则回退默认+警告），空值回退默认；显式 `-o` 文件路径尊重用户不加；html 目录同后缀（防与整本互覆盖）；校验目录同后缀
+  - 接入点：CLI `-i ID:spec` 拆分 + `--juan` flag（冲突报错）+ `process_file`/校验循环双 parse 点过滤；`verify.verify_one` 加 `juan=` 形参；GUI `_collect_jobs`/`parse_work_ids_file` 剥后缀验 ID、`build_render_cmd --juan`、`_verify_one` 透传、`_verify_dir` 后缀
+  - 校验语义：`work_juan_numbers(过滤后)` → `find_official` 的 `_NNN` 过滤自动限定子集基线（`verify.py:1497`）；整包单文件基线（无 `_NNN`）保持红灯（预期，文档写明）；`--baseline xml`（P3 辅轨，直读 XML）不支持子集 → 直接报错
+  - 单卷基线下载：新增 `fetch_baseline_juan(work_id, kind, juans, …)`，仅 `auto_fetch` 且子集模式、缺卷时补下；URL 形态（build 时实测 canon 层/位数）：txt 含注 `…/text-with-notes/{ID}_{NNN}.txt.zip`、html `…/html/{ID}_{NNN}.html`、docx `…/docx/{canon}/{ID}_{NNN}.docx`；素文本 `…/text/`（不含注）**不接线**（校验链无素文本 trial，全格式 `show_notes=True` 恒比注）；epub/odt 无单卷形态，整包 fallback
+  - 测试：新 `test_juan.py`（spec 正误例、合成 Work 过滤、注/app 裁剪、前置内容、空交集报错、label/模板）；X1077 e2e（`--juan 2-3` 带后缀 + 全范围 no-op 字节一致）；GUI job 解析；单卷下载 mock；全量回归
+  - 文档：README/安装说明（CLI 参数）、`GUI设计`（编号后缀：`ID:范围`、多段 `+`、`--juan`）、`校验说明书`（子集语义/整包基线必红/P3 不支持/单卷下载）、`主题与样式`+`兜底值清单`（`output.juan_suffix_template`）
+  - 非目标：品名选择（如“初序品”，另议）、XML 预过滤（先全量 parse，正确性优先）、按卷下载 XML（整包一次）
