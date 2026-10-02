@@ -8,8 +8,8 @@ import zipfile
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from pycbeta.parser import P5Parser
-from pycbeta.model import App, E, Text
-from pycbeta.render_docx import DocxRenderer, split_sections
+from pycbeta.model import App, E, Pb, Text, Work
+from pycbeta.render_docx import DocxRenderer, split_sections, split_title_lines
 
 from pycbeta.tests._data import DATA_ROOT as CBETA
 from pycbeta.tests._data import requires_data
@@ -101,7 +101,7 @@ class TestDocxPagination(unittest.TestCase):
 
     def test_mulu_level1_sections(self):
         # T0672：序 + 品 level=1 各分节；卷书签仍每卷一个
-        doc, _ = self._render(os.path.join(TESTDATA, "T0672 大乘入楞伽經", "T16n0672.xml"),
+        doc, _ = self._render(os.path.join(TESTDATA, "T0672 大乘入楞伽经", "T16n0672.xml"),
                               {"enabled": True, "juan": True, "mulu_level1": True})
         self.assertGreater(doc.count("<w:sectPr"), 10)
         for n in ("卷1", "卷2", "卷7"):
@@ -117,7 +117,7 @@ class TestDocxPagination(unittest.TestCase):
     def test_first_mulu_after_title_no_split(self):
         # 首个序紧跟书名题署块时不切（docNumber/title/byline 不计为可见内容，与 juan_first 无关）；
         # 第二个序起照常切分
-        work = P5Parser().parse(os.path.join(TESTDATA, "T0670 楞伽阿跋多羅寶經", "T16n0670.xml"))
+        work = P5Parser().parse(os.path.join(TESTDATA, "T0670 楞伽阿跋多罗宝经", "T16n0670.xml"))
         secs = split_sections(work.body, {"juan": True, "mulu_level1": True})
         self.assertEqual(len(secs), 6)                       # 原 7 节：题署块+蔣之奇序合并为首节
         sec0 = _ops_text(secs[0][1])
@@ -128,7 +128,7 @@ class TestDocxPagination(unittest.TestCase):
     def test_juan_head_mulu_same_section(self):
         # 卷头 juan E（含 jhead/书名/卷次）不计为可见内容：其后紧跟的首个品 mulu 不切分
         # （T1672 卷四/卷六：孤儿卷头并入品节，17 节→15 节；与 juan_first 无关）
-        work = P5Parser().parse(os.path.join(TESTDATA, "T0672 大乘入楞伽經", "T16n0672.xml"))
+        work = P5Parser().parse(os.path.join(TESTDATA, "T0672 大乘入楞伽经", "T16n0672.xml"))
         secs = split_sections(work.body, {"juan": True, "mulu_level1": True})
         self.assertEqual(len(secs), 15)
         # 含“卷第六”卷头 E 的节，同节必含一级品 mulu（旧行为会将其切走）
@@ -147,7 +147,7 @@ class TestDocxPagination(unittest.TestCase):
     def test_juan_break_pin_same_section(self):
         # 卷头 juan（fun=open）为断点：卷头开启新节，其后紧跟的首个品 mulu 不切分
         # （T0670：卷头/译者/一切佛語心品同节；与 milestone/juan_first 正交）
-        work = P5Parser().parse(os.path.join(TESTDATA, "T0670 楞伽阿跋多羅寶經", "T16n0670.xml"))
+        work = P5Parser().parse(os.path.join(TESTDATA, "T0670 楞伽阿跋多罗宝经", "T16n0670.xml"))
         secs = split_sections(work.body, {"juan": True, "mulu_level1": True})
         self.assertEqual(len(secs), 6)
         # 含卷头 juan E 的节，同节必含一级品 mulu（旧行为品名被切到下一节）
@@ -185,7 +185,7 @@ class TestDocxPagination(unittest.TestCase):
     def test_section_breaks_inside_paragraph_props(self):
         # 节间 sectPr 必须装进段落 pPr：裸挂 w:body 会被 Word 忽略
         # （曾导致切分正确但第二个序不换页；仅文末最后一个允许裸位置）
-        doc, _ = self._render(os.path.join(TESTDATA, "T0670 楞伽阿跋多羅寶經", "T16n0670.xml"),
+        doc, _ = self._render(os.path.join(TESTDATA, "T0670 楞伽阿跋多罗宝经", "T16n0670.xml"),
                               {"enabled": True, "juan": True, "mulu_level1": True})
         import xml.etree.ElementTree as ET
         ET.fromstring(doc.encode("utf-8"))               # 输出必须良构
@@ -196,7 +196,7 @@ class TestDocxPagination(unittest.TestCase):
 
     def test_second_xu_breaks_before_sushi(self):
         # T0670 第二个序（蘇軾序）节前必须有 pPr 内节分隔
-        doc, _ = self._render(os.path.join(TESTDATA, "T0670 楞伽阿跋多羅寶經", "T16n0670.xml"),
+        doc, _ = self._render(os.path.join(TESTDATA, "T0670 楞伽阿跋多罗宝经", "T16n0670.xml"),
                               {"enabled": True, "juan": True, "mulu_level1": True})
         i = doc.find("蘇軾序")
         self.assertGreater(i, 0)
@@ -295,6 +295,70 @@ class TestDivXuSpacing(unittest.TestCase):
         self.assertIn('w:after="480"', out)
 
 
+class TestPbPagination(unittest.TestCase):
+    """<pb/> 分页开关：parser 产 Pb(Node) 而非 E，is_break 须先判 Pb；
+    关时 pb 零输出（不产空段）。"""
+
+    def _body(self):
+        return [E(tag="p", attrs={}, children=[Text(text="甲")]),
+                Pb(n="0002a", ed="TX"),
+                E(tag="p", attrs={}, children=[Text(text="乙")])]
+
+    def test_pb_off_no_split(self):
+        self.assertEqual(len(split_sections(self._body(), {})), 1)
+
+    def test_pb_on_splits(self):
+        self.assertEqual(len(split_sections(self._body(), {"pb": True})), 2)
+
+    def test_pb_renders_nothing(self):
+        body = self._body()
+        w = Work(id="T", source_file="",
+                 metadata={"title": "t", "author": ""}, body=body,
+                 notes_by_n={}, apps=[], simplified=False)
+        r = DocxRenderer(bookmarks=False)
+        r._reset_state(w)
+        out = r._render_ops([("node", n) for n in body])
+        self.assertEqual(out.count("<w:p>"), 2)  # 仅甲乙两段，pb 无空段
+        self.assertIn("甲", out)
+        self.assertIn("乙", out)
+
+
+class TestPreBlankDrop(unittest.TestCase):
+    """pre 内纯换行残留丢弃：空元素独占源码行时 tail 换行不再产出空行
+    （TX01 目录 pb 处实锤）；真空行与行中空格保留。"""
+
+    def _pre_lines(self, children):
+        r = DocxRenderer(bookmarks=False)
+        r._reset_state(Work(id="T", source_file="",
+                            metadata={"title": "t", "author": ""}, body=[],
+                            notes_by_n={}, apps=[], simplified=False))
+        out = r._render_e(E(tag="p", attrs={"cb:type": "pre"},
+                            children=children))
+        toks = re.findall(r"<w:t[^>]*>(.*?)</w:t>|(<w:br/>)", out)
+        return "".join("\n" if b else a for a, b in toks).split("\n")
+
+    def test_pb_tail_no_blank(self):
+        # parser 原样：pb.tail == "\n" 自成节点，行文字另起节点（无行首换行）
+        out = self._pre_lines([Text(text="一七\n"), Pb(n="0002a", ed="TX"),
+                               Text(text="\n"), Text(text="第三章")])
+        self.assertEqual(out, ["一七", "第三章"])
+
+    def test_meaningful_blank_kept(self):
+        out = self._pre_lines([Text(text="甲\n\n乙")])
+        self.assertEqual(out, ["甲", "", "乙"])
+
+    def test_lone_newline_kept_off_line_start(self):
+        # 非行首的孤立换行是正文唯一断行，必须保留（X1116 凡例　官方同形）
+        out = self._pre_lines([Text(text="香乳記"), Text(text="\n"),
+                               Text(text="宗鏡")])
+        self.assertEqual(out, ["香乳記", "宗鏡"])
+
+    def test_lone_spaces_kept(self):
+        out = self._pre_lines([Text(text="甲"), Text(text="  "),
+                               Text(text="乙")])
+        self.assertEqual(out, ["甲  乙"])
+
+
 class TestPreNoFirstLine(unittest.TestCase):
     """预排不缩进（CSS pre/text-indent:0）：只掐 w:firstLine，段间距/行距跟 p 不变；
     真 <pre> 与 <p cb:type=pre> 同口径（X60n1116 实证）。"""
@@ -351,6 +415,90 @@ class TestStripHeadNo(unittest.TestCase):
         self.assertIn("序", out)
 
 
+class TestTitleSmartWrap(unittest.TestCase):
+    """书名超行在空格/破折号处换行（默认开；仅 DOCX 链；A4/26pt 版心约 17.3em）。"""
+
+    T = "太虛大師全書．第一編　佛法總學(第1卷-第26卷)"
+
+    def _title(self, text=T, **kw):
+        r = DocxRenderer(bookmarks=False, **kw)
+        return r._render_e(E(tag="title", attrs={"level": "m"},
+                             children=[Text(text=text)]))
+
+    def test_splitter_space_dropped(self):
+        self.assertEqual(split_title_lines(self.T, 17.3),
+                         ["太虛大師全書．第一編", "佛法總學(第1卷-第26卷)"])
+
+    def test_splitter_pair_dash_kept(self):
+        # 成对 -- 是转折号：不断开，断在其后、保留在行尾
+        lines = split_title_lines("甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉戌亥甲乙--丁戊", 20.0)
+        self.assertTrue(lines[0].endswith("--"))
+        self.assertTrue(lines[1].startswith("丁"))
+
+    def test_splitter_emdash_atomic(self):
+        lines = split_title_lines("甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉戌亥甲乙——丙丁", 20.0)
+        self.assertTrue(lines[0].endswith("——"))   # 连写不断开
+
+    def test_splitter_single_dash_no_break(self):
+        # 单个 -–— 是连接号/范围号（如 第1卷-第26卷），永不断
+        for dash in ("-", "–", "—"):
+            t = "甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉戌亥甲乙丙" + dash + "丁戊己庚"
+            self.assertEqual(split_title_lines(t, 20.0), [t], dash)
+
+    def test_splitter_no_candidate(self):
+        t = "甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉戌亥甲乙丙丁戊己"
+        self.assertEqual(split_title_lines(t, 20.0), [t])
+
+    def test_splitter_short_unchanged(self):
+        self.assertEqual(split_title_lines("短標題", 20.0), ["短標題"])
+
+    @staticmethod
+    def _lines(out):
+        # br 还原为换行后拼文本（run 切分随本机字体，不依赖 run 边界）
+        toks = re.findall(r"<w:t[^>]*>(.*?)</w:t>|(<w:br/>)", out)
+        return "".join("\n" if b else a for a, b in toks)
+
+    def test_docx_breaks_at_space(self):
+        out = self._title()
+        self.assertEqual(out.count("<w:r><w:br/></w:r>"), 1)
+        self.assertEqual(self._lines(out),
+                         "太虛大師全書．第一編\n佛法總學(第1卷-第26卷)")
+
+    def test_docx_off_unchanged(self):
+        out = self._title(title_smart_wrap=False)
+        self.assertNotIn("<w:r><w:br/></w:r>", out)
+        self.assertEqual(self._lines(out), self.T)   # 空格保留、字节不变
+
+    def test_docx_short_no_break(self):
+        out = self._title("短標題")
+        self.assertNotIn("<w:br/>", out)
+
+    def test_docx_hyphen_range_no_break(self):
+        # 范围号不断：无空格的超长标题即使含 - 也不切（第1卷-第26卷实锤）
+        t = "大" * 20 + "第1卷-第26卷"
+        out = self._title(t)
+        self.assertNotIn("<w:br/>", out)
+        self.assertEqual(self._lines(out), t)
+
+    def test_metadata_title_wrapped(self):
+        # body 无 title-m 时走元数据 title_para，同样断行（TX01n0001 实锤）
+        w = Work(id="T", source_file="",
+                 metadata={"title": self.T, "author": ""},
+                 body=[E(tag="p", attrs={}, children=[Text(text="正文")])],
+                 notes_by_n={}, apps=[], simplified=False)
+        d = tempfile.mkdtemp()
+        self.addCleanup(__import__("shutil").rmtree, d, True)
+        fn = DocxRenderer(bookmarks=False).render_work(w, d, "m.docx")
+        with zipfile.ZipFile(fn) as z:
+            xml = z.read("word/document.xml").decode("utf-8")
+        m = re.search(r'<w:p><w:pPr><w:pStyle w:val="title"/>.*?</w:p>',
+                      xml, re.S)
+        self.assertIsNotNone(m)
+        self.assertEqual(m.group(0).count("<w:r><w:br/></w:r>"), 1)
+        self.assertEqual(self._lines(m.group(0)),
+                         "太虛大師全書．第一編\n佛法總學(第1卷-第26卷)")
+
+
 @requires_data
 class TestDocxOptions(unittest.TestCase):
     """presets.json output 段的 grayscale / page_border 参数。"""
@@ -396,7 +544,7 @@ class TestDocxBookmarksSplit(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        xml = os.path.join(CBETA, "T0672 大乘入楞伽經", "T16n0672.xml")
+        xml = os.path.join(CBETA, "T0672 大乘入楞伽经", "T16n0672.xml")
         cls.work = P5Parser().parse(xml)
         cls.tmp = tempfile.mkdtemp()
 

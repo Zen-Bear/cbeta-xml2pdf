@@ -1391,9 +1391,38 @@ class XmlOptionsPanel(QWidget):
         right.addLayout(crow)
         self.strip_quotes_box = self._check_row(
             right, "去掉偈颂首尾引号", "（去掉偈颂行首尾的「」『』）")
+        self.pre_dedent_box = self._check("预排去缩进")
+        self.pre_dedent_box.setToolTip(
+            "output.pre_dedent（默认关）：预排段每行行首最多去 N 个空白"
+            "（半角/全角/制表各计 1）；不足 N 去尽；行中与相对层次保留")
+        self.pre_dedent_spin = QSpinBox()
+        self.pre_dedent_spin.setRange(1, 10)
+        self.pre_dedent_spin.setValue(4)
+        self.pre_dedent_spin.setToolTip("每行行首最多去掉的空白个数")
+        self.pre_dedent_spin.valueChanged.connect(lambda _v: self._changed())
+        self.pre_dedent_box.toggled.connect(self._on_pre_dedent)
+        prow = QHBoxLayout()
+        prow.setContentsMargins(0, 0, 0, 0)
+        prow.addWidget(self.pre_dedent_box)
+        prow.addWidget(QLabel("最多去"))
+        prow.addWidget(self.pre_dedent_spin)
+        prow.addWidget(self._gray_hint(
+            "（仅每行行首最多 N 个空白；不足去尽，行中不动）"), 1)
+        right.addLayout(prow)
+        self._on_pre_dedent(self.pre_dedent_box.isChecked())
+        self.title_wrap_box = self._check_row(
+            right, "书名超长换行", "（超 1 行在空格/成对破折号处换行；默认开）",
+            checked=True)
+        self.title_wrap_box.setToolTip(
+            "output.title_smart_wrap（默认开）：书名超出版心 1 行时，"
+            "在空格（去掉）/成对转折号 --/——（保留在行尾）处换行；"
+            "单个 -–—（范围号）不断；仅 DOCX 链")
         right.addStretch(1)
         grid.addLayout(right, 0, 1)
         return w
+
+    def _on_pre_dedent(self, on):
+        self.pre_dedent_spin.setEnabled(bool(on))
 
     def _tab_notes(self):
         w = QWidget()
@@ -1917,6 +1946,9 @@ class XmlOptionsPanel(QWidget):
                 "ignore_xml_space": self.ign_space_box.isChecked(),
                 "verse_caesura": self.caesura_edit.text(),
                 "verse_strip_quotes": self.strip_quotes_box.isChecked(),
+                "pre_dedent": self.pre_dedent_box.isChecked(),
+                "pre_dedent_spaces": int(self.pre_dedent_spin.value()),
+                "title_smart_wrap": self.title_wrap_box.isChecked(),
             },
             font_scale=float(self.scale_spin.value()),
             pagination={k: b.isChecked() for k, b in self.pg_boxes.items()},
@@ -2000,6 +2032,12 @@ class XmlOptionsPanel(QWidget):
             self.ign_space_box.setChecked(bool(o.get("ignore_xml_space", False)))
             self.caesura_edit.setText(str(o.get("verse_caesura", "　　")))
             self.strip_quotes_box.setChecked(bool(o.get("verse_strip_quotes", False)))
+            self.pre_dedent_box.setChecked(bool(o.get("pre_dedent", False)))
+            try:
+                self.pre_dedent_spin.setValue(int(o.get("pre_dedent_spaces", 4)))
+            except (TypeError, ValueError):
+                self.pre_dedent_spin.setValue(4)
+            self.title_wrap_box.setChecked(bool(o.get("title_smart_wrap", True)))
             st = opts.series_title or {}
             self.series_on.setChecked(bool(st.get("enabled", True)))
             # 旧 font/size 键只透传保留（样式走 CSS），不展示

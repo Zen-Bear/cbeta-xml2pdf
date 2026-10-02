@@ -485,5 +485,87 @@ class TestMuluBreakMarker(unittest.TestCase):
         self.assertEqual(blob.count("mulu-break"), 1)  # 「卷」型不标记
 
 
+class TestPreDedent(unittest.TestCase):
+    """预排去缩进：每行行首最多去 N 个空白，不足去尽；开关默认关。"""
+
+    def _work(self):
+        return Work(id="T", source_file="", metadata={"title": "t", "author": ""},
+                    body=[E(tag="p", attrs={"cb:type": "pre"},
+                            children=[Text("　　　　緒　言\n"
+                                           "　　　　　第一章　　傳\n"
+                                           "　　無縮排行")])],
+                    notes_by_n={}, apps=[], simplified=False)
+
+    def _docx_text(self, **kw):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        fn = DocxRenderer(**kw).render_work(self._work(), d, "x.docx")
+        import zipfile
+        with zipfile.ZipFile(fn) as z:
+            xml = z.read("word/document.xml").decode("utf-8")
+        return "".join(re.findall(r"<w:t[^>]*>([^<]*)</w:t>", xml))
+
+    def test_off_by_default(self):
+        # 默认关：预排原样保留行首缩进
+        self.assertIn("　　　　緒　言", self._docx_text())
+
+    def test_on_strips_four(self):
+        out = self._docx_text(pre_dedent=True, pre_dedent_spaces=4)
+        self.assertIn("緒　言　第一章", out)   # 4 个全去；5 个去 4 留 1
+        self.assertIn("傳無縮排行", out)       # 承接上行；2 个不足去尽
+        self.assertNotIn("　　　　緒　言", out)
+
+    def test_helper_edge(self):
+        def ded(text):
+            return DocxRenderer(pre_dedent=True,
+                                pre_dedent_spaces=4)._pre_dedent_text(text)
+        self.assertEqual(ded("　　　　abc"), "abc")
+        self.assertEqual(ded("   \u3000abc"), "abc")   # 混合空白共 4 个
+        self.assertEqual(ded("  ab"), "ab")            # 不足去尽
+        self.assertEqual(ded("a  b"), "a  b")          # 行中不动
+        self.assertEqual(ded("　　a\n　　　　　b"), "a\n　b")  # 多行各自去
+
+    def test_html_pre_dedent(self):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        files = HtmlRenderer(pre_dedent=True).render_work(self._work(), d)
+        blob = "".join(open(os.path.join(d, f), encoding="utf-8").read()
+                       for f in files)
+        self.assertIn("緒　言", blob)
+        self.assertNotIn("　　　　緒　言", blob)
+        self.assertIn("　第一章", blob)        # 5 去 4 留 1
+
+    def test_html_lone_newline_kept_off_line_start(self):
+        # 非行首孤立换行保留（X1116 凡例　官方同形）
+        w = Work(id="T", source_file="",
+                 metadata={"title": "t", "author": ""},
+                 body=[E(tag="p", attrs={"cb:type": "pre"},
+                         children=[Text("香乳記"), Text("\n"),
+                                   Text("宗鏡")])],
+                 notes_by_n={}, apps=[], simplified=False)
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        files = HtmlRenderer().render_work(w, d)
+        blob = "".join(open(os.path.join(d, f), encoding="utf-8").read()
+                       for f in files)
+        self.assertIn("香乳記\n宗鏡", blob)
+
+    def test_html_pre_blank_tail_dropped(self):
+        # pre 内纯换行残留（空元素独占行）丢弃：行间不增多空行
+        w = Work(id="T", source_file="",
+                 metadata={"title": "t", "author": ""},
+                 body=[E(tag="p", attrs={"cb:type": "pre"},
+                         children=[Text("一七\n"), Text("\n"),
+                                   Text("第三章")])],
+                 notes_by_n={}, apps=[], simplified=False)
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        files = HtmlRenderer().render_work(w, d)
+        blob = "".join(open(os.path.join(d, f), encoding="utf-8").read()
+                       for f in files)
+        self.assertIn("一七\n第三章", blob)
+        self.assertNotIn("\n\n", blob.split("<pre", 1)[1].split("</pre>")[0])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

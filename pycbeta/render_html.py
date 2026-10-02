@@ -110,7 +110,7 @@ class HtmlRenderer:
                  ignore_xml_space=False, show_notes=True, grayscale=False, inline_brackets="fullwidth",
                  note_inline_brackets=None, title_t2s=True, siddham_text=False,
                  annotations=None, strip_head_no=False, corr_cbeta=False,
-                 mulu_break=False):
+                 mulu_break=False, pre_dedent=False, pre_dedent_spaces=4):
         self.gaiji_db = gaiji_db if gaiji_db is not None else GaijiDb()
         self.theme = theme
         # 图片搜索目录：str | list[str]（{work}/figures → {work}/txt → 仓库 figures）
@@ -142,6 +142,13 @@ class HtmlRenderer:
         self._lb = None
         self._div_stack = 0
         self._in_pre = False
+        # 预排去缩进：行首最多去 pre_dedent_spaces 个空白（半角/全角/制表各计 1）
+        self.pre_dedent = bool(pre_dedent)
+        try:
+            self.pre_dedent_spaces = max(0, int(pre_dedent_spaces))
+        except (TypeError, ValueError):
+            self.pre_dedent_spaces = 4
+        self._pre_line_start = True
         self._drop_sa_tt = False  # 块级 <cb:tt> 内悉昙消音（_render_tt 置位）
 
     @contextmanager
@@ -316,15 +323,38 @@ class HtmlRenderer:
         ln = self._first_line(node) or self._lb or ""
         return f"<span class='lineInfo' line='{_esc(ln)}'></span>"
 
+    _PRE_BLANK = "[ \t\u3000]"
+
+    def _pre_dedent_text(self, text: str) -> str:
+        """预排去缩进：每行行首最多去 pre_dedent_spaces 个空白
+        （半角/全角/制表各计 1），不足去尽；只动行首，行中与相对层次保留。
+        行首判定读 `_pre_line_start`（调用方在 Text 分支统一维护）。"""
+        n = self.pre_dedent_spaces
+        if n <= 0 or not text:
+            return text
+        pat = self._PRE_BLANK + "{0,%d}" % n
+        if self._pre_line_start:
+            text = re.sub("^" + pat, "", text)
+        return re.sub("(?<=\\n)" + pat, "", text)
+
     def _render_node(self, node) -> str:
         if isinstance(node, Text):
             t = node.text
             if self.ignore_xml_space:
-                t = t.strip(" \t\u3000")
+                t = t.strip(" \t　")
+            if self._in_pre and t and "\n" in t \
+                    and not t.strip(" \t　\n\r") and self._pre_line_start:
+                # 与 docx 同口径：已处行首的纯换行残留丢弃；
+                # 非行首孤立换行保留（正文唯一断行，官方同形）
+                return ""
             if not self._in_pre:
                 t = re.sub(r"[\n\r]", "", t)
                 if not t.strip(" \t"):
                     return ""
+            elif self.pre_dedent:
+                t = self._pre_dedent_text(t)
+            if self._in_pre and t:
+                self._pre_line_start = t.endswith("\n")
             if self._annotations is not None:
                 return self._ann_text(t)
             return _esc(t)
@@ -534,6 +564,7 @@ class HtmlRenderer:
             s = f' style="{_esc(style)}"' if style else ""
             prev = self._in_pre
             self._in_pre = True
+            self._pre_line_start = True   # 预排去缩进：段首视为行首
             inner = self._render_nodes(e.children)
             self._in_pre = prev
             return f'<pre class=""{s}>{self._line_info(e)}{inner}</pre>'

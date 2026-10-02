@@ -182,10 +182,13 @@ p.figure {
 }
 /* 预排段（<pre>）：保留源换行，不缩进、不两端对齐（DOCX 拆成多 run + <w:br/>）。
    text-align:left 必须显式设：否则透传 p 的 justify，全角空格/点线被拉伸错位
-   （HTML 侧是 <pre> 元素不受 p 规则影响，DOCX 侧是 w:p 会继承）。 */
+   （HTML 侧是 <pre> 元素不受 p 规则影响，DOCX 侧是 w:p 会继承）。
+   font-size:12pt（小四）：显式写死、不跟随 body——纸张预设会把正文调到 14pt/13pt
+   （pages.<page>.body_font_size），目录类预排应恒为小四；需要改字号只动这一行。 */
 pre {
   text-indent: 0;
   text-align: left;
+  font-size: 12pt;
 }
 
 /* ============ 偈颂 ============ */

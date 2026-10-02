@@ -133,6 +133,24 @@ class TestScaleFontSizes(unittest.TestCase):
         self.assertIn("KaiTi", h.tags["kaiti"]["font-family"])
 
 
+class TestPreFontSize(unittest.TestCase):
+    """预排段字号写死小四 12pt，不跟随 body（纸张预设调正文时目录不变）。"""
+
+    def test_pre_font_size_12pt(self):
+        from pycbeta.theme import Theme
+        t = Theme()
+        self.assertEqual(t.tags["pre"]["font-size"], "12pt")
+        self.assertIn('w:sz w:val="24"', t.docx_run("p", "pre"))
+
+    def test_pre_decoupled_from_page_typography(self):
+        from pycbeta.theme import Theme, apply_page_typography
+        t = Theme()
+        apply_page_typography(t, "a4", {"a4": {"body_font_size": "14pt"}})
+        self.assertEqual(t.tags["body"]["font-size"], "14pt")
+        self.assertEqual(t.tags["pre"]["font-size"], "12pt")   # 不跟随
+        self.assertIn('w:sz w:val="24"', t.docx_run("p", "pre"))
+
+
 class TestFontVars(unittest.TestCase):
     CSS = (":root { --font-p: HantP; --font-title: HantT; }\n"
            'html[lang="zh-Hans"] { --font-p: HansP; }\n'

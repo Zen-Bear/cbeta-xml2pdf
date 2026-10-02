@@ -189,6 +189,9 @@ def build_docx_renderer(args, theme, figure_base, note_mode):
         strip_head_no=getattr(args, "strip_head_no", False),
         show_body_siddham=getattr(args, "show_body_siddham", True),
         corr_cbeta=getattr(args, "corr_cbeta", False),
+        pre_dedent=getattr(args, "pre_dedent", False),
+        pre_dedent_spaces=getattr(args, "pre_dedent_spaces", 4),
+        title_smart_wrap=getattr(args, "title_smart_wrap", True),
         figure_base=figure_base)
 
 
@@ -215,6 +218,8 @@ def render_one(w, fmt, out_dir, out_name, args, theme, html_base=None, figure_ba
                          corr_cbeta=getattr(args, "corr_cbeta", False),
                          siddham_text=getattr(args, "siddham_text", False),
                          title_t2s=getattr(args, "title_t2s", True),
+                         pre_dedent=getattr(args, "pre_dedent", False),
+                         pre_dedent_spaces=getattr(args, "pre_dedent_spaces", 4),
                          figure_base=figure_base)
         files = r.render_work(w, out_dir)
         _report_missing_figures(w.id, fmt, r)
@@ -265,6 +270,8 @@ def render_one(w, fmt, out_dir, out_name, args, theme, html_base=None, figure_ba
                          strip_head_no=getattr(args, "strip_head_no", False),
                          corr_cbeta=getattr(args, "corr_cbeta", False),
                          siddham_text=getattr(args, "siddham_text", False),
+                         pre_dedent=getattr(args, "pre_dedent", False),
+                         pre_dedent_spaces=getattr(args, "pre_dedent_spaces", 4),
                          figure_base=figure_base)
         fn = r.render_work(w, out_dir, filename=out_name)
         _report_missing_figures(w.id, fmt, r)
@@ -709,6 +716,13 @@ def main(argv=None):
     if args.strip_head_no is None:
         args.strip_head_no = bool(out_defaults.get("strip_head_no", False))
     args.corr_cbeta = bool(out_defaults.get("corr_cbeta"))  # CBETA 校改字标红（配置开关，默认关）
+    args.title_smart_wrap = bool(out_defaults.get("title_smart_wrap", True))  # 书名超行在空格/破折号处换行（默认开）
+    # 预排去缩进：行首最多去 N 个空白（默认关；N 默认 4，<=0 视作关）
+    args.pre_dedent = bool(out_defaults.get("pre_dedent", False))
+    try:
+        args.pre_dedent_spaces = int(out_defaults.get("pre_dedent_spaces", 4))
+    except (TypeError, ValueError):
+        args.pre_dedent_spaces = 4
     args.pdf_zoom = float(out_defaults.get("pdf_zoom", 1.0))
     args.t2s = bool(out_defaults.get("t2s"))
     if args.font_scale is None:

@@ -121,6 +121,9 @@
     "suppress_title_notes": false, // [docx] true=压制卷名/品名校勘注码（标题干净，默认 false 保留）
     "strip_head_no": false,     // [六格式] true=去 head/jhead 行首 No. 令牌（如 X 藏 "No. 1116-B 序"→"序"，余部 lstrip 吃版式空格；正文内 No. 不动；默认 false 保留）
     "corr_cbeta": false,        // [docx|html|epub|pdf] true=CBETA 校改字标红（app.lem 原始 wit 含 #wit.cbeta 的正文用字；docx 红 #FF0000、html/epub span.corr；md/txt 不标）；默认 false 关闭
+    "pre_dedent": false,        // [docx|html|epub|pdf] true=预排段（<p cb:type="pre">，如目录）每行行首最多去 N 个空白（半角/全角/制表各计 1；不足去尽；行中不动）；默认 false
+    "pre_dedent_spaces": 4,     // [docx|html|epub|pdf] 预排去缩进的 N（默认 4；仅在 pre_dedent=true 时生效）
+    "title_smart_wrap": true,   // [docx] true=超 1 行的书名（<title level="m">）在空格/成对转折号 --/—— 处换行（空格去掉、转折号保留在行尾；单个 -–— 是范围号永不断；只估当前版心宽度）；默认 true
     "show_dharani_transliteration": false, // [txt|md] true=逐字咒文表（<cb:tt> 无 place="inline"）也显示梵文罗马字母；默认 false 去掉（官方 text-with-notes 一致）
     "pdf_zoom": 1.0,               // [pdf/仅chromium] HTML→PDF 整页缩放（Playwright page.pdf scale，不重排；范围 0.1-2.0，1.0=原尺寸；与 font_scale 正交可叠加）
     "font_scale": 1.0,             // [所有格式] 字号等比缩放（重排式大字，老人版推荐 1.33/1.5；与 pdf_zoom 正交；字号不影响逐字校验）

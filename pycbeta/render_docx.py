@@ -88,14 +88,16 @@ def split_sections(body, rules: dict) -> list:
     def is_break(kind, n) -> bool:
         if kind == "milestone":
             return bool(rules.get("juan", True))
+        if isinstance(n, Pb):
+            # <pb/>：parser 转成 Pb(Node) 而非 E，必须在 isinstance(E)
+            # 检查之前处理，否则 pb 分页开关永不触发（死代码）
+            return bool(rules.get("pb", False))
         if not isinstance(n, E):
             return False
         if n.tag == "juan" and n.attrs.get("fun") == "open":
             return True  # 卷头开启新节：卷头/译者/首品同节（后续品仍由 mulu_level1 切分）
         if n.tag == "mulu" and rules.get("mulu_level1", True) and mulu_text(n).strip():
             return n.attrs.get("level") == "1" and n.attrs.get("type") != "卷"
-        if n.tag == "pb" and rules.get("pb", False):
-            return True
         return False
 
     def meaningful(ops) -> bool:
@@ -164,6 +166,69 @@ def split_sections(body, rules: dict) -> list:
         sections.append((cur_no, cur))
     return sections
 
+
+# 书名智能断行：超 1 行的书名（title m）在空格/转折号处换行。
+# 断点口径：半角/全角空格（换行时去掉）；转折号只认成对的 -- / ——
+# （原子不断开，断在其后、保留在行尾）。单个 -–— 是连接号/范围号
+# （如 第1卷-第26卷），永不断。只动断点空格，其它文字逐字保留。
+_TITLE_WRAP_SPACES = (" ", "\u3000")
+_TITLE_WRAP_DASHES = ("\u2014", "\u002d")   # 成对才算转折号
+
+
+def _title_char_w(ch: str) -> float:
+    """书名估宽：全角 1em、半角 0.5em（与 Word 楷体 advance 近似；加粗不占宽）"""
+    if ch == "\u3000":
+        return 1.0
+    if ch == " ":
+        return 0.5
+    if ch in "\n\r\t":
+        return 0.0
+    return 1.0 if unicodedata.east_asian_width(ch) in ("W", "F") else 0.5
+
+
+def _title_width(text: str) -> float:
+    return sum(_title_char_w(c) for c in text)
+
+
+def split_title_lines(text: str, capacity_em: float):
+    """书名按版心贪心断行 → [行]；不断返回 [text] 原样（字节不变）。
+
+    行超限时回退到本行最后一个候选点：空格（去空格断）、成对转折号
+    -- / ——（保留、断在其后，原子不断开）；续行行首空格去尽；
+    一行无候选则硬塞（留给 Word 自然换行）。"""
+    if capacity_em <= 0 or _title_width(text) <= capacity_em:
+        return [text]
+    spaces, dashes = _TITLE_WRAP_SPACES, _TITLE_WRAP_DASHES
+    lines, n = [], len(text)
+    s, i, cur_w, last = 0, 0, 0.0, None
+    while i < n:
+        ch = text[i]
+        w = _title_char_w(ch)
+        if cur_w + w > capacity_em and i > s:
+            # last[0] <= i：候选须在已消费区内（成对转折号登记未来位，未到不算）
+            if last is not None and last[0] > s and last[0] <= i:
+                pos, kind = last
+                lines.append(text[s:pos])
+                s = pos + (1 if kind == "space" else 0)
+                while s < n and text[s] in spaces:
+                    s += 1   # 续行行首空格去尽
+                cur_w = _title_width(text[s:i])
+                last = None
+                continue
+        cur_w += w
+        if ch in spaces:
+            last = (i, "space")
+        elif ch in dashes and (i == 0 or text[i - 1] != ch) \
+                and i + 1 < n and text[i + 1] == ch:
+            # 成对转折号（对首登记对尾）：单个 -–—（连接/范围号）永不断；
+            # 对内第二字不重复登记，保证不断开一对
+            last = (i + 2, "dash")
+        i += 1
+    tail = text[s:]
+    if tail or not lines:
+        lines.append(tail)
+    return lines
+
 # 段落级命名样式（styles.xml 里定义，段落用 <w:pStyle> 引用而非内联 pPr）
 _STYLED_PARAS = ("title", "head", "juan", "pin", "p", "verse", "footnote", "byline",
                  "author", "translator", "series-title", "def", "div-note", "figure")
@@ -212,7 +277,9 @@ class DocxRenderer:
                    annotations=None, gaiji_fonts=None, gaiji_lang: str = "zh-Hant",
                    fallback_fonts=None, siddham_fonts=None,
                     vertical: bool = False, notes_marker_font: Optional[str] = None,
-                    figure_base=None, corr_cbeta: bool = False):
+                    figure_base=None, corr_cbeta: bool = False,
+                    pre_dedent: bool = False, pre_dedent_spaces: int = 4,
+                    title_smart_wrap: bool = True):
         self.gaiji_db = gaiji_db if gaiji_db is not None else GaijiDb()
         self.theme = theme if theme is not None else Theme()
         # 纸张绑字号：库直接调用渲染器也生效；CLI 已在 font_scale 前应用过 → 跳过
@@ -281,6 +348,14 @@ class DocxRenderer:
         self._div_stack: List[str] = []
         self._list_stack: List[int] = []
         self._in_pre = False
+        # 预排去缩进：行首最多去 pre_dedent_spaces 个空白（半角/全角/制表各计 1）
+        self.pre_dedent = bool(pre_dedent)
+        try:
+            self.pre_dedent_spaces = max(0, int(pre_dedent_spaces))
+        except (TypeError, ValueError):
+            self.pre_dedent_spaces = 4
+        self._pre_line_start = True   # 预排段内是否处于行首（跨 Text 节点）
+        self.title_smart_wrap = bool(title_smart_wrap)  # 书名超行在空格/破折号处换行（默认开）
 
     @contextmanager
     def _no_ann(self):
@@ -926,9 +1001,34 @@ class DocxRenderer:
         inner = tuple(self._tag_stack) if self._tag_stack else ("p",)
         return ("body",) + tuple(self._div_stack) + inner
 
+    _PRE_BLANK = "[ \t\u3000]"
+
+    def _pre_dedent_text(self, text: str) -> str:
+        """预排去缩进：每行行首最多去 pre_dedent_spaces 个空白
+        （半角/全角/制表各计 1），不足去尽；只动行首，行中与相对层次保留。
+        行首判定读 `_pre_line_start`（调用方在 Text 分支统一维护）。"""
+        n = self.pre_dedent_spaces
+        if n <= 0 or not text:
+            return text
+        pat = self._PRE_BLANK + "{0,%d}" % n
+        if self._pre_line_start:
+            text = re.sub("^" + pat, "", text)
+        return re.sub("(?<=\\n)" + pat, "", text)
+
     def _render_node(self, n) -> str:
         if isinstance(n, Text):
             text = n.text.strip(" \t　") if self.ignore_xml_space else n.text
+            if self._in_pre and text and "\n" in text \
+                    and not text.strip(" \t　\n\r") and self._pre_line_start:
+                # pre 内多余换行：已处行首时纯空白 Text 只会再造空行
+                # （空元素独占源码行的 tail 残留，TX01 目录 pb 处实锤）；
+                # 非行首的孤立换行是正文唯一断行，必须保留（X1116 凡例　官方同形）。
+                # 无换行的纯空格保留（行中空格可能是有意义的）。
+                return ""
+            if self._in_pre and self.pre_dedent:
+                text = self._pre_dedent_text(text)
+            if self._in_pre and text:
+                self._pre_line_start = text.endswith("\n")
             if self._annotations is not None:
                 return self._run_annotated(text, *self._current_tag())
             return self._run(text, *self._current_tag())
@@ -1284,7 +1384,10 @@ class DocxRenderer:
             if ptype == "pre":
                 prev = self._in_pre
                 self._in_pre = True
-                runs = self._render_para_children(e, "p")
+                self._pre_line_start = True   # 预排去缩进：段首视为行首
+                # run 链带上 "pre"（与字面 <pre> 分支一致）：否则 run 取不到 pre 的
+                # 字号（如写死 12pt），会跟随 body；HTML 侧 <pre> 天然继承
+                runs = self._render_para_children(e, "p", "pre")
                 self._in_pre = prev
                 # 预排不缩进、不两端对齐（CSS pre/text-indent:0；只掐首行，段间距/行距跟 p 不变）
                 return self._para(runs, "p", "pre", no_first_line=True, align="left")
@@ -1307,6 +1410,7 @@ class DocxRenderer:
         if tag == "pre":
             prev = self._in_pre
             self._in_pre = True
+            self._pre_line_start = True   # 预排去缩进：段首视为行首
             runs = self._render_para_children(e, "p", "pre")
             self._in_pre = prev
             return self._para(runs, "p", "pre", no_first_line=True, align="left")
@@ -1414,6 +1518,8 @@ class DocxRenderer:
                 # mulu 书签保留其上，恰只显示一个书名；count=False 避免首卷 jhead 误加分页
                 with self._no_ann():
                     runs = self._render_tagged_clean(e.children, "title")
+                if self.title_smart_wrap and not self.vertical:
+                    runs = self._wrap_title_runs(runs)
                 return self._para(runs, "title", count=False)
             return self._render_children(e)
         if tag == "docNumber":
@@ -1516,6 +1622,77 @@ class DocxRenderer:
                 continue
             out.append(c)
         return out
+
+    _TITLE_RUN_RE = re.compile(r"(<w:r>.*?</w:r>)", re.S)
+    _TITLE_TEXT_RUN_RE = re.compile(
+        r"\A<w:r>(?P<rpr><w:rPr>.*?</w:rPr>)?"
+        r"<w:t(?P<attrs>[^>]*)>(?P<text>.*?)</w:t></w:r>\Z", re.S)
+
+    def _wrap_title_runs(self, runs: str) -> str:
+        """书名 runs 按版心断行：不断返回原样；断则在空格/破折号处插
+        `<w:r><w:br/></w:r>`（WPS 安全写法），各段保留原 rPr。
+
+        非纯文本 run（如注码）零宽原样保留，不断其内部。"""
+        from xml.sax.saxutils import unescape as _ux
+        toks = []   # ("ch", ch, rpr, attrs) | ("raw", xml)
+        for part in self._TITLE_RUN_RE.split(runs):
+            if not part:
+                continue
+            m = self._TITLE_TEXT_RUN_RE.match(part)
+            if not m:
+                toks.append(("raw", part))   # 非文本 run：零宽原样
+                continue
+            for ch in _ux(m.group("text")):
+                toks.append(("ch", ch, m.group("rpr") or "", m.group("attrs")))
+        full = "".join(t[1] for t in toks if t[0] == "ch")
+        title_pt = self._resolve_tag_pt(("title",))
+        usable_pt = (self.page_w - self.page_margins["left"]
+                     - self.page_margins["right"]) / 20.0
+        lines = split_title_lines(full, usable_pt / title_pt)
+        if len(lines) <= 1:
+            return runs
+        # 按行内容消费字符（断点删掉的空格不在行里，遇到跳过）；
+        # 行边界落在 strict run 内则切分（rPr/attrs 照抄）
+        out, li, ci = [], 0, 0
+        cur_rpr = cur_attrs = None
+        buf = []
+
+        def flush():
+            if buf:
+                out.append(f"<w:r>{cur_rpr}<w:t{cur_attrs}>"
+                           f"{_x(''.join(buf))}</w:t></w:r>")
+                buf.clear()
+
+        for t in toks:
+            if t[0] == "raw":
+                flush()
+                out.append(t[1])
+                cur_rpr = cur_attrs = None
+                continue
+            _, ch, rpr, attrs = t
+            if li >= len(lines) or ci >= len(lines[li]):
+                if li + 1 < len(lines):
+                    flush()
+                    out.append("<w:r><w:br/></w:r>")
+                    li += 1
+                    ci = 0
+                else:
+                    pass  # 防御（按构造不应发生）：直接落到本行
+            if li < len(lines) and ci < len(lines[li]) \
+                    and ch != lines[li][ci]:
+                if ch in _TITLE_WRAP_SPACES:
+                    continue  # 断行删掉的空格（断点/续行行首）
+                # else 防御：非空格对不上，原样输出（不推进 ci，重同步）
+                flush()
+                out.append(f"<w:r>{rpr}<w:t{attrs}>{_x(ch)}</w:t></w:r>")
+                continue
+            if (rpr, attrs) != (cur_rpr, cur_attrs):
+                flush()
+                cur_rpr, cur_attrs = rpr, attrs
+            buf.append(ch)
+            ci += 1
+        flush()
+        return "".join(out)
 
     def _render_tagged_clean(self, nodes, *tags: str) -> str:
         """渲染标题（品名/卷名）：suppress_title_notes 开启时压制校勘注码。"""
@@ -1751,7 +1928,10 @@ class DocxRenderer:
         # 书名（teiHeader title m）作首段打印，与官方 docx 首行一致：
         # body 已含 <title level="m"> 节点（如卷内书名）时由正文渲染，避免重复
         if title and not self._body_has_title_m():
-            title_para = self._para(self._run(title, "title"), "title", count=False)
+            _truns = self._run(title, "title")
+            if self.title_smart_wrap and not self.vertical:
+                _truns = self._wrap_title_runs(_truns)
+            title_para = self._para(_truns, "title", count=False)
         tei_page = self._tei_info_page(title, author)
         pw, ph = self.page_w, self.page_h
         m = self.page_margins

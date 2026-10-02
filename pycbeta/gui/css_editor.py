@@ -670,7 +670,8 @@ STYLE_ROW_LABEL = {"title": "书名", "head": "标题", "juan": "卷名",
                    "pin": "品名", "p": "正文", "verse": "偈颂",
                    "footnote": "脚注", "byline": "题署", "author": "作者",
                    "translator": "译者", "div-note": "字义", "def": "释义",
-                   "series-title": "经藏名", "div-xu-head": "序标题", "": "正文"}
+                   "series-title": "经藏名", "div-xu-head": "序标题",
+                   "pre": "预排", "": "正文"}
 
 
 def body_font_size(css_text):
@@ -724,8 +725,9 @@ _LABEL_TOUCHED_SEL = {"title": "h1.title", "head": "p.head",
                       "verse": "div.lg", "footnote": ".footnote",
                       "byline": "p.byline", "author": "p.author",
                       "translator": "p.translator", "div-note": "div.div-note",
-                      "def": "cb:def", "div-xu-head": "div.div-xu p.head",
-                      "series-title": "p.series-title", "": "p"}
+                      "def": "cb:def",                       "div-xu-head": "div.div-xu p.head",
+                      "series-title": "p.series-title",
+                      "pre": "pre", "": "p"}
 
 
 def label_key_for_para(para, xu_font, head_font):
@@ -738,6 +740,10 @@ def label_key_for_para(para, xu_font, head_font):
               if r.get("font") and not r.get("br")]
         if xu_font in fs and head_font not in fs:
             return "div-xu-head"
+    # 预排段（源 <p cb:type="pre">，无 pStyle）：DOCX 唯一会产出段内 w:br 的段落
+    # （_run 把 \n 拆多 run 加 <w:br/>；非 pre 段恒无 br）→ 据此标注【预排】。
+    if style in ("", "p") and any(r.get("br") for r in (para.get("runs") or [])):
+        return "pre"
     return style
 
 

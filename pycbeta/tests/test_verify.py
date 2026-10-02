@@ -1197,6 +1197,47 @@ class TestDocxStructureGuard(unittest.TestCase):
         self.assertIn("段中段/表中段 1 处", s)
 
 
+class TestExtractDocxLineBreaks(unittest.TestCase):
+    """docx 抽取保留行内 <w:br/>：同段目录/偈颂分行不连成一行
+    （TX01n0001 类 <p cb:type="pre"> 目录每 <lb/> 一行）。"""
+
+    def _mk(self, d, docxml, fnxml=None):
+        import zipfile
+        p = os.path.join(d, "t.docx")
+        with zipfile.ZipFile(p, "w") as z:
+            z.writestr("word/document.xml",
+                       "<w:document><w:body>" + docxml + "</w:body></w:document>")
+            if fnxml is not None:
+                z.writestr("word/footnotes.xml", fnxml)
+        return p
+
+    def test_br_splits_lines(self):
+        from pycbeta.verify import extract_text
+        d = tempfile.mkdtemp()
+        try:
+            p = self._mk(d, "<w:p><w:t>甲乙</w:t><w:br/>"
+                            "<w:t>丙丁</w:t></w:p>")
+            lines = extract_text(p).split("\n")
+            self.assertIn("甲乙", lines)
+            self.assertIn("丙丁", lines)
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_typed_br_and_footnotes(self):
+        from pycbeta.verify import extract_text
+        d = tempfile.mkdtemp()
+        try:
+            p = self._mk(d, "<w:p><w:t>正文</w:t></w:p>",
+                         "<w:footnotes><w:p><w:t>注一</w:t>"
+                         "<w:br w:type=\"textWrapping\"/><w:t>注二</w:t></w:p>"
+                         "</w:footnotes>")
+            lines = extract_text(p).split("\n")
+            self.assertIn("注一", lines)
+            self.assertIn("注二", lines)
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+
 class TestWorkSummary(unittest.TestCase):
     """总结行 `[id] N format: 1[docx=OK], …`：下游速读。"""
 

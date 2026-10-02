@@ -365,13 +365,17 @@ def extract_text(path: str, strip_jiaozhu: bool = True) -> str:
             xml = z.read("word/document.xml").decode("utf-8")
             xml = _EQ_RE.sub(_eq_base, xml)
             xml = _W_RUBY_RE.sub("", xml)
+            # 行内 <w:br/>（同段目录/偈颂/预排的分行）保留为换行，避免剥标签后
+            # 多行连成一行；与 html 侧「一行一条」口径一致（官方/生成同规）
             xml = re.sub(r"</w:p[^>]*>", "\n", xml)
+            xml = re.sub(r"<w:br[^>]*>", "\n", xml)
             txt = _TAG_RE.sub("", xml)
             try:
                 fn = z.read("word/footnotes.xml").decode("utf-8")
                 fn = _EQ_RE.sub(_eq_base, fn)
                 fn = _W_RUBY_RE.sub("", fn)
                 fn = re.sub(r"</w:p[^>]*>", "\n", fn)
+                fn = re.sub(r"<w:br[^>]*>", "\n", fn)
                 txt += "\n" + _TAG_RE.sub("", fn)
             except KeyError:
                 pass
@@ -1562,12 +1566,12 @@ def generate_formal(xml_fn: str, work, fmt: str, outdir: str, config_path: Optio
     # （如 publish 临时预设）时向官方对齐，不回退全角
     if fmt == "html":
         from .fetch import title_t2s as _tt
-        files = HtmlRenderer(theme=theme, notes="endnote", ignore_xml_style=bool(p("ignore_xml_style")), ignore_xml_space=bool(p("ignore_xml_space")), show_notes=True, inline_brackets=p("inline_brackets", "halfwidth"), annotations=_ann, strip_head_no=_shn, siddham_text=bool(p("siddham_text", False)), title_t2s=bool(_tt(presets)), figure_base=_fig_dirs or None).render_work(work, out_dir=outdir)
+        files = HtmlRenderer(theme=theme, notes="endnote", ignore_xml_style=bool(p("ignore_xml_style")), ignore_xml_space=bool(p("ignore_xml_space")), show_notes=True, inline_brackets=p("inline_brackets", "halfwidth"), annotations=_ann, strip_head_no=_shn, siddham_text=bool(p("siddham_text", False)), title_t2s=bool(_tt(presets)), pre_dedent=bool(p("pre_dedent", False)), pre_dedent_spaces=p("pre_dedent_spaces", 4), figure_base=_fig_dirs or None).render_work(work, out_dir=outdir)
         return [os.path.join(outdir, f) for f in files]
     if fmt == "docx":
-        return [os.path.join(outdir, DocxRenderer(theme=theme, notes="footnote", ignore_xml_style=bool(p("ignore_xml_style")), ignore_xml_space=bool(p("ignore_xml_space")), show_notes=True, suppress_jhead_dup=p("suppress_jhead_dup", True), show_close_juan=bool(p("show_close_juan", False)), inline_brackets=p("inline_brackets", "halfwidth"), note_inline_brackets=p("note_inline_brackets", None), series_title=p("series_title", {}), pagination=p("pagination", {}), verse_caesura=p("verse_caesura", "　　"), verse_strip_quotes=bool(p("verse_strip_quotes", False)), footnote_per_page=p("footnote_per_page", True), vertical=bool(p("vertical", False)), annotations=_ann, strip_head_no=_shn, show_body_siddham=bool(p("show_body_siddham", True)), figure_base=_fig_dirs or None).render_work(work, out_dir=outdir, filename=f"{stem}.docx"))]
+        return [os.path.join(outdir, DocxRenderer(theme=theme, notes="footnote", ignore_xml_style=bool(p("ignore_xml_style")), ignore_xml_space=bool(p("ignore_xml_space")), show_notes=True, suppress_jhead_dup=p("suppress_jhead_dup", True), show_close_juan=bool(p("show_close_juan", False)), inline_brackets=p("inline_brackets", "halfwidth"), note_inline_brackets=p("note_inline_brackets", None), series_title=p("series_title", {}), pagination=p("pagination", {}), verse_caesura=p("verse_caesura", "　　"), verse_strip_quotes=bool(p("verse_strip_quotes", False)), footnote_per_page=p("footnote_per_page", True), vertical=bool(p("vertical", False)), annotations=_ann, strip_head_no=_shn, show_body_siddham=bool(p("show_body_siddham", True)), pre_dedent=bool(p("pre_dedent", False)), pre_dedent_spaces=p("pre_dedent_spaces", 4), title_smart_wrap=bool(p("title_smart_wrap", True)), figure_base=_fig_dirs or None).render_work(work, out_dir=outdir, filename=f"{stem}.docx"))]
     if fmt == "epub":
-        return [os.path.join(outdir, EpubRenderer(theme=theme, notes="endnote", ignore_xml_style=bool(p("ignore_xml_style")), ignore_xml_space=bool(p("ignore_xml_space")), show_notes=True, inline_brackets=p("inline_brackets", "halfwidth"), annotations=_ann, strip_head_no=_shn, siddham_text=bool(p("siddham_text", False)), figure_base=_fig_dirs or None).render_work(work, out_dir=outdir, filename=f"{stem}.epub"))]
+        return [os.path.join(outdir, EpubRenderer(theme=theme, notes="endnote", ignore_xml_style=bool(p("ignore_xml_style")), ignore_xml_space=bool(p("ignore_xml_space")), show_notes=True, inline_brackets=p("inline_brackets", "halfwidth"), annotations=_ann, strip_head_no=_shn, siddham_text=bool(p("siddham_text", False)), pre_dedent=bool(p("pre_dedent", False)), pre_dedent_spaces=p("pre_dedent_spaces", 4), figure_base=_fig_dirs or None).render_work(work, out_dir=outdir, filename=f"{stem}.epub"))]
     if fmt == "md":
         return [os.path.join(outdir, MdRenderer(theme=theme, notes="footnote", show_notes=True, inline_brackets=p("inline_brackets", "halfwidth"), annotations=_ann, strip_head_no=_shn, show_dharani_transliteration=bool(p("show_dharani_transliteration", False)), siddham_text=bool(p("siddham_text", False))).render_work(work, out_dir=outdir, filename=f"{stem}.md"))]
     if fmt == "txt":

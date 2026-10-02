@@ -481,7 +481,7 @@ class TestRender(unittest.TestCase):
         import re as _re4
         from pycbeta.annotate import resolve_annotations as _res
         from pycbeta.parser import P5Parser as _P
-        xml = os.path.join(CBETA, "T0670 楞伽阿跋多羅寶經", "T16n0670.xml")
+        xml = os.path.join(CBETA, "T0670 楞伽阿跋多罗宝经", "T16n0670.xml")
         work = _P().parse(xml)
         first = _res({"enabled": True, "scheme": "pinyin", "style": "inline",
                       "repeat": "first", "file": self.table_fn})

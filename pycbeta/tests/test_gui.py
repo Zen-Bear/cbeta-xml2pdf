@@ -1512,6 +1512,32 @@ class TestLayoutRegroup(unittest.TestCase):
                  if "脏数据" in w.text()]
         self.assertTrue(hints)
 
+    def test_pre_dedent_roundtrip(self):
+        from pycbeta.gui.panel import XmlOptionsPanel
+        panel = XmlOptionsPanel(load_presets())
+        self.assertFalse(panel.pre_dedent_box.isChecked())       # 默认关
+        self.assertFalse(panel.pre_dedent_spin.isEnabled())      # 关时置灰
+        panel.pre_dedent_box.setChecked(True)
+        self.assertTrue(panel.pre_dedent_spin.isEnabled())
+        panel.pre_dedent_spin.setValue(6)
+        o = panel.get_options()
+        self.assertTrue(o.output["pre_dedent"])
+        self.assertEqual(o.output["pre_dedent_spaces"], 6)
+        panel.set_options(o)                                     # 回读
+        self.assertTrue(panel.pre_dedent_box.isChecked())
+        self.assertEqual(panel.pre_dedent_spin.value(), 6)
+        self.assertTrue(panel.pre_dedent_spin.isEnabled())
+
+    def test_title_wrap_roundtrip(self):
+        from pycbeta.gui.panel import XmlOptionsPanel
+        panel = XmlOptionsPanel(load_presets())
+        self.assertTrue(panel.title_wrap_box.isChecked())        # 默认开
+        panel.title_wrap_box.setChecked(False)
+        o = panel.get_options()
+        self.assertFalse(o.output["title_smart_wrap"])
+        panel.set_options(o)
+        self.assertFalse(panel.title_wrap_box.isChecked())
+
     def test_styles_tab_paths(self):
         import os
         from pycbeta.gui.panel import XmlOptionsPanel, STYLE_FILES, _STYLES_DIR
@@ -1538,6 +1564,16 @@ class TestLayoutRegroup(unittest.TestCase):
         panel.ann_file.setText(r"E:\nonexistent\x.tsv")
         self.assertIn("不存在", panel.ann_hint.text())
         self.assertFalse(panel.ann_open.isEnabled())
+
+    def test_cfg_toggle_blue(self):
+        from pycbeta.gui.__main__ import MainWindow
+        w = MainWindow()
+        try:
+            ss = w.cfg_toggle.styleSheet()
+            self.assertIn("#1565c0", ss)          # 蓝底
+            self.assertNotIn("#2e7d32", ss)       # 旧绿底已去除
+        finally:
+            w.close()
 
     def test_settings_menu(self):
         import unittest.mock as mock
@@ -1652,16 +1688,16 @@ class TestMainWindowUx(unittest.TestCase):
             def colors():
                 img = w.cfg_toggle.grab().toImage()
                 bg = img.pixelColor(5, 5)
-                # 箭头抗锯齿后非纯白，只要求明显亮于绿底
+                # 箭头抗锯齿后非纯白，只要求明显亮于蓝底
                 white = any(img.pixelColor(x, y).lightness() > 150
                             for x in range(22) for y in range(22))
                 return bg, white
 
-            # 绿底白字；切换前后同色（只靠箭头方向区分）
+            # 蓝底白字（#1565c0）；切换前后同色（只靠箭头方向区分）
             bg, white = colors()
             self.assertLess(bg.red(), 70)
-            self.assertGreater(bg.green(), 100)
-            self.assertLess(bg.blue(), 80)
+            self.assertGreater(bg.blue(), 120)
+            self.assertLess(bg.green(), 150)
             self.assertTrue(white)
             w.cfg_toggle.toggle()
             self.assertTrue(w.panel.isHidden())
@@ -4398,6 +4434,26 @@ class TestCssEditor(unittest.TestCase):
         self.assertNotEqual(xu_font, mu_font)
         self.assertEqual(label_key_for_para(xu, xu_font, mu_font), "div-xu-head")
         self.assertEqual(label_key_for_para(mu, xu_font, mu_font), "head")
+
+    def test_label_key_for_para_pre(self):
+        # 预排段无 pStyle，靠段内 w:br 识别 → 标【预排】而非【正文】
+        from pycbeta.gui.css_editor import label_key_for_para
+        pre = {"style": "", "runs": [{"text": "甲"}, {"br": True},
+                                     {"text": "乙"}]}
+        self.assertEqual(label_key_for_para(pre, "", ""), "pre")
+        plain = {"style": "", "runs": [{"text": "甲"}]}
+        self.assertEqual(label_key_for_para(plain, "", ""), "")
+        # 有命名样式的段（verse 等）不受 br 影响
+        verse = {"style": "verse", "runs": [{"br": True}]}
+        self.assertEqual(label_key_for_para(verse, "", ""), "verse")
+
+    def test_pre_editor_maps_and_dirty(self):
+        from pycbeta.gui.css_editor import (STYLE_ROW_LABEL, _LABEL_TOUCHED_SEL,
+                                            label_is_dirty)
+        self.assertEqual(STYLE_ROW_LABEL["pre"], "预排")
+        self.assertEqual(_LABEL_TOUCHED_SEL["pre"], "pre")
+        self.assertTrue(label_is_dirty("pre", {("pre", ("font-size", "12pt"))}))
+        self.assertFalse(label_is_dirty("pre", {("p", ("font-size", "12pt"))}))
 
     def test_styles_tab_opens_editor(self):
         from pycbeta.gui.panel import XmlOptionsPanel

@@ -27,7 +27,8 @@ class EpubRenderer:
                  ignore_xml_style=False, ignore_xml_space=False, show_notes=True,
                  annotations=None, strip_head_no=False, inline_brackets="fullwidth",
                  note_inline_brackets=None, figure_base=None, corr_cbeta=False,
-                 siddham_text=False, mulu_break=True):
+                 siddham_text=False, mulu_break=True,
+                 pre_dedent=False, pre_dedent_spaces=4):
         # theme=None → 纯基底（官方基底默认）；pdf_docx 主题不再进 epub
         #（render_html 章节与 style.css 同源 base_css）。
         self.theme = theme
@@ -46,6 +47,11 @@ class EpubRenderer:
         self.figure_base = figure_base
         self.siddham_text = siddham_text  # 转内部 HtmlRenderer（有读音悉昙字形+读音，默认关）
         self.mulu_break = mulu_break      # level-1 非「卷」mulu 拆 spine（与 docx mulu_level1 分页同口径）
+        self.pre_dedent = bool(pre_dedent)          # 预排去缩进（转内部 HtmlRenderer）
+        try:
+            self.pre_dedent_spaces = max(0, int(pre_dedent_spaces))
+        except (TypeError, ValueError):
+            self.pre_dedent_spaces = 4
         self.missing_figures = []
 
     def render_work(self, work: Work, out_dir: str, filename: str = "") -> str:
@@ -64,7 +70,9 @@ class EpubRenderer:
                                   figure_base=self.figure_base,
                                   siddham_text=self.siddham_text,
                                   corr_cbeta=self.corr_cbeta,
-                                  mulu_break=self.mulu_break)
+                                  mulu_break=self.mulu_break,
+                                  pre_dedent=self.pre_dedent,
+                                  pre_dedent_spaces=self.pre_dedent_spaces)
             html_files = inner.render_work(work, tmp)
             self.missing_figures = list(inner.missing_figures)
             md = work.metadata

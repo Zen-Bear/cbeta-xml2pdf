@@ -568,7 +568,7 @@ class MainWindow(QMainWindow):
         mode_row.addWidget(self.mode_file)
         mode_row.addWidget(self.mode_ids)
         mode_row.addStretch(1)
-        # 配置区总开关：绿底白字小箭头（tab 区 +「配置」分组整体收起/复原，收起后批量列表放大）；
+        # 配置区总开关：蓝底白字小箭头（tab 区 +「配置」分组整体收起/复原，收起后批量列表放大）；
         # 各态同色（checked 也不变），只靠箭头方向区分
         self.cfg_toggle = QToolButton()
         self.cfg_toggle.setCheckable(True)
@@ -583,13 +583,12 @@ class MainWindow(QMainWindow):
         _pal.setColor(QPalette.WindowText, Qt.white)
         self.cfg_toggle.setPalette(_pal)
         self.cfg_toggle.setStyleSheet(
-            "QToolButton { background-color: #2e7d32; color: white; border: none; border-radius: 4px; }"
-            "QToolButton:checked { background-color: #2e7d32; color: white; }"
-            "QToolButton:hover { background-color: #2e7d32; color: white; }"
-            "QToolButton:pressed { background-color: #2e7d32; color: white; }"
-            "QToolButton:disabled { background-color: #2e7d32; color: white; }")
+            "QToolButton { background-color: #1565c0; color: white; border: none; border-radius: 4px; }"
+            "QToolButton:checked { background-color: #1565c0; color: white; }"
+            "QToolButton:hover { background-color: #1565c0; color: white; }"
+            "QToolButton:pressed { background-color: #1565c0; color: white; }"
+            "QToolButton:disabled { background-color: #1565c0; color: white; }")
         self.cfg_toggle.toggled.connect(self._toggle_panel)
-        mode_row.addWidget(self.cfg_toggle)
         src.addWidget(QLabel("输入来源"), 0, 0)
         src.addLayout(mode_row, 0, 1, 1, 3)
         self.path_edit = QLineEdit()
@@ -622,6 +621,7 @@ class MainWindow(QMainWindow):
         dl_row.addWidget(self.auto_xml)
         dl_row.addWidget(self.auto_base)
         dl_row.addStretch(1)
+        dl_row.addWidget(self.cfg_toggle)   # 收起/展开配置：本行最右
         src.addLayout(dl_row, 3, 1, 1, 3)
         # 输出目录行已并入数据源「输入输出」tab；此处保留隐藏 edit 作会话值载体
         self.out_edit = QLineEdit(os.path.join(os.getcwd(), "out"))

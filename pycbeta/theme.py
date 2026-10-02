@@ -121,6 +121,7 @@ for _dt in _DIV_TYPES:
 # 缺失时提示往 pdf_docx.css 补对应选择器/属性。
 #
 # 约定：`p` 不写 font-size（跟随 `body`，DOCX 经 docDefaults 继承）；字号相对处用 em。
+# 例外：`pre` 写死 font-size（小四 12pt），不跟随 body——纸张预设调大正文时目录仍小四。
 REQUIRED_THEME_TAGS: Dict[str, tuple] = {
     "body": ("font-size", "line-height"),
     "title": ("font-size", "font-weight"),
@@ -131,7 +132,7 @@ REQUIRED_THEME_TAGS: Dict[str, tuple] = {
     "juan": ("font-size", "font-weight"),
     "pin": ("font-size", "font-weight"),
     "p": ("text-indent",),        # 刻意不要求 font-size/line-height：跟随 body
-    "pre": ("text-indent",),
+    "pre": ("text-indent", "font-size"),  # 例外：字号写死小四，不跟随 body
     "verse": (),                  # 字号继承 body；色/字体另行要求
     "form": ("font-weight",),
     "dharani": (),
