@@ -12,7 +12,8 @@ from .model import App, E, Gaiji, Lb, Note, NoteRef, Pb, Text, Work, \
     suppressed_orig_notes
 from .annotate import active as _ann_active, split_annotated as _split_ann, track_seen as _track_seen
 from .gaiji import GaijiDb
-from .theme import Theme, strip_head_no, bracket_pair
+from .theme import Theme, strip_head_no, bracket_pair, first_text_sourceline
+from .report import report
 
 
 class MdRenderer:
@@ -294,7 +295,13 @@ class MdRenderer:
                 self._drop_sa = prev
         if tag == "head":
             level = min(self._div_depth + 1, 6)
-            kids = strip_head_no(e.children)[0] if self.strip_head_no else None
+            kids = None
+            if self.strip_head_no:
+                kids, _tok = strip_head_no(e.children)
+                if _tok:
+                    report.add("去标题行首", f"剥离「{_tok}」",
+                               line=first_text_sourceline(e.children, e.sourceline),
+                               key=("strip", e.sourceline, _tok))
             with self._no_ann():
                 inner = self._render_children(e, kids).strip()
             return f"{'#' * level} {inner}\n\n"
@@ -312,6 +319,8 @@ class MdRenderer:
             return f"## {inner}\n\n"
         if tag == "docNumber":
             if self.strip_head_no:
+                report.add("内容丢弃", "strip_head_no：省略编号行（docNumber）",
+                           line=e.sourceline, key=("docnum", e.sourceline))
                 return ""  # 编号行随 strip_head_no 一并省略
             # No. 独立一行 + 空一行（对齐官方 txt），后接卷名
             with self._no_ann():
@@ -320,7 +329,11 @@ class MdRenderer:
         if tag == "jhead":
             kids = None
             if self.strip_head_no:
-                kids = strip_head_no(e.children)[0]
+                kids, _tok = strip_head_no(e.children)
+                if _tok:
+                    report.add("去标题行首", f"剥离「{_tok}」",
+                               line=first_text_sourceline(e.children, e.sourceline),
+                               key=("strip", e.sourceline, _tok))
             with self._no_ann():
                 return self._render_children(e, kids)
         if tag == "lg":

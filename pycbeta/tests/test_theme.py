@@ -133,6 +133,23 @@ class TestScaleFontSizes(unittest.TestCase):
         self.assertIn("KaiTi", h.tags["kaiti"]["font-family"])
 
 
+class TestFirstTextSourceline(unittest.TestCase):
+    """首个带行号 Text 的物理行号（转换报告：head/jhead 去 No. 定位用）。"""
+
+    def test_picks_first_text_line(self):
+        from pycbeta.theme import first_text_sourceline
+        from pycbeta.model import Lb, Text
+        nodes = [Lb(n="x", sourceline=1), Text("a", sourceline=9),
+                 Text("b", sourceline=10)]
+        self.assertEqual(first_text_sourceline(nodes, 5), 9)
+
+    def test_fallback(self):
+        from pycbeta.theme import first_text_sourceline
+        from pycbeta.model import Lb, Text
+        self.assertEqual(first_text_sourceline([Lb(n="x", sourceline=1)], 5), 5)
+        self.assertIsNone(first_text_sourceline([Text("a")], None))
+
+
 class TestPreFontSize(unittest.TestCase):
     """预排段字号写死小四 12pt，不跟随 body（纸张预设调正文时目录不变）。"""
 

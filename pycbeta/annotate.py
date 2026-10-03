@@ -179,23 +179,49 @@ def auto_reading(char, scheme="pinyin", review=True):
     （全文模式同字高频复用，避免重复查询）。
     review=True 时登记待审字（多音/未知，见 `_record_review`；全文模式不登记）。"""
     key = (char, scheme)
-    if key in _READING_CACHE:
-        return _READING_CACHE[key]
-    rd = _auto_reading_uncached(char, scheme)
-    if rd is None:
-        for alt in _norm_alts(char):
-            rd = _auto_reading_uncached(alt, scheme)
-            if rd:
-                break
-    _READING_CACHE[key] = rd
+    rd = _READING_CACHE.get(key, _READ_MISS)
+    if rd is _READ_MISS:
+        rd = _auto_reading_uncached(char, scheme)
+        if rd is None:
+            for alt in _norm_alts(char):
+                rd = _auto_reading_uncached(alt, scheme)
+                if rd:
+                    break
+        _READING_CACHE[key] = rd
     if review:
         _record_review(char, scheme)
+        _note_review_report(char, scheme)   # 每 work 首次出现即记（报告内去重）
     return rd
 
 
+_READ_MISS = object()
+
 # 待审字登记（注音模式自动收集，供 CLI/GUI 落盘告知；渲染器零 IO，只记内存）
 _REVIEW = {}  # char -> "unknown" | "polyphonic"
-_REVIEW_CHECKED = set()  # 已评估过的 (char, scheme)，避免重复查 heteronym
+_REVIEW_CHECKED = set()  # 已评估过的 (char, scheme)，避免重复查 heteronym（_REVIEW 用）
+_REVIEW_STATUS = {}      # (char, scheme) -> "unknown"|"polyphonic"|None（判定缓存）
+
+
+def _review_status(char, scheme="pinyin"):
+    """pypinyin 判定：无收录 → "unknown"；多音（heteronym>1）→ "polyphonic"；
+    正常/无法判定（缺库/异常）→ None。进程级缓存。"""
+    key = (char, scheme)
+    if key in _REVIEW_STATUS:
+        return _REVIEW_STATUS[key]
+    status = None
+    try:
+        from pypinyin import pinyin, Style
+        style = Style.BOPOMOFO if scheme == "zhuyin" else Style.TONE
+        rows = pinyin(char, style=style, heteronym=True)
+        rds = [r.strip() for r in (rows[0] if rows else [])]
+        if not rds or all(r.replace("˙", "") == char for r in rds):
+            status = "unknown"
+        elif len(set(rds)) > 1:
+            status = "polyphonic"
+    except Exception:
+        status = None
+    _REVIEW_STATUS[key] = status
+    return status
 
 
 def _record_review(char, scheme="pinyin"):
@@ -205,20 +231,25 @@ def _record_review(char, scheme="pinyin"):
     if key in _REVIEW_CHECKED:
         return
     _REVIEW_CHECKED.add(key)
+    st = _review_status(char, scheme)
+    if st:
+        _REVIEW.setdefault(char, st)
+
+
+def _note_review_report(char, scheme="pinyin"):
+    """按 work 首次出现登记待审字到转换报告（同一字跨 work 各记一次；
+    报告内按 (字, 状态) 去重）。未激活时零开销。"""
     try:
-        from pypinyin import pinyin, Style
-    except ImportError:
-        return
-    try:
-        style = Style.BOPOMOFO if scheme == "zhuyin" else Style.TONE
-        rows = pinyin(char, style=style, heteronym=True)
-        rds = [r.strip() for r in (rows[0] if rows else [])]
-    except Exception:
-        return
-    if not rds or all(r.replace("˙", "") == char for r in rds):
-        _REVIEW.setdefault(char, "unknown")
-    elif len(set(rds)) > 1:
-        _REVIEW.setdefault(char, "polyphonic")
+        from .report import report
+        if not report.active():
+            return
+        st = _review_status(char, scheme)
+        if st:
+            kind = "无收录" if st == "unknown" else "多音字"
+            report.add("注音待审", f"{char}（{kind}）",
+                       key=("review", char, st))
+    except Exception:  # noqa: BLE001 —— 报告失败不影响渲染
+        pass
 
 
 def pending_review():
@@ -230,6 +261,7 @@ def clear_reviewed():
     """清空待审登记（单测/多轮运行时隔离用）。"""
     _REVIEW.clear()
     _REVIEW_CHECKED.clear()
+    _REVIEW_STATUS.clear()
 
 
 def append_review_stubs(table_path):

@@ -17,10 +17,12 @@ from .model import App, E, Gaiji, Lb, Note, NoteRef, Pb, Text, Work, \
     suppressed_orig_notes
 from .gaiji import GaijiDb
 from .theme import (Theme, resolve_page, _hex6, strip_head_no, bracket_pair,
-                    VERTICAL_UNCENTER, ensure_page_typography, FALLBACKS)
+                    VERTICAL_UNCENTER, ensure_page_typography, FALLBACKS,
+                    first_text_sourceline)
 from .fonts import preferred_family
 from .render_html import split_juans
 from .filename import apply_template
+from .report import report
 from .annotate import active as _ann_active, split_annotated as _split_ann, parse_rt_size as _parse_rt_size, split_eq_reading as _split_eq, track_seen as _track_seen, page_repeat as _page_repeat
 
 _REND_TAGS = ("kaiti", "heiti", "mingti", "fangsong")
@@ -355,6 +357,9 @@ class DocxRenderer:
         except (TypeError, ValueError):
             self.pre_dedent_spaces = 4
         self._pre_line_start = True   # 预排段内是否处于行首（跨 Text 节点）
+        # 转换报告行号上下文：渲染到 Text 时更新（深层字体函数经 report.set_context 取用）
+        self._cur_line = None
+        self._cur_text = ""
         self.title_smart_wrap = bool(title_smart_wrap)  # 书名超行在空格/破折号处换行（默认开）
 
     @contextmanager
@@ -459,6 +464,10 @@ class DocxRenderer:
         except Exception:  # noqa: BLE001 —— 查不到不断渲染
             cmap = None
         self._fb_cmap[family] = cmap
+        if cmap is None:
+            report.add("字体无法验证",
+                       f"字体 {family!r} 文件缺失，无法核对字形覆盖",
+                       line=self._cur_line, key=("fbcov", family))
         return cmap
 
     def _fallback_chain(self):
@@ -488,7 +497,18 @@ class DocxRenderer:
         chunks, buf, cur = [], [], None
         started = False
         for ch in text:
-            fb = None if ord(ch) in cmap else self._fallback_for(family, ch)
+            if ord(ch) in cmap:
+                fb = None
+            else:
+                fb = self._fallback_for(family, ch)
+                if fb:
+                    report.add("字体替换",
+                               f"缺字 {ch}（U+{ord(ch):04X}）改用回退字体 {fb}",
+                               line=self._cur_line, key=("fb", ch, fb))
+                else:
+                    report.add("字体缺失",
+                               f"{ch}（U+{ord(ch):04X}）主字体缺字形且回退链无覆盖",
+                               line=self._cur_line, key=("tofu", ch))
             if not started:
                 cur, started = fb, True
             if fb != cur:
@@ -821,6 +841,8 @@ class DocxRenderer:
         self._div_stack = []
         self._body_para_count = 0
         self._pending_juan = None     # 待加书签的卷号（milestone 之后的下一个段落）
+        self._cur_line = None         # 转换报告行号上下文
+        self._cur_text = ""
         self._bm_id = 0               # 书签递增 id
         self._in_para = 0             # 段落上下文深度（>0 时 figure 只出 run，避免 <w:p> 嵌套）
         self._media = []              # 内嵌图片 [{path, ext, rid, name}]（_build_docx 落盘）
@@ -834,6 +856,15 @@ class DocxRenderer:
                 self._app_by_n[n.key[3:]] = n
         # 整体 orig 注被拆分 mod（a/b）取代：docx 不单出（见 model.suppressed_orig_notes）
         self._orig_suppressed = suppressed_orig_notes(work.notes_by_n)
+        # 转换报告：配置级特殊处理（每 work 一条，merge 时跨格式去重）
+        if not self.show_notes:
+            report.add("注释", "已关闭注释（show_notes=false）")
+        else:
+            report.add("注释", f"注释方式：{self.notes}", key=("notes", self.notes))
+        if not self.show_body_siddham:
+            report.add("悉昙", "正文悉昙字/读音隐藏")
+        if self.corr_cbeta:
+            report.add("校改标红", "CBETA 校改字标红")
 
     @staticmethod
     def _iter_all(nodes):
@@ -885,6 +916,13 @@ class DocxRenderer:
         return "".join(out)
 
     def _resolve_gaiji_raw(self, code: str, raw: str) -> str:
+        res = self._gaiji_resolve_one(code, raw)
+        if res and res != raw:
+            report.add("缺字字形", f"{code} → {res}", line=self._cur_line,
+                       content=raw or None, key=("gaiji", code, res))
+        return res
+
+    def _gaiji_resolve_one(self, code: str, raw: str) -> str:
         # 优先级：RJ 悉昙用 charDecl rjchar（常规汉字；官方行为，配 Ranjana 系字体显示，
         # 不用 PUA 私用字——无字体覆盖，必 tofu）→ gaiji_db（CBETA 全局缺字表，与官方 html 一致）
         # → charDecl（本经 charDecl，兜底）→ raw
@@ -952,7 +990,11 @@ class DocxRenderer:
                     else DEFAULT_SIDDHAM_FONTS):
             cmap = self._fallback_cmap(fam)
             if cmap is not None and ord(ch[0]) in cmap:
+                report.add("悉昙字体", f"悉昙字 {ch} 使用字体 {fam}",
+                           line=self._cur_line, key=("ranjana", ch, fam))
                 return fam
+        report.add("悉昙字体缺失", f"悉昙字 {ch} 无覆盖字体，回退主题字体",
+                   line=self._cur_line, key=("ranjana_miss", ch))
         return None
 
     def _gaiji_font(self) -> str:
@@ -971,6 +1013,8 @@ class DocxRenderer:
             except Exception:
                 pass
             self._gaiji_font_resolved = pick
+            report.add("缺字字体", f"超大缺字字体：{pick}",
+                       line=self._cur_line, key=("gaijifont", pick))
         return self._gaiji_font_resolved
 
     def _render_body(self, body) -> str:
@@ -1010,20 +1054,41 @@ class DocxRenderer:
         n = self.pre_dedent_spaces
         if n <= 0 or not text:
             return text
+        orig = text
         pat = self._PRE_BLANK + "{0,%d}" % n
         if self._pre_line_start:
             text = re.sub("^" + pat, "", text)
-        return re.sub("(?<=\\n)" + pat, "", text)
+        text = re.sub("(?<=\\n)" + pat, "", text)
+        if text != orig:
+            report.add("预排去缩进", f"行首去空白（每行最多 {n} 个）",
+                       line=self._cur_line, content=f"{orig!r}→{text!r}",
+                       key=("pre_dedent", self._cur_line, orig))
+        return text
 
     def _render_node(self, n) -> str:
         if isinstance(n, Text):
-            text = n.text.strip(" \t　") if self.ignore_xml_space else n.text
+            if n.sourceline is not None:
+                self._cur_line = n.sourceline
+                self._cur_text = n.text or ""
+                if report.active():
+                    report.set_context(line=n.sourceline)
+            text = n.text
+            if self.ignore_xml_space:
+                stripped = text.strip(" \t　")
+                if stripped != text:
+                    report.add("忽略脏数据", "忽略文本首尾空白（ignore_xml_space）",
+                               line=self._cur_line,
+                               content=f"{text!r}→{stripped!r}",
+                               key=("igspace", self._cur_line, text))
+                text = stripped
             if self._in_pre and text and "\n" in text \
                     and not text.strip(" \t　\n\r") and self._pre_line_start:
                 # pre 内多余换行：已处行首时纯空白 Text 只会再造空行
                 # （空元素独占源码行的 tail 残留，TX01 目录 pb 处实锤）；
                 # 非行首的孤立换行是正文唯一断行，必须保留（X1116 凡例　官方同形）。
                 # 无换行的纯空格保留（行中空格可能是有意义的）。
+                report.add("预排空行", "丢弃空元素独占行的残留换行",
+                           line=self._cur_line)
                 return ""
             if self._in_pre and self.pre_dedent:
                 text = self._pre_dedent_text(text)
@@ -1395,7 +1460,12 @@ class DocxRenderer:
             ptag = ptype if ptype in self.theme.tags else None
             style = a.get("style") or ""
             indent = 0
-            if not self.ignore_xml_style:
+            if self.ignore_xml_style:
+                if "margin-left" in style:
+                    report.add("忽略脏数据", "忽略 <p style> 的 margin-left 缩进",
+                               line=e.sourceline, content=style,
+                               key=("igstyle", e.sourceline, style))
+            else:
                 m = re.search(r"margin-left:\s*([\d.]+)em", style)
                 if m:
                     indent = float(m.group(1))
@@ -1418,7 +1488,11 @@ class DocxRenderer:
             # 仅 jhead 去重，head 保留书名；若有 pending mulu（紧随的 cb:mulu），则以 mulu 的 level/text 作隐形书签（段内避免空白页）
             nodes = e.children
             if self.strip_head_no:
-                nodes, _ = strip_head_no(nodes)
+                nodes, _tok = strip_head_no(nodes)
+                if _tok:
+                    report.add("去标题行首", f"剥离「{_tok}」",
+                               line=first_text_sourceline(e.children, e.sourceline),
+                               key=("strip", e.sourceline, _tok))
             is_pin = bool(re.search(r"品第[一二三四五六七八九十百千]", self._render_text(e)))
             para_tag = "pin" if is_pin else "head"
             with self._no_ann():
@@ -1472,7 +1546,11 @@ class DocxRenderer:
             if a.get("type") == "pin":
                 nodes = self._children_no_dup_title(e) if self.suppress_jhead_dup else e.children
                 if self.strip_head_no:
-                    nodes, _ = strip_head_no(nodes)
+                    nodes, _tok = strip_head_no(nodes)
+                    if _tok:
+                        report.add("去标题行首", f"剥离「{_tok}」",
+                                   line=first_text_sourceline(e.children, e.sourceline),
+                                   key=("strip", e.sourceline, _tok))
                 with self._no_ann():
                     runs = self._render_tagged_clean(nodes, "pin", self._rend_tag(a))
                 p = self._para(runs, "pin")
@@ -1519,10 +1597,12 @@ class DocxRenderer:
                 with self._no_ann():
                     runs = self._render_tagged_clean(e.children, "title")
                 if self.title_smart_wrap and not self.vertical:
-                    runs = self._wrap_title_runs(runs)
+                    runs = self._wrap_title_runs(runs, line=e.sourceline)
                 return self._para(runs, "title", count=False)
             return self._render_children(e)
         if tag == "docNumber":
+            report.count("其它显示调整", "省略编号行（docNumber）",
+                         line=e.sourceline)
             return ""  # 恒不显
         if tag == "tt":
             return self._render_tt(e)
@@ -1550,6 +1630,7 @@ class DocxRenderer:
         if tag in ("table", "row", "cell"):
             return self._render_table(e)
         if tag == "unclear":
+            report.count("其它显示调整", "虚缺符 □", line=e.sourceline)
             return self._run("□", *self._current_tag())  # 虚缺符号 U+25A1（文字无法辨析）
         if tag == "form":
             return self._para(self._render_para_children(e, "form", self._rend_tag(a)), "form")
@@ -1590,7 +1671,12 @@ class DocxRenderer:
         ptag = ptype if ptype in self.theme.tags else None
         style = a.get("style") or ""
         indent = 0
-        if not self.ignore_xml_style:
+        if self.ignore_xml_style:
+            if "margin-left" in style:
+                report.add("忽略脏数据", "忽略 <p style> 的 margin-left 缩进",
+                           line=p.sourceline, content=style,
+                           key=("igstyle", p.sourceline, style))
+        else:
             m = re.search(r"margin-left:\s*([\d.]+)em", style)
             if m:
                 indent = float(m.group(1))
@@ -1619,6 +1705,8 @@ class DocxRenderer:
         out = []
         for c in e.children:
             if isinstance(c, E) and c.tag == "title" and self._render_text(c).strip() == title.strip():
+                report.add("卷名去重", f"丢弃与书名重复的 title：{title.strip()}",
+                           line=c.sourceline, key=("dupchild", c.sourceline))
                 continue
             out.append(c)
         return out
@@ -1628,11 +1716,11 @@ class DocxRenderer:
         r"\A<w:r>(?P<rpr><w:rPr>.*?</w:rPr>)?"
         r"<w:t(?P<attrs>[^>]*)>(?P<text>.*?)</w:t></w:r>\Z", re.S)
 
-    def _wrap_title_runs(self, runs: str) -> str:
+    def _wrap_title_runs(self, runs: str, line=None) -> str:
         """书名 runs 按版心断行：不断返回原样；断则在空格/破折号处插
         `<w:r><w:br/></w:r>`（WPS 安全写法），各段保留原 rPr。
 
-        非纯文本 run（如注码）零宽原样保留，不断其内部。"""
+        非纯文本 run（如注码）零宽原样保留，不断其内部。line 为书名的物理 XML 行号。"""
         from xml.sax.saxutils import unescape as _ux
         toks = []   # ("ch", ch, rpr, attrs) | ("raw", xml)
         for part in self._TITLE_RUN_RE.split(runs):
@@ -1651,6 +1739,9 @@ class DocxRenderer:
         lines = split_title_lines(full, usable_pt / title_pt)
         if len(lines) <= 1:
             return runs
+        report.add("标题折行", f"书名超 1 行，断为 {len(lines)} 行",
+                   line=line, content=" ／ ".join(lines),
+                   key=("titlewrap", tuple(lines)))
         # 按行内容消费字符（断点删掉的空格不在行里，遇到跳过）；
         # 行边界落在 strict run 内则切分（rPr/attrs 照抄）
         out, li, ci = [], 0, 0
@@ -1712,12 +1803,18 @@ class DocxRenderer:
         if self.suppress_jhead_dup and title and txt and txt == title.strip():
             # 单卷去重：jhead 与书名相同，整段丢弃；mulu/卷书签一并清除，
             # 避免孤立书签（书签必须附着在真实段落上）
+            report.add("卷名去重", f"卷名与书名相同，整段去重：{txt}",
+                       line=e.sourceline, key=("juandup", e.sourceline))
             self._pending_mulu = None
             self._pending_juan = None
             return ""
         nodes = self._children_no_dup_title(e) if self.suppress_jhead_dup else e.children
         if self.strip_head_no:
-            nodes, _ = strip_head_no(nodes)
+            nodes, _tok = strip_head_no(nodes)
+            if _tok:
+                report.add("去标题行首", f"剥离「{_tok}」",
+                           line=first_text_sourceline(e.children, e.sourceline),
+                           key=("strip", e.sourceline, _tok))
         with self._no_ann():
             runs = self._render_tagged_clean(nodes, "juan", self._rend_tag(e.attrs))
         return self._para(runs, "juan",
@@ -1746,6 +1843,12 @@ class DocxRenderer:
             return self._render_nodes(t.children)
 
         if len(ts) >= 2 and e.attrs.get("type") not in ("app", "single-line"):
+            if len(ts) > 2:
+                dropped = "／".join(self._render_text(t) for t in ts[2:])
+                report.add("内容丢弃",
+                           f"<cb:tt> 共 {len(ts)} 行，仅显示前 2 行",
+                           line=e.sourceline, content=dropped,
+                           key=("ttdrop", e.sourceline, len(ts)))
             # 官方 docx 两行直连无分隔（如 歾(raṃ)㘕）；不插全角空格
             #（裸 U+3000 run 无 rPr 时部分 Word 回退缺字形显示方框）
             return _row(ts[0]) + _row(ts[1])
@@ -1769,8 +1872,7 @@ class DocxRenderer:
             del self._tag_stack[-len(tags):]
         return out
 
-    @staticmethod
-    def _strip_quote_text(nodes, leading=False, trailing=False):
+    def _strip_quote_text(self, nodes, leading=False, trailing=False):
         """去掉偈颂首/尾的「『 』」：改第一个/最后一个 Text 节点内容。"""
         def find(nodes, last):
             seq = nodes if not last else reversed(nodes)
@@ -1783,14 +1885,22 @@ class DocxRenderer:
                         return r
             return None
 
+        removed = ""
         if leading:
             t = find(nodes, False)
             if t:
-                t.text = t.text.lstrip("「『")
+                before = t.text
+                t.text = before.lstrip("「『")
+                removed += before[:len(before) - len(t.text)]
         if trailing:
             t = find(nodes, True)
             if t:
-                t.text = t.text.rstrip("』」")
+                before = t.text
+                t.text = before.rstrip("』」")
+                removed = before[len(t.text):] + removed
+        if removed:
+            report.add("偈颂去引号", f"去掉偈颂首尾引号「{removed}」",
+                       line=self._cur_line, key=("vquote", removed, self._cur_line))
 
     @staticmethod
     def _leading_quotes(e) -> int:
@@ -1930,7 +2040,9 @@ class DocxRenderer:
         if title and not self._body_has_title_m():
             _truns = self._run(title, "title")
             if self.title_smart_wrap and not self.vertical:
-                _truns = self._wrap_title_runs(_truns)
+                _tline = (self._work.metadata or {}).get(
+                    "_title_sourceline") if self._work else None
+                _truns = self._wrap_title_runs(_truns, line=_tline)
             title_para = self._para(_truns, "title", count=False)
         tei_page = self._tei_info_page(title, author)
         pw, ph = self.page_w, self.page_h

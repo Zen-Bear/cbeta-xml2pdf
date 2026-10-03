@@ -80,9 +80,18 @@ _WARNED_CANON = set()
 
 
 def _note_canon(orig, new):
-    if new != orig and (orig, new) not in _WARNED_CANON:
-        _WARNED_CANON.add((orig, new))
-        print(f"字体：{orig!r} 按本机 GDI 可见名归一为 {new!r}")
+    if new != orig:
+        # 转换报告：每个 work 上报（报告内按 (原,新) 去重）；控制台仍全局只提示一次
+        try:
+            from .report import report
+            report.add("字体替换",
+                       f"{orig!r} 按本机 GDI 可见名归一为 {new!r}",
+                       key=("font_canon", orig, new))
+        except Exception:  # noqa: BLE001 —— 报告失败不影响渲染
+            pass
+        if (orig, new) not in _WARNED_CANON:
+            _WARNED_CANON.add((orig, new))
+            print(f"字体：{orig!r} 按本机 GDI 可见名归一为 {new!r}")
     return new
 
 

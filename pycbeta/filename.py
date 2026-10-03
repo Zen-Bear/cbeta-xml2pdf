@@ -17,6 +17,16 @@ Sanitization (Windows):
 import re
 import sys
 
+
+def _report_note(cat, msg, key=None):
+    """转换报告：文件名净化（仅 CLI 子进程内激活；GUI worker 侧 no-op）。"""
+    try:
+        from .report import report
+        report.add(cat, msg, key=key)
+    except Exception:  # noqa: BLE001 —— 报告失败不影响命名
+        pass
+
+
 _ILLEGAL_FULLWIDTH = {
     ":": "：", "\\": "＼", "/": "／", "*": "＊", "?": "？",
     '"': "＂", "<": "＜", ">": "＞", "|": "｜",
@@ -41,16 +51,24 @@ def sanitize(name: str) -> str:
     if warned:
         print(f"警告: 文件名含无全角对应之非法字符，已删除: {''.join(map(repr, warned))}",
               file=sys.stderr)
+        _report_note("输出净化", f"文件名删除非法字符：{''.join(warned)!r}",
+                     key=("fn_illegal", name))
     s = "".join(out).rstrip(". ").strip()
     stem = s.split(".")[0].upper()
     if stem in _RESERVED:
         s = "_" + s
         print(f"警告: 文件名 {stem} 为保留名，已加前缀 _", file=sys.stderr)
+        _report_note("输出净化", f"文件名 {stem} 为保留名，已加前缀 _",
+                     key=("fn_reserved", stem))
     if not s:
         print("警告: 文件名经处理后为空，退回使用 [id]", file=sys.stderr)
+        _report_note("输出净化", "文件名经处理后为空，退回 UNKNOWN",
+                     key=("fn_empty", name))
         return "UNKNOWN"
     if len(s) > _MAX_LEN:
         print(f"警告: 文件名过长，已截断到 {_MAX_LEN} 字符", file=sys.stderr)
+        _report_note("输出净化", f"文件名过长，截断到 {_MAX_LEN} 字符",
+                     key=("fn_trunc", name))
         s = s[:_MAX_LEN].rstrip(". ")
     return s
 

@@ -4,7 +4,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from pycbeta.model import App, Gaiji, Note, NoteRef, Text
+from pycbeta.model import App, E, Gaiji, Lb, Note, NoteRef, Pb, Text
 from pycbeta.parser import P5Parser
 
 from pycbeta.tests._data import DATA_ROOT as CBETA
@@ -48,6 +48,61 @@ class TestCharDeclRjchar(unittest.TestCase):
             os.remove(fn)
         self.assertEqual((w.metadata.get("charDecl") or {}).get("RJ-T"),
                          {"rjchar": "屇", "pua": "U+10CCBA"})
+
+
+class TestSourceline(unittest.TestCase):
+    """物理 XML 行号（lxml sourceline）采集：Text/E/Lb/Pb/Gaiji +
+    元数据书名行（转换报告定位用）。"""
+
+    XML = (
+        "<TEI xmlns='http://www.tei-c.org/ns/1.0'>\n"        # 1
+        "<teiHeader><fileDesc><titleStmt>\n"                 # 2
+        "<title level='m' xml:lang='zh-Hant'>書名</title>\n"  # 3
+        "</titleStmt></fileDesc></teiHeader>\n"              # 4
+        "<text><body>\n"                                     # 5
+        "<p>甲</p>\n"                                        # 6
+        "<p>乙<lb n='0001b01'/>丙</p>\n"                     # 7
+        "<p><pb n='0002'/>丁<g ref='#CB1'>戊</g></p>\n"      # 8
+        "</body></text>\n"                                   # 9
+        "</TEI>\n"                                           # 10
+    )
+
+    @classmethod
+    def setUpClass(cls):
+        import tempfile
+        with tempfile.NamedTemporaryFile("w", suffix=".xml", delete=False,
+                                         encoding="utf-8") as f:
+            f.write(cls.XML)
+            fn = f.name
+        try:
+            cls.w = P5Parser().parse(fn)
+        finally:
+            os.remove(fn)
+
+    def test_title_sourceline(self):
+        self.assertEqual(self.w.metadata.get("_title_sourceline"), 3)
+
+    def test_text_and_e_sourceline(self):
+        ps = [n for n in self.w.body if isinstance(n, E) and n.tag == "p"]
+        self.assertEqual([p.sourceline for p in ps], [6, 7, 8])
+        texts = all_of(self.w, Text)
+        first = next(t for t in texts if t.text.strip() == "甲")
+        self.assertEqual(first.sourceline, 6)
+
+    def test_lb_tail_sourceline(self):
+        lb = next(n for n in all_of(self.w, Lb) if n.n == "0001b01")
+        self.assertEqual(lb.sourceline, 7)
+        bing = next(t for t in all_of(self.w, Text) if t.text.strip() == "丙")
+        self.assertEqual(bing.sourceline, 7)   # tail 随所属元素行
+
+    def test_pb_g_sourceline(self):
+        pb = all_of(self.w, Pb)[0]
+        self.assertEqual(pb.sourceline, 8)
+        g = all_of(self.w, Gaiji)[0]
+        self.assertEqual(g.sourceline, 8)
+        self.assertEqual(g.char, "戊")
+        ding = next(t for t in all_of(self.w, Text) if t.text.strip() == "丁")
+        self.assertEqual(ding.sourceline, 8)   # pb.tail 随 pb 行
 
 
 @requires_data

@@ -13,7 +13,8 @@ class Node:
 @dataclass
 class Text(Node):
     text: str = ""
-    line: Optional[str] = None
+    line: Optional[str] = None          # CBETA 校勘行号（lb/@n，canonical 版）
+    sourceline: Optional[int] = None    # 物理 XML 行号（lxml sourceline；转换报告用）
 
 
 @dataclass
@@ -21,18 +22,21 @@ class Lb(Node):
     n: str = ""
     ed: Optional[str] = None
     lbtype: Optional[str] = None
+    sourceline: Optional[int] = None
 
 
 @dataclass
 class Pb(Node):
     n: Optional[str] = None
     ed: Optional[str] = None
+    sourceline: Optional[int] = None
 
 
 @dataclass
 class Gaiji(Node):
     code: str = ""
     char: Optional[str] = None
+    sourceline: Optional[int] = None
 
 
 @dataclass
@@ -40,6 +44,7 @@ class E(Node):
     tag: str = ""
     attrs: Dict[str, str] = field(default_factory=dict)
     children: List[Node] = field(default_factory=list)
+    sourceline: Optional[int] = None    # 物理 XML 行号（转换报告用）
 
 
 @dataclass

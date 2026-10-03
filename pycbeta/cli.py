@@ -73,6 +73,15 @@ def _notes_marker_font(out_defaults):
     return out_defaults.get("notes_marker_font", out_defaults.get("marker_font"))
 
 
+def resolve_convert_report(flag, out_defaults):
+    """转换报告开关：CLI flag > config output.convert_report > 默认 True。
+
+    flag 为三态（None=未指定 / True / False）；config 值缺失取 True（默认开）。"""
+    if flag is not None:
+        return bool(flag)
+    return bool((out_defaults or {}).get("convert_report", True))
+
+
 def _annotations_source(config_path, presets):
     """annotations 配置来源（P6）：显式 --config 用其 presets；
     否则读内置 pycbeta/config.json——与其他 output.* 默认来源一致，
@@ -110,6 +119,13 @@ def _report_missing_figures(wid, fmt, renderer):
     miss = list(getattr(renderer, "missing_figures", None) or [])
     if miss:
         print(f"{wid}: {fmt} 图片缺失（占位）：{', '.join(miss)}")
+        try:
+            from .report import report
+            for b in miss:
+                report.add("图缺失", f"图片缺失，以占位符输出：{b}",
+                           key=("fig", b))
+        except Exception:
+            pass
 
 
 def _frag_lines(idx, tag, i1, i2, j1, j2, t_ours, theirs_n,
@@ -396,6 +412,11 @@ def resolve_output(xml_fn, fmt, args, work, _used=None):
                     os.rename(old, new)
                     print(f"改名: {os.path.basename(old)} -> "
                           f"{os.path.basename(new)}（多源同名统一回退）")
+                    from .report import report
+                    report.add("输出改名",
+                               f"{os.path.basename(old)} → "
+                               f"{os.path.basename(new)}（多源同名统一回退）",
+                               key=("rename", new))
             except OSError:
                 pass
     if args.output:
@@ -415,34 +436,95 @@ def resolve_verify_ebook(args, presets, src):
     return (cfg.get("cbeta_ebook") or "").strip() or src
 
 
+def _convert_report_root(xml_fn, args):
+    """转换报告根目录（与校验产物同规则）：-o 为目录/无后缀则取之，否则取
+    -o 文件所在目录；无 -o 取输入 xml 所在目录。"""
+    if getattr(args, "output", None):
+        _o = os.path.abspath(args.output)
+        return _o if (os.path.isdir(_o) or not os.path.splitext(_o)[1]) \
+            else os.path.dirname(_o)
+    return os.path.dirname(os.path.abspath(xml_fn))
+
+
+def _write_convert_reports(xml_fn, args, w, formats):
+    """写转换报告：per-fmt 到 {验证}/{fmt}/{name}_转换报告_{fmt}.txt，
+    合并到 {验证}/{name}_转换报告.txt，并打印 `-> 合并路径`（GUI 抓取）。
+    失败只记 console，不影响渲染/退出码。返回合并路径（失败 ""）。"""
+    try:
+        from .filename import default_output_name
+        from .report import report
+        root = _convert_report_root(xml_fn, args)
+        name = default_output_name(w.id, w.metadata.get("title"),
+                                   getattr(args, "title_t2s", True))
+        vdir = os.path.join(root, f"{name}（验证）")
+        for fmt in formats:
+            try:
+                sub = os.path.join(vdir, fmt)
+                os.makedirs(sub, exist_ok=True)
+                with open(os.path.join(sub, f"{name}_转换报告_{fmt}.txt"),
+                          "w", encoding="utf-8") as f:
+                    f.write(report.format_text(fmt=fmt))
+            except Exception as e:  # noqa: BLE001 —— 单格式失败不阻断
+                print(f"{w.id}: {fmt} 转换报告写入失败：{e}", file=sys.stderr)
+        os.makedirs(vdir, exist_ok=True)
+        merged = os.path.join(vdir, f"{name}_转换报告.txt")
+        with open(merged, "w", encoding="utf-8") as f:
+            f.write(report.format_text())
+        msg = f"{w.id}: 转换报告 -> {merged}"
+        try:
+            print(msg)
+        except UnicodeEncodeError:
+            print(msg.encode("gbk", "replace").decode("gbk", "replace"))
+        return merged
+    except Exception as e:  # noqa: BLE001 —— 报告失败不影响渲染
+        print(f"{w.id}: 转换报告写入失败：{e}", file=sys.stderr)
+        return ""
+
+
 def process_file(xml_fn, formats, args, theme, html_base=None, _used=None,
                  ebook_root=None):
     w = P5Parser().parse(xml_fn)
-    if args.t2s:
-        from .simplify import simplify_work
-        simplify_work(w)
-    if getattr(args, "font_check", False):
-        try:
-            _fc_dir, _ = resolve_output(xml_fn, formats[0], args, w)
-        except Exception:
-            _fc_dir = None
-        _run_font_check(w, args, theme, _fc_dir)
-    # 图片搜索目录（{work}/figures → {work}/txt → xml 同目录；渲染器按 basename 匹配）
-    from . import figures as _fig
-    fig_dirs = _fig.work_figure_dirs(ebook_root, w.id, xml_fn)
-    failed = 0
-    for fmt in formats:
-        out_dir, out_name = resolve_output(xml_fn, fmt, args, w, _used)
-        try:
-            render_one(w, fmt, out_dir, out_name, args, theme,
-                       html_base=html_base, figure_base=fig_dirs or None)
-        except NotImplementedError as e:
-            print(f"{w.id}: {fmt} skipped - {e}", file=sys.stderr)
-        except OSError as e:
-            # 目标被占用/无写权限等：不中断其余格式，报一行可读原因并以非 0 退出
-            failed += 1
-            print(f"{w.id}: {fmt} 生成失败：{e}", file=sys.stderr)
-    return failed
+    want_report = bool(getattr(args, "convert_report", False))
+    if want_report:
+        from .report import report
+        report.begin(w.id, xml_fn)
+    try:
+        if args.t2s:
+            from .simplify import simplify_work
+            simplify_work(w)
+            from .report import report
+            report.add("简繁转换", "已转简体（OpenCC t2s）")
+        if getattr(args, "font_check", False):
+            try:
+                _fc_dir, _ = resolve_output(xml_fn, formats[0], args, w)
+            except Exception:
+                _fc_dir = None
+            _run_font_check(w, args, theme, _fc_dir)
+        # 图片搜索目录（{work}/figures → {work}/txt → xml 同目录；渲染器按 basename 匹配）
+        from . import figures as _fig
+        fig_dirs = _fig.work_figure_dirs(ebook_root, w.id, xml_fn)
+        failed = 0
+        for fmt in formats:
+            if want_report:
+                from .report import report
+                report.set_fmt(fmt)
+            out_dir, out_name = resolve_output(xml_fn, fmt, args, w, _used)
+            try:
+                render_one(w, fmt, out_dir, out_name, args, theme,
+                           html_base=html_base, figure_base=fig_dirs or None)
+            except NotImplementedError as e:
+                print(f"{w.id}: {fmt} skipped - {e}", file=sys.stderr)
+            except OSError as e:
+                # 目标被占用/无写权限等：不中断其余格式，报一行可读原因并以非 0 退出
+                failed += 1
+                print(f"{w.id}: {fmt} 生成失败：{e}", file=sys.stderr)
+        if want_report:
+            _write_convert_reports(xml_fn, args, w, formats)
+        return failed
+    finally:
+        if want_report:
+            from .report import report
+            report.end()   # 保留 sticky（theme 兜底）供下一 work
 
 
 def _stack_font_files(theme, latin_font):
@@ -583,6 +665,13 @@ def main(argv=None):
     note.add_argument("--no-show-notes", dest="show_notes_flag", action="store_false",
                       default=None,
                       help="关闭校勘注/脚注/尾注（覆盖 config output.show_notes；不含正文夹注）")
+    note.add_argument("--convert-report", dest="convert_report_flag",
+                      action="store_true", default=None,
+                      help="生成转换报告（记录字体替换/缺字/去缩进/折行/去 No./脏数据忽略/待审字等；"
+                           "默认开，可配 output.convert_report；--no-convert-report 关）")
+    note.add_argument("--no-convert-report", dest="convert_report_flag",
+                      action="store_false", default=None,
+                      help="关闭转换报告（覆盖 config output.convert_report）")
 
     pg = ap.add_argument_group("页面（pdf/docx；纯 HTML 输出不适用）")
     pg.add_argument("--page", default=None,
@@ -704,6 +793,8 @@ def main(argv=None):
         # 缺省取 config output.notes（非法/空则不设，render_one 落按格式默认）
         _n = str(out_defaults.get("notes") or "").strip().lower()
         args.notes = _n if _n in ("footnote", "endnote", "inline") else None
+    args.convert_report = resolve_convert_report(
+        getattr(args, "convert_report_flag", None), out_defaults)
     args.show_body_siddham = bool(out_defaults.get("show_body_siddham", True))
     args.siddham_text = bool(out_defaults.get("siddham_text", False))  # 有读音悉昙字形+读音文本形（docx 同款；默认关，开则偏离官方基线）
     args.show_dharani_transliteration = bool(out_defaults.get("show_dharani_transliteration", False))

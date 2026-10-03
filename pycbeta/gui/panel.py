@@ -1565,7 +1565,18 @@ class XmlOptionsPanel(QWidget):
         w = QWidget()
         form = QFormLayout(w)
         self.verify_on = self._check("转换后校验（对比官方文档）")
-        form.addRow("", self.verify_on)
+        self.convert_report_box = self._check("转换报告", checked=True)
+        self.convert_report_box.setToolTip(
+            "output.convert_report（默认开）：记录渲染期间的特殊处理与对原文的改动"
+            "（字体替换/缺字/预排去缩进/标题折行/去标题 No./忽略脏数据/注音待审等），"
+            "落 {输出}/{id 书名}（验证）/{id 书名}_转换报告.txt，与校验报告同处")
+        _vrow = QHBoxLayout()
+        _vrow.setContentsMargins(0, 0, 0, 0)
+        _vrow.setSpacing(18)
+        _vrow.addWidget(self.verify_on)
+        _vrow.addWidget(self.convert_report_box)
+        _vrow.addStretch(1)
+        form.addRow("", _vrow)
         self.maxdiff_spin = QSpinBox()
         self.maxdiff_spin.setRange(0, 1000)
         self.maxdiff_spin.setValue(10)
@@ -1949,6 +1960,7 @@ class XmlOptionsPanel(QWidget):
                 "pre_dedent": self.pre_dedent_box.isChecked(),
                 "pre_dedent_spaces": int(self.pre_dedent_spin.value()),
                 "title_smart_wrap": self.title_wrap_box.isChecked(),
+                "convert_report": self.convert_report_box.isChecked(),
             },
             font_scale=float(self.scale_spin.value()),
             pagination={k: b.isChecked() for k, b in self.pg_boxes.items()},
@@ -2082,6 +2094,8 @@ class XmlOptionsPanel(QWidget):
             self.difflines_spin.setValue(int(vf.get("diffLines", 5) or 5))
             self.autofetch_box.setChecked(bool(vf.get("auto_fetch", True)))
             self.scope_box.setChecked(bool(vf.get("scope_juan", True)))
+            self.convert_report_box.setChecked(
+                bool(o.get("convert_report", True)))
         finally:
             self._emitting = False
         self._changed()

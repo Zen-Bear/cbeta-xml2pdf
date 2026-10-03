@@ -94,6 +94,75 @@ class TestProcessFileErrors(unittest.TestCase):
         self.assertEqual(R.call_count, 2)
 
 
+class TestProcessFileConvertReport(unittest.TestCase):
+    """process_file 转换报告落盘：开关关（裸 args）零副作用；开则写
+    {验证}/{name}_转换报告.txt 并打印 `->` 供 GUI 抓取。"""
+
+    def _run(self, d, convert):
+        import io
+        from contextlib import redirect_stdout
+        from types import SimpleNamespace
+        from unittest import mock
+        import pycbeta.cli as cli
+        args = SimpleNamespace(t2s=False, font_check=False, output=d,
+                               title_t2s=True)
+        if convert is not None:
+            args.convert_report = convert
+        w = SimpleNamespace(id="T1", metadata={"title": "書"})
+        out = io.StringIO()
+        with mock.patch.object(cli, "P5Parser") as P, \
+                mock.patch.object(cli, "resolve_output",
+                                  return_value=(d, "T1.docx")), \
+                mock.patch.object(cli, "render_one"), \
+                redirect_stdout(out):
+            P.return_value.parse.return_value = w
+            cli.process_file("x.xml", ["docx"], args, None)
+        return out.getvalue()
+
+    def test_writes_report_and_prints(self):
+        import shutil
+        import tempfile
+        from pycbeta.filename import default_output_name
+        d = tempfile.mkdtemp()
+        try:
+            s = self._run(d, True)
+            self.assertIn("转换报告 ->", s)
+            name = default_output_name("T1", "書", True)
+            p = os.path.join(d, f"{name}（验证）", f"{name}_转换报告.txt")
+            self.assertTrue(os.path.isfile(p))
+            self.assertIn("转换报告", open(p, encoding="utf-8").read())
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_off_by_default_no_side_effect(self):
+        import shutil
+        import tempfile
+        d = tempfile.mkdtemp()
+        try:
+            s = self._run(d, None)             # 裸 args：默认关
+            self.assertNotIn("转换报告", s)
+            self.assertEqual(
+                [x for x in os.listdir(d) if "（验证）" in x], [])
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+
+class TestResolveConvertReport(unittest.TestCase):
+    """转换报告开关：flag > config > 默认 True。"""
+
+    def test_flag_overrides(self):
+        from pycbeta.cli import resolve_convert_report
+        self.assertTrue(resolve_convert_report(True, {"convert_report": False}))
+        self.assertFalse(resolve_convert_report(False, {"convert_report": True}))
+
+    def test_config_then_default(self):
+        from pycbeta.cli import resolve_convert_report
+        self.assertFalse(resolve_convert_report(None, {"convert_report": False}))
+        self.assertTrue(resolve_convert_report(None, {"convert_report": True}))
+        self.assertTrue(resolve_convert_report(None, {}))    # 缺省开
+        self.assertTrue(resolve_convert_report(None, None))
+
+
 class TestResolveEngineVerticalLang(unittest.TestCase):
     """engine/vertical/font_lang：显式开关 > 配置 > 默认。"""
 

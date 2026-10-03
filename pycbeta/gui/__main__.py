@@ -81,6 +81,11 @@ def build_render_cmd(opts, xml, fmt, out_dir, tmpcfg, out_name=None):
 
 _ERR_RE = re.compile(r"(?i)(error|exception|permission|denied|traceback|失败|错误)")
 
+# 转换报告 per-fmt 文件名（worker 合并时过滤，不直接入文件列）
+_RE_PER_FMT = re.compile(r"_转换报告_[a-z0-9]+\.txt$")
+# 合并后的转换报告（文件列置末）
+_RE_REPORT = re.compile(r"_转换报告\.txt$")
+
 
 def _last_error_line(text):
     """从子进程输出取最可能的错误行（截 300 字）。
@@ -174,6 +179,7 @@ class BatchWorker(QThread):
         self._cancel = False
         self._proc = None
         self._last_render_err = ""
+        self._row_renames = []  # 本行输出改名（并入转换报告）
 
     def cancel(self):
         self._cancel = True
@@ -198,6 +204,9 @@ class BatchWorker(QThread):
             snapshot = write_temp_presets(presets, self.opts)
             tmpcfg = write_temp_run(run, snapshot)
             verify_on = bool(self.opts.verify.get("enabled"))
+            want_report = bool(
+                (getattr(self.opts, "output", None) or {}).get("convert_report",
+                                                               False))
             n_fmt = len(self.opts.formats)
             # 校验与渲染各占一格进度；进度条不再在校验期间停死
             total_units = sum(n_fmt for _j in self.jobs) * (2 if verify_on else 1)
@@ -218,6 +227,10 @@ class BatchWorker(QThread):
                 row_wid = None
                 row_title = ""
                 verify_dir = None
+                row_report_files = []   # 本行 per-fmt 转换报告（合并用）
+                row_report_dir = None
+                row_report_name = None
+                self._row_renames = []  # 本行输出改名（并入转换报告）
                 for xml in xmls:
                     if self._cancel:
                         break
@@ -230,6 +243,13 @@ class BatchWorker(QThread):
                     if verify_on and verify_dir is None:
                         # 校验产物独立成 {(id) 书名}（验证）/ 子目录（保持 {fmt}/ 结构）
                         verify_dir = self._verify_dir(out_dir, wid, title)
+                    if want_report and row_report_dir is None and row_wid:
+                        # 报告目录与校验报告同处（不依赖校验开关）
+                        row_report_dir = self._verify_dir(out_dir, row_wid,
+                                                          row_title)
+                        from pycbeta.filename import default_output_name
+                        row_report_name = default_output_name(
+                            row_wid, row_title, getattr(self, "_title_t2s", True))
                     for fmt in self.opts.formats:
                         if self._cancel:
                             break
@@ -238,6 +258,10 @@ class BatchWorker(QThread):
                             os.path.splitext(os.path.basename(xml))[0], fmt)
                         ok, paths = self._render_one(xml, fmt, out_dir, tmpcfg,
                                                      out_name=out_name)
+                        if want_report:
+                            # per-fmt 报告不进文件列（行末合并为一份）
+                            paths = [p for p in paths
+                                     if not _RE_PER_FMT.search(p)]
                         row_produced += paths
                         gen_name = os.path.basename(paths[0]) if paths else ""
                         render_ok = render_ok and ok
@@ -256,6 +280,33 @@ class BatchWorker(QThread):
                             done_units += 1
                             self.total_progress.emit(
                                 done_units, max(total_units, 1))
+                        if want_report and row_report_dir:
+                            _pf = os.path.join(
+                                row_report_dir, fmt,
+                                f"{row_report_name}_转换报告_{fmt}.txt")
+                            if os.path.isfile(_pf) \
+                                    and _pf not in row_report_files:
+                                row_report_files.append(_pf)
+                # 转换报告：合并本行 per-fmt → {name}_转换报告.txt（与校验报告同处）
+                if want_report and row_report_files and row_report_dir:
+                    try:
+                        from pycbeta.report import merge_convert_reports
+                        _extra = [("输出改名",
+                                   f"{os.path.basename(o)} → "
+                                   f"{os.path.basename(n)}（多源同名统一回退）")
+                                  for o, n in getattr(self, "_row_renames", [])]
+                        _txt = merge_convert_reports(row_report_files,
+                                                     extra=_extra)
+                        if _txt:
+                            _merged = os.path.join(
+                                row_report_dir,
+                                f"{row_report_name}_转换报告.txt")
+                            with open(_merged, "w", encoding="utf-8") as f:
+                                f.write(_txt)
+                            if _merged not in row_produced:
+                                row_produced.append(_merged)
+                    except Exception as e:
+                        self.log.emit(f"convert report fail: {e}")
                 # 验证总报告：每行一份，放该行（验证）子目录，排文件列最后
                 if verify_on and row_ver and row_stem:
                     report = os.path.join(
@@ -273,8 +324,10 @@ class BatchWorker(QThread):
                     except Exception as e:
                         self.log.emit(f"verify report fail: {e}")
                 if row_produced:
-                    self.row_file.emit(
-                        idx, ";".join(dict.fromkeys(row_produced)))
+                    files = list(dict.fromkeys(row_produced))
+                    # 转换报告排文件列最后（稳定排序，其余保持原序）
+                    files.sort(key=lambda p: 1 if _RE_REPORT.search(p) else 0)
+                    self.row_file.emit(idx, ";".join(files))
                 text, level = _row_outcome(
                     render_ok, row_ver, verify_on, render_errors)
                 self.row_status.emit(idx, text)
@@ -386,6 +439,9 @@ class BatchWorker(QThread):
                     os.rename(old, new)
             except OSError:
                 pass
+        if renames:
+            self._row_renames = getattr(self, "_row_renames", [])
+            self._row_renames.extend(renames)
         return None if final == default else final
 
     def _verify_dir(self, out_dir, wid, title):

@@ -1528,6 +1528,18 @@ class TestLayoutRegroup(unittest.TestCase):
         self.assertEqual(panel.pre_dedent_spin.value(), 6)
         self.assertTrue(panel.pre_dedent_spin.isEnabled())
 
+    def test_convert_report_roundtrip(self):
+        from pycbeta.gui.panel import XmlOptionsPanel
+        panel = XmlOptionsPanel(load_presets())
+        self.assertTrue(panel.convert_report_box.isChecked())    # 默认勾
+        panel.convert_report_box.setChecked(False)
+        o = panel.get_options()
+        self.assertFalse(o.output["convert_report"])
+        panel.set_options(o)
+        self.assertFalse(panel.convert_report_box.isChecked())
+        panel.convert_report_box.setChecked(True)
+        self.assertTrue(panel.get_options().output["convert_report"])
+
     def test_title_wrap_roundtrip(self):
         from pycbeta.gui.panel import XmlOptionsPanel
         panel = XmlOptionsPanel(load_presets())
@@ -4744,6 +4756,54 @@ class TestVerifyFeedback(unittest.TestCase):
         self.assertIn("=== T12n0349.xml", body)
         self.assertIn("[FAIL]", body)
         self.assertIn("缺0/多15", body)
+
+    def test_run_appends_convert_report_to_files(self):
+        import tempfile
+        from types import SimpleNamespace
+        import pycbeta.gui.__main__ as M
+        from pycbeta.filename import default_output_name
+        tmp = tempfile.mkdtemp(prefix="gconvrep-")
+        xml = os.path.join(tmp, "T12n0349.xml")
+        rendered = os.path.join(tmp, "T12n0349.txt")
+        for p in (xml, rendered):
+            with open(p, "w", encoding="utf-8") as f:
+                f.write("x")
+        opts = SimpleNamespace(verify={"enabled": False}, formats=["txt"],
+                               t2s=False, output={"convert_report": True})
+        w = M.BatchWorker([{"id": "T0349"}], opts,
+                          {"presets": {}, "run": {}, "out": tmp}, {})
+        w._resolve = lambda job, idx, fetch, presets: [xml]
+        w._title_of = lambda x, i, P: ("T0349", "T0349")
+        w._out_name_for = lambda *a, **k: "T12n0349.txt"
+        name = default_output_name("T0349", "T0349", True)
+        vdir = os.path.join(tmp, name + "（验证）")
+        os.makedirs(os.path.join(vdir, "txt"), exist_ok=True)
+        pfmt = os.path.join(vdir, "txt", f"{name}_转换报告_txt.txt")
+
+        def fake_render(x, fmt, o, cfg, out_name=None):
+            with open(pfmt, "w", encoding="utf-8") as f:
+                f.write(f"# 转换报告 T0349 [{fmt}]\n"
+                        f"1. [字体替换] [{fmt}] XML 行 9：x\n")
+            return True, [rendered]
+
+        w._render_one = fake_render
+        orig = (M.write_temp_presets, M.write_temp_run)
+        M.write_temp_presets = lambda presets, opts: os.path.join(tmp, "p.json")
+        M.write_temp_run = lambda run, snap: os.path.join(tmp, "r.json")
+        captured = {}
+        w.row_file.connect(lambda i, p: captured.__setitem__(i, p))
+        try:
+            w.run()
+        finally:
+            M.write_temp_presets, M.write_temp_run = orig
+            w.wait(1)
+        files = captured[0].split(";")
+        self.assertEqual(files[0], rendered)
+        merged = os.path.join(vdir, f"{name}_转换报告.txt")
+        self.assertIn(merged, files)
+        self.assertEqual(files[-1], merged)          # 报告排文件列最后
+        self.assertTrue(os.path.isfile(merged))
+        self.assertIn("字体替换", open(merged, encoding="utf-8").read())
 
     def test_verify_one_pdf_delegates_to_source(self):
         from types import SimpleNamespace

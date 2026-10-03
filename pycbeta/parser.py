@@ -142,6 +142,7 @@ class P5Parser:
 
         title = None
         series = None
+        title_el = None
         ts = teiHeader.find("fileDesc/titleStmt")
         if ts is not None:
             titles = ts.findall("title")
@@ -150,14 +151,17 @@ class P5Parser:
             for t in titles:
                 if t.get("level") == "m" and _lang(t).startswith("zh"):
                     title = "".join(t.itertext()).strip()
+                    title_el = t
                     break
             if title is None:
                 for t in titles:
                     if t.get("level") == "m":
                         title = "".join(t.itertext()).strip()
+                        title_el = t
                         break
             if title is None and titles:
                 title = "".join(titles[0].itertext()).strip()
+                title_el = titles[0]
             for t in titles:
                 if t.get("level") == "s" and _lang(t).startswith("zh"):
                     series = "".join(t.itertext()).strip()
@@ -169,6 +173,8 @@ class P5Parser:
                         break
         md["title"] = title
         md["series"] = series
+        # 书名元素物理行号（转换报告：元数据书名路径无 body 节点可依）
+        md["_title_sourceline"] = self._src(title_el) if title_el is not None else None
 
         author = teiHeader.find("fileDesc/titleStmt/author")
         md["author"] = "".join(author.itertext()).strip() if author is not None else None
@@ -292,6 +298,7 @@ class P5Parser:
             subtype=el.get("subtype"),
             resp=resp,
             note_key=self._get(el, "note_key", "cb:note_key"),
+            sourceline=self._src(el),
         )
         note.children = self._traverse(el)
         return note
@@ -299,7 +306,8 @@ class P5Parser:
     def _parse_app(self, el) -> App:
         frm = el.get("from") or ""
         key = frm.lstrip("#") or None
-        app = App(tag="app", attrs=self._attrs(el), key=key, atype=el.get("type"))
+        app = App(tag="app", attrs=self._attrs(el), key=key,
+                  atype=el.get("type"), sourceline=self._src(el))
         for child in el:
             if not isinstance(child.tag, str):
                 continue
@@ -319,6 +327,7 @@ class P5Parser:
             wit=wit,
             resp=self._resolve(el.get("resp")),
             rtype=el.get("type"),
+            sourceline=self._src(el),
         )
         r.children = self._traverse(el)
         return r
@@ -361,18 +370,25 @@ class P5Parser:
             i += 1
         return out
 
+    @staticmethod
+    def _src(el) -> Optional[int]:
+        """物理 XML 行号（lxml sourceline）；不可得返回 None。"""
+        return getattr(el, "sourceline", None)
+
     def _traverse(self, el) -> List[object]:
         nodes: List[object] = []
         t = _norm_text(el.text or "")
         if t:
-            nodes.append(Text(t, line=self._current_lb))
+            nodes.append(Text(t, line=self._current_lb,
+                              sourceline=self._src(el)))
         for child in el:
             if not isinstance(child.tag, str):
                 # <!-- --> 等注释节点：本身跳过，但其 tail 为逗号后的正文（_handle 不会处理）
                 if child.tail:
                     t2 = _norm_text(child.tail)
                     if t2:
-                        nodes.append(Text(t2, line=self._current_lb))
+                        nodes.append(Text(t2, line=self._current_lb,
+                                          sourceline=self._src(child)))
                 continue
             nodes.extend(self._handle(child))
         return self._wrap_corr(nodes)
@@ -382,12 +398,14 @@ class P5Parser:
         out: List[object] = []
         if tag == "lb":
             ed = el.get("ed")
-            lb = Lb(n=el.get("n") or "", ed=ed, lbtype=el.get("type"))
+            lb = Lb(n=el.get("n") or "", ed=ed, lbtype=el.get("type"),
+                    sourceline=self._src(el))
             out.append(lb)
             if lb.lbtype != "old" and (not ed or ed == self._canon):
                 self._current_lb = lb.n
         elif tag == "pb":
-            out.append(Pb(n=el.get("n"), ed=el.get("ed")))
+            out.append(Pb(n=el.get("n"), ed=el.get("ed"),
+                          sourceline=self._src(el)))
         elif tag == "g":
             code = (el.get("ref") or "").lstrip("#")
             char = "".join(el.itertext()).strip() or None
@@ -395,7 +413,7 @@ class P5Parser:
                 data = self.gaiji_db.get(code)
                 if data:
                     char = data.get("uni_char") or data.get("composition")
-            out.append(Gaiji(code=code, char=char))
+            out.append(Gaiji(code=code, char=char, sourceline=self._src(el)))
         elif tag == "anchor":
             aid = self._get(el, "xml:id", "id")
             if aid and aid.startswith("nkr_note_"):
@@ -417,14 +435,18 @@ class P5Parser:
                     self._corr_open.discard(n)
                     out.append(_CorrMark(n, False))
             elif el.get("type") == "circle":
-                out.append(E(tag="anchor", attrs=self._attrs(el)))
+                out.append(E(tag="anchor", attrs=self._attrs(el),
+                             sourceline=self._src(el)))
         elif tag == "note":
             out.append(self._parse_note(el))
         else:
-            out.append(E(tag=tag, attrs=self._attrs(el), children=self._traverse(el)))
+            out.append(E(tag=tag, attrs=self._attrs(el),
+                         children=self._traverse(el),
+                         sourceline=self._src(el)))
         tail = _norm_text(el.tail or "")
         if tail:
-            out.append(Text(tail, line=self._current_lb))
+            out.append(Text(tail, line=self._current_lb,
+                            sourceline=self._src(el)))
         return out
 
     def _backfill(self):

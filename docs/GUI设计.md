@@ -58,7 +58,7 @@ class XmlOptions:
 | | `output.verse_caesura` / `verse_strip_quotes` | 输入/复选（偈颂） | `output.*` |
 | 分页 | `output.pagination.*` | 分组复选（各选项右侧**灰色括号说明**）：智能分页=总开关（关则下列全失效）；双面打印=每卷单数页起；卷首换页=每卷开头另起一页（第 1 卷默认与书名同页）；首卷换页=第 1 卷也另起一页、书名独占首页（需勾选卷首换页）；序/品 level1 换页=level-1 目录各自另起一页；按 pb 分页=按 `<pb>` 刻本页边界；尾页换页=末尾【經文資訊】另起一页 | `pagination.*` |
 | 经藏名 | `output.series_title.*` | 复选+字体+字号 | `series_title.*` |
-| 校验 | `verify.enabled/maxDiff/diffLines/auto_fetch/scope_juan` | 高级页（转换后校验开关**默认开**/阈值/报告差异行数/自动下载/卷限定 + 「清理校验产物…」按钮） | `verify.*` |
+| 校验 | `verify.enabled/maxDiff/diffLines/auto_fetch/scope_juan` + `output.convert_report` | 高级页（转换后校验开关**默认开** + **转换报告开关默认开**/阈值/报告差异行数/自动下载/卷限定 + 「清理校验产物…」按钮） | `verify.*` / `output.convert_report` |
 | 注音 | `annotations.enabled` / `full_text` | 三选一**单选按钮**「无注音 / 难字注音 / 全文注音」（全文含难字；`QRadioButton` 同组互斥）+ 方案/位置/括号/频率/词表（词表**只读**，浏览选择，默认内置表）；`rare_zones`/`rare_font` 走 config | `annotations.*` |
 
 **不适合 GUI 修改**：`source.xml_dir/cbeta_ebook`（路径，数据源窗口只读框走浏览；`catalog` 钉死内置）、`downloads.*` URL 模板（数据源窗口 tab1 可改，存当前选中预设）、`source.title_t2s`（数据源窗口复选）。
@@ -114,7 +114,7 @@ class XmlOptions:
 ├───────────────────────────────────────────────────────────────┤
 │ 经藏名: ☑ 打印  字体 [隸書, LiSu ▼]  字号 [9]                 │
 ├───────────────────────────────────────────────────────────────┤
-│ 校验(高级): ☑ 转换后校验  阈值[10]  报告差异行[5]                │
+│ 校验(高级): ☑ 转换后校验 ☑ 转换报告  阈值[10]  报告差异行[5]    │
 │       ☑ 官方文档缺失自动下载 ☑ 按卷限定官方文档                │
 │       [清理校验产物…]                                          │
 └───────────────────────────────────────────────────────────────┘
@@ -210,6 +210,8 @@ class XmlOptions:
 5. **（可选）校验**：`verify.verify_one(xml, fmt, source, out_root)`，进度条把校验计入总单元；行状态显示 `完成｜校验 OK/失败N/无对照N` 并按结果着色（通过绿 `#2e7d32` / 失败红 `#c62828` / 无对照灰）；转换期间状态列先示 `校验中（fmt）…`；**校验产物独立成 `{输出}/{id 书名}（验证）/` 子目录**（内部保持 `{fmt}/` 结构：重生成文件 + 各格式 `*_compare_*.txt` + `report.txt`；渲染输出仍在输出根），文件列依次为「渲染产物 + **验证总报告 `{id 书名}（验证）/{stem}_verify_report.txt`（排最后）**」，均可单击打开（各格式 `*_compare_*.txt` 仍落盘但**不列文件列**）；总报告由 `verify.format_verify_report(records, diff_lines, max_diff)` 生成，**逐条列出每个尝试过的对照**：`[OK]|[FAIL] ({fmt}→{对照kind} 缺X/多Y ≤|>阈值N)` + `【源】/【新】` + 前 N 条【源】【新】差异（N=`verify.diffLines` 默认 5，绿灯但非 缺0/多0 也列）；全部结束弹 `VerifySummaryDialog` 汇总（通过/失败/无对照计数 + 逐项明细 + 「打开报告目录」，失败不强制弹窗）。信号：`row_verify(int, level)`、`verify_result(dict)`（简体转换开启时官方文档同步转简体后比对）。**PDF 走源格式校验**：`docx2pdf`→按 docx、`html2pdf`→按 html；源格式已选中则标灰色「已覆盖」不重复，未选中则委托该类校验（显示 `pdf→docx`/`pdf→html`）
 
 > 校验卡「清理校验产物…」：确认后删除**输出目录**下全部 `{id 书名}（验证）/`（及 `（驗證）/`）子目录——可重生成的中间产物，成品不受影响；完成后提示删除数量。清理逻辑 `panel.clean_verify_dirs(out_dir)`（纯函数，可单测）。
+
+> **转换报告**（`output.convert_report`，默认开；`--no-convert-report` 关）：记录渲染期间一切特殊处理与对原文的改动，落 `{输出}/{id 书名}（验证）/{id 书名}_转换报告.txt`（与校验报告同处；各格式中间件落 `（验证）/{fmt}/{id 书名}_转换报告_{fmt}.txt`，GUI 行末合并为一份并只列合并件）。条目含**物理 XML 行号**与内容摘要，连续序号、条间空行；覆盖：字体替换（GDI 归一/按字回退）、字体缺失/无法验证、缺字字形、悉昙字体、预排去缩进/空行、标题折行、去标题行首 No.、忽略脏数据（style/空格）、卷名去重、偈颂去引号、内容丢弃（cb:tt/sic/docNumber）、注音待审、简繁转换、注释/悉昙/校改开关、图缺失、其它显示调整（□/space/◎ 计数）、输出改名/净化、主题/页面兜底。收集器 `pycbeta/report.py`（渲染器零 IO，仅 CLI/GUI 落盘）；开关与查看方式同校验报告（文件列单击打开），**转换报告排在文件列最后**。
 
 批量列表列：`经号 | 经名 | 来源（本地/已下载/官方电子书） | 状态 | 进度`；`QThread` + 信号更新；取消中断后续。
 

@@ -20,6 +20,7 @@ import re
 from typing import Dict, List, Optional
 
 from .fonts import preferred_family
+from .report import report
 
 _DEFAULT_CSS = os.path.join(os.path.dirname(__file__), "styles", "pdf_docx.css")
 
@@ -402,17 +403,30 @@ def strip_head_no(children):
                 rest = s[m.end():].lstrip()
                 phase = "lstrip"
                 if rest:
-                    out.append(Text(rest, line=n.line))
+                    out.append(Text(rest, line=n.line,
+                                    sourceline=n.sourceline))
                 continue
             else:  # lstrip：No. 后的首个文本去前导空格
                 s = t.lstrip()
                 phase = "done"
                 if s:
-                    out.append(Text(s, line=n.line))
+                    out.append(Text(s, line=n.line,
+                                    sourceline=n.sourceline))
                 continue
         out.append(n)
         phase = "done"
     return out, token
+
+
+def first_text_sourceline(nodes, fallback=None):
+    """节点列表中首个带行号的 Text 的物理 XML 行号（转换报告定位用）；
+    无则返回 fallback（如所属元素 sourceline）。"""
+    from .model import Text
+    for n in nodes or []:
+        if isinstance(n, Text):
+            if n.sourceline:
+                return n.sourceline
+    return fallback
 
 
 # ---------------- CSS 字体变量（:root 双栏，font_sets 已删除） ----------------
@@ -553,6 +567,8 @@ def resolve_theme_css(value, base_dir=None):
             if os.path.isfile(c):
                 return os.path.abspath(c), "路径指定"
         print(f"theme: 预设 {value!r} 不存在，回内置出厂")
+        report.add("主题兜底", f"预设 {value!r} 不存在，回内置出厂",
+                   key=("theme", "preset", value), sticky=True)
         return None, "内置出厂（预设缺失）"
     cands = []
     if os.path.isabs(value):
@@ -567,6 +583,8 @@ def resolve_theme_css(value, base_dir=None):
         if os.path.isfile(c):
             return os.path.abspath(c), "路径指定"
     print(f"theme: 文件 {value!r} 不存在，回内置出厂")
+    report.add("主题兜底", f"主题文件 {value!r} 不存在，回内置出厂",
+               key=("theme", "file", value), sticky=True)
     return None, "内置出厂（文件缺失）"
 
 
@@ -703,6 +721,8 @@ def _resolve_run_file(value, run_dir, label):
         if os.path.isfile(c):
             return os.path.abspath(c)
     print(f"run.json: {label} {value!r} 不存在，回内置")
+    report.add("主题兜底", f"run.json {label} {value!r} 不存在，回内置",
+               key=("runfile", label, value), sticky=True)
     return None
 
 
@@ -965,6 +985,9 @@ def apply_page_typography(theme, page, page_presets):
         else:
             print(f"pages[{page}].body_font_size 非法，已忽略：{fs!r}"
                   "（只要绝对 pt，如 10.5pt）")
+            report.add("页面兜底",
+                       f"pages[{page}].body_font_size 非法，已忽略：{fs!r}",
+                       key=("pagefs", page, str(fs)), sticky=True)
     lh = entry.get("body_line_height")
     if lh is not None and str(lh).strip():
         if re.match(r"^\s*[\d.]+\s*$", str(lh)):
@@ -973,6 +996,9 @@ def apply_page_typography(theme, page, page_presets):
                 theme.tags.setdefault("p", {})["line-height"] = props["line-height"]
         else:
             print(f"pages[{page}].body_line_height 非法，已忽略：{lh!r}")
+            report.add("页面兜底",
+                       f"pages[{page}].body_line_height 非法，已忽略：{lh!r}",
+                       key=("pagelh", page, str(lh)), sticky=True)
     return theme
 
 
@@ -1000,6 +1026,9 @@ def resolve_page(name: str, page_presets: Optional[Dict] = None) -> Dict:
     p = _lookup_ci(page_presets or {}, name)
     if not p:
         p = dict(_lookup_ci(BUILTIN_PAGES, name) or BUILTIN_PAGES["a4"])
+        if name and str(name).lower() not in ("a4",):
+            report.add("页面兜底", f"未知纸张 {name!r}，回退内置 a4",
+                       key=("pagefb", str(name)), sticky=True)
     margins = dict(p.get("custom_margins") or p.get("margins") or {})
     for k in ("top", "right", "bottom", "left"):
         margins.setdefault(k, 25.4)

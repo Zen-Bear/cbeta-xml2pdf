@@ -9,8 +9,9 @@ from typing import List, Optional
 
 from .gaiji import GaijiDb
 from .annotate import active as _ann_active, split_annotated as _split_ann, rt_css_rule as _rt_css, track_seen as _track_seen, page_repeat as _page_repeat
+from .report import report
 from .model import App, E, Gaiji, Lb, Note, NoteRef, Pb, Text, Work
-from .theme import strip_head_no, bracket_pair
+from .theme import strip_head_no, bracket_pair, first_text_sourceline
 
 # 官方格式基底 CSS：styles/html_epub_official.css（html/epub 用）。
 # pdf/docx 的默认主题是 styles/pdf_docx.css（theme.py 加载）。base_css 供
@@ -149,6 +150,8 @@ class HtmlRenderer:
         except (TypeError, ValueError):
             self.pre_dedent_spaces = 4
         self._pre_line_start = True
+        self._cur_line = None      # 转换报告行号上下文
+        self._cur_text = ""
         self._drop_sa_tt = False  # 块级 <cb:tt> 内悉昙消音（_render_tt 置位）
 
     @contextmanager
@@ -166,6 +169,13 @@ class HtmlRenderer:
         self._work = work
         self._ann_seen = set()
         self.missing_figures = []
+        # 转换报告：配置级特殊处理（每 work 一条）
+        if not self.show_notes:
+            report.add("注释", "已关闭注释（show_notes=false）")
+        else:
+            report.add("注释", f"注释方式：{self.notes}", key=("notes", self.notes))
+        if self.corr_cbeta:
+            report.add("校改标红", "CBETA 校改字标红")
         self._app_by_n = {}
         for n in self._iter_all(work.body):
             if isinstance(n, App) and n.key:
@@ -179,6 +189,8 @@ class HtmlRenderer:
             self._back_cb = []
             self._div_stack = 0
             self._lb = None
+            self._cur_line = None
+            self._cur_text = ""
             self._in_pre = False
             # repeat=page：每卷文件已注清零，本卷词首现重注
             if _page_repeat(self._annotations):
@@ -332,20 +344,38 @@ class HtmlRenderer:
         n = self.pre_dedent_spaces
         if n <= 0 or not text:
             return text
+        orig = text
         pat = self._PRE_BLANK + "{0,%d}" % n
         if self._pre_line_start:
             text = re.sub("^" + pat, "", text)
-        return re.sub("(?<=\\n)" + pat, "", text)
+        text = re.sub("(?<=\\n)" + pat, "", text)
+        if text != orig:
+            report.add("预排去缩进", f"行首去空白（每行最多 {n} 个）",
+                       line=self._cur_line, content=f"{orig!r}→{text!r}",
+                       key=("pre_dedent", self._cur_line, orig))
+        return text
 
     def _render_node(self, node) -> str:
         if isinstance(node, Text):
+            if node.sourceline is not None:
+                self._cur_line = node.sourceline
+                self._cur_text = node.text or ""
+                if report.active():
+                    report.set_context(line=node.sourceline)
             t = node.text
             if self.ignore_xml_space:
-                t = t.strip(" \t　")
+                stripped = t.strip(" \t　")
+                if stripped != t:
+                    report.add("忽略脏数据", "忽略文本首尾空白（ignore_xml_space）",
+                               line=self._cur_line, content=f"{t!r}→{stripped!r}",
+                               key=("igspace", self._cur_line, t))
+                t = stripped
             if self._in_pre and t and "\n" in t \
                     and not t.strip(" \t　\n\r") and self._pre_line_start:
                 # 与 docx 同口径：已处行首的纯换行残留丢弃；
-                # 非行首孤立换行保留（正文唯一断行，官方同形）
+                # 非首孤立换行保留（正文唯一断行，官方同形）
+                report.add("预排空行", "丢弃空元素独占行的残留换行",
+                           line=self._cur_line)
                 return ""
             if not self._in_pre:
                 t = re.sub(r"[\n\r]", "", t)
@@ -415,7 +445,10 @@ class HtmlRenderer:
         if getattr(self._work, "simplified", False):
             # 简体模式：渲染时解析的缺字同样过 t2s 管线（与官方侧 t2s_baseline 对齐）
             from .simplify import simplify_text
-            return simplify_text(char)
+            char = simplify_text(char)
+        if char and char != raw:
+            report.add("缺字字形", f"{code} → {char}", line=self._cur_line,
+                       content=raw or None, key=("gaiji", code, char))
         return char
 
     def _ann_text(self, t: str) -> str:
@@ -493,7 +526,14 @@ class HtmlRenderer:
             return self._render_p(e) + "\n"
         if tag == "head":
             level = self._div_stack
-            kids = strip_head_no(e.children)[0] if self.strip_head_no else e.children
+            if self.strip_head_no:
+                kids, _tok = strip_head_no(e.children)
+                if _tok:
+                    report.add("去标题行首", f"剥离「{_tok}」",
+                               line=first_text_sourceline(e.children, e.sourceline),
+                               key=("strip", e.sourceline, _tok))
+            else:
+                kids = e.children
             with self._no_ann():
                 inner = self._render_nodes(kids)
             return f'<p data-head-level="{level}" class="head">{inner}</p>'
@@ -506,7 +546,14 @@ class HtmlRenderer:
                 inner = self._render_nodes(e.children)
             return f"<p class='juan'>{inner}</p>"
         if tag == "jhead":
-            kids = strip_head_no(e.children)[0] if self.strip_head_no else e.children
+            if self.strip_head_no:
+                kids, _tok = strip_head_no(e.children)
+                if _tok:
+                    report.add("去标题行首", f"剥离「{_tok}」",
+                               line=first_text_sourceline(e.children, e.sourceline),
+                               key=("strip", e.sourceline, _tok))
+            else:
+                kids = e.children
             if a.get("type") == "pin":
                 # 品名：与其他品名一致，渲染成 head 段落（data-head-level + class=head）
                 level = self._div_stack
@@ -519,6 +566,8 @@ class HtmlRenderer:
             # 编号行（No. XXXX）：与 head/jhead 同源，strip_head_no 开启时整体省略
             # （docx 恒不显；html/epub/md/txt 官方版保留，故默认保留）
             if self.strip_head_no:
+                report.add("内容丢弃", "strip_head_no：省略编号行（docNumber）",
+                           line=e.sourceline, key=("docnum", e.sourceline))
                 return ""
             with self._no_ann():
                 return self._render_nodes(e.children)
@@ -559,6 +608,10 @@ class HtmlRenderer:
         ptype = a.get("cb:type") or a.get("type")
         style = a.get("style")
         if self.ignore_xml_style:
+            if style:
+                report.add("忽略脏数据", "忽略 <p style> 内联样式",
+                           line=e.sourceline, content=style,
+                           key=("igstyle", e.sourceline, style))
             style = None
         if ptype == "pre":
             s = f' style="{_esc(style)}"' if style else ""
@@ -752,9 +805,11 @@ class HtmlRenderer:
     def _render_misc(self, e: E) -> str:
         tag = e.tag
         if tag == "unclear":
+            report.count("其它显示调整", "虚缺符 □", line=e.sourceline)
             return "□"  # 文字无法辨析：标准虚缺符号 U+25A1
         if tag == "anchor":
             if e.attrs.get("type") == "circle":
+                report.count("其它显示调整", "圆圈标记 ◎", line=e.sourceline)
                 return "◎"
             return ""
         if tag == "space":
@@ -762,6 +817,7 @@ class HtmlRenderer:
                 q = int(e.attrs.get("quantity") or 1)
             except ValueError:
                 q = 1
+            report.count("其它显示调整", "空格 <space>", line=e.sourceline)
             return "　" * q
         if tag == "mulu":
             # epub：level-1 非「卷」mulu 断页标记（含标题），供拆 spine 章节；
@@ -781,6 +837,10 @@ class HtmlRenderer:
         if tag in ("table", "row", "cell"):
             return self._render_table(e)
         if tag == "sic":
+            _txt = "".join(getattr(c, "text", "") or ""
+                           for c in e.children if isinstance(c, Text))
+            report.add("内容丢弃", "忽略 <sic> 内容", line=e.sourceline,
+                       content=_txt, key=("sic", e.sourceline))
             return ""
         if tag == "sg":
             # 梵呗注音（<cb:sg>）：官方半角括号，如 (音𫬠)
