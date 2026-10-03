@@ -155,7 +155,10 @@
       "duplex": false,             //   true=双面打印：每个分页单元置于单数页（oddPage 分节，Word 自动补空白偶页）
       "juan": true,                //   true=卷首分页：第 2 卷起每卷换页（由 <cb:jhead> 触发）
       "juan_first": false,         //   true=第 1 卷也换页（书名独占一页）；false=第 1 卷紧跟书名不分页（默认）
-      "mulu_level1": true,         //   true=<cb:mulu level="1"> 且有目录文字的 序/品/其他 分页；level≥2 不参与
+      "mulu_levels": [1],          //   目录分页 level（显式优先）：[1]=仅 level-1（序/品/其他，默认）；[1,2]/[1,2,3]=更深；[]=关；epub 同步按此拆章节
+      "mulu_level1": true,         //   （旧键，兼容）未写 mulu_levels 时：true≡[1]、false≡[]
+      "mulu_smart_merge": true,    //   智能合页：level≥2 的短节与下一节同页（只看前一节累计字数 < mulu_smart_min_chars）
+      "mulu_smart_min_chars": 400, //   智能合页阈值（正文字数；仅 mulu_smart_merge 且启用了 level≥2 时生效）
       "pb": false,                 //   true=按 <cb:pb> 官方刻本页边界分页（默认 false）
       "tei": true                  //   true=尾页【經文資訊】换页
     },

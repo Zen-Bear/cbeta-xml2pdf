@@ -44,11 +44,11 @@ PRESET_DIRNAME = "presets"
 SENTINEL_LABEL = "（出厂默认）"
 SLOT_NAME_WIDTH = 220    # “当前配置：<名>”里名字的固定显示宽度（px），超长省略
 
-PAGINATION_KEYS = ["enabled", "duplex", "juan", "juan_first", "mulu_level1", "pb", "tei"]
+PAGINATION_KEYS = ["enabled", "duplex", "juan", "juan_first", "mulu_levels", "pb", "tei"]
 PAGINATION_LABELS = {
     "enabled": "智能分页", "duplex": "双面打印",
     "juan": "卷首换页", "juan_first": "首卷换页",
-    "mulu_level1": "序/品 level1 换页",
+    "mulu_levels": "目录换页 level",
     "pb": "按 pb 分页", "tei": "尾页换页",
 }
 # 各分页选项的补充说明（UI 以灰色括号显示在标签右侧）
@@ -57,10 +57,17 @@ PAGINATION_HINTS = {
     "duplex": "（每卷从单数页开始，Word 自动补空白偶页；双面装订用）",
     "juan": "（每卷开头另起一页；第 1 卷默认与书名同页）",
     "juan_first": "（第 1 卷也另起一页，书名/题署独占一页；需勾选「卷首换页」）",
-    "mulu_level1": "（序、品等 level-1 目录各自另起一页；level≥2 不分）",
+    "mulu_levels": "（序/品等目录在所选 level 各自另起一页；epub 同步按此拆章节）",
     "pb": "（源 XML 的 <pb> 刻本页边界处换页；默认关）",
     "tei": "（末尾【經文資訊】页另起一页）",
 }
+# 目录换页 level 下拉：显示名 → 级别元组
+MULU_LEVEL_ITEMS = [
+    ("关（不分）", ()),
+    ("仅 level-1（序/品…）", (1,)),
+    ("level-1+2", (1, 2)),
+    ("level-1+2+3", (1, 2, 3)),
+]
 FORMATS = ["pdf", "docx", "html", "epub", "md", "txt"]
 DOCX_SINGLES = ["msword", "wps", "docbuilder", "libreoffice", "minipdf"]
 HTML_SINGLES = ["chromium", "prince", "weasyprint", "cbetapdf"]
@@ -1321,6 +1328,8 @@ class XmlOptionsPanel(QWidget):
         self.pg_boxes = {}
         self.pg_hints = {}
         for key in PAGINATION_KEYS:
+            if key == "mulu_levels":
+                continue  # 下拉，单独处理
             box = self._check(PAGINATION_LABELS[key])
             self.pg_boxes[key] = box
             hint = PAGINATION_HINTS.get(key, "")
@@ -1335,6 +1344,40 @@ class XmlOptionsPanel(QWidget):
                 left.addLayout(row)
             else:
                 left.addWidget(box)
+        # 目录换页 level：下拉（关 / 仅1 / 1+2 / 1+2+3）
+        self.mulu_levels_box = QComboBox()
+        for _name, _lv in MULU_LEVEL_ITEMS:
+            self.mulu_levels_box.addItem(_name, _lv)
+        self.mulu_levels_box.setCurrentIndex(1)   # 默认仅 level-1
+        self.mulu_levels_box.currentIndexChanged.connect(
+            lambda _i: self._changed())
+        _lrow = QHBoxLayout()
+        _lrow.setContentsMargins(0, 0, 0, 0)
+        _lrow.addWidget(QLabel(PAGINATION_LABELS["mulu_levels"]))
+        _lrow.addWidget(self.mulu_levels_box)
+        _llab = self._gray_hint(PAGINATION_HINTS["mulu_levels"])
+        _llab.setMaximumWidth(380)
+        self.pg_hints["mulu_levels"] = _llab
+        _lrow.addWidget(_llab, 1)
+        left.addLayout(_lrow)
+        # 智能合页：level≥2 短节与下节同页（只看前一节累计字数）
+        self.pg_smart_box = self._check("短节智能合页", checked=True)
+        self.pg_smart_spin = QSpinBox()
+        self.pg_smart_spin.setRange(50, 3000)
+        self.pg_smart_spin.setSingleStep(50)
+        self.pg_smart_spin.setValue(400)
+        self.pg_smart_spin.setToolTip("前一节累计正文字数低于此值时，与下一节同页")
+        self.pg_smart_spin.valueChanged.connect(lambda _v: self._changed())
+        self.pg_smart_box.toggled.connect(self._on_pg_smart)
+        _srow = QHBoxLayout()
+        _srow.setContentsMargins(0, 0, 0, 0)
+        _srow.addWidget(self.pg_smart_box)
+        _srow.addWidget(QLabel("不足"))
+        _srow.addWidget(self.pg_smart_spin)
+        _srow.addWidget(self._gray_hint(
+            "（level≥2 短节不足 N 字与下节同页；仅 DOCX）"), 1)
+        left.addLayout(_srow)
+        self._on_pg_smart(self.pg_smart_box.isChecked())
         left.addStretch(1)
         grid.addLayout(left, 0, 0)
         right = QVBoxLayout()
@@ -1423,6 +1466,9 @@ class XmlOptionsPanel(QWidget):
 
     def _on_pre_dedent(self, on):
         self.pre_dedent_spin.setEnabled(bool(on))
+
+    def _on_pg_smart(self, on):
+        self.pg_smart_spin.setEnabled(bool(on))
 
     def _tab_notes(self):
         w = QWidget()
@@ -1963,7 +2009,12 @@ class XmlOptionsPanel(QWidget):
                 "convert_report": self.convert_report_box.isChecked(),
             },
             font_scale=float(self.scale_spin.value()),
-            pagination={k: b.isChecked() for k, b in self.pg_boxes.items()},
+            pagination={**{k: b.isChecked() for k, b in self.pg_boxes.items()},
+                        "mulu_levels": list(
+                            self.mulu_levels_box.currentData() or ()),
+                        "mulu_smart_merge": self.pg_smart_box.isChecked(),
+                        "mulu_smart_min_chars": int(
+                            self.pg_smart_spin.value())},
             series_title={"enabled": self.series_on.isChecked(),
                           **self._series_extra},
             t2s=self.t2s_box.isChecked(),
@@ -2034,6 +2085,22 @@ class XmlOptionsPanel(QWidget):
             pg = opts.pagination or {}
             for k, b in self.pg_boxes.items():
                 b.setChecked(bool(pg.get(k, False)))
+            _ml = pg.get("mulu_levels")
+            if _ml is None:  # 旧键兼容：mulu_level1 bool → [1]/[]
+                _ml = [1] if pg.get("mulu_level1", True) else []
+            _idx = 0
+            for _i, (_n, _lv) in enumerate(MULU_LEVEL_ITEMS):
+                if list(_lv) == list(_ml):
+                    _idx = _i
+                    break
+            self.mulu_levels_box.setCurrentIndex(_idx)
+            self.pg_smart_box.setChecked(bool(pg.get("mulu_smart_merge", True)))
+            try:
+                self.pg_smart_spin.setValue(
+                    int(pg.get("mulu_smart_min_chars", 400)))
+            except (TypeError, ValueError):
+                self.pg_smart_spin.setValue(400)
+            self._on_pg_smart(self.pg_smart_box.isChecked())
             o = opts.output or {}
             self.split_box.setChecked(bool(o.get("split_juan", False)))
             self.close_juan_box.setChecked(bool(o.get("show_close_juan", False)))

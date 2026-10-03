@@ -295,6 +295,77 @@ class TestDivXuSpacing(unittest.TestCase):
         self.assertIn('w:after="480"', out)
 
 
+class TestMuluLevels(unittest.TestCase):
+    """目录分页 level 可配置：显式 mulu_levels 优先，旧键 mulu_level1 回退。"""
+
+    def test_normalize(self):
+        from pycbeta.render_docx import _mulu_levels
+        self.assertEqual(_mulu_levels({}), {1})                      # 缺省仅1
+        self.assertEqual(_mulu_levels({"mulu_level1": False}), set())
+        self.assertEqual(_mulu_levels({"mulu_levels": [1, 2]}), {1, 2})
+        # 显式优先（旧键被忽略）
+        self.assertEqual(
+            _mulu_levels({"mulu_levels": [2], "mulu_level1": True}), {2})
+        self.assertEqual(_mulu_levels({"mulu_levels": [0, 10, "x"]}), set())
+
+    def test_split_by_level(self):
+        from pycbeta.render_docx import split_sections
+        from pycbeta.model import E, Text
+
+        def mulu(lv, t):
+            return E(tag="mulu", attrs={"level": str(lv), "type": "其他"},
+                     children=[Text(t)])
+
+        body = [E(tag="p", children=[Text("前")]), mulu(2, "二"),
+                E(tag="p", children=[Text("中")]), mulu(1, "一"),
+                E(tag="p", children=[Text("后")])]
+        self.assertEqual(
+            len(split_sections(body, {"juan": False, "mulu_levels": [1],
+                                      "mulu_smart_merge": False})), 2)
+        self.assertEqual(
+            len(split_sections(body, {"juan": False, "mulu_levels": [1, 2],
+                                      "mulu_smart_merge": False})), 3)
+        self.assertEqual(
+            len(split_sections(body, {"juan": False, "mulu_level1": False})), 1)
+
+    def test_smart_merge_level2(self):
+        from pycbeta.render_docx import split_sections
+        from pycbeta.model import E, Text
+
+        def mulu(lv, t):
+            return E(tag="mulu", attrs={"level": str(lv), "type": "其他"},
+                     children=[Text(t)])
+
+        def para(s):
+            return E(tag="p", children=[Text(s)])
+
+        body = [para("甲" * 10), mulu(2, "二A"), para("乙" * 10),
+                mulu(2, "二B"), para("丙" * 600), mulu(2, "二C"),
+                para("丁" * 10)]
+        # 关智能：4 节；默认开（阈值 400）：前两短节并入，丙段节超阈不再并 → 2 节
+        self.assertEqual(
+            len(split_sections(body, {"juan": False, "mulu_levels": [2],
+                                      "mulu_smart_merge": False})), 4)
+        self.assertEqual(
+            len(split_sections(body, {"juan": False, "mulu_levels": [2]})), 2)
+
+    def test_smart_merge_not_for_level1(self):
+        from pycbeta.render_docx import split_sections
+        from pycbeta.model import E, Text
+
+        def mulu(lv, t):
+            return E(tag="mulu", attrs={"level": str(lv), "type": "其他"},
+                     children=[Text(t)])
+
+        def para(s):
+            return E(tag="p", children=[Text(s)])
+
+        # level-1 边界永不参与智能合页（smart 只含 ≥2）
+        body = [para("甲"), mulu(1, "一"), para("乙")]
+        self.assertEqual(
+            len(split_sections(body, {"juan": False, "mulu_levels": [1, 2]})), 2)
+
+
 class TestPbPagination(unittest.TestCase):
     """<pb/> 分页开关：parser 产 Pb(Node) 而非 E，is_break 须先判 Pb；
     关时 pb 零输出（不产空段）。"""

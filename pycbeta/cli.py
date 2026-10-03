@@ -73,6 +73,16 @@ def _notes_marker_font(out_defaults):
     return out_defaults.get("notes_marker_font", out_defaults.get("marker_font"))
 
 
+def _pagination_mulu_levels(pg):
+    """epub 拆 spine 用的 mulu level 集合：跟随 pagination 配置；
+    pagination 显式 enabled=false → 空（不拆）；缺省 → 与 docx 同口径（{1}）。"""
+    pg = pg or {}
+    if pg.get("enabled", True) is False:
+        return ()
+    from .render_docx import _mulu_levels
+    return tuple(sorted(_mulu_levels(pg)))
+
+
 def resolve_convert_report(flag, out_defaults):
     """转换报告开关：CLI flag > config output.convert_report > 默认 True。
 
@@ -288,6 +298,8 @@ def render_one(w, fmt, out_dir, out_name, args, theme, html_base=None, figure_ba
                          siddham_text=getattr(args, "siddham_text", False),
                          pre_dedent=getattr(args, "pre_dedent", False),
                          pre_dedent_spaces=getattr(args, "pre_dedent_spaces", 4),
+                         mulu_levels=_pagination_mulu_levels(
+                             getattr(args, "pagination", None)),
                          figure_base=figure_base)
         fn = r.render_work(w, out_dir, filename=out_name)
         _report_missing_figures(w.id, fmt, r)

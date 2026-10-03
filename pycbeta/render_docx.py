@@ -54,10 +54,49 @@ def _needs_ea_hint(text: str) -> bool:
     return has_ambiguous
 
 
+def _mulu_levels(rules: dict) -> set:
+    """已启用的 mulu 分页 level 集合。
+
+    显式 `rules['mulu_levels']`（list/int）优先（int 化、只留 1–9）；
+    未写则回退旧键 `mulu_level1`：true/缺省 → {1}，false → 空（关）。"""
+    raw = rules.get("mulu_levels")
+    if raw is None:
+        return {1} if rules.get("mulu_level1", True) else set()
+    vals = raw if isinstance(raw, (list, tuple, set)) else [raw]
+    out = set()
+    for v in vals:
+        try:
+            iv = int(v)
+        except (TypeError, ValueError):
+            continue
+        if 1 <= iv <= 9:
+            out.add(iv)
+    return out
+
+
+def _mulu_level(n) -> int:
+    try:
+        return int(n.attrs.get("level") or "0")
+    except (TypeError, ValueError):
+        return 0
+
+
+# 智能合页：level≥2 的短节与下一节同页（只看前一节累计字数）
+DEFAULT_MULU_SMART_MIN_CHARS = 400
+
+
+def _mulu_smart_levels(rules: dict) -> set:
+    """参与智能合页的 level 集合：已启用 level 中 ≥2 的（level-1 不参与）。
+    `mulu_smart_merge` 默认开；关闭 → 空。"""
+    if not rules.get("mulu_smart_merge", True):
+        return set()
+    return {lv for lv in _mulu_levels(rules) if lv >= 2}
+
+
 def split_sections(body, rules: dict) -> list:
     """按分页规则把 body 切成 [(卷号, ops)]（跨 div 补 close/open，同 split_juans）。
 
-    rules: {juan, juan_first, mulu_level1, pb}。
+    rules: {juan, juan_first, mulu_levels|mulu_level1, pb}。
     - milestone（卷边界）：juan 规则触发；首个卷边界默认不切（紧跟书名），juan_first=true 时也切
     - 卷头 juan（fun=open）：恒为断点（无开关），卷头/译者/首品同节；后续品仍由 mulu_level1 切分
     - <cb:mulu level="1"> 非"卷"型且有目录文字（序/品/其他）：mulu_level1 触发分页；
@@ -87,6 +126,8 @@ def split_sections(body, rules: dict) -> list:
                 parts.append(mulu_text(c))
         return "".join(parts)
 
+    levels = _mulu_levels(rules)
+
     def is_break(kind, n) -> bool:
         if kind == "milestone":
             return bool(rules.get("juan", True))
@@ -97,9 +138,10 @@ def split_sections(body, rules: dict) -> list:
         if not isinstance(n, E):
             return False
         if n.tag == "juan" and n.attrs.get("fun") == "open":
-            return True  # 卷头开启新节：卷头/译者/首品同节（后续品仍由 mulu_level1 切分）
-        if n.tag == "mulu" and rules.get("mulu_level1", True) and mulu_text(n).strip():
-            return n.attrs.get("level") == "1" and n.attrs.get("type") != "卷"
+            return True  # 卷头开启新节：卷头/译者/首品同节（后续品仍由 mulu_levels 切分）
+        if n.tag == "mulu" and mulu_text(n).strip():
+            return (_mulu_level(n) in levels
+                    and n.attrs.get("type") != "卷")
         return False
 
     def meaningful(ops) -> bool:
@@ -121,17 +163,32 @@ def split_sections(body, rules: dict) -> list:
                              "juan"):  # 卷头（含 jhead/书名/卷次）亦属题署块
                     continue
                 if n.tag == "mulu":
-                    if (n.attrs.get("level") == "1" and n.attrs.get("type") != "卷"
-                            and mulu_text(n).strip()):
+                    if (n.attrs.get("type") != "卷"
+                            and mulu_text(n).strip()
+                            and _mulu_level(n) in levels):
                         return True
                     continue
                 return True
         return False
 
+    def sec_len(ops) -> int:
+        """节内正文字数（递归取 E/Text 文本、去空白；lb/pb 等无文本不计）。"""
+        total = 0
+        for k, nd in ops:
+            if k != "node":
+                continue
+            if isinstance(nd, Text):
+                total += len(nd.text.strip())
+            elif isinstance(nd, E):
+                total += len(mulu_text(nd).strip())
+        return total
+
     walk(body)
     sections = []
+    starts = []            # 每节起始断点的 mulu level（None=非 mulu）
     cur_no = None
     cur = []
+    cur_start = None
     open_divs = []
     juan_first = bool(rules.get("juan_first", False))
 
@@ -145,14 +202,18 @@ def split_sections(body, rules: dict) -> list:
                     cur.append(("close", d))
                 if meaningful(cur) or force:
                     sections.append((cur_no, cur))
+                    starts.append(cur_start)
                 cur = []
                 for d in open_divs:
                     cur.append(("open", d))
                 if is_milestone:
                     cur_no = int(n.attrs.get("n")) if n.attrs.get("n") else (cur_no or 0) + 1
+                    cur_start = None
                 else:
                     # mulu/pb 节点归入新节（mulu 保留 pending 书签，pb 渲染为空）
                     cur.append((kind, n))
+                    cur_start = (_mulu_level(n)
+                                 if isinstance(n, E) and n.tag == "mulu" else None)
             elif is_milestone:
                 cur_no = int(n.attrs.get("n")) if n.attrs.get("n") else (cur_no or 0) + 1
             else:
@@ -166,6 +227,26 @@ def split_sections(body, rules: dict) -> list:
             cur.append((kind, n))
     if cur and meaningful(cur):
         sections.append((cur_no, cur))
+        starts.append(cur_start)
+
+    # 智能合页：level≥2 的短节并入下一节（只看前一节累计字数）
+    smart = _mulu_smart_levels(rules)
+    if smart and len(sections) > 1:
+        try:
+            thr = int(rules.get("mulu_smart_min_chars",
+                                DEFAULT_MULU_SMART_MIN_CHARS))
+        except (TypeError, ValueError):
+            thr = DEFAULT_MULU_SMART_MIN_CHARS
+        out = []
+        cno, cops, cst = sections[0][0], sections[0][1], starts[0]
+        for (no, ops), st in zip(sections[1:], starts[1:]):
+            if st in smart and sec_len(cops) < thr:
+                cops = cops + ops   # 合并（跨节 div close/open 对相抵，无副作用）
+            else:
+                out.append((cno, cops))
+                cno, cops, cst = no, ops, st
+        out.append((cno, cops))
+        sections = out
     return sections
 
 

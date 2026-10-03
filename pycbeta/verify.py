@@ -1508,6 +1508,15 @@ def _find_official_in(source: str, stem: str, kind: str,
             out = scoped
     return out
 
+def _epub_mulu_levels(pg):
+    """epub 拆 spine 用的 mulu level 集合（与 CLI 同口径）。"""
+    pg = pg or {}
+    if pg.get("enabled", True) is False:
+        return ()
+    from .render_docx import _mulu_levels
+    return tuple(sorted(_mulu_levels(pg)))
+
+
 def generate_formal(xml_fn: str, work, fmt: str, outdir: str, config_path: Optional[str] = None, overrides: Optional[dict] = None) -> List[str]:
     """正式管线生成，返回生成档路径列表（html 按卷多个文件，其余单元素）。"""
     os.makedirs(outdir, exist_ok=True)
@@ -1571,7 +1580,7 @@ def generate_formal(xml_fn: str, work, fmt: str, outdir: str, config_path: Optio
     if fmt == "docx":
         return [os.path.join(outdir, DocxRenderer(theme=theme, notes="footnote", ignore_xml_style=bool(p("ignore_xml_style")), ignore_xml_space=bool(p("ignore_xml_space")), show_notes=True, suppress_jhead_dup=p("suppress_jhead_dup", True), show_close_juan=bool(p("show_close_juan", False)), inline_brackets=p("inline_brackets", "halfwidth"), note_inline_brackets=p("note_inline_brackets", None), series_title=p("series_title", {}), pagination=p("pagination", {}), verse_caesura=p("verse_caesura", "　　"), verse_strip_quotes=bool(p("verse_strip_quotes", False)), footnote_per_page=p("footnote_per_page", True), vertical=bool(p("vertical", False)), annotations=_ann, strip_head_no=_shn, show_body_siddham=bool(p("show_body_siddham", True)), pre_dedent=bool(p("pre_dedent", False)), pre_dedent_spaces=p("pre_dedent_spaces", 4), title_smart_wrap=bool(p("title_smart_wrap", True)), figure_base=_fig_dirs or None).render_work(work, out_dir=outdir, filename=f"{stem}.docx"))]
     if fmt == "epub":
-        return [os.path.join(outdir, EpubRenderer(theme=theme, notes="endnote", ignore_xml_style=bool(p("ignore_xml_style")), ignore_xml_space=bool(p("ignore_xml_space")), show_notes=True, inline_brackets=p("inline_brackets", "halfwidth"), annotations=_ann, strip_head_no=_shn, siddham_text=bool(p("siddham_text", False)), pre_dedent=bool(p("pre_dedent", False)), pre_dedent_spaces=p("pre_dedent_spaces", 4), figure_base=_fig_dirs or None).render_work(work, out_dir=outdir, filename=f"{stem}.epub"))]
+        return [os.path.join(outdir, EpubRenderer(theme=theme, notes="endnote", ignore_xml_style=bool(p("ignore_xml_style")), ignore_xml_space=bool(p("ignore_xml_space")), show_notes=True, inline_brackets=p("inline_brackets", "halfwidth"), annotations=_ann, strip_head_no=_shn, siddham_text=bool(p("siddham_text", False)), pre_dedent=bool(p("pre_dedent", False)), pre_dedent_spaces=p("pre_dedent_spaces", 4), mulu_levels=_epub_mulu_levels(p("pagination", {})), figure_base=_fig_dirs or None).render_work(work, out_dir=outdir, filename=f"{stem}.epub"))]
     if fmt == "md":
         return [os.path.join(outdir, MdRenderer(theme=theme, notes="footnote", show_notes=True, inline_brackets=p("inline_brackets", "halfwidth"), annotations=_ann, strip_head_no=_shn, show_dharani_transliteration=bool(p("show_dharani_transliteration", False)), siddham_text=bool(p("siddham_text", False))).render_work(work, out_dir=outdir, filename=f"{stem}.md"))]
     if fmt == "txt":

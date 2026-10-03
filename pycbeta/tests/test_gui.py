@@ -1528,6 +1528,40 @@ class TestLayoutRegroup(unittest.TestCase):
         self.assertEqual(panel.pre_dedent_spin.value(), 6)
         self.assertTrue(panel.pre_dedent_spin.isEnabled())
 
+    def test_mulu_levels_roundtrip(self):
+        from pycbeta.gui.panel import XmlOptionsPanel, MULU_LEVEL_ITEMS
+        panel = XmlOptionsPanel(load_presets())
+        self.assertEqual(panel.get_options().pagination.get("mulu_levels"),
+                         [1])                                   # 默认仅 level-1
+        idx = next(i for i, (_n, lv) in enumerate(MULU_LEVEL_ITEMS)
+                   if list(lv) == [1, 2])
+        panel.mulu_levels_box.setCurrentIndex(idx)
+        o = panel.get_options()
+        self.assertEqual(o.pagination["mulu_levels"], [1, 2])
+        panel.set_options(o)
+        self.assertEqual(list(panel.mulu_levels_box.currentData()), [1, 2])
+        idx0 = next(i for i, (_n, lv) in enumerate(MULU_LEVEL_ITEMS)
+                    if list(lv) == [])
+        panel.mulu_levels_box.setCurrentIndex(idx0)
+        self.assertEqual(panel.get_options().pagination["mulu_levels"], [])
+
+    def test_smart_merge_roundtrip(self):
+        from pycbeta.gui.panel import XmlOptionsPanel
+        panel = XmlOptionsPanel(load_presets())
+        self.assertTrue(panel.pg_smart_box.isChecked())     # 默认开
+        self.assertTrue(panel.pg_smart_spin.isEnabled())
+        panel.pg_smart_box.setChecked(False)
+        self.assertFalse(panel.pg_smart_spin.isEnabled())
+        o = panel.get_options()
+        self.assertFalse(o.pagination["mulu_smart_merge"])
+        panel.set_options(o)
+        self.assertFalse(panel.pg_smart_box.isChecked())
+        panel.pg_smart_box.setChecked(True)
+        panel.pg_smart_spin.setValue(500)
+        o2 = panel.get_options()
+        self.assertTrue(o2.pagination["mulu_smart_merge"])
+        self.assertEqual(o2.pagination["mulu_smart_min_chars"], 500)
+
     def test_convert_report_roundtrip(self):
         from pycbeta.gui.panel import XmlOptionsPanel
         panel = XmlOptionsPanel(load_presets())
