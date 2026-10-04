@@ -944,8 +944,16 @@ class XmlOptionsPanel(QWidget):
         self.typo_info.setFixedHeight(self.fontMetrics().lineSpacing())
         form.addRow("", self.typo_info)
         self.grayscale_box = self._check("黑白输出")
+        self.series_on = self._check("佛典丛书名", checked=True)
+        self.series_on.setToolTip(
+            "output.series_title.enabled：经藏名（title level=\"s\"）印在首页左上角；"
+            "字体/字号走 CSS p.series-title")
+        _grow = QHBoxLayout()
+        _grow.addWidget(self.grayscale_box)
+        _grow.addStretch(1)
+        _grow.addWidget(self.series_on)
+        form.addRow("", _grow)
         self.border_box = self._check("页面边框")
-        form.addRow("", self.grayscale_box)
         form.addRow("", self.border_box)
         return w
 
@@ -1468,20 +1476,6 @@ class XmlOptionsPanel(QWidget):
         left.addStretch(1)
         grid.setColumnStretch(0, 1)             # 左列吃富余宽度
         grid.addLayout(left, 0, 0)
-        right = QVBoxLayout()
-        group = QGroupBox("佛典丛书名")
-        form = QFormLayout(group)
-        self.series_on = self._check("首页打印", checked=True)
-        form.addRow("", self.series_on)
-        self.series_css_btn = QPushButton("去 CSS 编辑器调样式…")
-        self.series_css_btn.setToolTip("经藏名字体/字号走 CSS p.series-title（此处仅留开关）")
-        self.series_css_btn.clicked.connect(self._open_style_editor)
-        form.addRow("样式", self.series_css_btn)
-        right.addWidget(group)
-        right.addWidget(self._hint("印在首页左上角"))
-        right.addStretch(1)
-        grid.addLayout(right, 0, 1)
-        # level / 智能合页两行跨两列：否则被右列「佛典丛书名」挡住，注释延不到右沿
         grid.addLayout(_lrow, 1, 0, 1, 2)
         grid.addLayout(_srow, 2, 0, 1, 2)
         grid.addWidget(_smart_hint, 3, 0, 1, 2)
