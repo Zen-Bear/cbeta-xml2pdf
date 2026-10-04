@@ -944,17 +944,23 @@ class XmlOptionsPanel(QWidget):
         self.typo_info.setFixedHeight(self.fontMetrics().lineSpacing())
         form.addRow("", self.typo_info)
         self.grayscale_box = self._check("黑白输出")
-        self.series_on = self._check("佛典丛书名", checked=True)
-        self.series_on.setToolTip(
-            "output.series_title.enabled：经藏名（title level=\"s\"）印在首页左上角；"
-            "字体/字号走 CSS p.series-title")
+        self.border_box = self._check("页面边框")
         _grow = QHBoxLayout()
         _grow.addWidget(self.grayscale_box)
         _grow.addStretch(1)
-        _grow.addWidget(self.series_on)
+        _grow.addWidget(self.border_box)
         form.addRow("", _grow)
-        self.border_box = self._check("页面边框")
-        form.addRow("", self.border_box)
+        # 佛典丛书名（title level="s"）：仅首页左上角一行（无「每页」选项）
+        _srow = QHBoxLayout()
+        _srow.setContentsMargins(0, 0, 0, 0)
+        _srow.addWidget(QLabel("佛典丛书名"))
+        self.series_on = self._check("首页打印", checked=True)
+        self.series_on.setToolTip(
+            "output.series_title.enabled：经藏名（title level=\"s\"）印在首页左上角；"
+            "字体/字号走 CSS p.series-title")
+        _srow.addWidget(self.series_on)
+        _srow.addStretch(1)
+        form.addRow("", _srow)
         return w
 
     def _preset_margins(self):
