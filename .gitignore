@@ -9,6 +9,9 @@ out/
 test/out*/
 test/X1077/
 [Ee]gg-info/
+# 校验产物（自定义 verify_root 落仓库根时；默认 {输出}/验证 已被 out/ 覆盖）
+/verify/
+/验证/
 
 # 外部 PDF 引擎可执行文件（体积大，改由 GitHub Releases 分发；
 # 自行放入 engines/ 目录即可，不入库）

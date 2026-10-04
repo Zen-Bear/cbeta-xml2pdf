@@ -82,7 +82,7 @@ def _mulu_level(n) -> int:
 
 
 # 智能合页：level≥2 的短节与下一节同页（只看前一节累计字数）
-DEFAULT_MULU_SMART_MIN_CHARS = 400
+DEFAULT_MULU_SMART_MIN_CHARS = 200
 
 
 def _mulu_smart_levels(rules: dict) -> set:

@@ -1605,19 +1605,26 @@ class TestLayoutRegroup(unittest.TestCase):
     def test_mulu_levels_roundtrip(self):
         from pycbeta.gui.panel import XmlOptionsPanel, MULU_LEVEL_ITEMS
         panel = XmlOptionsPanel(load_presets())
+        self.assertTrue(panel.mulu_on_box.isChecked())           # 默认开
+        self.assertTrue(panel.mulu_levels_box.isEnabled())
         self.assertEqual(panel.get_options().pagination.get("mulu_levels"),
-                         [1])                                   # 默认仅 level-1
+                         [1])                                    # 默认仅 level-1
         idx = next(i for i, (_n, lv) in enumerate(MULU_LEVEL_ITEMS)
                    if list(lv) == [1, 2])
         panel.mulu_levels_box.setCurrentIndex(idx)
         o = panel.get_options()
         self.assertEqual(o.pagination["mulu_levels"], [1, 2])
         panel.set_options(o)
+        self.assertTrue(panel.mulu_on_box.isChecked())
         self.assertEqual(list(panel.mulu_levels_box.currentData()), [1, 2])
-        idx0 = next(i for i, (_n, lv) in enumerate(MULU_LEVEL_ITEMS)
-                    if list(lv) == [])
-        panel.mulu_levels_box.setCurrentIndex(idx0)
+        # 关开关 → 不分（下拉禁用）
+        panel.mulu_on_box.setChecked(False)
+        self.assertFalse(panel.mulu_levels_box.isEnabled())
         self.assertEqual(panel.get_options().pagination["mulu_levels"], [])
+        # 回读空 → 开关关闭
+        panel.set_options(panel.get_options())
+        self.assertFalse(panel.mulu_on_box.isChecked())
+        self.assertFalse(panel.mulu_levels_box.isEnabled())
 
     def test_smart_merge_roundtrip(self):
         from pycbeta.gui.panel import XmlOptionsPanel
@@ -2349,6 +2356,7 @@ class TestSourceDialog(unittest.TestCase):
         try:
             dlg = P.SourceDialog(out_dir=root)
             try:
+                dlg.path_edits["verify_root"].setText("")  # 自包含：忽略本机用户预设
                 want = os.path.join(root, "验证")
                 self.assertEqual(dlg.io_verify_edit.text(), want)
                 self.assertTrue(dlg.io_verify_edit.isReadOnly())

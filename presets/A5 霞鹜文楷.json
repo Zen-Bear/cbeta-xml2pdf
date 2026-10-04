@@ -243,7 +243,7 @@
         1
       ],
       "mulu_smart_merge": true,
-      "mulu_smart_min_chars": 400
+      "mulu_smart_min_chars": 200
     },
     "series_title": {
       "enabled": true

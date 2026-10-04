@@ -342,7 +342,7 @@ class TestMuluLevels(unittest.TestCase):
         body = [para("甲" * 10), mulu(2, "二A"), para("乙" * 10),
                 mulu(2, "二B"), para("丙" * 600), mulu(2, "二C"),
                 para("丁" * 10)]
-        # 关智能：4 节；默认开（阈值 400）：前两短节并入，丙段节超阈不再并 → 2 节
+        # 关智能：4 节；默认开（阈值 200）：前两短节并入，丙段节超阈不再并 → 2 节
         self.assertEqual(
             len(split_sections(body, {"juan": False, "mulu_levels": [2],
                                       "mulu_smart_merge": False})), 4)
