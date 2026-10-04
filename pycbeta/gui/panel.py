@@ -1437,7 +1437,6 @@ class XmlOptionsPanel(QWidget):
         _llab = self._gray_hint(PAGINATION_HINTS["mulu_levels"])
         self.pg_hints["mulu_levels"] = _llab
         _lrow.addWidget(_llab, 1)
-        left.addLayout(_lrow)
         self._on_mulu_on(self.mulu_on_box.isChecked())
         # 智能合页：level≥2 短节与下节同页（只看前一节累计字数）
         self.pg_smart_box = self._check("短节智能合页", checked=True)
@@ -1459,16 +1458,15 @@ class XmlOptionsPanel(QWidget):
         _spin_row.addWidget(QLabel("字"))
         _srow.addLayout(_spin_row)
         _srow.addStretch(1)
-        left.addLayout(_srow)
         # 注释独立一行跨两列（与控件同行会被挤到过早折行）
         _smart_hint = self._gray_hint(
             "（默认仅 level-1 时不生效，需选 level-1+2…；"
-            "前一节不足 200 字与下节同页，约合 A4 纸 5 行；仅 DOCX）")
+            "前一节不足 200 字与下节同页，约合 A4 纸 5 行；"
+            "仅 DOCX 及 docx2pdf 派生的 PDF）")
         _smart_hint.setContentsMargins(20, 0, 0, 0)
-        grid.addWidget(_smart_hint, 1, 0, 1, 2)
         self._on_pg_smart(self.pg_smart_box.isChecked())
         left.addStretch(1)
-        grid.setColumnStretch(0, 1)             # 左列吃富余宽度，注释延到右沿
+        grid.setColumnStretch(0, 1)             # 左列吃富余宽度
         grid.addLayout(left, 0, 0)
         right = QVBoxLayout()
         group = QGroupBox("佛典丛书名")
@@ -1483,6 +1481,10 @@ class XmlOptionsPanel(QWidget):
         right.addWidget(self._hint("印在首页左上角"))
         right.addStretch(1)
         grid.addLayout(right, 0, 1)
+        # level / 智能合页两行跨两列：否则被右列「佛典丛书名」挡住，注释延不到右沿
+        grid.addLayout(_lrow, 1, 0, 1, 2)
+        grid.addLayout(_srow, 2, 0, 1, 2)
+        grid.addWidget(_smart_hint, 3, 0, 1, 2)
         return w
 
     def _tab_layout(self):
