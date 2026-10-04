@@ -946,9 +946,11 @@ class XmlOptionsPanel(QWidget):
         self.grayscale_box = self._check("黑白输出")
         self.border_box = self._check("页面边框")
         _grow = QHBoxLayout()
+        _grow.setContentsMargins(0, 0, 0, 0)
         _grow.addWidget(self.grayscale_box)
-        _grow.addStretch(1)
+        _grow.addSpacing(24)
         _grow.addWidget(self.border_box)
+        _grow.addStretch(1)
         form.addRow("", _grow)
         # 佛典丛书名（title level="s"）：仅首页左上角一行（无「每页」选项）
         _srow = QHBoxLayout()
@@ -961,6 +963,10 @@ class XmlOptionsPanel(QWidget):
         _srow.addWidget(self.series_on)
         _srow.addStretch(1)
         form.addRow("", _srow)
+        _shint = self._gray_hint(
+            "（经藏名 title level=\"s\" 仅印在首页左上角；字体/字号走 CSS p.series-title）")
+        _shint.setContentsMargins(20, 0, 0, 0)
+        form.addRow("", _shint)
         return w
 
     def _preset_margins(self):
