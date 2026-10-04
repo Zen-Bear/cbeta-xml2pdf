@@ -448,19 +448,33 @@ def resolve_verify_ebook(args, presets, src):
     return (cfg.get("cbeta_ebook") or "").strip() or src
 
 
+def _cli_verify_custom(args):
+    """校验根自定义值：--verify-root 优先，否则配置 source.verify_root；
+    都没有 → ""（跟随输出目录）。只读配置，不写文件。"""
+    custom = (getattr(args, "verify_root", "") or "").strip()
+    if custom:
+        return custom
+    try:
+        from .theme import load_effective_presets
+        src = (load_effective_presets(
+            getattr(args, "config", None)).get("source") or {})
+        return (src.get("verify_root") or "").strip()
+    except Exception:
+        return ""
+
+
 def _convert_report_root(xml_fn, args):
-    """转换报告根目录（与校验产物同规则）：-o 为目录/无后缀则取之，否则取
-    -o 文件所在目录；无 -o 取输入 xml 所在目录。"""
-    if getattr(args, "output", None):
-        _o = os.path.abspath(args.output)
-        return _o if (os.path.isdir(_o) or not os.path.splitext(_o)[1]) \
-            else os.path.dirname(_o)
-    return os.path.dirname(os.path.abspath(xml_fn))
+    """转换报告根目录（与校验产物同规则）：--verify-root 优先，否则
+    {输出}/验证（-o 为目录/无后缀则取之，否则取 -o 文件所在目录；
+    无 -o 取输入 xml 所在目录）。"""
+    from .verify import resolve_verify_root as _rvr
+    return _rvr(getattr(args, "output", None), xml_fn,
+                _cli_verify_custom(args))
 
 
 def _write_convert_reports(xml_fn, args, w, formats):
-    """写转换报告：per-fmt 到 {验证}/{fmt}/{name}_转换报告_{fmt}.txt，
-    合并到 {验证}/{name}_转换报告.txt，并打印 `-> 合并路径`（GUI 抓取）。
+    """写转换报告：per-fmt 到 {验证}/{id 书名}（验证）/{fmt}/{name}_转换报告_{fmt}.txt，
+    合并到 {验证}/{id 书名}（验证）/{name}_转换报告.txt，并打印 `-> 合并路径`（GUI 抓取）。
     失败只记 console，不影响渲染/退出码。返回合并路径（失败 ""）。"""
     try:
         from .filename import default_output_name
@@ -713,7 +727,10 @@ def main(argv=None):
     vg.add_argument("--verify-max-diff", type=int, default=10,
                     help="校验阈值 max-diff（缺+多≤阈值判OK，默认10）")
     vg.add_argument("--verify-diff-lines", type=int, default=5,
-                    help="校验失败时打印差异行数（默认5）")
+                      help="校验失败时打印差异行数（默认5）")
+    vg.add_argument("--verify-root", default="",
+                      help="校验产物总目录（默认 {输出}/验证，各经书 {id 书名}（验证）/ 在其下；"
+                           "不给则用配置 source.verify_root）")
     vg.add_argument("--font-check", action="store_true",
                     help="豆腐字检测：逐字核对渲染字表覆盖率并打印报告（TOFU/仅补充字形/缺失字体，不中断渲染）")
 
@@ -969,13 +986,19 @@ def main(argv=None):
                 else os.path.abspath(args.input)
         # 若输入为文件，其官方在同目录；若为目录，则 source 即该目录；
         # 若为編號，官方基线随材料化落 work 目录（auto_fetch 同目录）
-        # 校验产物目录：镜像渲染输出根，每个经书独立 `{id 书名}（验证）/`（内含 {fmt}/ + report.txt）
-        if args.output:
+        # 校验产物总目录：--verify-root 优先，否则 {输出}/验证；
+        # 每个经书独立 `{id 书名}（验证）/`（内含 {fmt}/ + report.txt + report.json）
+        from .verify import default_verify_root as _dvr
+        _custom_root = _cli_verify_custom(args)
+        if _custom_root:
+            verify_root = os.path.abspath(_custom_root)
+        elif getattr(args, "output", None):
             _o = os.path.abspath(args.output)
-            verify_root = _o if (os.path.isdir(_o) or not os.path.splitext(_o)[1]) \
+            _base = _o if (os.path.isdir(_o) or not os.path.splitext(_o)[1]) \
                 else os.path.dirname(_o)
+            verify_root = _dvr(_base)
         else:
-            verify_root = src
+            verify_root = _dvr(src)
         from .filename import default_output_name as _default_out_name
         report_lines = []
         def vlog(msg=""):
@@ -1021,6 +1044,7 @@ def main(argv=None):
             block = [f"=== {name}"]
             block_failed = False
             summ = []  # 本经书各格式 (fmt, status, mi, ex)，末尾组总结行
+            json_recs = []  # 本经书 report.json 用最小记录（与 summ 同步）
             # 为本文件确定每个格式的生成路径（与 resolve_output 一致）
             try:
                 from .parser import P5Parser as _P
@@ -1070,6 +1094,9 @@ def main(argv=None):
                     if _src in formats:
                         block.append(f"  [--]  pdf 已覆盖（已由 {_src} 校验）")
                         summ.append((fmt_raw, "covered", None, None, _src))
+                        json_recs.append({"xml": xml_fn, "fmt": "pdf",
+                                          "status": "covered",
+                                          "cover_by": _src, "gen": []})
                         continue
                     fmt = _src
                     disp = f"pdf→{_src}"
@@ -1096,6 +1123,8 @@ def main(argv=None):
                 if not gen_path or not os.path.isfile(gen_path):
                     block.append(f"  [--]  {disp} gen not found: {gen_path}")
                     summ.append((fmt_raw, "nogen", None, None))
+                    json_recs.append({"xml": xml_fn, "fmt": fmt_raw,
+                                      "status": "nogen", "gen": []})
                     if args.verify_only:
                         # 只校验模式：缺失产物计失败（退出码非零）
                         grand_total += 1; grand_fail += 1; block_failed = True
@@ -1146,6 +1175,9 @@ def main(argv=None):
                 if not bases:
                     block.append(f"  [--]  {disp} no baseline")
                     summ.append((fmt_raw, "no_baseline", None, None))
+                    json_recs.append({"xml": xml_fn, "fmt": fmt_raw,
+                                      "status": "no_baseline",
+                                      "gen": list(gen_paths)})
                     continue
                 ours_raw_all = "".join(v_extract(p, strip_jiaozhu=(fmt not in ("html", "epub")))
                                          for p in gen_paths)
@@ -1342,19 +1374,49 @@ def main(argv=None):
                     for _s in _struct_issues[:5]:
                         block.append(f"         {_s}")
                 summ.append((fmt_raw, "ok" if ok_any else "fail", best_mi, best_ex))
+                json_recs.append({"xml": xml_fn, "fmt": fmt_raw,
+                                  "status": "ok" if ok_any else "fail",
+                                  "gen": list(gen_paths),
+                                  "official": bpath,
+                                  "official_kind": bkind,
+                                  "missing": best_mi, "extra": best_ex,
+                                  "struct_issues": list(_struct_issues)})
             if summ:
                 from .verify import format_work_summary as _v_summ
                 block.insert(1, "  " + _v_summ(os.path.splitext(name)[0], summ))
             results.append((block_failed, name, block))
-            # 每经书独立报告：{输出}/{id 书名}（验证）/report.txt
+            # 每经书独立报告：{输出}/验证/{id 书名}（验证）/{id}_{书名}_校验报告.txt + report.json
+            from .filename import verify_report_name as _vrn
+            _rep_base = _vrn(w.id, w.metadata.get("title"),
+                             getattr(args, "title_t2s", True))
             try:
                 os.makedirs(verify_dir, exist_ok=True)
-                _rpt = os.path.join(verify_dir, "report.txt")
+                _rpt = os.path.join(verify_dir, _rep_base + ".txt")
                 with open(_rpt, "w", encoding="utf-8") as _f:
                     _f.write("\n".join(block) + "\n")
                 print(f"报告已写入: {_rpt}")
             except Exception as e:
                 print(f"写入报告失败: {e}")
+            # 机读结论（指纹提案 §4）：与 report.txt 同目录覆盖写；失败只打印
+            try:
+                from .verify import build_report_json as _v_json
+                _bl = _bl_cfg if isinstance(_bl_cfg, dict) else None
+                _j = _v_json(w.id, json_recs, xml_files=[xml_fn],
+                             config_path=args.config,
+                             requested_formats=list(formats),
+                             max_diff=args.verify_max_diff,
+                             diff_lines=args.verify_diff_lines,
+                             t2s=True if getattr(args, "t2s", False) else None,
+                             engine=getattr(args, "engine", None),
+                             vertical=bool(getattr(args, "vertical", False)),
+                             baseline_roots=_bl, report_name=_rep_base + ".txt")
+                _jp = os.path.join(verify_dir, "report.json")
+                with open(_jp, "w", encoding="utf-8") as _f:
+                    json.dump(_j, _f, ensure_ascii=False, sort_keys=True,
+                              indent=1)
+                print(f"报告JSON已写入: {_jp}")
+            except Exception as e:
+                print(f"写入报告JSON失败: {e}")
         results.sort(key=lambda x: (0 if x[0] else 1, x[1]))
         for _,_,block in results:
             for line in block:

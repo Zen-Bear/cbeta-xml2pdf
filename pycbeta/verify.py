@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """校验库：供 CLI --verify、test/verify_text.py 及 GUI 复用。"""
-import difflib, glob, os, re, sys, zipfile
+import difflib, glob, hashlib, json, os, re, sys, zipfile
 from typing import List, Dict, Optional
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -1979,6 +1979,7 @@ def _format_verify_record(r, diff_lines: int = 5, max_diff: int = 10):
             _gen_index = _gen_locate_index(
                 fmt, r.get("gen") if isinstance(r.get("gen"), list)
                 else ([r.get("gen")] if r.get("gen") else []))
+            src_loc = gen_loc = ""
             for idx, (_tag, i1, i2, j1, j2) in enumerate(
                     (t.get("ctx") or [])[:diff_lines], 1):
                 loc = locs[idx - 1] if idx - 1 < len(locs) else {}
@@ -2004,6 +2005,678 @@ def _format_verify_record(r, diff_lines: int = 5, max_diff: int = 10):
                     "\n".join(_o_rawln))
                 if src_loc:
                     lines.append(f"         【源文件】{src_loc}")
-                if gen_loc:
-                    lines.append(f"         【新文件】{gen_loc}")
+            if gen_loc:
+                lines.append(f"         【新文件】{gen_loc}")
     return lines
+
+
+# ---------------- 校验指纹 verify-fp-1 ----------------
+# 用途：publish 在跑 --verify 之前廉价预判“上次 pass 结论是否仍然有效”，
+# 以跳过重复校验。只读（stat/读文件/读配置/glob），禁 parse/渲染/下载/
+# 写文件/控制台输出；任一无法证明的情形返回 None（调用方一律重验）。
+# 本机有效：mtime、本机路径解析参与定位，不保证跨机器可比。
+_FP_VERSION = "verify-fp-1"
+_FP_FORMATS = ("html", "docx", "epub", "md", "txt", "pdf")
+# 影响比对文本的源码模块：任一变化必须使旧指纹失效；改此表本身须 bump 版本。
+# 刻意排除：fonts/gaiji/figures（只影响字形与图片，不影响抽取文本）、
+# filename/names（只影响命名）、fetch/merge/cli（输入内容已直接哈希；cli 只做编排）。
+_FP_IMPL_MODULES = ("verify", "render_docx", "render_html", "render_epub",
+                    "render_md", "render_txt", "render_pdf", "theme",
+                    "annotate", "simplify", "parser", "model")
+
+
+def _sha256_bytes(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def _sha256_file(path: str):
+    """文件内容 sha256（读失败返回 None）。"""
+    try:
+        h = hashlib.sha256()
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(65536), b""):
+                h.update(chunk)
+        return h.hexdigest()
+    except (OSError, ValueError):
+        return None
+
+
+def _file_identity(path: str):
+    """文件身份 {name, size, mtime_ns, sha256}；缺失/不可读/非文件 → None。
+    mtime_ns 仅记录不哈希（合册临时文件每次 mtime 都新；同字节重写不应失效）。"""
+    try:
+        st = os.stat(path)
+    except (OSError, ValueError):
+        return None
+    if not os.path.isfile(path):
+        return None
+    digest = _sha256_file(path)
+    if digest is None:
+        return None
+    return {"name": os.path.basename(path), "size": st.st_size,
+            "mtime_ns": st.st_mtime_ns, "sha256": digest}
+
+
+def _impl_digest(modules=None, pkg_dir=None) -> str:
+    """实现摘要：包版本 + 指定模块源码内容哈希（缺失记 missing 标记，保证确定性）。"""
+    import pycbeta
+    pkg = pkg_dir or os.path.dirname(os.path.abspath(pycbeta.__file__))
+    h = hashlib.sha256()
+    h.update(("verify-fp-impl-1|" + pycbeta.__version__).encode("utf-8"))
+    for m in (modules if modules is not None else _FP_IMPL_MODULES):
+        h.update(("|" + m + "|").encode("utf-8"))
+        data = None
+        try:
+            with open(os.path.join(pkg, m + ".py"), "rb") as f:
+                data = f.read()
+        except (OSError, ValueError):
+            data = None
+        h.update(data if data is not None else b"<missing>")
+    return "sha256:" + h.hexdigest()
+
+
+def _canon_jsonable(v):
+    """配置值规范形（确定性；未知类型走 repr，集合排序）。"""
+    if v is None or isinstance(v, (bool, int, float, str)):
+        return v
+    if isinstance(v, (list, tuple)):
+        return [_canon_jsonable(x) for x in v]
+    if isinstance(v, (set, frozenset)):
+        return sorted((_canon_jsonable(x) for x in v), key=repr)
+    if isinstance(v, dict):
+        return {str(k): _canon_jsonable(v[k]) for k in sorted(v, key=repr)}
+    return repr(v)
+
+
+def _canon_annotations(presets, config_path):
+    """注音配置规范形：与 resolve_annotations 同源，表内容整体哈希（无路径）。"""
+    try:
+        from .annotate import resolve_annotations
+        spec = (presets.get("annotations")
+                if isinstance(presets, dict) else None)
+        ann = resolve_annotations(spec, config_path or _PRESETS_PATH)
+    except Exception:
+        return None
+    if not ann:
+        return None
+    try:
+        table_digest = _sha256_bytes(json.dumps(
+            _canon_jsonable(ann.get("table") or {}),
+            sort_keys=True, ensure_ascii=True).encode("utf-8"))
+    except Exception:
+        return None
+    return {
+        "scheme": ann.get("scheme"),
+        "brackets": list(ann.get("brackets") or []),
+        "repeat": ann.get("repeat"),
+        "zones": sorted(ann.get("rare_zones") or []),
+        "full_text": bool(ann.get("full_text", False)),
+        "table_sha256": table_digest,
+        "rare": _canon_jsonable(ann.get("rare_cmap")),
+    }
+
+
+def _theme_css_digest(config_path=None):
+    """与 generate_formal 同口径的主题 CSS 内容摘要（无路径）。
+    解析失败 → 出厂等价摘要；连出厂都不可读 → "unavailable"。"""
+    text = None
+    try:
+        from .theme import resolve_config_arg, resolve_pdf_docx_css
+        _run, _rdir = resolve_config_arg(config_path)
+        text = resolve_pdf_docx_css(_run, _rdir)
+    except Exception:
+        text = None
+    if not isinstance(text, str) or not text:
+        try:
+            from .theme import Theme as _Theme
+            text = _Theme().raw_css or ""
+        except Exception:
+            return "unavailable"
+    return "sha256:" + _sha256_bytes(text.encode("utf-8"))
+
+
+def canonical_verify_config(config_path=None, _presets=None):
+    """生效校验配置的规范形（JSON 可序列化；失败返回 None）。
+    只收 generate_formal 实际消费的影响文本键 + verify 链配置；
+    show_notes（formal 强制 True）、notes 模式（按格式写死）、
+    corr_cbeta/footnote_separator/font_scale 等 formal 未消费项一律剔除；
+    临时路径/输出目录等位置信息一律不收（只哈希内容）。
+    本函数自身静默（内部打印一律重定向吞掉）。"""
+    import io as _io
+    from contextlib import redirect_stdout as _redir
+    buf = _io.StringIO()
+    try:
+        with _redir(buf):
+            return _canonical_verify_config_inner(config_path, _presets)
+    except Exception:
+        return None
+
+
+def _canonical_verify_config_inner(config_path=None, _presets=None):
+    if _presets is not None:
+        presets = _presets
+    else:
+        try:
+            presets = load_effective_presets(config_path)
+        except Exception:
+            return None
+    if not isinstance(presets, dict):
+        return None
+    out = presets.get("output") or {}
+    ver = presets.get("verify") or {}
+    # inline_brackets 回退规则与 generate_formal 同构（verify 缺键强制半角）
+    ib = ver.get("inline_brackets") if "inline_brackets" in ver else "halfwidth"
+    try:
+        from .fetch import title_t2s as _tt
+        t2s_flag = bool(_tt(presets))
+    except Exception:
+        t2s_flag = False
+    try:
+        shn = bool(_strip_no_from(config_path))
+    except Exception:
+        shn = False
+    return {
+        "ignore_xml_style": bool(out.get("ignore_xml_style", False)),
+        "ignore_xml_space": bool(out.get("ignore_xml_space", False)),
+        "suppress_jhead_dup": bool(out.get("suppress_jhead_dup", True)),
+        "show_close_juan": bool(out.get("show_close_juan", False)),
+        "inline_brackets": ib,
+        "note_inline_brackets": out.get("note_inline_brackets"),
+        "series_title": _canon_jsonable(out.get("series_title") or {}),
+        "pagination": _canon_jsonable(out.get("pagination") or {}),
+        "verse_caesura": out.get("verse_caesura", "　　"),
+        "verse_strip_quotes": bool(out.get("verse_strip_quotes", False)),
+        "footnote_per_page": bool(out.get("footnote_per_page", True)),
+        "vertical": bool(out.get("vertical", False)),
+        "show_body_siddham": bool(out.get("show_body_siddham", True)),
+        "siddham_text": bool(out.get("siddham_text", False)),
+        "show_dharani_transliteration": bool(
+            out.get("show_dharani_transliteration", False)),
+        "pre_dedent": bool(out.get("pre_dedent", False)),
+        "pre_dedent_spaces": _canon_jsonable(out.get("pre_dedent_spaces", 4)),
+        "title_smart_wrap": bool(out.get("title_smart_wrap", True)),
+        "strip_head_no": shn,
+        "title_t2s": t2s_flag,
+        "scope_juan": bool(ver.get("scope_juan", True)),
+        "bases": _canon_jsonable(ver.get("bases")),
+        "annotations": _canon_annotations(presets, config_path),
+        "theme_css": _theme_css_digest(config_path),
+        "pages": _canon_jsonable(presets.get("pages") or {}),
+    }
+
+
+def _locate_xml_nosideeffects(work_id, presets):
+    """只读定位本地 XML（不下载、不物化、不写文件）：source.cbeta_ebook /
+    source.xml_dir 内 find_local_xml；找不到 → []。"""
+    try:
+        from .fetch import parse_work_id, find_local_xml
+        canon, no = parse_work_id(work_id or "")
+    except Exception:
+        return []
+    src = (presets.get("source") or {}) if isinstance(presets, dict) else {}
+    roots = []
+    for k in ("cbeta_ebook", "xml_dir"):
+        v = (src.get(k) or "").strip() if isinstance(src.get(k), str) else ""
+        if v and os.path.isdir(v):
+            roots.append(v)
+    out, seen = [], set()
+    for r in roots:
+        try:
+            found = find_local_xml(r, canon, no)
+        except Exception:
+            continue
+        for p in found:
+            if p not in seen and os.path.isfile(p):
+                seen.add(p)
+                out.append(p)
+    return out
+
+
+def verify_fingerprint(work_id, fmt, *, xml_files=None, config_path=None,
+                       max_diff=10, diff_lines=5, t2s=None,
+                       engine=None, vertical=None, baseline_roots=None,
+                       baseline="render"):
+    """校验指纹（Phase 1）：判断“上次 pass 结论是否仍然有效”的廉价预检。
+    返回 "verify-fp-1:sha256:…" 或 None（不能证明 → 调用方一律重验）。
+    无副作用：不 parse、不渲染、不下载、不写文件、不打印（内部输出一律重定向吞掉）。
+    本机有效，不保证跨机器可比。t2s/engine/vertical 为 None 时取有效配置值；
+    baseline_roots 为 None 时取配置 source.baselines。"""
+    if (fmt or "") not in _FP_FORMATS:
+        return None
+    import io as _io
+    from contextlib import redirect_stdout as _redir
+    buf = _io.StringIO()
+    try:
+        with _redir(buf):
+            return _verify_fingerprint_inner(
+                work_id, fmt, xml_files, config_path, max_diff, diff_lines,
+                t2s, engine, vertical, baseline_roots, baseline)
+    except Exception:
+        return None
+
+
+def _verify_fingerprint_inner(work_id, fmt, xml_files, config_path,
+                              max_diff, diff_lines, t2s, engine, vertical,
+                              baseline_roots, baseline):
+    try:
+        presets = load_effective_presets(config_path)
+    except Exception:
+        return None
+    if not isinstance(presets, dict):
+        return None
+    out = presets.get("output") or {}
+    if t2s is None:
+        t2s = bool(out.get("t2s", False))
+    if engine is None:
+        engine = (presets.get("engine") or "").strip() or None
+    if vertical is None:
+        vertical = bool(out.get("vertical", False))
+    # pdf 覆盖关系（与 CLI 同口径）：结论随源格式，覆盖映射进载荷
+    from .render_pdf import pdf_source_fmt
+    coverage = {}
+    eff = fmt
+    if fmt == "pdf":
+        src = pdf_source_fmt(engine, bool(vertical))
+        coverage = {"pdf": src}
+        eff = src
+    # XML 输入（调用方显式优先；否则只读定位，找不到 → None）
+    if xml_files is None:
+        xml_files = _locate_xml_nosideeffects(work_id, presets)
+    if not xml_files:
+        return None
+    xmlrecs = []
+    for f in xml_files:
+        ident = _file_identity(f)
+        if ident is None:
+            return None
+        xmlrecs.append(ident)
+    stem = os.path.splitext(os.path.basename(xml_files[0]))[0]
+    source = os.path.dirname(os.path.abspath(xml_files[0]))
+    canon = canonical_verify_config(config_path, _presets=presets)
+    if canon is None:
+        return None
+    # 基线超集（juan=None，不过滤；只增不减方向安全）+ 首选缺失即 None
+    if baseline_roots is None:
+        _bl = ((presets.get("source") or {}).get("baselines") or {})
+        roots_cfg = _bl if isinstance(_bl, dict) else {}
+    else:
+        roots_cfg = baseline_roots if isinstance(baseline_roots, dict) else {}
+    ver = presets.get("verify") or {}
+    chains_cfg = ver.get("bases")
+    official = {}
+    for kind in ("html", "txt_notes", "docx", "epub", "odt"):
+        v = roots_cfg.get(kind, "")
+        extra = [v.strip()] if isinstance(v, str) and v.strip() else []
+        try:
+            found = find_official(source, stem, kind, juan=None,
+                                  extra_roots=extra)
+        except Exception:
+            found = []
+        if found:
+            official[kind] = found
+    chain = chain_for(eff, chains_cfg)
+    if not chain or not official.get(chain[0]):
+        return None  # 首选基线缺失：实际跑会下载，本次不能证明
+    bases = resolve_bases(eff, official, chains_cfg)
+    if not bases:
+        return None
+    blrecs = {}
+    for kind, paths in bases:
+        ids = []
+        for p in paths:
+            ident = _file_identity(p)
+            if ident is None:
+                return None
+            ids.append(ident)
+        blrecs[kind] = ids
+    payload = {
+        "fp_version": _FP_VERSION,
+        "work": work_id,
+        "requested": [fmt],
+        "coverage": coverage,
+        "xml": xmlrecs,
+        "config_digest": _sha256_bytes(json.dumps(
+            canon, sort_keys=True, ensure_ascii=True).encode("utf-8")),
+        "baselines": blrecs,
+        "thresholds": {"max_diff": int(max_diff), "diff_lines": int(diff_lines)},
+        "t2s": bool(t2s),
+        "engine": engine,
+        "vertical": bool(vertical),
+        "baseline": baseline,
+        "impl": _impl_digest(),
+    }
+    return "verify-fp-1:sha256:" + _sha256_bytes(json.dumps(
+        payload, sort_keys=True, ensure_ascii=True).encode("utf-8"))
+
+
+_VERDICTS = ("pass", "fail", "undetermined", "error")
+_VERDICT_SEVERITY = {"pass": 0, "undetermined": 1, "error": 2, "fail": 3}
+
+
+def _record_counts(r):
+    """单条记录的 (missing, extra)：顶层缺失回退首个 trial；都没有 → (None, None)。"""
+    mi, ex = r.get("missing"), r.get("extra")
+    if mi is None or ex is None:
+        for t in (r.get("trials") or []):
+            if not isinstance(t, dict):
+                continue
+            if mi is None:
+                mi = t.get("missing")
+            if ex is None:
+                ex = t.get("extra")
+            if mi is not None and ex is not None:
+                break
+    return mi, ex
+
+
+def _counts_reason(mi, ex):
+    parts = []
+    if mi is not None:
+        parts.append(f"missing {mi}")
+    if ex is not None:
+        parts.append(f"extra {ex}")
+    return ", ".join(parts)
+
+
+def verdict_for(record):
+    """单条 verify_one 记录 → (verdict, reason)。
+    verdict ∈ pass/fail/undetermined/error（指纹提案 §2 口径，与 report.txt
+    的 [OK]/[FAIL]/[--] 块一致：struct_issues 非空恒为 fail）；
+    reason 为机读短码（no_baseline / covered:docx / gen_not_found /
+    missing m, extra e / struct_illegal n / detail 原文），pass 时为 None。
+    大小写不敏感；未知状态 → error（不得伪装 pass/fail）。"""
+    r = record if isinstance(record, dict) else {}
+    st = str(r.get("status") or "").strip().lower()
+    struct = r.get("struct_issues") or []
+    n_struct = len(struct) if isinstance(struct, list) else 1
+    mi, ex = _record_counts(r)
+    if n_struct:
+        extra = _counts_reason(mi, ex)
+        reason = f"struct_illegal {n_struct}" + (f"; {extra}" if extra else "")
+        return ("fail", reason)
+    if st == "ok":
+        return ("pass", None)
+    if st == "fail":
+        return ("fail", _counts_reason(mi, ex) or "diff_over_threshold")
+    if st == "no_baseline":
+        return ("undetermined", "no_baseline")
+    if st == "covered":
+        return ("undetermined", f"covered:{r.get('cover_by') or '?'}")
+    if st == "nogen":
+        return ("undetermined", "gen_not_found")
+    if st == "error":
+        return ("error", str(r.get("detail") or "verify_error"))
+    return ("error", f"unknown_status:{st or 'missing'}")
+
+
+def _public_file_identity(path):
+    """report.json inputs 用公开标识（提案 §4.2：仅 name/size/mtime_ns，不含 sha）。"""
+    ident = _file_identity(path)
+    if ident is None:
+        return None
+    return {"name": ident["name"], "size": ident["size"],
+            "mtime_ns": ident["mtime_ns"]}
+
+
+def build_report_json(work_id, records, *, xml_files=None, config_path=None,
+                      requested_formats=None, max_diff=10, diff_lines=5,
+                      t2s=None, engine=None, vertical=None,
+                      baseline_roots=None, baseline="render",
+                      report_name="report.txt"):
+    """verify_one 记录列表 → report.json 载荷 dict（指纹提案 §4 口径）。
+    纯装配：只读文件哈希，不写文件、不打印（内部输出重定向吞掉）；
+    算不出的字段记 None，绝不抛异常（极端失败回退最小骨架）。"""
+    import io as _io
+    from contextlib import redirect_stdout as _redir
+    buf = _io.StringIO()
+    try:
+        with _redir(buf):
+            return _build_report_json_inner(
+                work_id, records, xml_files, config_path,
+                requested_formats, max_diff, diff_lines,
+                t2s, engine, vertical, baseline_roots, baseline,
+                report_name)
+    except Exception:
+        return {"schema": 1, "work": work_id, "fmts": {},
+                "error": "build_failed"}
+
+
+def _build_report_json_inner(work_id, records, xml_files, config_path,
+                             requested_formats, max_diff, diff_lines,
+                             t2s, engine, vertical, baseline_roots, baseline,
+                             report_name):
+    import pycbeta as _pkg
+    recs = [r for r in (records or []) if isinstance(r, dict)]
+    groups = {}
+    for r in recs:
+        fmt = str(r.get("fmt") or "").strip() or "?"
+        groups.setdefault(fmt, []).append(r)
+    if requested_formats is None:
+        wanted = sorted(groups)
+    else:
+        wanted = [str(f).strip() or "?" for f in requested_formats]
+        for f in wanted:
+            groups.setdefault(f, [])
+    try:
+        presets = load_effective_presets(config_path)
+    except Exception:
+        presets = {}
+    if not isinstance(presets, dict):
+        presets = {}
+    canon = canonical_verify_config(config_path, _presets=presets)
+    config_digest = ("sha256:" + _sha256_bytes(json.dumps(
+        canon, sort_keys=True, ensure_ascii=True).encode("utf-8"))) \
+        if canon is not None else None
+    # XML 输入：显式优先，否则从记录反推（只读，不定位下载）
+    if xml_files is None:
+        seen = set()
+        xml_files = []
+        for r in recs:
+            p = r.get("xml")
+            if isinstance(p, str) and p and p not in seen:
+                seen.add(p)
+                xml_files.append(p)
+    xmlrecs = []
+    for f in xml_files or []:
+        ident = _public_file_identity(f)
+        if ident is not None:
+            xmlrecs.append(ident)
+    # 基线超集（与 verify_fingerprint 同口径：juan=None；只增不减方向安全）
+    blrecs = {}
+    if xml_files:
+        source = os.path.dirname(os.path.abspath(xml_files[0]))
+        stem = os.path.splitext(os.path.basename(xml_files[0]))[0]
+        if baseline_roots is None:
+            _bl = ((presets.get("source") or {}).get("baselines") or {})
+            roots_cfg = _bl if isinstance(_bl, dict) else {}
+        else:
+            roots_cfg = baseline_roots if isinstance(baseline_roots, dict) else {}
+        for kind in ("html", "txt_notes", "docx", "epub", "odt"):
+            v = roots_cfg.get(kind, "")
+            extra = [v.strip()] if isinstance(v, str) and v.strip() else []
+            try:
+                found = find_official(source, stem, kind, juan=None,
+                                      extra_roots=extra)
+            except Exception:
+                found = []
+            if found:
+                ids = []
+                for p in found:
+                    ident = _public_file_identity(p)
+                    if ident is not None:
+                        ids.append(ident)
+                if ids:
+                    blrecs[kind] = ids
+    # pdf 覆盖关系（与 CLI/指纹同口径）
+    coverage = {}
+    if "pdf" in wanted:
+        try:
+            from .render_pdf import pdf_source_fmt as _psf
+            _e, _v = engine, vertical
+            if _e is None or _v is None:
+                out = presets.get("output") or {}
+                if _e is None:
+                    _e = (presets.get("engine") or "").strip() or None
+                if _v is None:
+                    _v = bool(out.get("vertical", False))
+            coverage = {"pdf": _psf(_e, bool(_v))}
+        except Exception:
+            coverage = {}
+    fmts = {}
+    for fmt in wanted:
+        grp = groups.get(fmt, [])
+        best = "pass"
+        reasons = []
+        tot_mi = tot_ex = 0
+        has_mi = has_ex = False
+        gens = set()
+        for r in grp:
+            v, reason = verdict_for(r)
+            if _VERDICT_SEVERITY[v] > _VERDICT_SEVERITY[best]:
+                best = v
+            if reason and reason not in reasons:
+                reasons.append(reason)
+            mi, ex = _record_counts(r)
+            if isinstance(mi, int):
+                tot_mi += mi
+                has_mi = True
+            if isinstance(ex, int):
+                tot_ex += ex
+                has_ex = True
+            g = r.get("gen")
+            if isinstance(g, (list, tuple)):
+                for p in g:
+                    if p:
+                        gens.add(str(p))
+            elif g:
+                gens.add(str(g))
+        try:
+            fp = verify_fingerprint(
+                work_id, fmt, xml_files=xml_files, config_path=config_path,
+                max_diff=max_diff, diff_lines=diff_lines, t2s=t2s,
+                engine=engine, vertical=vertical,
+                baseline_roots=baseline_roots, baseline=baseline)
+        except Exception:
+            fp = None
+        if not grp:
+            best = "undetermined"
+            reasons = ["no_record"]
+        fmts[fmt] = {
+            "verdict": best,
+            "fingerprint": fp,
+            "missing": tot_mi if has_mi else None,
+            "extra": tot_ex if has_ex else None,
+            "reason": "; ".join(reasons) if reasons else None,
+            "formal_outputs": sorted(gens),
+            "report": report_name,
+        }
+    try:
+        impl_digest = _impl_digest()
+    except Exception:
+        impl_digest = "unavailable"
+    try:
+        from datetime import datetime as _dt
+        created = _dt.now().astimezone().isoformat(timespec="seconds")
+    except Exception:
+        created = ""
+    return {
+        "schema": 1,
+        "fingerprint_version": _FP_VERSION,
+        "tool": {"name": "pycbeta", "version": _pkg.__version__},
+        "verify_impl": {"module": "pycbeta.verify", "digest": impl_digest,
+                        "algorithm": "verify-1"},
+        "work": work_id,
+        "requested_formats": list(wanted),
+        "thresholds": {"max_diff": int(max_diff), "diff_lines": int(diff_lines)},
+        "inputs": {"xml_files": xmlrecs, "config_digest": config_digest,
+                   "baselines": blrecs, "coverage": coverage},
+        "fmts": fmts,
+        "created_at": created,
+    }
+
+
+_VERIFY_ROOT_NAME = "验证"
+_VERIFY_DIR_SUFFIXES = ("（验证）", "（驗證）")
+_WORK_ID_RE = re.compile(r"^[A-Za-z]+\d+[A-Za-z]*$")
+
+
+def default_verify_root(out_dir):
+    """校验总目录唯一规则：`{输出}/验证`（out 为空 → 当前目录下 验证）。"""
+    base = os.path.abspath(out_dir) if out_dir else os.getcwd()
+    return os.path.join(base, _VERIFY_ROOT_NAME)
+
+
+def resolve_verify_root(output_arg=None, xml_fn="", custom=""):
+    """校验根目录决议（CLI/GUI 共用唯一入口）：
+    custom（--verify-root）非空 → 其绝对路径；
+    否则 default_verify_root(输出基)：输出参数是目录用其本身、是文件用其目录、
+    无输出用 xml 所在目录。只做路径计算，不建目录、不碰文件。"""
+    if (custom or "").strip():
+        return os.path.abspath((custom or "").strip())
+    base = ""
+    if output_arg:
+        _o = os.path.abspath(output_arg)
+        base = _o if (os.path.isdir(_o) or not os.path.splitext(_o)[1]) \
+            else os.path.dirname(_o)
+    elif xml_fn:
+        base = os.path.dirname(os.path.abspath(xml_fn))
+    return default_verify_root(base)
+
+
+def parse_verify_report_name(name):
+    """`{id 书名}（验证）` → {"id", "title"}（兼容 （驗證） 后缀）。
+    后缀不对 / id 不像 work id / 空 → None。title 缺失记 ""。"""
+    s = (name or "").strip()
+    core = None
+    for suf in _VERIFY_DIR_SUFFIXES:
+        if s.endswith(suf):
+            core = s[:-len(suf)].strip()
+            break
+    if not core:
+        return None
+    parts = core.split(None, 1)
+    if not parts or not _WORK_ID_RE.match(parts[0]):
+        return None
+    return {"id": parts[0], "title": parts[1].strip() if len(parts) > 1 else ""}
+
+
+def find_verify_reports(verify_root):
+    """新布局发现：只扫 `{verify_root}/*（验证）/` 直接子目录（不递归、不认旧平铺）。
+    每目录配对报告：report.json 优先，否则 `*_verify_report.json` /
+    `*_校验报告.json` 首个；txt 同理（report.txt / `*_verify_report.txt` /
+    `*_校验报告.txt`）；无报告文件的仍收录（字段记 ""）。
+    返回 [{"id","title","dir","report_json","report_txt"}]，按 dir 排序；
+    根不存在 → []。只读，不抛异常。"""
+    out = []
+    try:
+        if not verify_root or not os.path.isdir(verify_root):
+            return []
+        import glob as _glob
+        for pat in ("*（验证）", "*（驗證）"):
+            for d in sorted(_glob.glob(os.path.join(verify_root, pat))):
+                if not os.path.isdir(d):
+                    continue
+                parsed = parse_verify_report_name(os.path.basename(d))
+                if parsed is None:
+                    continue
+                rj = os.path.join(d, "report.json")
+                if not os.path.isfile(rj):
+                    cands = []
+                    for pat in ("*_verify_report.json", "*_校验报告.json"):
+                        cands += _glob.glob(os.path.join(d, pat))
+                    cands = sorted(cands)
+                    rj = cands[0] if cands else ""
+                rt = os.path.join(d, "report.txt")
+                if not os.path.isfile(rt):
+                    cands = []
+                    for pat in ("*_verify_report.txt", "*_校验报告.txt"):
+                        cands += _glob.glob(os.path.join(d, pat))
+                    cands = sorted(cands)
+                    rt = cands[0] if cands else ""
+                out.append({"id": parsed["id"], "title": parsed["title"],
+                            "dir": os.path.abspath(d),
+                            "report_json": rj, "report_txt": rt})
+    except Exception:
+        return out
+    out.sort(key=lambda e: e["dir"])
+    return out

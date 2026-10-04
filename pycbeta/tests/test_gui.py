@@ -1294,6 +1294,80 @@ class TestConfigBar(unittest.TestCase):
         finally:
             shutil.rmtree(root, ignore_errors=True)
 
+    def test_clean_verify_dirs_new_root(self):
+        # 新总目录 验证/ 整个拿掉，成品文件不动
+        import shutil
+        import pycbeta.gui.panel as pm
+        root = tempfile.mkdtemp()
+        try:
+            vroot = os.path.join(root, "验证", "T0349 書（验证）")
+            os.makedirs(vroot)
+            with open(os.path.join(vroot, "report.txt"),
+                      "w", encoding="utf-8") as f:
+                f.write("x")
+            keep = os.path.join(root, "T0349 书.docx")
+            with open(keep, "w", encoding="utf-8") as f:
+                f.write("k")
+            removed, errs = pm.clean_verify_dirs(root)
+            self.assertEqual(removed, 1)
+            self.assertEqual(errs, [])
+            self.assertFalse(os.path.isdir(os.path.join(root, "验证")))
+            self.assertTrue(os.path.isfile(keep))
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+    def test_verify_dir_size(self):
+        import shutil
+        import pycbeta.gui.panel as pm
+        root = tempfile.mkdtemp()
+        try:
+            self.assertEqual(pm.verify_dir_size(root), (0, 0))
+            self.assertEqual(pm.verify_dir_size(""), (0, 0))
+            os.makedirs(os.path.join(root, "验证", "T（验证）"),
+                        exist_ok=True)
+            os.makedirs(os.path.join(root, "B（驗證）"), exist_ok=True)
+            with open(os.path.join(root, "验证", "T（验证）", "a.txt"),
+                      "w", encoding="utf-8") as f:
+                f.write("12345")
+            with open(os.path.join(root, "B（驗證）", "b.txt"),
+                      "w", encoding="utf-8") as f:
+                f.write("1234567")
+            total, count = pm.verify_dir_size(root)
+            self.assertEqual(count, 2)
+            self.assertEqual(total, 5 + 7)
+            self.assertEqual(pm._human_size(0), "0 B")
+            self.assertEqual(pm._human_size(2048), "2.0 KB")
+            self.assertEqual(pm._human_size(5 * 1024 * 1024), "5.0 MB")
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+    def test_clean_verify_dirs_custom_root(self):
+        # 自选根：只删其下校验子目录，自选根本身与无关内容保留
+        import shutil
+        import pycbeta.gui.panel as pm
+        root = tempfile.mkdtemp()
+        custom = tempfile.mkdtemp(prefix="vclean-")
+        try:
+            keep_dir = os.path.join(custom, "T0349 書（验证）")
+            os.makedirs(keep_dir)
+            with open(os.path.join(keep_dir, "report.txt"),
+                      "w", encoding="utf-8") as f:
+                f.write("x")
+            other = os.path.join(custom, "misc.txt")
+            with open(other, "w", encoding="utf-8") as f:
+                f.write("keep")
+            removed, errs = pm.clean_verify_dirs(root, custom)
+            self.assertEqual(removed, 1)
+            self.assertEqual(errs, [])
+            self.assertTrue(os.path.isdir(custom))      # 自选根本身保留
+            self.assertTrue(os.path.isfile(other))     # 无关内容保留
+            self.assertFalse(os.path.isdir(keep_dir))
+            total, count = pm.verify_dir_size(root, custom)
+            self.assertEqual((total, count), (4, 1))  # 仅剩无关文件
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+            shutil.rmtree(custom, ignore_errors=True)
+
 
 class TestEngineSingles(unittest.TestCase):
     @classmethod
@@ -2264,6 +2338,57 @@ class TestSourceDialog(unittest.TestCase):
         finally:
             dlg.close()
 
+    def test_io_verify_row_follows_out_dir(self):
+        import shutil
+        import tempfile
+        import pycbeta.gui.panel as P
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PySide6.QtWidgets import QApplication
+        QApplication.instance() or QApplication([])
+        root = tempfile.mkdtemp()
+        try:
+            dlg = P.SourceDialog(out_dir=root)
+            try:
+                want = os.path.join(root, "验证")
+                self.assertEqual(dlg.io_verify_edit.text(), want)
+                self.assertTrue(dlg.io_verify_edit.isReadOnly())
+                self.assertEqual(dlg.io_verify_size.text(), "（尚无校验产物）")
+                os.makedirs(os.path.join(want, "T0349 書（验证）"))
+                with open(os.path.join(want, "T0349 書（验证）",
+                                       "report.txt"),
+                          "w", encoding="utf-8") as f:
+                    f.write("12345")
+                dlg._refresh_verify_info()
+                self.assertIn("5 B", dlg.io_verify_size.text())
+                self.assertIn("1 个文件", dlg.io_verify_size.text())
+                other = tempfile.mkdtemp()
+                try:
+                    dlg.io_out_edit.setText(other)  # 输出改 → 校验目录跟随
+                    self.assertEqual(dlg.io_verify_edit.text(),
+                                     os.path.join(other, "验证"))
+                    self.assertEqual(dlg.io_verify_size.text(),
+                                     "（尚无校验产物）")
+                finally:
+                    shutil.rmtree(other, ignore_errors=True)
+                custom = tempfile.mkdtemp(prefix="vcustom-")
+                try:
+                    os.makedirs(os.path.join(custom, "T（验证）"))
+                    with open(os.path.join(custom, "T（验证）", "r.txt"),
+                              "w", encoding="utf-8") as f:
+                        f.write("1234567")
+                    dlg.path_edits["verify_root"].setText(custom)
+                    self.assertEqual(dlg.io_verify_edit.text(), custom)
+                    self.assertIn("7 B", dlg.io_verify_size.text())
+                    dlg.path_edits["verify_root"].setText("")  # 清空回默认
+                    self.assertEqual(dlg.io_verify_edit.text(),
+                                     os.path.join(other, "验证"))
+                finally:
+                    shutil.rmtree(custom, ignore_errors=True)
+            finally:
+                dlg.close()
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
     def test_accept_clears_unsafe_xml_dir(self):
         saved = self._accept_with(r"X:\p5b", "clear")
         self.assertEqual(saved.get("source", {}).get("xml_dir"), "")
@@ -2616,8 +2741,8 @@ class TestSourceDialog(unittest.TestCase):
         dlg = pm.SourceDialog()
         try:
             keys = [k for k, _ in pm.SOURCE_LABELS]
-            # 路径行：xml_dir + cbeta_ebook（catalog 已钉死内置，不再设行）
-            self.assertEqual(keys, ["xml_dir", "cbeta_ebook"])
+            # 路径行：xml_dir + cbeta_ebook + verify_root（catalog 已钉死内置，不再设行）
+            self.assertEqual(keys, ["xml_dir", "cbeta_ebook", "verify_root"])
             self.assertIn("xml_dir", dlg.path_edits)
             self.assertIn("cbeta_ebook", dlg.path_edits)
             self.assertNotIn("catalog", dlg.path_edits)
@@ -4778,8 +4903,9 @@ class TestVerifyFeedback(unittest.TestCase):
             w.wait(1)
         files = captured[0].split(";")
         from pycbeta.filename import default_output_name
-        vdir = os.path.join(tmp, default_output_name("T0349", "T0349") + "（验证）")
-        report = os.path.join(vdir, "T0349_verify_report.txt")
+        vdir = os.path.join(tmp, "验证",
+                            default_output_name("T0349", "T0349") + "（验证）")
+        report = os.path.join(vdir, "T0349_T0349_校验报告.txt")
         self.assertEqual(files[0], rendered)
         self.assertNotIn(gcmp, files)                # 比较文件不列文件列
         self.assertNotIn(scmp, files)
@@ -4790,6 +4916,14 @@ class TestVerifyFeedback(unittest.TestCase):
         self.assertIn("=== T12n0349.xml", body)
         self.assertIn("[FAIL]", body)
         self.assertIn("缺0/多15", body)
+        jrep = os.path.splitext(report)[0] + ".json"
+        self.assertTrue(os.path.isfile(jrep))       # 机读结论与 txt 配对
+        j = json.load(open(jrep, encoding="utf-8"))
+        self.assertEqual(j["fmts"]["txt"]["verdict"], "fail")
+        self.assertEqual(j["fmts"]["txt"]["extra"], 15)
+        self.assertEqual(j["fmts"]["txt"]["report"],
+                         "T0349_T0349_校验报告.txt")
+        self.assertNotIn(jrep, files)               # JSON 不进文件列
 
     def test_run_appends_convert_report_to_files(self):
         import tempfile
@@ -4810,7 +4944,7 @@ class TestVerifyFeedback(unittest.TestCase):
         w._title_of = lambda x, i, P: ("T0349", "T0349")
         w._out_name_for = lambda *a, **k: "T12n0349.txt"
         name = default_output_name("T0349", "T0349", True)
-        vdir = os.path.join(tmp, name + "（验证）")
+        vdir = os.path.join(tmp, "验证", name + "（验证）")
         os.makedirs(os.path.join(vdir, "txt"), exist_ok=True)
         pfmt = os.path.join(vdir, "txt", f"{name}_转换报告_txt.txt")
 
@@ -4878,8 +5012,27 @@ class TestVerifyFeedback(unittest.TestCase):
         w = BatchWorker([], SimpleNamespace(verify={}, formats=[]), {}, {})
         w._title_t2s = False
         d = w._verify_dir(tmp, "X1077", "准提净业")
-        self.assertEqual(d, os.path.join(tmp, "X1077 准提净业（验证）"))
+        self.assertEqual(d, os.path.join(tmp, "验证", "X1077 准提净业（验证）"))
         self.assertTrue(os.path.isdir(d))
+
+    def test_verify_dir_custom_root(self):
+        from types import SimpleNamespace
+        from pycbeta.gui.__main__ import BatchWorker
+        import tempfile
+        tmp = tempfile.mkdtemp(prefix="gverc-")
+        custom = tempfile.mkdtemp(prefix="gvercc-")
+        w = BatchWorker([], SimpleNamespace(verify={}, formats=[]), {}, {})
+        w._title_t2s = False
+        try:
+            d = w._verify_dir(tmp, "X1077", "准提净业", custom)
+            self.assertEqual(
+                d, os.path.join(custom, "X1077 准提净业（验证）"))
+            self.assertTrue(os.path.isdir(d))
+            self.assertFalse(os.path.exists(os.path.join(tmp, "验证")))
+        finally:
+            import shutil
+            shutil.rmtree(tmp, ignore_errors=True)
+            shutil.rmtree(custom, ignore_errors=True)
 
     def test_batch_verify_one_error_rec(self):
         import tempfile

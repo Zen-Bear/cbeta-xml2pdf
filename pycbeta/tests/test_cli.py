@@ -96,7 +96,7 @@ class TestProcessFileErrors(unittest.TestCase):
 
 class TestProcessFileConvertReport(unittest.TestCase):
     """process_file 转换报告落盘：开关关（裸 args）零副作用；开则写
-    {验证}/{name}_转换报告.txt 并打印 `->` 供 GUI 抓取。"""
+    {验证}/{id 书名}（验证）/{name}_转换报告.txt 并打印 `->` 供 GUI 抓取。"""
 
     def _run(self, d, convert):
         import io
@@ -128,7 +128,8 @@ class TestProcessFileConvertReport(unittest.TestCase):
             s = self._run(d, True)
             self.assertIn("转换报告 ->", s)
             name = default_output_name("T1", "書", True)
-            p = os.path.join(d, f"{name}（验证）", f"{name}_转换报告.txt")
+            p = os.path.join(d, "验证", f"{name}（验证）",
+                             f"{name}_转换报告.txt")
             self.assertTrue(os.path.isfile(p))
             self.assertIn("转换报告", open(p, encoding="utf-8").read())
         finally:
@@ -336,6 +337,84 @@ class TestVerifyOnly(unittest.TestCase):
             self.assertIn("no baseline", s)
             self.assertEqual(rc, 0)
             PF.assert_not_called()
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+    def test_verify_root_config_then_flag_wins(self):
+        import io
+        import json as _json
+        import shutil
+        from contextlib import redirect_stdout
+        from types import SimpleNamespace
+        from unittest import mock
+        from pycbeta.cli import main
+        from pycbeta.filename import default_output_name
+        d = tempfile.mkdtemp()
+        custom = tempfile.mkdtemp(prefix="vrconf-")
+        flagdir = tempfile.mkdtemp(prefix="vrflag-")
+        try:
+            xml = os.path.join(d, "T01n0001.xml")
+            with open(xml, "w", encoding="utf-8") as f:
+                f.write("<TEI/>")
+            gen = os.path.join(
+                d, default_output_name("T0001", None, True) + ".txt")
+            with open(gen, "w", encoding="utf-8") as f:
+                f.write("x")
+            cfgp = os.path.join(d, "cfg.json")
+            with open(cfgp, "w", encoding="utf-8") as f:
+                _json.dump({"verify": {"auto_fetch": False},
+                            "source": {"verify_root": custom}}, f)
+            work = SimpleNamespace(id="T0001", metadata={})
+
+            def _go(extra):
+                out = io.StringIO()
+                with mock.patch("pycbeta.parser.P5Parser") as P, \
+                        mock.patch("pycbeta.verify.work_juan_numbers",
+                                   return_value=[]), \
+                        mock.patch("pycbeta.cli.process_file"):
+                    P.return_value.parse.return_value = work
+                    with redirect_stdout(out):
+                        return main(["--config", cfgp, "-i", xml,
+                                     "-f", "txt", "--verify-only", *extra])
+
+            name = default_output_name("T0001", None, True) + "（验证）"
+            self.assertEqual(_go([]), 0)
+            self.assertTrue(os.path.isfile(
+                os.path.join(custom, name, "T0001_校验报告.txt")))
+            self.assertFalse(os.path.exists(os.path.join(d, "验证")))
+            self.assertEqual(_go(["--verify-root", flagdir]), 0)
+            self.assertTrue(os.path.isfile(
+                os.path.join(flagdir, name, "T0001_校验报告.txt")))
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+            shutil.rmtree(custom, ignore_errors=True)
+            shutil.rmtree(flagdir, ignore_errors=True)
+
+    def test_verify_only_writes_report_json(self):
+        import json as _json
+        import shutil
+        from pycbeta.filename import default_output_name
+        d = tempfile.mkdtemp()
+        try:
+            xml = os.path.join(d, "T01n0001.xml")
+            with open(xml, "w", encoding="utf-8") as f:
+                f.write("<TEI/>")
+            gen = os.path.join(
+                d, default_output_name("T0001", None, True) + ".txt")
+            with open(gen, "w", encoding="utf-8") as f:
+                f.write("x")
+            rc, s, PF, _ = self._run(d, xml)
+            self.assertEqual(rc, 0)
+            vdir = os.path.join(
+                d, "验证",
+                default_output_name("T0001", None, True) + "（验证）")
+            self.assertTrue(os.path.isfile(
+                os.path.join(vdir, "T0001_校验报告.txt")))
+            jp = os.path.join(vdir, "report.json")
+            self.assertTrue(os.path.isfile(jp))
+            j = _json.load(open(jp, encoding="utf-8"))
+            self.assertEqual(j["fmts"]["txt"]["verdict"], "undetermined")
+            self.assertEqual(j["fmts"]["txt"]["reason"], "no_baseline")
+            self.assertEqual(j["fmts"]["txt"]["report"], "T0001_校验报告.txt")
         finally:
             shutil.rmtree(d, ignore_errors=True)
 

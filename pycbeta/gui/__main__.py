@@ -204,6 +204,11 @@ class BatchWorker(QThread):
             snapshot = write_temp_presets(presets, self.opts)
             tmpcfg = write_temp_run(run, snapshot)
             verify_on = bool(self.opts.verify.get("enabled"))
+            try:
+                self._verify_custom = (
+                    (presets.get("source") or {}).get("verify_root") or "")
+            except Exception:
+                self._verify_custom = ""
             want_report = bool(
                 (getattr(self.opts, "output", None) or {}).get("convert_report",
                                                                False))
@@ -241,12 +246,14 @@ class BatchWorker(QThread):
                     if row_wid is None:
                         row_wid, row_title = wid, title
                     if verify_on and verify_dir is None:
-                        # 校验产物独立成 {(id) 书名}（验证）/ 子目录（保持 {fmt}/ 结构）
-                        verify_dir = self._verify_dir(out_dir, wid, title)
+                        # 校验产物独立成 {(id) 书名}（验证）/ 子目录（保持 {fmt}/ 结构）；
+                        # 根：source.verify_root 自选优先，否则 {输出}/验证
+                        verify_dir = self._verify_dir(out_dir, wid, title,
+                                                      self._verify_custom)
                     if want_report and row_report_dir is None and row_wid:
                         # 报告目录与校验报告同处（不依赖校验开关）
-                        row_report_dir = self._verify_dir(out_dir, row_wid,
-                                                          row_title)
+                        row_report_dir = self._verify_dir(
+                            out_dir, row_wid, row_title, self._verify_custom)
                         from pycbeta.filename import default_output_name
                         row_report_name = default_output_name(
                             row_wid, row_title, getattr(self, "_title_t2s", True))
@@ -307,10 +314,18 @@ class BatchWorker(QThread):
                                 row_produced.append(_merged)
                     except Exception as e:
                         self.log.emit(f"convert report fail: {e}")
-                # 验证总报告：每行一份，放该行（验证）子目录，排文件列最后
+                # 验证总报告：每行一份 `{id}_{书名}_校验报告.txt`，放该行
+                # （验证）子目录，排文件列最后（JSON 同名配对，不进文件列）
                 if verify_on and row_ver and row_stem:
-                    report = os.path.join(
-                        verify_dir or out_dir, f"{row_stem}_verify_report.txt")
+                    from pycbeta.filename import verify_report_name as _vrn
+                    if row_wid:
+                        _rep_base = _vrn(
+                            row_wid, row_title,
+                            getattr(self, "_title_t2s", True))
+                    else:
+                        _rep_base = _vrn(row_stem, "", True)
+                    report = os.path.join(verify_dir or out_dir,
+                                          _rep_base + ".txt")
                     try:
                         vv = self.opts.verify
                         lines = format_verify_report(
@@ -323,6 +338,36 @@ class BatchWorker(QThread):
                             row_produced.append(report)
                     except Exception as e:
                         self.log.emit(f"verify report fail: {e}")
+                    # 机读结论（指纹提案 §4）：与 txt 配对，不进文件列；失败只记日志
+                    try:
+                        import json as _json
+                        from pycbeta.verify import build_report_json as _v_json
+                        vv = self.opts.verify
+                        _recs = []
+                        for _r in row_ver:
+                            if not isinstance(_r, dict):
+                                continue
+                            _c = dict(_r)
+                            _c["fmt"] = str(_c.get("fmt") or "").split(
+                                "→")[0].strip() or "?"
+                            _recs.append(_c)
+                        _j = _v_json(
+                            row_wid or row_stem, _recs, config_path=tmpcfg,
+                            requested_formats=list(self.opts.formats),
+                            max_diff=int(vv.get("maxDiff", 10) or 10),
+                            diff_lines=int(vv.get("diffLines", 5) or 5),
+                            t2s=True if getattr(self.opts, "t2s",
+                                                False) else None,
+                            engine=getattr(self.opts, "engine", None),
+                            vertical=bool(getattr(self.opts, "vertical",
+                                                  False)),
+                            report_name=os.path.basename(report))
+                        _jp = os.path.splitext(report)[0] + ".json"
+                        with open(_jp, "w", encoding="utf-8") as _f:
+                            _json.dump(_j, _f, ensure_ascii=False,
+                                       sort_keys=True, indent=1)
+                    except Exception as e:
+                        self.log.emit(f"verify report json fail: {e}")
                 if row_produced:
                     files = list(dict.fromkeys(row_produced))
                     # 转换报告排文件列最后（稳定排序，其余保持原序）
@@ -444,12 +489,17 @@ class BatchWorker(QThread):
             self._row_renames.extend(renames)
         return None if final == default else final
 
-    def _verify_dir(self, out_dir, wid, title):
-        """校验产物子目录 `{输出}/{id 书名}（验证）/`（内部保持 {fmt}/ 结构）。"""
+    def _verify_dir(self, out_dir, wid, title, verify_root=""):
+        """校验产物子目录 `{校验根}/{id 书名}（验证）/`（内部保持 {fmt}/ 结构）。
+        校验根：自选（source.verify_root）优先，否则 {输出}/验证。"""
         from pycbeta.filename import default_output_name
+        from pycbeta.verify import default_verify_root
         name = default_output_name(
             wid or "", title, getattr(self, "_title_t2s", True))
-        path = os.path.join(out_dir, f"{name}（验证）")
+        custom = (verify_root or "").strip()
+        root = os.path.abspath(custom) if custom \
+            else default_verify_root(out_dir)
+        path = os.path.join(root, f"{name}（验证）")
         os.makedirs(path, exist_ok=True)
         return path
 

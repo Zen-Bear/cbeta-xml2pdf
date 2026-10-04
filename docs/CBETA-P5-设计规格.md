@@ -427,6 +427,7 @@ PDF 专属           : --vertical  --engine{chromium,docx2pdf,prince,weasyprint}
 - 单文件输入、无 `-o`：源目录生成**同名文件+扩展名**（html 生成 `<同名>_html/` 目录）
 - `-o` 以格式扩展名结尾：视为输出文件；`-o` 为目录：视为输出目录，文件名 = `{佛典編號 书名}.{ext}`（书名跟随 `source.title_t2s`）
 - 目录输入：`os.walk` 逐文件处理
+- 同一 work id 多个源卷（如 `TX18n0011.xml` / `TX19n0011.xml` → work id 均为 `TX0011`）：整文件不合并，各按自家 `title level="m"` 独立命名渲染（如 `TX0011 …宗依论（上）.docx` 与 `TX0011 …宗依论（中、下）.docx`），互不顶替；仅碎片文件（`merge.split_paths` 分组）才合册
 
 `--page` 同时作用于 docx（`w:pgSz` twips）与 pdf（`@page`）；docx 支持脚注/尾注双模式（OOXML 脚注 or 文末「注释」节）。
 

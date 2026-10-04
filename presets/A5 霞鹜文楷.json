@@ -28,7 +28,7 @@
         "left": 25.4
       },
       "body_font_size": "12pt",
-      "body_line_height": "1.5",
+      "body_line_height": "1.2",
       "custom_margins": {
         "top": 15.0,
         "bottom": 20.0,
@@ -237,9 +237,13 @@
       "duplex": false,
       "juan": true,
       "juan_first": false,
-      "mulu_level1": true,
       "pb": false,
-      "tei": true
+      "tei": true,
+      "mulu_levels": [
+        1
+      ],
+      "mulu_smart_merge": true,
+      "mulu_smart_min_chars": 400
     },
     "series_title": {
       "enabled": true
@@ -249,12 +253,25 @@
     "show_body_siddham": true,
     "note_inline_brackets": "fullwidth",
     "corr_cbeta": false,
-    "siddham_text": false
+    "siddham_text": false,
+    "pre_dedent": false,
+    "pre_dedent_spaces": 4,
+    "title_smart_wrap": true,
+    "convert_report": false
   },
   "source": {
     "xml_dir": "",
-    "cbeta_ebook": "",
-    "title_t2s": true
+    "cbeta_ebook": "E:/dev/cbeta/xml",
+    "title_t2s": true,
+    "baselines": {
+      "txt": "",
+      "txt_notes": "E:\\CBETA\\2026r2\\cbeta-text-with-notes",
+      "docx": "E:\\CBETA\\2026r2\\cbeta_docx_2026r2",
+      "epub": "E:\\CBETA\\2026r2\\cbeta_epub_2026r2",
+      "pdf": "E:\\CBETA\\2026r2\\cbeta_pdf_2026r2"
+    },
+    "baselines_root": "E:/CBETA/2026r2",
+    "out_dir": "E:\\dev\\cbeta\\xml2pdf\\out"
   },
   "downloads": {
     "xml": "https://raw.githubusercontent.com/cbeta-org/xml-p5/master/{canon}/{canon}{vol}/{file}",
@@ -287,7 +304,7 @@
       "〕"
     ],
     "repeat": "page",
-    "file": ""
+    "file": "E:\\dev\\cbeta\\xml2pdf\\pycbeta\\data\\annotations.txt"
   },
   "formats": [
     "pdf",

@@ -673,24 +673,102 @@ class DataUpdateDialog(QDialog):
         self.status.setText("；".join(format_report(report or [])) or "无更新项")
 
 
-def clean_verify_dirs(out_dir):
-    """删除 `out_dir` 下的校验产物目录 `*（验证）`/`*（驗證）`（可重生成的中间产物）。
+def clean_verify_dirs(out_dir, verify_root=None):
+    """删除 `out_dir` 下的校验产物（可重生成的中间产物）：
+    旧平铺 `*（验证）`/`*（驗證）` + 生效校验根。
+    默认根（`{输出}/验证`）整树删；用户自选根只删其下 `*（验证）` 子目录
+    （不动自选根本身及无关内容）。
 
-    返回 (删除数, 失败列表[短说明])。目录不存在视为 0。
+    返回 (删除数, 失败列表[短说明])。目录不存在/空视为 0。
     """
     import glob as _glob
     import shutil as _sh
+    from pycbeta.verify import default_verify_root as _dvr
+    if not (out_dir or "").strip() and not (verify_root or "").strip():
+        return 0, []
     removed, errs = 0, []
-    for pat in ("*（验证）", "*（驗證）"):
-        for d in _glob.glob(os.path.join(out_dir or "", pat)):
-            if not os.path.isdir(d):
-                continue
-            try:
-                _sh.rmtree(d)
-                removed += 1
-            except OSError as e:
-                errs.append(f"{os.path.basename(d)}: {e}")
+    out = (out_dir or "").strip()
+    if out:
+        for pat in ("*（验证）", "*（驗證）"):
+            for d in _glob.glob(os.path.join(out, pat)):
+                if not os.path.isdir(d):
+                    continue
+                try:
+                    _sh.rmtree(d)
+                    removed += 1
+                except OSError as e:
+                    errs.append(f"{os.path.basename(d)}: {e}")
+    try:
+        custom = (verify_root or "").strip()
+        default = _dvr(out) if out else ""
+        eff = os.path.abspath(custom) if custom else default
+    except Exception:
+        eff, default, custom = "", "", ""
+    if not eff or not os.path.isdir(eff):
+        return removed, errs
+    is_default = (not custom) or (
+        bool(default) and os.path.abspath(eff) == os.path.abspath(default))
+    if not is_default:
+        # 自选根：只删其下校验子目录
+        for pat in ("*（验证）", "*（驗證）"):
+            for d in _glob.glob(os.path.join(eff, pat)):
+                if not os.path.isdir(d):
+                    continue
+                try:
+                    _sh.rmtree(d)
+                    removed += 1
+                except OSError as e:
+                    errs.append(f"{os.path.basename(d)}: {e}")
+        return removed, errs
+    try:
+        kids = [d for pat in ("*（验证）", "*（驗證）")
+                for d in _glob.glob(os.path.join(eff, pat))
+                if os.path.isdir(d)]
+        _sh.rmtree(eff)
+        removed += len(kids) or 1
+    except OSError as e:
+        errs.append(f"验证: {e}")
     return removed, errs
+
+
+def _human_size(num_bytes):
+    """字节数 → 人读串（B/KB/MB/GB/TB，一位小数；B 取整）。"""
+    n = float(max(0, num_bytes or 0))
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if n < 1024 or unit == "TB":
+            break
+        n /= 1024
+    return f"{int(n)} {unit}" if unit == "B" else f"{n:.1f} {unit}"
+
+
+def verify_dir_size(out_dir, verify_root=None):
+    """校验产物占盘：生效校验根（自选或 {输出}/验证）+ 旧平展 `*（验证）`，
+    返回 (bytes, files)。只统计文件大小；不存在/空 → (0, 0)；不抛异常。"""
+    import glob as _glob
+    from pycbeta.verify import default_verify_root as _dvr
+    total, count = 0, 0
+    roots = []
+    out = (out_dir or "").strip()
+    try:
+        custom = (verify_root or "").strip()
+        eff = os.path.abspath(custom) if custom else (_dvr(out) if out else "")
+    except Exception:
+        eff = ""
+    if eff:
+        roots.append(eff)
+    if out:
+        for pat in ("*（验证）", "*（驗證）"):
+            roots += [d for d in _glob.glob(os.path.join(out, pat))
+                      if os.path.isdir(d)]
+    for r in roots:
+        for dp, _dn, fns in os.walk(r):
+            for fn in fns:
+                try:
+                    total += os.path.getsize(os.path.join(dp, fn))
+                    count += 1
+                except OSError:
+                    continue
+    return total, count
 
 
 class XmlOptionsPanel(QWidget):
@@ -1615,7 +1693,7 @@ class XmlOptionsPanel(QWidget):
         self.convert_report_box.setToolTip(
             "output.convert_report（默认开）：记录渲染期间的特殊处理与对原文的改动"
             "（字体替换/缺字/预排去缩进/标题折行/去标题 No./忽略脏数据/注音待审等），"
-            "落 {输出}/{id 书名}（验证）/{id 书名}_转换报告.txt，与校验报告同处")
+            "落 {输出}/验证/{id 书名}（验证）/{id 书名}_转换报告.txt，与校验报告同处")
         _vrow = QHBoxLayout()
         _vrow.setContentsMargins(0, 0, 0, 0)
         _vrow.setSpacing(18)
@@ -1636,10 +1714,17 @@ class XmlOptionsPanel(QWidget):
         self.autofetch_box = self._check("官方文档缺失自动下载", checked=True)
         self.scope_box = self._check("按卷限定官方文档", checked=True)
         form.addRow("", self.autofetch_box)
+        _af_hint = self._gray_hint("（首选基线缺失时自动下载官方文档）")
+        _af_hint.setContentsMargins(20, 0, 0, 0)
+        form.addRow("", _af_hint)
         form.addRow("", self.scope_box)
+        _sj_hint = self._gray_hint("（只用 XML 实际覆盖卷的官方 _NNN 文件）")
+        _sj_hint.setContentsMargins(20, 0, 0, 0)
+        form.addRow("", _sj_hint)
         self.clean_verify_btn = QPushButton("清理校验产物…")
         self.clean_verify_btn.setToolTip(
-            "删除输出目录下的「*（验证）」校验中间产物（正式比对档/compare/报告）；"
+            "删除输出目录下的校验中间产物（旧 *（验证）/ 新 验证/ 总目录："
+            "正式比对档/compare/报告）；"
             "可重生成，不影响成品")
         self.clean_verify_btn.clicked.connect(self._on_clean_verify)
         form.addRow("", self.clean_verify_btn)
@@ -1665,13 +1750,29 @@ class XmlOptionsPanel(QWidget):
                                     f"目录不存在：{out_dir}")
             return
         import glob as _glob
+        try:
+            _custom = (((self._presets or {}).get("source") or {}).get(
+                "verify_root") or "").strip() or None
+        except Exception:
+            _custom = None
         dirs = []
         for pat in ("*（验证）", "*（驗證）"):
             dirs += [d for d in _glob.glob(os.path.join(out_dir, pat))
                      if os.path.isdir(d)]
+        _vroot = os.path.join(out_dir, "验证")
+        if os.path.isdir(_vroot):
+            for pat in ("*（验证）", "*（驗證）"):
+                dirs += [d for d in _glob.glob(os.path.join(_vroot, pat))
+                         if os.path.isdir(d)]
+        if _custom:
+            _ceff = os.path.abspath(_custom)
+            if os.path.isdir(_ceff):
+                for pat in ("*（验证）", "*（驗證）"):
+                    dirs += [d for d in _glob.glob(os.path.join(_ceff, pat))
+                             if os.path.isdir(d)]
         if not dirs:
             QMessageBox.information(self, "清理校验产物",
-                                    "未发现校验产物目录（*（验证））。")
+                                    "未发现校验产物目录（*（验证）/验证/）。")
             return
         names = "\n".join("  " + os.path.basename(d) for d in dirs[:12])
         more = f"\n  …（共 {len(dirs)} 个）" if len(dirs) > 12 else ""
@@ -1679,10 +1780,10 @@ class XmlOptionsPanel(QWidget):
                 self, "清理校验产物",
                 f"将删除以下 {len(dirs)} 个校验产物目录（不可撤销）：\n"
                 f"{names}{more}\n\n位置：{out_dir}\n删除后下次校验会重新生成。",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No) != QMessageBox.Yes:
+                 QMessageBox.Yes | QMessageBox.No,
+                 QMessageBox.No) != QMessageBox.Yes:
             return
-        removed, errs = clean_verify_dirs(out_dir)
+        removed, errs = clean_verify_dirs(out_dir, _custom)
         msg = f"已删除 {removed} 个校验产物目录。"
         if errs:
             msg += "\n失败：\n" + "\n".join(errs[:5])
@@ -2171,6 +2272,7 @@ class XmlOptionsPanel(QWidget):
 SOURCE_LABELS = [
     ("xml_dir", "本地 XML 候选源（只读；角色同远端 URL）"),
     ("cbeta_ebook", "XML及电子书（官方下载保存平展目录）"),
+    ("verify_root", "校验目录（为空=跟随输出目录，即 {输出}/验证）"),
 ]
 # catalog 已钉死内置（fetch.resolve_catalog），不再接受自定义：固定为程序内
 # cbeta/data/sutra_mapping.txt，随「更新官方数据」刷新，此处不设编辑行。
@@ -2294,6 +2396,46 @@ class SourceDialog(QDialog):
         out_lab = QLabel("source.out_dir（输出成品目录，存入配置）")
         out_lab.setStyleSheet("color: gray")
         tio.addWidget(out_lab)
+        tio.addWidget(QLabel("校验目录"))
+        row_vroot = QHBoxLayout()
+        vr_edit = self.path_edits["verify_root"]
+        vr_browse = QPushButton("浏览…")
+        vr_browse.clicked.connect(lambda _v, e=vr_edit: self._browse_dir(e))
+        vr_clear = QPushButton("清空")
+        vr_clear.setToolTip("清空=跟随输出目录（{输出}/验证）")
+        vr_clear.clicked.connect(lambda _v, e=vr_edit: e.setText(""))
+        row_vroot.addWidget(vr_edit, 1)
+        row_vroot.addWidget(vr_browse)
+        row_vroot.addWidget(vr_clear)
+        tio.addLayout(row_vroot)
+        vr_lab = QLabel("source.verify_root（为空=跟随输出目录，即 {输出}/验证）")
+        vr_lab.setStyleSheet("color: gray")
+        tio.addWidget(vr_lab)
+        row_ver = QHBoxLayout()
+        self.io_verify_edit = QLineEdit()
+        self.io_verify_edit.setReadOnly(True)
+        self.io_verify_edit.setToolTip("生效校验根（自选或 {输出}/验证）")
+        ver_refresh = QPushButton("刷新")
+        ver_refresh.setToolTip("重新统计校验目录占用")
+        ver_refresh.clicked.connect(lambda _v: self._refresh_verify_info())
+        ver_open = QPushButton("打开目录")
+        ver_open.clicked.connect(lambda _v: self._open_verify_dir())
+        ver_clean = QPushButton("删除校验产物…")
+        ver_clean.setToolTip("删除生效校验根下的校验中间产物（可重生成）")
+        ver_clean.clicked.connect(lambda _v: self._on_clean_verify_io())
+        row_ver.addWidget(self.io_verify_edit, 1)
+        row_ver.addWidget(ver_refresh)
+        row_ver.addWidget(ver_open)
+        row_ver.addWidget(ver_clean)
+        tio.addLayout(row_ver)
+        self.io_verify_size = QLabel()
+        self.io_verify_size.setStyleSheet("color: gray")
+        tio.addWidget(self.io_verify_size)
+        self.io_out_edit.textChanged.connect(
+            lambda _t: self._refresh_verify_info())
+        vr_edit.textChanged.connect(
+            lambda _t: self._refresh_verify_info())
+        self._refresh_verify_info()
         tio.addWidget(self.title_t2s_box)
         t2s_lab = QLabel(
             "source.title_t2s：工作目录与输出成品文件名中的书名是否转简体"
@@ -2591,6 +2733,80 @@ class SourceDialog(QDialog):
         d = self.io_out_edit.text().strip() or os.path.join(os.getcwd(), "out")
         os.makedirs(d, exist_ok=True)
         QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.abspath(d)))
+
+    def _effective_verify_root(self):
+        """生效校验根：自选（source.verify_root）优先，否则 {输出}/验证。"""
+        try:
+            custom = self.path_edits["verify_root"].text().strip()
+        except (AttributeError, RuntimeError, KeyError):
+            custom = ""
+        if custom:
+            return os.path.abspath(custom)
+        try:
+            from pycbeta.verify import default_verify_root
+            return default_verify_root(self.io_out_edit.text().strip())
+        except Exception:
+            return ""
+
+    def _refresh_verify_info(self):
+        """校验目录行刷新：生效路径 + 占盘重统（静默失败保底）。"""
+        try:
+            vroot = self._effective_verify_root()
+        except Exception:
+            vroot = ""
+        try:
+            self.io_verify_edit.setText(vroot)
+        except (AttributeError, RuntimeError):
+            return
+        try:
+            custom = self.path_edits["verify_root"].text().strip()
+            total, count = verify_dir_size(self.io_out_edit.text().strip(),
+                                           custom or None)
+        except Exception:
+            total, count = 0, 0
+        try:
+            if count:
+                self.io_verify_size.setText(
+                    f"占用 {_human_size(total)}（{count} 个文件）")
+            else:
+                self.io_verify_size.setText("（尚无校验产物）")
+        except (AttributeError, RuntimeError):
+            pass
+
+    def _open_verify_dir(self):
+        try:
+            d = self.io_verify_edit.text().strip()
+        except (AttributeError, RuntimeError):
+            return
+        if d and os.path.isdir(d):
+            QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.abspath(d)))
+
+    def _on_clean_verify_io(self):
+        """输入输出栏一键删除：带占用确认，删完刷新（只清生效根及旧平展）。"""
+        out_dir = self.io_out_edit.text().strip()
+        try:
+            custom = self.path_edits["verify_root"].text().strip() or None
+        except (AttributeError, RuntimeError, KeyError):
+            custom = None
+        total, count = verify_dir_size(out_dir, custom)
+        if not count:
+            QMessageBox.information(self, "删除校验产物",
+                                    "尚无校验产物，无需删除。")
+            return
+        if QMessageBox.question(
+                self, "删除校验产物",
+                f"将删除输出目录下的校验产物（{count} 个文件，"
+                f"占用 {_human_size(total)}，不可撤销）：\n  {out_dir}\n\n"
+                "删除后下次校验会重新生成。",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No) != QMessageBox.Yes:
+            return
+        removed, errs = clean_verify_dirs(out_dir, custom)
+        msg = f"已删除 {removed} 个校验产物目录。"
+        if errs:
+            msg += "\n失败：\n" + "\n".join(errs[:5])
+        QMessageBox.information(self, "删除校验产物", msg)
+        self._refresh_verify_info()
 
     def _browse_dir(self, edit):
         d = QFileDialog.getExistingDirectory(self, "选择目录", edit.text().strip() or "")

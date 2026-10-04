@@ -105,6 +105,21 @@ def default_output_name(work_id: str, title: str, title_t2s: bool = True) -> str
     return sanitize(f"{work_id} {title}".strip() if title else (work_id or "UNKNOWN"))
 
 
+def verify_report_name(work_id: str, title: str, title_t2s: bool = True) -> str:
+    """校验报告基名（不含后缀）：`{workid}_{书名}_校验报告`
+    （无书名 → `{workid}_校验报告`；下划线分隔；title_t2s/净化规则与
+    default_output_name 一致，最后做 Windows 净化）。"""
+    title = (title or "").strip()
+    if title and title_t2s:
+        try:
+            from .simplify import simplify_text
+            title = simplify_text(title)
+        except Exception:
+            pass
+    core = f"{work_id}_{title}" if title else (work_id or "UNKNOWN")
+    return sanitize(f"{core}_校验报告")
+
+
 def _claim(taken, emitted, out_dir, name):
     """认领一名：已登记（同轮重放/同文件重复）原样返回，不 churn taken；
     否则占用（仍撞则 _2 后缀），返回最终名。"""

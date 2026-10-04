@@ -86,5 +86,23 @@ class TestDefaultOutputName(unittest.TestCase):
         self.assertEqual(default_output_name("T1", "a/b:c", False), "T1 a／b：c")
 
 
+class TestVerifyReportName(unittest.TestCase):
+    def test_id_title(self):
+        from pycbeta.filename import verify_report_name
+        self.assertEqual(verify_report_name("T0349", "彌勒菩薩所問本願經", False),
+                         "T0349_彌勒菩薩所問本願經_校验报告")
+
+    def test_no_title(self):
+        from pycbeta.filename import verify_report_name
+        self.assertEqual(verify_report_name("T0001", "", True),
+                         "T0001_校验报告")
+
+    def test_sanitized(self):
+        from pycbeta.filename import verify_report_name
+        got = verify_report_name("T1", "a/b:c", False)
+        self.assertEqual(got, "T1_a／b：c_校验报告")
+        self.assertNotIn("/", got)
+
+
 if __name__ == "__main__":
     unittest.main()
