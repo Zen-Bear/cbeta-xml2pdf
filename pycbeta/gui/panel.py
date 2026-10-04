@@ -965,7 +965,9 @@ class XmlOptionsPanel(QWidget):
         form.addRow("", _srow)
         _shint = self._gray_hint(
             "（经藏名 title level=\"s\" 仅印在首页左上角；字体/字号走 CSS p.series-title）")
-        _shint.setContentsMargins(20, 0, 0, 0)
+        # 与「纸张绑定」说明同款：不折行 + 固定单行高，左端对齐，避免大段留白
+        _shint.setWordWrap(False)
+        _shint.setFixedHeight(self.fontMetrics().lineSpacing())
         form.addRow("", _shint)
         return w
 
