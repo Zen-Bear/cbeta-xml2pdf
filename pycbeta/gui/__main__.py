@@ -213,8 +213,10 @@ class BatchWorker(QThread):
                 (getattr(self.opts, "output", None) or {}).get("convert_report",
                                                                False))
             n_fmt = len(self.opts.formats)
-            # 校验与渲染各占一格进度；进度条不再在校验期间停死
-            total_units = sum(n_fmt for _j in self.jobs) * (2 if verify_on else 1)
+            _factor = 2 if verify_on else 1
+            # 校验与渲染各占一格进度；进度条不再在校验期间停死。
+            # 每 job 先按 1 个 XML 预算，解析后再按实际 XML 数校正（见下）。
+            total_units = sum(n_fmt for _j in self.jobs) * _factor
             done_units = 0
             used_names = {}  # 本轮命名状态（多源同名统一回退，与 CLI 同规则）
             for idx, job in enumerate(self.jobs):
@@ -223,7 +225,15 @@ class BatchWorker(QThread):
                     continue
                 xmls = self._resolve(job, idx, fetch, presets)
                 if not xmls:
+                    # 该 job 无产物：扣除预算，否则进度永不达 100%
+                    total_units -= n_fmt * _factor
+                    self.total_progress.emit(done_units, max(total_units, 1))
                     continue
+                if len(xmls) != 1:
+                    # 多册经一个 job 展开多个 XML（如 TX0001→TX01n0001/TX02n0001）：
+                    # 按实际 XML 数补足预算，避免提前冲到 100% 后干等
+                    total_units += (len(xmls) - 1) * n_fmt * _factor
+                    self.total_progress.emit(done_units, max(total_units, 1))
                 row_ver = []      # 本行校验结果
                 row_produced = []  # 本行全部产物（跨 xml 累积，行末一次发文件列）
                 render_errors = []

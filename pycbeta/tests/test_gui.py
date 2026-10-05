@@ -5030,6 +5030,75 @@ class TestVerifyFeedback(unittest.TestCase):
         self.assertTrue(os.path.isfile(merged))
         self.assertIn("字体替换", open(merged, encoding="utf-8").read())
 
+    def test_progress_total_accounts_multi_xml(self):
+        # 多册经一个 job 展开多个 XML：进度总数须按实际 XML 数校正，
+        # 否则跑完第一个 XML 就冲到 100% 后干等（TX0001 两个 XML 实测）。
+        import tempfile
+        from types import SimpleNamespace
+        import pycbeta.gui.__main__ as M
+        tmp = tempfile.mkdtemp(prefix="gprog-")
+        x1 = os.path.join(tmp, "TX01n0001.xml")
+        x2 = os.path.join(tmp, "TX02n0001.xml")
+        rendered = os.path.join(tmp, "TX0001.txt")
+        for p in (x1, x2, rendered):
+            with open(p, "w", encoding="utf-8") as f:
+                f.write("x")
+        opts = SimpleNamespace(verify={"enabled": False}, formats=["txt"],
+                               t2s=False, output={"convert_report": False})
+        w = M.BatchWorker([{"id": "TX0001"}], opts,
+                          {"presets": {}, "run": {}, "out": tmp}, {})
+        w._resolve = lambda job, idx, fetch, presets: [x1, x2]
+        w._title_of = lambda x, i, P: ("TX0001", "TX0001")
+        w._out_name_for = lambda *a, **k: "TX0001.txt"
+        w._render_one = lambda x, fmt, o, cfg, out_name=None: (True, [rendered])
+        orig = (M.write_temp_presets, M.write_temp_run)
+        M.write_temp_presets = lambda presets, opts: os.path.join(tmp, "p.json")
+        M.write_temp_run = lambda run, snap: os.path.join(tmp, "r.json")
+        progress = []
+        w.total_progress.connect(lambda d, t: progress.append((d, t)))
+        try:
+            w.run()
+        finally:
+            M.write_temp_presets, M.write_temp_run = orig
+            w.wait(1)
+        self.assertTrue(progress)
+        # 总数校正为 2（2 XML × 1 格式），且全程不会 done > total（不提前 100%）
+        self.assertEqual(progress[-1], (2, 2))
+        self.assertTrue(all(d <= t for d, t in progress), progress)
+
+    def test_progress_total_skips_empty_job(self):
+        # job 解析为空：扣除预算，避免进度永不达 100%
+        import tempfile
+        from types import SimpleNamespace
+        import pycbeta.gui.__main__ as M
+        tmp = tempfile.mkdtemp(prefix="gprog2-")
+        xml = os.path.join(tmp, "T1.xml")
+        rendered = os.path.join(tmp, "T1.txt")
+        for p in (xml, rendered):
+            with open(p, "w", encoding="utf-8") as f:
+                f.write("x")
+        opts = SimpleNamespace(verify={"enabled": False}, formats=["txt"],
+                               t2s=False, output={"convert_report": False})
+        w = M.BatchWorker([{"id": "A"}, {"id": "B"}], opts,
+                          {"presets": {}, "run": {}, "out": tmp}, {})
+        w._resolve = (lambda job, idx, fetch, presets:
+                      [] if job["id"] == "A" else [xml])
+        w._title_of = lambda x, i, P: ("B", "B")
+        w._out_name_for = lambda *a, **k: "T1.txt"
+        w._render_one = lambda x, fmt, o, cfg, out_name=None: (True, [rendered])
+        orig = (M.write_temp_presets, M.write_temp_run)
+        M.write_temp_presets = lambda presets, opts: os.path.join(tmp, "p.json")
+        M.write_temp_run = lambda run, snap: os.path.join(tmp, "r.json")
+        progress = []
+        w.total_progress.connect(lambda d, t: progress.append((d, t)))
+        try:
+            w.run()
+        finally:
+            M.write_temp_presets, M.write_temp_run = orig
+            w.wait(1)
+        self.assertEqual(progress[-1], (1, 1))
+        self.assertTrue(all(d <= t for d, t in progress), progress)
+
     def test_verify_one_pdf_delegates_to_source(self):
         from types import SimpleNamespace
         from pycbeta.gui.__main__ import BatchWorker
