@@ -619,8 +619,8 @@
   - **待办**：创建 `v0.1` Release，并上传 `engines/cbetapdf.exe`、`engines/minipdf.exe` 作附件（本机 `engines/` 目录下）；上传前先实测两 exe 可用
   - 发布页：https://github.com/Zen-Bear/cbeta-xml2pdf/releases/new
 
-- [ ] **待办** 开校验时基线目录被重复递归扫描（2026-10-05 用户立项；暂不做）
-  - 实测：`find_official` 对已配置基线根（如 `E:\CBETA\2026r2\cbeta-text-with-notes`）递归 `**` 扫描 **~1.35s/次**（稳定，不随缓存变快）；`verify_fingerprint` **~1.85s/次**。`build_report_json` 自己扫一遍 5 种基线，又对每个请求格式各调一次 `verify_fingerprint` → **(1+N) 次大目录扫描**（N=6 时 ~13s）；`verify_one` 每个格式也各扫一遍。
-  - 影响：仅"转换后校验"打开时（`report.json` 写盘 + 校验本身变慢）；与"进度条提前 100%"无关（后者是多 XML job 的进度总数问题，已修）。
-  - 建议修法：`build_report_json` 扫一次得 `official`，经内部参数（如 `verify_fingerprint(..., _official=...)`）复用给每个格式；`canonical_verify_config`/`_impl_digest` 各算一次复用。更大收益是"行级共享"（`verify_one` 与 `build_report_json` 共用一次发现）。
-  - 未做原因：用户当前不开校验，暂不受影响。
+- [x] **已完成** 开校验时基线目录被重复递归扫描（2026-10-05 立项并落地）
+  - 实测（优化前）：`find_official` 对已配置基线根（如 `E:\CBETA\2026r2\cbeta-text-with-notes`）递归 `**` 扫描 **~1.35s/次**；`verify_fingerprint` **~1.85s/次**。`build_report_json` 自己扫一遍 5 种基线，又对每个请求格式各调一次 `verify_fingerprint` → **(1+N) 次大目录扫描**（N=6 时 ~13s）。
+  - 修法：抽 `_official_superset`/`_fp_roots_cfg`；`build_report_json` 只扫一次 `official`，连同 `presets`/`canon`/`impl` 经内部 `_ctx` 传给每个 `verify_fingerprint`（`_verify_fingerprint_inner` 检测到就跳过重扫/重算）。实测 3 格式 `build_report_json` 由 ~7s 降到 ~2.6s；指纹与独立调用逐字一致。
+  - 单测：`test_report_json.TestBuildReportJson.test_discovery_reused_across_formats`（计数 `find_official` ≤5 次 = 5 kind × 1，而非 (1+N)×5）。
+  - 未做：`verify_one` 与 `build_report_json` 的"行级共享"（两者仍各扫一次）；收益较小，暂不。

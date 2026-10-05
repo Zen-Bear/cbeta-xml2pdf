@@ -155,6 +155,27 @@ class TestBuildReportJson(JsonFixture):
                                               xml_files=[self.xml],
                                               config_path=self.cfg))
 
+    def test_discovery_reused_across_formats(self):
+        # build_report_json 只做一次基线发现（5 种 kind），而非每格式各一次；
+        # 多格式时避免 (1+N) 次基线目录重扫。
+        calls = []
+        orig = V.find_official
+        V.find_official = lambda *a, **k: (calls.append(a) or orig(*a, **k))
+        try:
+            j = self.build(
+                [self.rec(fmt="html"),
+                 self.rec(fmt="docx", status="no_baseline")],
+                requested_formats=["html", "docx"])
+        finally:
+            V.find_official = orig
+        self.assertEqual(j["fmts"]["html"]["verdict"], "pass")
+        self.assertLessEqual(len(calls), 5)   # 5 kind × 1 次；不是 (1+2)×5
+        # 复用后指纹仍与独立调用一致
+        self.assertEqual(j["fmts"]["html"]["fingerprint"],
+                         V.verify_fingerprint("T0001", "html",
+                                              xml_files=[self.xml],
+                                              config_path=self.cfg))
+
     def test_config_digest_consistent(self):
         j = self.build([self.rec()])
         canon = V.canonical_verify_config(self.cfg)

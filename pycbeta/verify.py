@@ -2245,12 +2245,14 @@ def _locate_xml_nosideeffects(work_id, presets):
 def verify_fingerprint(work_id, fmt, *, xml_files=None, config_path=None,
                        max_diff=10, diff_lines=5, t2s=None,
                        engine=None, vertical=None, baseline_roots=None,
-                       baseline="render"):
+                       baseline="render", _ctx=None):
     """校验指纹（Phase 1）：判断“上次 pass 结论是否仍然有效”的廉价预检。
     返回 "verify-fp-1:sha256:…" 或 None（不能证明 → 调用方一律重验）。
     无副作用：不 parse、不渲染、不下载、不写文件、不打印（内部输出一律重定向吞掉）。
     本机有效，不保证跨机器可比。t2s/engine/vertical 为 None 时取有效配置值；
-    baseline_roots 为 None 时取配置 source.baselines。"""
+    baseline_roots 为 None 时取配置 source.baselines。
+    `_ctx`（内部用）：预计算的 {presets,canon,official,impl}，供 build_report_json
+    一次发现多格式复用，避免每格式重扫基线目录。"""
     if (fmt or "") not in _FP_FORMATS:
         return None
     import io as _io
@@ -2260,18 +2262,50 @@ def verify_fingerprint(work_id, fmt, *, xml_files=None, config_path=None,
         with _redir(buf):
             return _verify_fingerprint_inner(
                 work_id, fmt, xml_files, config_path, max_diff, diff_lines,
-                t2s, engine, vertical, baseline_roots, baseline)
+                t2s, engine, vertical, baseline_roots, baseline, _ctx)
     except Exception:
         return None
+
+
+_FP_KINDS = ("html", "txt_notes", "docx", "epub", "odt")
+
+
+def _fp_roots_cfg(presets, baseline_roots):
+    """指纹/报告的基线根配置：显式 baseline_roots 优先，否则 presets source.baselines。"""
+    if baseline_roots is None:
+        _bl = ((presets.get("source") or {}).get("baselines") or {})
+        return _bl if isinstance(_bl, dict) else {}
+    return baseline_roots if isinstance(baseline_roots, dict) else {}
+
+
+def _official_superset(source, stem, roots_cfg):
+    """基线超集发现（juan=None，不过滤；只增不减方向安全）→ {kind: [paths]}。
+    只读；单种失败跳过。build_report_json 与 verify_fingerprint 共用（扫一次复用）。"""
+    out = {}
+    for kind in _FP_KINDS:
+        v = roots_cfg.get(kind, "") if isinstance(roots_cfg, dict) else ""
+        extra = [v.strip()] if isinstance(v, str) and v.strip() else []
+        try:
+            found = find_official(source, stem, kind, juan=None,
+                                  extra_roots=extra)
+        except Exception:
+            found = []
+        if found:
+            out[kind] = found
+    return out
 
 
 def _verify_fingerprint_inner(work_id, fmt, xml_files, config_path,
                               max_diff, diff_lines, t2s, engine, vertical,
-                              baseline_roots, baseline):
-    try:
-        presets = load_effective_presets(config_path)
-    except Exception:
-        return None
+                              baseline_roots, baseline, _ctx=None):
+    _ctx = _ctx or {}
+    if "presets" in _ctx:
+        presets = _ctx["presets"]
+    else:
+        try:
+            presets = load_effective_presets(config_path)
+        except Exception:
+            return None
     if not isinstance(presets, dict):
         return None
     out = presets.get("output") or {}
@@ -2302,28 +2336,20 @@ def _verify_fingerprint_inner(work_id, fmt, xml_files, config_path,
         xmlrecs.append(ident)
     stem = os.path.splitext(os.path.basename(xml_files[0]))[0]
     source = os.path.dirname(os.path.abspath(xml_files[0]))
-    canon = canonical_verify_config(config_path, _presets=presets)
+    if "canon" in _ctx:
+        canon = _ctx["canon"]
+    else:
+        canon = canonical_verify_config(config_path, _presets=presets)
     if canon is None:
         return None
     # 基线超集（juan=None，不过滤；只增不减方向安全）+ 首选缺失即 None
-    if baseline_roots is None:
-        _bl = ((presets.get("source") or {}).get("baselines") or {})
-        roots_cfg = _bl if isinstance(_bl, dict) else {}
+    if "official" in _ctx:
+        official = _ctx["official"]
     else:
-        roots_cfg = baseline_roots if isinstance(baseline_roots, dict) else {}
+        roots_cfg = _fp_roots_cfg(presets, baseline_roots)
+        official = _official_superset(source, stem, roots_cfg)
     ver = presets.get("verify") or {}
     chains_cfg = ver.get("bases")
-    official = {}
-    for kind in ("html", "txt_notes", "docx", "epub", "odt"):
-        v = roots_cfg.get(kind, "")
-        extra = [v.strip()] if isinstance(v, str) and v.strip() else []
-        try:
-            found = find_official(source, stem, kind, juan=None,
-                                  extra_roots=extra)
-        except Exception:
-            found = []
-        if found:
-            official[kind] = found
     chain = chain_for(eff, chains_cfg)
     if not chain or not official.get(chain[0]):
         return None  # 首选基线缺失：实际跑会下载，本次不能证明
@@ -2339,6 +2365,7 @@ def _verify_fingerprint_inner(work_id, fmt, xml_files, config_path,
                 return None
             ids.append(ident)
         blrecs[kind] = ids
+    impl = _ctx.get("impl") if "impl" in _ctx else _impl_digest()
     payload = {
         "fp_version": _FP_VERSION,
         "work": work_id,
@@ -2353,7 +2380,7 @@ def _verify_fingerprint_inner(work_id, fmt, xml_files, config_path,
         "engine": engine,
         "vertical": bool(vertical),
         "baseline": baseline,
-        "impl": _impl_digest(),
+        "impl": impl,
     }
     return "verify-fp-1:sha256:" + _sha256_bytes(json.dumps(
         payload, sort_keys=True, ensure_ascii=True).encode("utf-8"))
@@ -2492,31 +2519,21 @@ def _build_report_json_inner(work_id, records, xml_files, config_path,
         if ident is not None:
             xmlrecs.append(ident)
     # 基线超集（与 verify_fingerprint 同口径：juan=None；只增不减方向安全）
+    official = {}
     blrecs = {}
     if xml_files:
         source = os.path.dirname(os.path.abspath(xml_files[0]))
         stem = os.path.splitext(os.path.basename(xml_files[0]))[0]
-        if baseline_roots is None:
-            _bl = ((presets.get("source") or {}).get("baselines") or {})
-            roots_cfg = _bl if isinstance(_bl, dict) else {}
-        else:
-            roots_cfg = baseline_roots if isinstance(baseline_roots, dict) else {}
-        for kind in ("html", "txt_notes", "docx", "epub", "odt"):
-            v = roots_cfg.get(kind, "")
-            extra = [v.strip()] if isinstance(v, str) and v.strip() else []
-            try:
-                found = find_official(source, stem, kind, juan=None,
-                                      extra_roots=extra)
-            except Exception:
-                found = []
-            if found:
-                ids = []
-                for p in found:
-                    ident = _public_file_identity(p)
-                    if ident is not None:
-                        ids.append(ident)
-                if ids:
-                    blrecs[kind] = ids
+        roots_cfg = _fp_roots_cfg(presets, baseline_roots)
+        official = _official_superset(source, stem, roots_cfg)
+        for kind, found in official.items():
+            ids = []
+            for p in found:
+                ident = _public_file_identity(p)
+                if ident is not None:
+                    ids.append(ident)
+            if ids:
+                blrecs[kind] = ids
     # pdf 覆盖关系（与 CLI/指纹同口径）
     coverage = {}
     if "pdf" in wanted:
@@ -2532,6 +2549,13 @@ def _build_report_json_inner(work_id, records, xml_files, config_path,
             coverage = {"pdf": _psf(_e, bool(_v))}
         except Exception:
             coverage = {}
+    # 预计算一次，供每个格式的指纹复用（避免 (1+N) 次基线目录重扫）
+    try:
+        impl_digest = _impl_digest()
+    except Exception:
+        impl_digest = "unavailable"
+    _ctx = {"presets": presets, "canon": canon, "official": official,
+            "impl": impl_digest}
     fmts = {}
     for fmt in wanted:
         grp = groups.get(fmt, [])
@@ -2565,7 +2589,7 @@ def _build_report_json_inner(work_id, records, xml_files, config_path,
                 work_id, fmt, xml_files=xml_files, config_path=config_path,
                 max_diff=max_diff, diff_lines=diff_lines, t2s=t2s,
                 engine=engine, vertical=vertical,
-                baseline_roots=baseline_roots, baseline=baseline)
+                baseline_roots=baseline_roots, baseline=baseline, _ctx=_ctx)
         except Exception:
             fp = None
         if not grp:
@@ -2580,10 +2604,6 @@ def _build_report_json_inner(work_id, records, xml_files, config_path,
             "formal_outputs": sorted(gens),
             "report": report_name,
         }
-    try:
-        impl_digest = _impl_digest()
-    except Exception:
-        impl_digest = "unavailable"
     try:
         from datetime import datetime as _dt
         created = _dt.now().astimezone().isoformat(timespec="seconds")
