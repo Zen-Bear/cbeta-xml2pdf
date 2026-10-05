@@ -1639,6 +1639,19 @@ class TestLayoutRegroup(unittest.TestCase):
         panel.pg_zhang_box.setChecked(True)
         self.assertTrue(panel.get_options().pagination["mulu_zhang_break"])
 
+    def test_heading_merge_roundtrip(self):
+        from pycbeta.gui.panel import XmlOptionsPanel
+        panel = XmlOptionsPanel(load_presets())
+        self.assertTrue(panel.pg_heading_box.isChecked())     # 默认开
+        self.assertTrue(panel.get_options().pagination["mulu_heading_merge"])
+        panel.pg_heading_box.setChecked(False)
+        o = panel.get_options()
+        self.assertFalse(o.pagination["mulu_heading_merge"])
+        panel.set_options(o)
+        self.assertFalse(panel.pg_heading_box.isChecked())
+        panel.pg_heading_box.setChecked(True)
+        self.assertTrue(panel.get_options().pagination["mulu_heading_merge"])
+
     def test_mulu_levels_items_four(self):
         from pycbeta.gui.panel import MULU_LEVEL_ITEMS
         self.assertEqual([list(lv) for _n, lv in MULU_LEVEL_ITEMS],

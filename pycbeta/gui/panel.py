@@ -1480,6 +1480,17 @@ class XmlOptionsPanel(QWidget):
         _zrow.addWidget(self.pg_zhang_box)
         _zrow.addWidget(self._gray_hint(
             "（mulu 形如「第X章」独立成页，不论 level；章恒不参与合页）"), 1)
+        # 空标题并入下节：本节只有标题、无正文时与下节同页（默认开；同卷内）
+        self.pg_heading_box = self._check("空标题并入下节", checked=True)
+        self.pg_heading_box.setToolTip(
+            "pagination.mulu_heading_merge：本节只有标题（mulu/head）、"
+            "没有正文时与下一节同页（同卷内）；默认开")
+        self.pg_heading_box.toggled.connect(lambda _v: self._changed())
+        _hrow = QHBoxLayout()
+        _hrow.setContentsMargins(0, 0, 0, 0)
+        _hrow.addWidget(self.pg_heading_box)
+        _hrow.addWidget(self._gray_hint(
+            "（本节只有标题、无正文时与下节同页；同卷内）"), 1)
         # 智能合页：level≥2 短节与下节同页（前一节估高 < 页高×所选比例）
         self.pg_smart_box = self._check("短节智能合页", checked=True)
         self.pg_smart_frac = QComboBox()
@@ -1513,8 +1524,9 @@ class XmlOptionsPanel(QWidget):
         grid.addLayout(left, 0, 0)
         grid.addLayout(_lrow, 1, 0, 1, 2)
         grid.addLayout(_zrow, 2, 0, 1, 2)
-        grid.addLayout(_srow, 3, 0, 1, 2)
-        grid.addWidget(_smart_hint, 4, 0, 1, 2)
+        grid.addLayout(_hrow, 3, 0, 1, 2)
+        grid.addLayout(_srow, 4, 0, 1, 2)
+        grid.addWidget(_smart_hint, 5, 0, 1, 2)
         return w
 
     def _tab_layout(self):
@@ -2163,6 +2175,7 @@ class XmlOptionsPanel(QWidget):
                             if self.mulu_on_box.isChecked() else []),
                         "mulu_smart_merge": self.pg_smart_box.isChecked(),
                         "mulu_zhang_break": self.pg_zhang_box.isChecked(),
+                        "mulu_heading_merge": self.pg_heading_box.isChecked(),
                         "mulu_smart_max_frac": float(
                             self.pg_smart_frac.currentData()
                             if self.pg_smart_frac.currentData() is not None
@@ -2250,6 +2263,8 @@ class XmlOptionsPanel(QWidget):
             self.mulu_levels_box.setCurrentIndex(_idx)
             self._on_mulu_on(self.mulu_on_box.isChecked())
             self.pg_zhang_box.setChecked(bool(pg.get("mulu_zhang_break", True)))
+            self.pg_heading_box.setChecked(
+                bool(pg.get("mulu_heading_merge", True)))
             self.pg_smart_box.setChecked(bool(pg.get("mulu_smart_merge", True)))
             try:
                 _f = float(pg.get("mulu_smart_max_frac", 1.0 / 3.0))

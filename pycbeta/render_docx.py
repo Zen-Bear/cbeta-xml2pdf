@@ -284,6 +284,25 @@ def split_sections(body, rules: dict, layout=None) -> list:
                 return True
         return False
 
+    def has_body(ops) -> bool:
+        """节内是否有**正文**（p/lg/list/pre/table/form/def…）。
+        标题（mulu/head）、题署块、换页/行号标记一律不算——用于"仅标题的空节
+        与下节同页"（mulu_heading_merge，复用"空则不切"的既有机制）。"""
+        for kind, n in ops:
+            if kind != "node":
+                continue
+            if isinstance(n, Text):
+                if n.text.strip():
+                    return True
+            elif isinstance(n, (Lb, Pb)):
+                continue
+            elif isinstance(n, E):
+                if n.tag in ("space", "milestone", "anchor", "docNumber",
+                             "title", "byline", "juan", "mulu", "head"):
+                    continue
+                return True
+        return False
+
     walk(body)
     sections = []
     starts = []            # 每节起始断点的 mulu level（None=非 mulu）
@@ -297,7 +316,13 @@ def split_sections(body, rules: dict, layout=None) -> list:
         if is_break(kind, n):
             is_milestone = kind == "milestone"
             force = is_milestone and juan_first
-            has_content = bool(cur and meaningful(cur))
+            # mulu 断点：开关开时用"有无正文"判（仅标题的空节与下节同页，
+            # 复用"空则不切"的既有机制）；卷/pb 断点仍用 meaningful（卷首/pb 照旧）
+            if (rules.get("mulu_heading_merge", True)
+                    and isinstance(n, E) and n.tag == "mulu"):
+                has_content = bool(cur and has_body(cur))
+            else:
+                has_content = bool(cur and meaningful(cur))
             if has_content or force:
                 for d in reversed(open_divs):
                     cur.append(("close", d))

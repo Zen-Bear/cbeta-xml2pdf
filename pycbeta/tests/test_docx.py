@@ -538,9 +538,69 @@ class TestSmartMergeHeight(unittest.TestCase):
         self.assertAlmostEqual(a["usable_h_pt"], b["usable_w_pt"], places=3)
 
 
+class TestHeadingOnlyMerge(unittest.TestCase):
+    """空标题并入下节（mulu_heading_merge，默认开）：本节只有标题、无正文时
+    与下一节同页（同卷内），复用"空则不切"的既有机制。"""
+
+    def _n(self):
+        from pycbeta.model import E, Text
+
+        def mulu(lv, t, ty="其他"):
+            return E(tag="mulu", attrs={"level": str(lv), "type": ty},
+                     children=[Text(t)])
+
+        def head(t):
+            return E(tag="head", children=[Text(t)])
+
+        def para(s):
+            return E(tag="p", children=[Text(s)])
+
+        def ms(n):
+            return E(tag="milestone", attrs={"unit": "juan", "n": str(n)})
+        return mulu, head, para, ms
+
+    def _rules(self, **kw):
+        r = {"juan": True, "juan_first": False, "mulu_levels": [1, 2, 3],
+             "pb": False, "mulu_zhang_break": True, "mulu_smart_merge": False}
+        r.update(kw)
+        return r
+
+    def test_heading_only_merges_chapter(self):
+        from pycbeta.render_docx import split_sections
+        mulu, head, para, _ = self._n()
+        # 學史（level-3，仅标题）+ 第一章（章）→ 同节
+        body = [para("甲" * 10), mulu(3, "學史"), head("學史"),
+                mulu(4, "第一章　X"), head("第一章　X"), para("乙" * 10)]
+        self.assertEqual(
+            len(split_sections(body, self._rules(mulu_heading_merge=True))), 2)
+        # 开关关 → 回到旧行为（各占一节）
+        self.assertEqual(
+            len(split_sections(body, self._rules(mulu_heading_merge=False))), 3)
+
+    def test_heading_only_chain(self):
+        from pycbeta.render_docx import split_sections
+        mulu, head, para, _ = self._n()
+        # 概論(1) → 佛學概論(2,仅标题) → 第一章(章)：连续空标题并入首个正文节
+        body = [para("甲"), mulu(1, "概論"), mulu(2, "佛學概論"),
+                head("佛學概論"), mulu(4, "第一章"), para("乙")]
+        self.assertEqual(
+            len(split_sections(body, self._rules(mulu_heading_merge=True))), 2)
+
+    def test_milestone_still_cuts(self):
+        from pycbeta.render_docx import split_sections
+        mulu, _head, para, ms = self._n()
+        # 空标题节后遇卷边界：卷仍切（不跨卷并入下一卷内容）
+        body = [mulu(1, "一"), ms(2), para("乙")]
+        secs = split_sections(body, self._rules(mulu_heading_merge=True))
+        self.assertEqual(len(secs), 2)
+        self.assertEqual(secs[1][0], 2)          # 第二节属卷 2
+        self.assertIn("乙", _ops_text(secs[1][1]))
+
+
 class TestPbPagination(unittest.TestCase):
     """<pb/> 分页开关：parser 产 Pb(Node) 而非 E，is_break 须先判 Pb；
     关时 pb 零输出（不产空段）。"""
+
     def _body(self):
         return [E(tag="p", attrs={}, children=[Text(text="甲")]),
                 Pb(n="0002a", ed="TX"),
