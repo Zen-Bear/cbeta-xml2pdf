@@ -1645,21 +1645,30 @@ class TestLayoutRegroup(unittest.TestCase):
                          [[1], [1, 2], [1, 2, 3], [1, 2, 3, 4]])
 
     def test_smart_merge_roundtrip(self):
-        from pycbeta.gui.panel import XmlOptionsPanel
+        from pycbeta.gui.panel import XmlOptionsPanel, SMART_FRAC_ITEMS
         panel = XmlOptionsPanel(load_presets())
         self.assertTrue(panel.pg_smart_box.isChecked())     # 默认开
-        self.assertTrue(panel.pg_smart_spin.isEnabled())
+        self.assertTrue(panel.pg_smart_frac.isEnabled())
+        self.assertAlmostEqual(
+            panel.get_options().pagination["mulu_smart_max_frac"], 1.0 / 3.0)
         panel.pg_smart_box.setChecked(False)
-        self.assertFalse(panel.pg_smart_spin.isEnabled())
+        self.assertFalse(panel.pg_smart_frac.isEnabled())
         o = panel.get_options()
         self.assertFalse(o.pagination["mulu_smart_merge"])
         panel.set_options(o)
         self.assertFalse(panel.pg_smart_box.isChecked())
         panel.pg_smart_box.setChecked(True)
-        panel.pg_smart_spin.setValue(500)
+        idx = next(i for i, (_l, v) in enumerate(SMART_FRAC_ITEMS)
+                   if abs(v - 0.5) < 1e-6)
+        panel.pg_smart_frac.setCurrentIndex(idx)
         o2 = panel.get_options()
         self.assertTrue(o2.pagination["mulu_smart_merge"])
-        self.assertEqual(o2.pagination["mulu_smart_min_chars"], 500)
+        self.assertAlmostEqual(o2.pagination["mulu_smart_max_frac"], 0.5)
+        # 回读非档位值 → 取最近档（1/2）
+        o2.pagination["mulu_smart_max_frac"] = 0.48
+        panel.set_options(o2)
+        self.assertAlmostEqual(
+            panel.get_options().pagination["mulu_smart_max_frac"], 0.5)
 
     def test_convert_report_roundtrip(self):
         from pycbeta.gui.panel import XmlOptionsPanel

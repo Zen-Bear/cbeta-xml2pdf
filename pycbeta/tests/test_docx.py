@@ -342,7 +342,7 @@ class TestMuluLevels(unittest.TestCase):
         body = [para("甲" * 10), mulu(2, "二A"), para("乙" * 10),
                 mulu(2, "二B"), para("丙" * 600), mulu(2, "二C"),
                 para("丁" * 10)]
-        # 关智能：4 节；默认开（阈值 200）：前两短节并入，丙段节超阈不再并 → 2 节
+        # 关智能：4 节；默认开（阈值 1/3 页）：前两短节并入，丙段节超阈不再并 → 2 节
         self.assertEqual(
             len(split_sections(body, {"juan": False, "mulu_levels": [2],
                                       "mulu_smart_merge": False})), 4)
@@ -461,10 +461,86 @@ class TestZhangPagination(unittest.TestCase):
                                       "mulu_zhang_break": False})), 2)
 
 
+class TestSmartMergeHeight(unittest.TestCase):
+    """智能合页改用「估算占页比例」：按纸张/边距/字号/行距估段高。"""
+
+    def test_lines_vs_wrapped_para(self):
+        from pycbeta.render_docx import estimate_section_height_pt
+        from pycbeta.model import E, Text
+
+        def p(s):
+            return ("node", E(tag="p", children=[Text(s)]))
+        many = [p("甲" * 10) for _ in range(10)]   # 10 段短句 = 10 行
+        one = [p("甲" * 100)]                      # 1 段 100 字 ≈ 3 行
+        self.assertGreater(estimate_section_height_pt(many),
+                           estimate_section_height_pt(one) * 2)
+
+    def test_mulu_lb_not_counted(self):
+        from pycbeta.render_docx import estimate_section_height_pt
+        from pycbeta.model import E, Text
+        only_p = [("node", E(tag="p", children=[Text("甲" * 10)]))]
+        with_extra = [
+            ("node", E(tag="mulu", attrs={"level": "2"},
+                       children=[Text("二")])),
+            ("node", E(tag="lb", attrs={})),
+            ("node", E(tag="p", children=[Text("甲" * 10)]))]
+        self.assertAlmostEqual(estimate_section_height_pt(with_extra),
+                               estimate_section_height_pt(only_p))
+
+    def test_frac_merge_short_not_multiline(self):
+        from pycbeta.render_docx import split_sections
+        from pycbeta.model import E, Text
+
+        def mulu(lv, t):
+            return E(tag="mulu", attrs={"level": str(lv), "type": "其他"},
+                     children=[Text(t)])
+
+        def p(s):
+            return E(tag="p", children=[Text(s)])
+        # 前节 1 段 10 字（远不足 1/3 页）→ 与下节合
+        b1 = [p("甲" * 10), mulu(2, "小節"), p("乙" * 10)]
+        self.assertEqual(
+            len(split_sections(b1, {"juan": False, "mulu_levels": [2]})), 1)
+        # 前节 20 段各 10 字（≈0.5 页）→ 不合
+        b2 = [p("甲" * 10) for _ in range(20)] + [mulu(2, "小節"),
+                                                  p("乙" * 10)]
+        self.assertEqual(
+            len(split_sections(b2, {"juan": False, "mulu_levels": [2]})), 2)
+
+    def test_frac_override(self):
+        from pycbeta.render_docx import split_sections
+        from pycbeta.model import E, Text
+
+        def mulu(lv, t):
+            return E(tag="mulu", attrs={"level": str(lv), "type": "其他"},
+                     children=[Text(t)])
+
+        def p(s):
+            return E(tag="p", children=[Text(s)])
+        # 前节 6 段（≈0.15 页）：1/4 阈下合、1/20 阈下不合
+        b = [p("甲" * 10) for _ in range(6)] + [mulu(2, "小節"), p("乙" * 10)]
+        self.assertEqual(len(split_sections(
+            b, {"juan": False, "mulu_levels": [2],
+                "mulu_smart_max_frac": 0.25})), 1)
+        self.assertEqual(len(split_sections(
+            b, {"juan": False, "mulu_levels": [2],
+                "mulu_smart_max_frac": 0.05})), 2)
+
+    def test_vertical_swaps_usable(self):
+        from pycbeta.render_docx import DocxRenderer
+        from pycbeta.theme import Theme, load_presets
+        pages = load_presets().get("pages")
+        a = DocxRenderer(theme=Theme(), page="a4",
+                         page_presets=pages)._pagination_layout()
+        b = DocxRenderer(theme=Theme(), page="a4", page_presets=pages,
+                         vertical=True)._pagination_layout()
+        self.assertAlmostEqual(a["usable_w_pt"], b["usable_h_pt"], places=3)
+        self.assertAlmostEqual(a["usable_h_pt"], b["usable_w_pt"], places=3)
+
+
 class TestPbPagination(unittest.TestCase):
     """<pb/> 分页开关：parser 产 Pb(Node) 而非 E，is_break 须先判 Pb；
     关时 pb 零输出（不产空段）。"""
-
     def _body(self):
         return [E(tag="p", attrs={}, children=[Text(text="甲")]),
                 Pb(n="0002a", ed="TX"),

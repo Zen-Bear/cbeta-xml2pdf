@@ -6,6 +6,7 @@ Styling comes from the shared Theme (semantic tags -> OOXML props).
 """
 
 import io
+import math
 import os
 import re
 import unicodedata
@@ -93,8 +94,103 @@ def _is_zhang(text: str) -> bool:
     return bool(_ZHANG_RE.match((text or "").strip()))
 
 
-# 智能合页：level≥2 的短节与下一节同页（只看前一节累计字数）
-DEFAULT_MULU_SMART_MIN_CHARS = 200
+# 智能合页：level≥2 的短节与下一节同页（前一节不足 max_frac 页）
+DEFAULT_MULU_SMART_MAX_FRAC = 1.0 / 3.0
+_MM2PT = 72.0 / 25.4
+
+
+def _node_text(n) -> str:
+    """节点递归取文本（去不了空白，调用方自行 strip）。"""
+    parts = []
+    for c in (getattr(n, "children", None) or []):
+        if isinstance(c, Text):
+            parts.append(c.text)
+        elif getattr(c, "children", None):
+            parts.append(_node_text(c))
+    return "".join(parts)
+
+
+def _default_layout() -> dict:
+    """无渲染器几何时的兜底版面：A4 标准边距 25.4mm + 正文 12pt/1.5。"""
+    return {"usable_w_pt": (210 - 25.4 * 2) * _MM2PT,
+            "usable_h_pt": (297 - 25.4 * 2) * _MM2PT,
+            "base_pt": 12.0, "body_lh": 1.5,
+            "pt": {}, "lh": {}, "margin": {}}
+
+
+def _lh_ratio(theme, tag, default=1.5) -> float:
+    """标签行距比（CSS line-height 数值）；本标签缺则继承 body；再缺回 default。"""
+    lh = (theme.tags.get(tag) or {}).get("line-height")
+    if lh is None and tag != "body":
+        lh = (theme.tags.get("body") or {}).get("line-height")
+    m = re.match(r"([\d.]+)", str(lh or ""))
+    return float(m.group(1)) if m else default
+
+
+def _block_lines(text, font_pt, usable_w_pt) -> int:
+    """一段文本按版心宽估行数（每字宽：全角 1em、其余 0.5em；空段记 1 行）。"""
+    text = (text or "").strip()
+    if font_pt <= 0 or usable_w_pt <= 0:
+        return 1
+    capacity = usable_w_pt / font_pt          # 每行可容 em 数
+    if capacity <= 0:
+        return 1
+    if not text:
+        return 1
+    return max(1, math.ceil(_title_width(text) / capacity))
+
+
+def estimate_section_height_pt(ops, layout=None) -> float:
+    """估算一节渲染后占的版面高度（pt）。纯函数。
+
+    逐块（p/head/item/form/…）按版心宽估行数 × 字号 × 行距比 + 段前后间距；
+    `<lg>` 数其 `<l>`；`<pre>` 数行；`<list>` 递归 item。
+    mulu/lb/anchor/space/milestone/pb 不计；图片/表格/竖排未精确建模（估 0）。
+    layout=None → 默认 A4+12pt/1.5。"""
+    lay = layout or _default_layout()
+    uw = float(lay.get("usable_w_pt") or 0) or _default_layout()["usable_w_pt"]
+    base = float(lay.get("base_pt") or 12.0)
+    body_lh = float(lay.get("body_lh") or 1.5)
+    pt_map = lay.get("pt") or {}
+    lh_map = lay.get("lh") or {}
+    margin = lay.get("margin") or {}
+
+    def fpt(tag):
+        return float(pt_map.get(tag, base))
+
+    def flh(tag):
+        return float(lh_map.get(tag, body_lh))
+
+    def node_h(nd) -> float:
+        if not isinstance(nd, E):
+            return 0.0
+        tag = nd.tag
+        if tag in ("mulu", "lb", "anchor", "space", "milestone", "pb"):
+            return 0.0
+        if tag == "lg":
+            f, lh = fpt("verse"), flh("verse")
+            h = 0.0
+            for c in (getattr(nd, "children", None) or []):
+                if isinstance(c, E) and c.tag == "l":
+                    h += _block_lines(_node_text(c), f, uw) * f * lh
+                elif isinstance(c, Text) and c.text.strip():
+                    h += _block_lines(c.text, f, uw) * f * lh
+            return h
+        if tag == "pre":
+            f, lh = fpt("pre"), flh("pre")
+            n = max(1, len(_node_text(nd).split("\n")))
+            return n * f * lh
+        if tag == "list":
+            return sum(node_h(c)
+                       for c in (getattr(nd, "children", None) or []))
+        f, lh = fpt(tag), flh(tag)
+        h = _block_lines(_node_text(nd), f, uw) * f * lh
+        m = margin.get(tag)
+        if m:
+            h += float(m[0]) + float(m[1])
+        return h
+
+    return sum(node_h(nd) for k, nd in ops if k == "node")
 
 
 def _mulu_smart_levels(rules: dict) -> set:
@@ -105,10 +201,12 @@ def _mulu_smart_levels(rules: dict) -> set:
     return {lv for lv in _mulu_levels(rules) if lv >= 2}
 
 
-def split_sections(body, rules: dict) -> list:
+def split_sections(body, rules: dict, layout=None) -> list:
     """按分页规则把 body 切成 [(卷号, ops)]（跨 div 补 close/open，同 split_juans）。
 
-    rules: {juan, juan_first, mulu_levels|mulu_level1, pb}。
+    rules: {juan, juan_first, mulu_levels|mulu_level1, pb, mulu_zhang_break,
+            mulu_smart_merge, mulu_smart_max_frac}。
+    layout: 版面度量（估段高用；None → 默认 A4+12pt/1.5）。
     - milestone（卷边界）：juan 规则触发；首个卷边界默认不切（紧跟书名），juan_first=true 时也切
     - 卷头 juan（fun=open）：恒为断点（无开关），卷头/译者/首品同节；后续品仍由 mulu_level1 切分
     - <cb:mulu level="1"> 非"卷"型且有目录文字（序/品/其他）：mulu_level1 触发分页；
@@ -129,14 +227,7 @@ def split_sections(body, rules: dict) -> list:
             else:
                 events.append(("node", n))
 
-    def mulu_text(n) -> str:
-        parts = []
-        for c in n.children:
-            if isinstance(c, Text):
-                parts.append(c.text)
-            elif getattr(c, "children", None):
-                parts.append(mulu_text(c))
-        return "".join(parts)
+    mulu_text = _node_text
 
     levels = _mulu_levels(rules)
     # 章分页（R2）：mulu 命中「第X章」独立成页，无视其 level 是否在 levels 里；
@@ -192,18 +283,6 @@ def split_sections(body, rules: dict) -> list:
                     continue
                 return True
         return False
-
-    def sec_len(ops) -> int:
-        """节内正文字数（递归取 E/Text 文本、去空白；lb/pb 等无文本不计）。"""
-        total = 0
-        for k, nd in ops:
-            if k != "node":
-                continue
-            if isinstance(nd, Text):
-                total += len(nd.text.strip())
-            elif isinstance(nd, E):
-                total += len(mulu_text(nd).strip())
-        return total
 
     walk(body)
     sections = []
@@ -261,22 +340,27 @@ def split_sections(body, rules: dict) -> list:
         return ""
 
     if smart and len(sections) > 1:
+        lay = layout or _default_layout()
         try:
-            thr = int(rules.get("mulu_smart_min_chars",
-                                DEFAULT_MULU_SMART_MIN_CHARS))
+            frac = float(rules.get("mulu_smart_max_frac",
+                                   DEFAULT_MULU_SMART_MAX_FRAC))
         except (TypeError, ValueError):
-            thr = DEFAULT_MULU_SMART_MIN_CHARS
+            frac = DEFAULT_MULU_SMART_MAX_FRAC
+        if not (0.0 < frac < 1.0):
+            frac = DEFAULT_MULU_SMART_MAX_FRAC
+        usable_h = float(lay.get("usable_h_pt") or 0) or \
+            _default_layout()["usable_h_pt"]
         out = []
-        cno, cops, cst = sections[0][0], sections[0][1], starts[0]
+        cno, cops = sections[0][0], sections[0][1]
         for (no, ops), st in zip(sections[1:], starts[1:]):
             # 章豁免（R3，恒生效）：incoming 节首是「第X章」→ 不并入上一节，
             # 章独立起页（单向：只挡「吞章头」，短章吸后文仍保留）
             if (st in smart and not _is_zhang(first_mulu_text(ops))
-                    and sec_len(cops) < thr):
+                    and estimate_section_height_pt(cops, lay) / usable_h < frac):
                 cops = cops + ops   # 合并（跨节 div close/open 对相抵，无副作用）
             else:
                 out.append((cno, cops))
-                cno, cops, cst = no, ops, st
+                cno, cops = no, ops
         out.append((cno, cops))
         sections = out
     return sections
@@ -511,6 +595,44 @@ class DocxRenderer:
             if pt is not None:
                 cur = pt
         return cur
+
+    def _pagination_layout(self) -> dict:
+        """智能合页用版面度量（pt）：版心宽高 + 各标签字号/行距/段前后间距。
+        竖排交换版心宽高（上→下、右→左，行长按页高）。供 estimate_section_height_pt。"""
+        from pycbeta.theme import _abs_pt, Theme as _Theme
+        uw = (self.page_w - self.page_margins["left"]
+              - self.page_margins["right"]) / 20.0
+        uh = (self.page_h - self.page_margins["top"]
+              - self.page_margins["bottom"]) / 20.0
+        if self.vertical:
+            uw, uh = uh, uw
+        base = self.theme.base_pt()
+        body_lh = _lh_ratio(self.theme, "body", 1.5)
+        pt_map, lh_map, margin = {}, {}, {}
+        for tag, props in (self.theme.tags or {}).items():
+            if not isinstance(props, dict):
+                continue
+            p = _abs_pt(props.get("font-size"), base)
+            if p is not None:
+                pt_map[tag] = p
+            lh_map[tag] = _lh_ratio(self.theme, tag, body_lh)
+            f = pt_map.get(tag, base)
+            m = _Theme._parse_margin(props.get("margin") or "")
+            top = m.get("top", 0.0)
+            bottom = m.get("bottom", 0.0)
+            for css_prop, key in (("margin-top", "top"),
+                                  ("margin-bottom", "bottom")):
+                mm = re.match(r"([\d.]+)em", props.get(css_prop) or "")
+                if mm:
+                    if key == "top":
+                        top = float(mm.group(1))
+                    else:
+                        bottom = float(mm.group(1))
+            if top or bottom:
+                margin[tag] = (top * f, bottom * f)
+        return {"usable_w_pt": uw, "usable_h_pt": uh, "base_pt": base,
+                "body_lh": body_lh, "pt": pt_map, "lh": lh_map,
+                "margin": margin}
 
     def _run_rpr(self, tags, props) -> str:
         """run 属性（含 <w:rPr> 包裹）：_run 与 _run_annotated 共用，保证注音 run 样式一致。"""
@@ -922,7 +1044,8 @@ class DocxRenderer:
         if self.pagination.get("enabled"):
             sections = []
             last_juan = object()
-            for juan_no, ops in split_sections(work.body, self.pagination):
+            for juan_no, ops in split_sections(work.body, self.pagination,
+                                               layout=self._pagination_layout()):
                 if juan_no != last_juan:
                     self._pending_juan = str(juan_no) if juan_no else None
                     last_juan = juan_no

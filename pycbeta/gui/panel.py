@@ -68,6 +68,13 @@ MULU_LEVEL_ITEMS = [
     ("level-1+2+3", (1, 2, 3)),
     ("level-1+2+3+4", (1, 2, 3, 4)),
 ]
+# 短节智能合页阈值：显示名 → 占页比例（估算）
+SMART_FRAC_ITEMS = [
+    ("1/4", 0.25),
+    ("1/3", 1.0 / 3.0),
+    ("1/2", 0.5),
+    ("2/3", 2.0 / 3.0),
+]
 FORMATS = ["pdf", "docx", "html", "epub", "md", "txt"]
 DOCX_SINGLES = ["msword", "wps", "docbuilder", "libreoffice", "minipdf"]
 HTML_SINGLES = ["chromium", "prince", "weasyprint", "cbetapdf"]
@@ -1473,31 +1480,32 @@ class XmlOptionsPanel(QWidget):
         _zrow.addWidget(self.pg_zhang_box)
         _zrow.addWidget(self._gray_hint(
             "（mulu 形如「第X章」独立成页，不论 level；章恒不参与合页）"), 1)
-        # 智能合页：level≥2 短节与下节同页（只看前一节累计字数）
+        # 智能合页：level≥2 短节与下节同页（前一节估高 < 页高×所选比例）
         self.pg_smart_box = self._check("短节智能合页", checked=True)
-        self.pg_smart_spin = QSpinBox()
-        self.pg_smart_spin.setRange(50, 3000)
-        self.pg_smart_spin.setSingleStep(50)
-        self.pg_smart_spin.setValue(200)
-        self.pg_smart_spin.setToolTip("前一节累计正文字数低于此值时，与下一节同页")
-        self.pg_smart_spin.valueChanged.connect(lambda _v: self._changed())
+        self.pg_smart_frac = QComboBox()
+        for _label, _v in SMART_FRAC_ITEMS:
+            self.pg_smart_frac.addItem(_label, _v)
+        self.pg_smart_frac.setCurrentIndex(
+            next((i for i, (_l, _v) in enumerate(SMART_FRAC_ITEMS)
+                  if abs(_v - 1.0 / 3.0) < 1e-6), 0))   # 默认 1/3
+        self.pg_smart_frac.setToolTip(
+            "前一节估算版面高度低于此比例时与下一节同页"
+            "（按当前纸张/边距/字号/行距估算）")
+        self.pg_smart_frac.currentIndexChanged.connect(
+            lambda _i: self._changed())
         self.pg_smart_box.toggled.connect(self._on_pg_smart)
         _srow = QHBoxLayout()
         _srow.setContentsMargins(0, 0, 0, 0)
+        _srow.setSpacing(2)
         _srow.addWidget(self.pg_smart_box)
-        _spin_row = QHBoxLayout()
-        _spin_row.setContentsMargins(0, 0, 0, 0)
-        _spin_row.setSpacing(2)                 # 「不足」贴紧输入框
-        _spin_row.addWidget(QLabel("不足"))
-        _spin_row.addWidget(self.pg_smart_spin)
-        _spin_row.addWidget(QLabel("字"))
-        _srow.addLayout(_spin_row)
+        _srow.addWidget(QLabel("不足"))
+        _srow.addWidget(self.pg_smart_frac)
+        _srow.addWidget(QLabel("页"))
         _srow.addStretch(1)
         # 注释独立一行跨两列（与控件同行会被挤到过早折行）
         _smart_hint = self._gray_hint(
-            "（下拉含 level-2 及更深时才生效；前一节不足 200 字与下节同页，"
-            "约合 A4 纸 5 行；章独立成页、恒不参与合页；"
-            "仅 DOCX 及 docx2pdf 派生的 PDF）")
+            "（下拉含 level-2 及更深时才生效；前一节估算占页不足所选比例时与下节同页"
+            "——按当前纸张/边距/字号/行距估算；仅 DOCX 及 docx2pdf 派生的 PDF）")
         _smart_hint.setContentsMargins(20, 0, 0, 0)
         self._on_pg_smart(self.pg_smart_box.isChecked())
         left.addStretch(1)
@@ -1582,7 +1590,7 @@ class XmlOptionsPanel(QWidget):
         self.pre_dedent_spin.setEnabled(bool(on))
 
     def _on_pg_smart(self, on):
-        self.pg_smart_spin.setEnabled(bool(on))
+        self.pg_smart_frac.setEnabled(bool(on))
 
     def _on_mulu_on(self, on):
         self.mulu_levels_box.setEnabled(bool(on))
@@ -2155,8 +2163,10 @@ class XmlOptionsPanel(QWidget):
                             if self.mulu_on_box.isChecked() else []),
                         "mulu_smart_merge": self.pg_smart_box.isChecked(),
                         "mulu_zhang_break": self.pg_zhang_box.isChecked(),
-                        "mulu_smart_min_chars": int(
-                            self.pg_smart_spin.value())},
+                        "mulu_smart_max_frac": float(
+                            self.pg_smart_frac.currentData()
+                            if self.pg_smart_frac.currentData() is not None
+                            else 1.0 / 3.0)},
             series_title={"enabled": self.series_on.isChecked(),
                           **self._series_extra},
             t2s=self.t2s_box.isChecked(),
@@ -2242,10 +2252,12 @@ class XmlOptionsPanel(QWidget):
             self.pg_zhang_box.setChecked(bool(pg.get("mulu_zhang_break", True)))
             self.pg_smart_box.setChecked(bool(pg.get("mulu_smart_merge", True)))
             try:
-                self.pg_smart_spin.setValue(
-                    int(pg.get("mulu_smart_min_chars", 200)))
+                _f = float(pg.get("mulu_smart_max_frac", 1.0 / 3.0))
             except (TypeError, ValueError):
-                self.pg_smart_spin.setValue(200)
+                _f = 1.0 / 3.0
+            self.pg_smart_frac.setCurrentIndex(
+                min(range(len(SMART_FRAC_ITEMS)),
+                    key=lambda i: abs(SMART_FRAC_ITEMS[i][1] - _f)))
             self._on_pg_smart(self.pg_smart_box.isChecked())
             o = opts.output or {}
             self.split_box.setChecked(bool(o.get("split_juan", False)))
