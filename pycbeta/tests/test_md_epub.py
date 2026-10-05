@@ -128,6 +128,41 @@ class TestEpubMuluSplit(unittest.TestCase):
         blob = "".join(z.read(n).decode("utf-8") for n in ch)
         self.assertNotIn("mulu-break", blob)  # 标记不残留
 
+    def test_split_spine_by_zhang(self):
+        # 章信号：level-4「第X章」在章开关开、R1 开（level 非空）时也拆 spine
+        import shutil
+        from pycbeta.model import E, Text, Work
+
+        def _w():
+            return Work(id="T", source_file="",
+                        metadata={"title": "t", "author": ""},
+                        body=[E(tag="p", attrs={}, children=[Text("卷首")]),
+                              E(tag="mulu", attrs={"level": "4", "type": "其他"},
+                                children=[Text("第一章　甲")]),
+                              E(tag="p", attrs={}, children=[Text("甲文")]),
+                              E(tag="mulu", attrs={"level": "4", "type": "其他"},
+                                children=[Text("甲　非章")]),
+                              E(tag="p", attrs={}, children=[Text("乙文")])],
+                        notes_by_n={}, apps=[], simplified=False)
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        # 章开、R1 只到 level-1：第一章仍拆章（非章 level-4 不拆）→ 2 章
+        fn = EpubRenderer(mulu_levels=(1,), mulu_zhang_break=True).render_work(
+            _w(), d)
+        z = zipfile.ZipFile(fn)
+        ch = [n for n in z.namelist()
+              if n.endswith(".xhtml") and n.startswith("OEBPS/ch")]
+        self.assertEqual(len(ch), 2)
+        # 章关：level-4 不在 (1,) → 1 章
+        d2 = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d2, True)
+        fn2 = EpubRenderer(mulu_levels=(1,), mulu_zhang_break=False).render_work(
+            _w(), d2)
+        z2 = zipfile.ZipFile(fn2)
+        ch2 = [n for n in z2.namelist()
+               if n.endswith(".xhtml") and n.startswith("OEBPS/ch")]
+        self.assertEqual(len(ch2), 1)
+
 
 class TestCorrCbetaRender(unittest.TestCase):
     """corr-cbeta：html 开门控 span.corr；md 始终透明（排除）。"""

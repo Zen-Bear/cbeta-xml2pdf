@@ -681,7 +681,7 @@ class MainWindow(QMainWindow):
         self.cfg_toggle.setChecked(True)
         self.cfg_toggle.setAutoRaise(True)
         self.cfg_toggle.setFixedSize(22, 22)
-        self.cfg_toggle.setArrowType(Qt.DownArrow)
+        self.cfg_toggle.setArrowType(Qt.UpArrow)
         self.cfg_toggle.setToolTip("收起/展开配置面板")
         # 箭头走 QStyle 调色板（stylesheet 的 color 管不到），显式设白
         _pal = self.cfg_toggle.palette()
@@ -751,7 +751,8 @@ class MainWindow(QMainWindow):
         self.table.setSelectionBehavior(QTableWidget.SelectItems)
         self.table.setSelectionMode(QTableWidget.ExtendedSelection)
         self.table.cellClicked.connect(self._open_cell)
-        layout.addWidget(self.table, 1)
+        self.table.setMinimumHeight(150)   # 保底高度：窗口变矮时不被压没
+        layout.addWidget(self.table, 2)
         # 进度与按钮
         bar = QHBoxLayout()
         self.btn_start = QPushButton("转换")
@@ -769,7 +770,8 @@ class MainWindow(QMainWindow):
 
     def _toggle_panel(self, show: bool):
         self.panel.setVisible(show)
-        self.cfg_toggle.setArrowType(Qt.DownArrow if show else Qt.RightArrow)
+        # 动作语义：展开态显示上箭头（点按=向上收起）；收起态显示下箭头（点按=向下展开）
+        self.cfg_toggle.setArrowType(Qt.UpArrow if show else Qt.DownArrow)
 
     def _browse(self):
         d = QFileDialog.getExistingDirectory(self, "选择 XML 目录")

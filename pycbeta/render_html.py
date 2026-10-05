@@ -125,7 +125,7 @@ class HtmlRenderer:
                  ignore_xml_space=False, show_notes=True, grayscale=False, inline_brackets="fullwidth",
                  note_inline_brackets=None, title_t2s=True, siddham_text=False,
                  annotations=None, strip_head_no=False, corr_cbeta=False,
-                 mulu_break=False, mulu_levels=(1,),
+                 mulu_break=False, mulu_levels=(1,), mulu_zhang_break=False,
                  pre_dedent=False, pre_dedent_spaces=4):
         self.gaiji_db = gaiji_db if gaiji_db is not None else GaijiDb()
         self.theme = theme
@@ -147,6 +147,7 @@ class HtmlRenderer:
         self.corr_cbeta = corr_cbeta        # CBETA 校改字标红（corr-cbeta；默认 false）
         self.mulu_break = mulu_break        # 非「卷」mulu 断页标记（epub 拆 spine 用；默认 false）
         self.mulu_levels = _norm_levels(mulu_levels)  # 触发断页标记的 mulu level 集合
+        self.mulu_zhang_break = bool(mulu_zhang_break)  # 章信号（第X章）也断章（epub spine）
         self.siddham_text = siddham_text  # 悉昙字形+读音文本形（docx 同款；默认 false 走官方空元素）
         # 难字注音（P6）：None 或 {"table", "scheme"}（CLI 已由 resolve_annotations 装载；渲染器内不做 IO）
         self._annotations = _ann_active(annotations)
@@ -837,6 +838,7 @@ class HtmlRenderer:
             return "　" * q
         if tag == "mulu":
             # epub：已启用 level 的非「卷」mulu 断页标记（含标题），供拆 spine 章节；
+            # 章信号（第X章）在章开关开、R1 开（mulu_levels 非空）时同样断章；
             # html/pdf 不开（产品与官方 html 同形、不插标记）
             if getattr(self, "mulu_break", False) \
                     and e.attrs.get("type") != "卷":
@@ -844,11 +846,15 @@ class HtmlRenderer:
                     _lvl = int(e.attrs.get("level") or "0")
                 except (TypeError, ValueError):
                     _lvl = 0
-                if _lvl in self.mulu_levels:
-                    t = _plain_text(e).strip()
-                    if t:
-                        return ('<div class="mulu-break" data-title="'
-                                + _esc(t).replace('"', "&quot;") + '"></div>')
+                t = _plain_text(e).strip()
+                from .render_docx import _is_zhang
+                _is_brk = (_lvl in self.mulu_levels) or (
+                    bool(self.mulu_levels)
+                    and getattr(self, "mulu_zhang_break", False)
+                    and _is_zhang(t))
+                if _is_brk and t:
+                    return ('<div class="mulu-break" data-title="'
+                            + _esc(t).replace('"', "&quot;") + '"></div>')
             return ""
         if tag == "graphic":
             return self._render_graphic(e)

@@ -66,6 +66,7 @@ MULU_LEVEL_ITEMS = [
     ("仅 level-1（默认）", (1,)),
     ("level-1+2", (1, 2)),
     ("level-1+2+3", (1, 2, 3)),
+    ("level-1+2+3+4", (1, 2, 3, 4)),
 ]
 FORMATS = ["pdf", "docx", "html", "epub", "md", "txt"]
 DOCX_SINGLES = ["msword", "wps", "docbuilder", "libreoffice", "minipdf"]
@@ -1442,7 +1443,7 @@ class XmlOptionsPanel(QWidget):
                 left.addLayout(row)
             else:
                 left.addWidget(box)
-        # 目录换页 level：开关（默认开）+ 下拉（仅1 / 1+2 / 1+2+3）
+        # 目录换页 level：开关（默认开）+ 下拉（仅1 / 1+2 / 1+2+3 / 1+2+3+4）
         self.mulu_on_box = self._check(
             PAGINATION_LABELS["mulu_levels"], checked=True)
         self.mulu_on_box.toggled.connect(self._on_mulu_on)
@@ -1460,6 +1461,18 @@ class XmlOptionsPanel(QWidget):
         self.pg_hints["mulu_levels"] = _llab
         _lrow.addWidget(_llab, 1)
         self._on_mulu_on(self.mulu_on_box.isChecked())
+        # 章独立成页（R2）：mulu 形如「第X章」时无视 level 独立成页（默认开；
+        # 需上面的开关开着）；章恒不参与智能合页（R3，无开关）
+        self.pg_zhang_box = self._check("章独立成页", checked=True)
+        self.pg_zhang_box.setToolTip(
+            "pagination.mulu_zhang_break：mulu 形如「第X章」时独立成页，"
+            "不论其 level 是否在所选范围；章恒不参与短节智能合页")
+        self.pg_zhang_box.toggled.connect(lambda _v: self._changed())
+        _zrow = QHBoxLayout()
+        _zrow.setContentsMargins(0, 0, 0, 0)
+        _zrow.addWidget(self.pg_zhang_box)
+        _zrow.addWidget(self._gray_hint(
+            "（mulu 形如「第X章」独立成页，不论 level；章恒不参与合页）"), 1)
         # 智能合页：level≥2 短节与下节同页（只看前一节累计字数）
         self.pg_smart_box = self._check("短节智能合页", checked=True)
         self.pg_smart_spin = QSpinBox()
@@ -1482,8 +1495,8 @@ class XmlOptionsPanel(QWidget):
         _srow.addStretch(1)
         # 注释独立一行跨两列（与控件同行会被挤到过早折行）
         _smart_hint = self._gray_hint(
-            "（默认仅 level-1 时不生效，需选 level-1+2…；"
-            "前一节不足 200 字与下节同页，约合 A4 纸 5 行；"
+            "（下拉含 level-2 及更深时才生效；前一节不足 200 字与下节同页，"
+            "约合 A4 纸 5 行；章独立成页、恒不参与合页；"
             "仅 DOCX 及 docx2pdf 派生的 PDF）")
         _smart_hint.setContentsMargins(20, 0, 0, 0)
         self._on_pg_smart(self.pg_smart_box.isChecked())
@@ -1491,8 +1504,9 @@ class XmlOptionsPanel(QWidget):
         grid.setColumnStretch(0, 1)             # 左列吃富余宽度
         grid.addLayout(left, 0, 0)
         grid.addLayout(_lrow, 1, 0, 1, 2)
-        grid.addLayout(_srow, 2, 0, 1, 2)
-        grid.addWidget(_smart_hint, 3, 0, 1, 2)
+        grid.addLayout(_zrow, 2, 0, 1, 2)
+        grid.addLayout(_srow, 3, 0, 1, 2)
+        grid.addWidget(_smart_hint, 4, 0, 1, 2)
         return w
 
     def _tab_layout(self):
@@ -2140,6 +2154,7 @@ class XmlOptionsPanel(QWidget):
                             list(self.mulu_levels_box.currentData() or ())
                             if self.mulu_on_box.isChecked() else []),
                         "mulu_smart_merge": self.pg_smart_box.isChecked(),
+                        "mulu_zhang_break": self.pg_zhang_box.isChecked(),
                         "mulu_smart_min_chars": int(
                             self.pg_smart_spin.value())},
             series_title={"enabled": self.series_on.isChecked(),
@@ -2224,6 +2239,7 @@ class XmlOptionsPanel(QWidget):
                     break
             self.mulu_levels_box.setCurrentIndex(_idx)
             self._on_mulu_on(self.mulu_on_box.isChecked())
+            self.pg_zhang_box.setChecked(bool(pg.get("mulu_zhang_break", True)))
             self.pg_smart_box.setChecked(bool(pg.get("mulu_smart_merge", True)))
             try:
                 self.pg_smart_spin.setValue(

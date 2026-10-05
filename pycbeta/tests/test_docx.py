@@ -366,6 +366,101 @@ class TestMuluLevels(unittest.TestCase):
             len(split_sections(body, {"juan": False, "mulu_levels": [1, 2]})), 2)
 
 
+class TestZhangPagination(unittest.TestCase):
+    """章信号分页（R2 开关，默认开）+ 章恒豁免合页（R3）。
+    level 号各书相对，只有「第X章」文字能跨书识别。"""
+
+    def test_is_zhang(self):
+        from pycbeta.render_docx import _is_zhang
+        for t in ("第二章　印度佛學略史", "第一章", "第10章",
+                  "第二十三章", "  第三章  "):
+            self.assertTrue(_is_zhang(t), t)
+        for t in ("第一節　釋尊略傳", "附：第二章", "", "  ", "卷第一",
+                  "甲　破無因", "第２章"):
+            self.assertFalse(_is_zhang(t), t)
+
+    def _body(self):
+        from pycbeta.model import E, Text
+
+        def mulu(lv, t, ty="其他"):
+            return E(tag="mulu", attrs={"level": str(lv), "type": ty},
+                     children=[Text(t)])
+
+        def para(s):
+            return E(tag="p", children=[Text(s)])
+        return mulu, para
+
+    def test_zhang_breaks_beyond_level(self):
+        from pycbeta.render_docx import split_sections
+        mulu, para = self._body()
+        body = [para("甲" * 10), mulu(4, "第二章　印度佛學略史"),
+                para("乙" * 10), mulu(4, "甲　普通小標"), para("丙" * 10)]
+        # 章开关开：章断页（无视 level-4 不在 [1,2]）；非章 level-4 不断 → 2 节
+        self.assertEqual(
+            len(split_sections(body, {"juan": False, "mulu_levels": [1, 2],
+                                      "mulu_smart_merge": False,
+                                      "mulu_zhang_break": True})), 2)
+        # 章开关关：都不在 level 里 → 1 节
+        self.assertEqual(
+            len(split_sections(body, {"juan": False, "mulu_levels": [1, 2],
+                                      "mulu_smart_merge": False,
+                                      "mulu_zhang_break": False})), 1)
+
+    def test_zhang_needs_r1_on(self):
+        from pycbeta.render_docx import split_sections
+        mulu, para = self._body()
+        body = [para("甲" * 10), mulu(4, "第二章"), para("乙" * 10)]
+        # R1 关（level 集合空）→ 章也不断
+        self.assertEqual(
+            len(split_sections(body, {"juan": False, "mulu_levels": [],
+                                      "mulu_smart_merge": False,
+                                      "mulu_zhang_break": True})), 1)
+
+    def test_zhang_type_juan_excluded(self):
+        from pycbeta.render_docx import split_sections
+        mulu, para = self._body()
+        body = [para("甲" * 10), mulu(4, "第二章", ty="卷"), para("乙" * 10)]
+        self.assertEqual(
+            len(split_sections(body, {"juan": False, "mulu_levels": [1],
+                                      "mulu_smart_merge": False,
+                                      "mulu_zhang_break": True})), 1)
+
+    def test_zhang_exempt_from_smart_merge(self):
+        from pycbeta.render_docx import split_sections
+        mulu, para = self._body()
+        # 短尾 + 章：章不并入上一节（各独立）
+        body = [para("甲" * 10), mulu(2, "第一章　短"), para("乙" * 10),
+                mulu(2, "第二章　短"), para("丙" * 10)]
+        self.assertEqual(
+            len(split_sections(body, {"juan": False, "mulu_levels": [1, 2],
+                                      "mulu_zhang_break": True})), 3)
+        # 对照：非章 level-2 短节照常合并（豁免只认章信号）→ 1 节
+        body2 = [para("甲" * 10), mulu(2, "小節A"), para("乙" * 10),
+                 mulu(2, "小節B"), para("丙" * 10)]
+        self.assertEqual(
+            len(split_sections(body2, {"juan": False, "mulu_levels": [1, 2],
+                                       "mulu_zhang_break": True})), 1)
+
+    def test_zhang_absorbs_following_short(self):
+        from pycbeta.render_docx import split_sections
+        mulu, para = self._body()
+        # 短章 + 后续短非章 level-2：非章并入章页（章头仍独立起页）→ 2 节
+        body = [para("甲" * 10), mulu(2, "第一章　短"), para("乙" * 10),
+                mulu(2, "小節"), para("丙" * 10)]
+        self.assertEqual(
+            len(split_sections(body, {"juan": False, "mulu_levels": [1, 2],
+                                      "mulu_zhang_break": True})), 2)
+
+    def test_zhang_exempt_even_if_r2_off(self):
+        from pycbeta.render_docx import split_sections
+        mulu, para = self._body()
+        # R2 关，但章因 level 规则断页（level-2 且选 [1,2]）→ 豁免仍生效
+        body = [para("甲" * 10), mulu(2, "第一章　短"), para("乙" * 10)]
+        self.assertEqual(
+            len(split_sections(body, {"juan": False, "mulu_levels": [1, 2],
+                                      "mulu_zhang_break": False})), 2)
+
+
 class TestPbPagination(unittest.TestCase):
     """<pb/> 分页开关：parser 产 Pb(Node) 而非 E，is_break 须先判 Pb；
     关时 pb 零输出（不产空段）。"""

@@ -83,6 +83,17 @@ def _pagination_mulu_levels(pg):
     return tuple(sorted(_mulu_levels(pg)))
 
 
+def _pagination_zhang_break(pg):
+    """epub 章信号（第X章）拆 spine：R2 开关（默认开）且 R1 开（level 集合非空）；
+    pagination 总闸关 → 不拆。与 docx 同口径。"""
+    pg = pg or {}
+    if pg.get("enabled", True) is False:
+        return False
+    if not _pagination_mulu_levels(pg):
+        return False
+    return bool(pg.get("mulu_zhang_break", True))
+
+
 def resolve_convert_report(flag, out_defaults):
     """转换报告开关：CLI flag > config output.convert_report > 默认 True。
 
@@ -299,6 +310,8 @@ def render_one(w, fmt, out_dir, out_name, args, theme, html_base=None, figure_ba
                          pre_dedent=getattr(args, "pre_dedent", False),
                          pre_dedent_spaces=getattr(args, "pre_dedent_spaces", 4),
                          mulu_levels=_pagination_mulu_levels(
+                             getattr(args, "pagination", None)),
+                         mulu_zhang_break=_pagination_zhang_break(
                              getattr(args, "pagination", None)),
                          figure_base=figure_base)
         fn = r.render_work(w, out_dir, filename=out_name)

@@ -1626,6 +1626,24 @@ class TestLayoutRegroup(unittest.TestCase):
         self.assertFalse(panel.mulu_on_box.isChecked())
         self.assertFalse(panel.mulu_levels_box.isEnabled())
 
+    def test_zhang_break_roundtrip(self):
+        from pycbeta.gui.panel import XmlOptionsPanel
+        panel = XmlOptionsPanel(load_presets())
+        self.assertTrue(panel.pg_zhang_box.isChecked())     # 默认开
+        self.assertTrue(panel.get_options().pagination["mulu_zhang_break"])
+        panel.pg_zhang_box.setChecked(False)
+        o = panel.get_options()
+        self.assertFalse(o.pagination["mulu_zhang_break"])
+        panel.set_options(o)
+        self.assertFalse(panel.pg_zhang_box.isChecked())
+        panel.pg_zhang_box.setChecked(True)
+        self.assertTrue(panel.get_options().pagination["mulu_zhang_break"])
+
+    def test_mulu_levels_items_four(self):
+        from pycbeta.gui.panel import MULU_LEVEL_ITEMS
+        self.assertEqual([list(lv) for _n, lv in MULU_LEVEL_ITEMS],
+                         [[1], [1, 2], [1, 2, 3], [1, 2, 3, 4]])
+
     def test_smart_merge_roundtrip(self):
         from pycbeta.gui.panel import XmlOptionsPanel
         panel = XmlOptionsPanel(load_presets())
@@ -1838,6 +1856,28 @@ class TestMainWindowUx(unittest.TestCase):
         finally:
             w.close()
 
+
+    def test_cfg_toggle_arrow_action_semantics(self):
+        from PySide6.QtCore import Qt
+        from pycbeta.gui.__main__ import MainWindow
+        w = MainWindow()
+        try:
+            # 展开态=上箭头（点按向上收起）；收起态=下箭头（点按向下展开）
+            self.assertEqual(w.cfg_toggle.arrowType(), Qt.UpArrow)
+            w.cfg_toggle.toggle()
+            self.assertEqual(w.cfg_toggle.arrowType(), Qt.DownArrow)
+            w.cfg_toggle.toggle()
+            self.assertEqual(w.cfg_toggle.arrowType(), Qt.UpArrow)
+        finally:
+            w.close()
+
+    def test_table_min_height(self):
+        from pycbeta.gui.__main__ import MainWindow
+        w = MainWindow()
+        try:
+            self.assertGreaterEqual(w.table.minimumHeight(), 150)
+        finally:
+            w.close()
 
     def test_start_button_labeled_convert(self):
         from pycbeta.gui.__main__ import MainWindow

@@ -81,6 +81,18 @@ def _mulu_level(n) -> int:
         return 0
 
 
+# 章信号：mulu 去空白后以「第…章」开头（如「第二章　印度佛學略史」）。
+# level 号各书相对（X1077 level-2 是真言节、TX0001 level-4 才是章），
+# 只有文字能跨书稳定识别「章」。
+_ZHANG_RE = re.compile(
+    r"^第[〇零一二三四五六七八九十百千兩两萬万億亿0-9]+章")
+
+
+def _is_zhang(text: str) -> bool:
+    """mulu 文字是否为「第X章」章信号（去空白后前缀匹配）。"""
+    return bool(_ZHANG_RE.match((text or "").strip()))
+
+
 # 智能合页：level≥2 的短节与下一节同页（只看前一节累计字数）
 DEFAULT_MULU_SMART_MIN_CHARS = 200
 
@@ -127,6 +139,21 @@ def split_sections(body, rules: dict) -> list:
         return "".join(parts)
 
     levels = _mulu_levels(rules)
+    # 章分页（R2）：mulu 命中「第X章」独立成页，无视其 level 是否在 levels 里；
+    # 需 R1 开着（levels 非空）；开关 mulu_zhang_break 默认开。
+    zhang_break = bool(rules.get("mulu_zhang_break", True)) and bool(levels)
+
+    def is_mulu_break(n) -> bool:
+        """mulu 是否为分页断点：level 命中 levels，或（章开关开）命中章信号。
+        type=卷 恒排除（卷只归 juan 规则）；空文字不触发。"""
+        if not (isinstance(n, E) and n.tag == "mulu"):
+            return False
+        txt = mulu_text(n).strip()
+        if not txt or n.attrs.get("type") == "卷":
+            return False
+        if _mulu_level(n) in levels:
+            return True
+        return zhang_break and _is_zhang(txt)
 
     def is_break(kind, n) -> bool:
         if kind == "milestone":
@@ -139,10 +166,7 @@ def split_sections(body, rules: dict) -> list:
             return False
         if n.tag == "juan" and n.attrs.get("fun") == "open":
             return True  # 卷头开启新节：卷头/译者/首品同节（后续品仍由 mulu_levels 切分）
-        if n.tag == "mulu" and mulu_text(n).strip():
-            return (_mulu_level(n) in levels
-                    and n.attrs.get("type") != "卷")
-        return False
+        return is_mulu_break(n)
 
     def meaningful(ops) -> bool:
         """节内是否已有内容：lb/pb/space/anchor 渲染为空不计；
@@ -163,9 +187,7 @@ def split_sections(body, rules: dict) -> list:
                              "juan"):  # 卷头（含 jhead/书名/卷次）亦属题署块
                     continue
                 if n.tag == "mulu":
-                    if (n.attrs.get("type") != "卷"
-                            and mulu_text(n).strip()
-                            and _mulu_level(n) in levels):
+                    if is_mulu_break(n):
                         return True
                     continue
                 return True
@@ -231,6 +253,13 @@ def split_sections(body, rules: dict) -> list:
 
     # 智能合页：level≥2 的短节并入下一节（只看前一节累计字数）
     smart = _mulu_smart_levels(rules)
+
+    def first_mulu_text(ops) -> str:
+        for k, nd in ops:
+            if k == "node" and isinstance(nd, E) and nd.tag == "mulu":
+                return mulu_text(nd).strip()
+        return ""
+
     if smart and len(sections) > 1:
         try:
             thr = int(rules.get("mulu_smart_min_chars",
@@ -240,7 +269,10 @@ def split_sections(body, rules: dict) -> list:
         out = []
         cno, cops, cst = sections[0][0], sections[0][1], starts[0]
         for (no, ops), st in zip(sections[1:], starts[1:]):
-            if st in smart and sec_len(cops) < thr:
+            # 章豁免（R3，恒生效）：incoming 节首是「第X章」→ 不并入上一节，
+            # 章独立起页（单向：只挡「吞章头」，短章吸后文仍保留）
+            if (st in smart and not _is_zhang(first_mulu_text(ops))
+                    and sec_len(cops) < thr):
                 cops = cops + ops   # 合并（跨节 div close/open 对相抵，无副作用）
             else:
                 out.append((cno, cops))

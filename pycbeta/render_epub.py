@@ -28,6 +28,7 @@ class EpubRenderer:
                  annotations=None, strip_head_no=False, inline_brackets="fullwidth",
                  note_inline_brackets=None, figure_base=None, corr_cbeta=False,
                  siddham_text=False, mulu_break=True, mulu_levels=(1,),
+                 mulu_zhang_break=False,
                  pre_dedent=False, pre_dedent_spaces=4):
         # theme=None → 纯基底（官方基底默认）；pdf_docx 主题不再进 epub
         #（render_html 章节与 style.css 同源 base_css）。
@@ -48,6 +49,7 @@ class EpubRenderer:
         self.siddham_text = siddham_text  # 转内部 HtmlRenderer（有读音悉昙字形+读音，默认关）
         self.mulu_break = mulu_break      # 非「卷」mulu 拆 spine（与 docx mulu_levels 分页同口径）
         self.mulu_levels = mulu_levels    # 触发拆 spine 的 mulu level 集合（转内部 HtmlRenderer）
+        self.mulu_zhang_break = bool(mulu_zhang_break)  # 章信号（第X章）也拆 spine
         self.pre_dedent = bool(pre_dedent)          # 预排去缩进（转内部 HtmlRenderer）
         try:
             self.pre_dedent_spaces = max(0, int(pre_dedent_spaces))
@@ -73,6 +75,7 @@ class EpubRenderer:
                                   corr_cbeta=self.corr_cbeta,
                                   mulu_break=self.mulu_break,
                                   mulu_levels=self.mulu_levels,
+                                  mulu_zhang_break=self.mulu_zhang_break,
                                   pre_dedent=self.pre_dedent,
                                   pre_dedent_spaces=self.pre_dedent_spaces)
             html_files = inner.render_work(work, tmp)
