@@ -750,7 +750,7 @@ class MainWindow(QMainWindow):
         _out0 = ((presets.get("source") or {}).get("out_dir") or "").strip()
         if _out0:
             self.out_edit.setText(_out0)
-        layout.addWidget(self.panel, 1)
+        layout.addWidget(self.panel, 3)   # 选项面板给足高度（表格只占 2）
         # 批量列表
         self.table = QTableWidget(0, 5)
         self.table.setHorizontalHeaderLabels(["经号", "经名", "来源", "状态", "文件"])
