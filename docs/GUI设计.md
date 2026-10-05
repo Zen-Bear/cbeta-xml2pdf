@@ -56,7 +56,7 @@ class XmlOptions:
 | | `output.corr_cbeta` | 复选「CBETA校改字标红」（默认关） | `output.corr_cbeta` |
 | | `output.ignore_xml_style` / `ignore_xml_space` | 复选（脏数据忽略） | `output.*` |
 | | `output.verse_caesura` / `verse_strip_quotes` | 输入/复选（偈颂） | `output.*` |
-| 分页 | `output.pagination.*` | 分组复选（各选项右侧**灰色括号说明**）：智能分页=总开关（关则下列全失效）；双面打印=每卷单数页起；卷首换页=每卷开头另起一页（第 1 卷默认与书名同页）；首卷换页=第 1 卷也另起一页、书名独占首页（需勾选卷首换页）；目录换页 level=开关（默认开）+下拉（仅 level-1（默认）/level-1+2/level-1+2+3/level-1+2+3+4），选中 level 的目录各自另起一页（epub 同步按此拆章节）；章独立成页=开关（默认开）mulu 形如「第X章」时无视 level 独立成页、章恒不参与合页（epub 同步拆章）；空标题并入下节=开关（默认开）本节只有标题、无正文时与下一节同页（同卷内；复用"空则不切"机制）；短节智能合页=level≥2 的短节（前一节**估算**占页不足所选比例，默认 1/3；按当前纸张/边距/字号/行距估算）与下一节同页（仅 DOCX 及 docx2pdf 派生的 PDF，可关；下拉含 level≥2 才生效）；按 pb 分页=按 `<pb>` 刻本页边界；尾页换页=末尾【經文資訊】另起一页 | `pagination.*`（`mulu_levels`/`mulu_zhang_break`/`mulu_heading_merge`/`mulu_smart_merge`/`mulu_smart_max_frac`；旧键 `mulu_level1` 兼容） |
+| 分页 | `output.pagination.*` | 分组复选（各选项右侧**灰色括号说明**）：智能分页=总开关（关则下列全失效）；双面打印=每卷单数页起；卷首换页=每卷开头另起一页（第 1 卷默认与书名同页）；首卷换页=第 1 卷也另起一页、书名独占首页（需勾选卷首换页）；目录换页 level=开关（默认开）+下拉（仅 level-1（默认）/level-1+2/level-1+2+3/level-1+2+3+4），选中 level 的目录各自另起一页（epub 同步按此拆章节）；章独立成页=开关（默认开）mulu 形如「第X章」时无视 level 独立成页、章恒不参与合页（epub 同步拆章）；空标题并入下节=开关（默认关）本节只有标题、无正文时与下一节同页（同卷内；复用"空则不切"机制）；短节智能合页=level≥2 的短节（前一节**估算**占页不足所选比例，默认 1/3；按当前纸张/边距/字号/行距估算）与下一节同页（仅 DOCX 及 docx2pdf 派生的 PDF，可关；下拉含 level≥2 才生效）；按 pb 分页=按 `<pb>` 刻本页边界；尾页换页=末尾【經文資訊】另起一页 | `pagination.*`（`mulu_levels`/`mulu_zhang_break`/`mulu_heading_merge`/`mulu_smart_merge`/`mulu_smart_max_frac`；旧键 `mulu_level1` 兼容） |
 | 经藏名 | `output.series_title.*` | 复选+字体+字号 | `series_title.*` |
 | 校验 | `verify.enabled/maxDiff/diffLines/auto_fetch/scope_juan` + `output.convert_report` | 高级页（转换后校验开关**默认开** + **转换报告开关默认开**/阈值/报告差异行数/自动下载/卷限定 + 「清理校验产物…」按钮） | `verify.*` / `output.convert_report` |
 | 注音 | `annotations.enabled` / `full_text` | 三选一**单选按钮**「无注音 / 难字注音 / 全文注音」（全文含难字；`QRadioButton` 同组互斥）+ 方案/位置/括号/频率/词表（词表**只读**，浏览选择，默认内置表）；`rare_zones`/`rare_font` 走 config | `annotations.*` |
@@ -112,7 +112,7 @@ class XmlOptions:
 │       ☐ 首卷换页（第1卷也另起一页，书名独占首页）             │
 │       ☑ 目录换页 level [仅 level-1（默认）▼]（序/品各自另起一页）│
 │       ☑ 章独立成页（第X章无视 level 独立成页；恒不参与合页）   │
-│       ☑ 空标题并入下节（本节只有标题、无正文时与下节同页）     │
+│       ☐ 空标题并入下节（本节只有标题、无正文时与下节同页）     │
 │       ☑ 短节智能合页 不足[1/3 页]（level≥2 短节与下节同页；估算）│
 │       ☐ 按 pb 分页（按刻本页边界；默认关）                    │
 │       ☑ 尾页换页（【經文資訊】另起一页）                       │

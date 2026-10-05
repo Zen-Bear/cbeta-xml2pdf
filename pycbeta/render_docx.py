@@ -318,7 +318,7 @@ def split_sections(body, rules: dict, layout=None) -> list:
             force = is_milestone and juan_first
             # mulu 断点：开关开时用"有无正文"判（仅标题的空节与下节同页，
             # 复用"空则不切"的既有机制）；卷/pb 断点仍用 meaningful（卷首/pb 照旧）
-            if (rules.get("mulu_heading_merge", True)
+            if (rules.get("mulu_heading_merge", False)
                     and isinstance(n, E) and n.tag == "mulu"):
                 has_content = bool(cur and has_body(cur))
             else:

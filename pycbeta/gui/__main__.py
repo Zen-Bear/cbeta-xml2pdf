@@ -660,7 +660,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         from pycbeta import __version__ as _ver
         self.setWindowTitle(f"CBETA XML 格式转换 v{_ver}（{_gui_date()}）")
-        self.resize(817, 720)
+        self.resize(817, 660)
         menu = self.menuBar()
         act_cfg = menu.addAction("设置…")
         act_cfg.setToolTip("查看/编辑数据源与配置（存当前选中预设）")

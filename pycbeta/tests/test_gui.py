@@ -1642,15 +1642,15 @@ class TestLayoutRegroup(unittest.TestCase):
     def test_heading_merge_roundtrip(self):
         from pycbeta.gui.panel import XmlOptionsPanel
         panel = XmlOptionsPanel(load_presets())
-        self.assertTrue(panel.pg_heading_box.isChecked())     # 默认开
-        self.assertTrue(panel.get_options().pagination["mulu_heading_merge"])
-        panel.pg_heading_box.setChecked(False)
-        o = panel.get_options()
-        self.assertFalse(o.pagination["mulu_heading_merge"])
-        panel.set_options(o)
-        self.assertFalse(panel.pg_heading_box.isChecked())
+        self.assertFalse(panel.pg_heading_box.isChecked())    # 默认关
+        self.assertFalse(panel.get_options().pagination["mulu_heading_merge"])
         panel.pg_heading_box.setChecked(True)
-        self.assertTrue(panel.get_options().pagination["mulu_heading_merge"])
+        o = panel.get_options()
+        self.assertTrue(o.pagination["mulu_heading_merge"])
+        panel.set_options(o)
+        self.assertTrue(panel.pg_heading_box.isChecked())
+        panel.pg_heading_box.setChecked(False)
+        self.assertFalse(panel.get_options().pagination["mulu_heading_merge"])
 
     def test_mulu_levels_items_four(self):
         from pycbeta.gui.panel import MULU_LEVEL_ITEMS
@@ -2322,12 +2322,14 @@ class TestNotesTab(unittest.TestCase):
             panel.close()
 
     def test_notes_on_label_and_row(self):
-        from PySide6.QtWidgets import QFormLayout
+        from PySide6.QtWidgets import QFormLayout, QScrollArea
         panel = self._panel()
         try:
             tab = next(panel.tabs.widget(i)
                        for i in range(panel.tabs.count())
                        if panel.tabs.tabText(i) == "注释")
+            if isinstance(tab, QScrollArea):   # 页内容套滚动区，取内层
+                tab = tab.widget()
             fl = tab.layout()
             self.assertIsInstance(fl, QFormLayout)
 

@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
     QDialogButtonBox, QDoubleSpinBox,
     QFileDialog, QFormLayout, QGridLayout, QGroupBox, QHBoxLayout, QInputDialog,
     QLabel, QLineEdit,
-    QMessageBox, QPlainTextEdit, QPushButton, QRadioButton, QHeaderView, QSpinBox,
+    QMessageBox, QPlainTextEdit, QPushButton, QRadioButton, QHeaderView, QScrollArea, QSpinBox,
     QTableWidget, QTableWidgetItem,
     QTabWidget, QVBoxLayout,
     QWidget,
@@ -839,14 +839,14 @@ class XmlOptionsPanel(QWidget):
         layout.addWidget(cfg)
         self.tabs = QTabWidget()
         layout.addWidget(self.tabs)
-        self.tabs.addTab(self._tab_formats(), "输出格式")
-        self.tabs.addTab(self._tab_styles(), "样式表")
-        self.tabs.addTab(self._tab_page(), "页面")
-        self.tabs.addTab(self._tab_pagination(), "分页")
-        self.tabs.addTab(self._tab_layout(), "排版")
-        self.tabs.addTab(self._tab_notes(), "注释")
-        self.tabs.addTab(self._tab_ann(), "注音")
-        self.tabs.addTab(self._tab_verify(), "校验")
+        self.tabs.addTab(self._wrap_scroll(self._tab_formats()), "输出格式")
+        self.tabs.addTab(self._wrap_scroll(self._tab_styles()), "样式表")
+        self.tabs.addTab(self._wrap_scroll(self._tab_page()), "页面")
+        self.tabs.addTab(self._wrap_scroll(self._tab_pagination()), "分页")
+        self.tabs.addTab(self._wrap_scroll(self._tab_layout()), "排版")
+        self.tabs.addTab(self._wrap_scroll(self._tab_notes()), "注释")
+        self.tabs.addTab(self._wrap_scroll(self._tab_ann()), "注音")
+        self.tabs.addTab(self._wrap_scroll(self._tab_verify()), "校验")
 
     def _combo(self, items, cur=None):
         box = QComboBox()
@@ -1428,8 +1428,8 @@ class XmlOptionsPanel(QWidget):
         return box
 
     def _tab_pagination(self):
-        w = QWidget()
-        grid = QGridLayout(w)
+        content = QWidget()
+        grid = QGridLayout(content)
         left = QVBoxLayout()
         left.addWidget(self._hint("分节即分页单元：Word 里每节另起一页"))
         self.pg_boxes = {}
@@ -1481,10 +1481,10 @@ class XmlOptionsPanel(QWidget):
         _zrow.addWidget(self._gray_hint(
             "（mulu 形如「第X章」独立成页，不论 level；章恒不参与合页）"), 1)
         # 空标题并入下节：本节只有标题、无正文时与下节同页（默认开；同卷内）
-        self.pg_heading_box = self._check("空标题并入下节", checked=True)
+        self.pg_heading_box = self._check("空标题并入下节", checked=False)
         self.pg_heading_box.setToolTip(
             "pagination.mulu_heading_merge：本节只有标题（mulu/head）、"
-            "没有正文时与下一节同页（同卷内）；默认开")
+            "没有正文时与下一节同页（同卷内）；默认关")
         self.pg_heading_box.toggled.connect(lambda _v: self._changed())
         _hrow = QHBoxLayout()
         _hrow.setContentsMargins(0, 0, 0, 0)
@@ -1527,7 +1527,16 @@ class XmlOptionsPanel(QWidget):
         grid.addLayout(_hrow, 3, 0, 1, 2)
         grid.addLayout(_srow, 4, 0, 1, 2)
         grid.addWidget(_smart_hint, 5, 0, 1, 2)
-        return w
+        return content
+
+    @staticmethod
+    def _wrap_scroll(content):
+        """内容套垂直滚动区（页内容多时只在本页出滚动条，不撑高整个窗口）。"""
+        area = QScrollArea()
+        area.setWidgetResizable(True)
+        area.setFrameShape(QScrollArea.NoFrame)
+        area.setWidget(content)
+        return area
 
     def _tab_layout(self):
         w = QWidget()
@@ -2264,7 +2273,7 @@ class XmlOptionsPanel(QWidget):
             self._on_mulu_on(self.mulu_on_box.isChecked())
             self.pg_zhang_box.setChecked(bool(pg.get("mulu_zhang_break", True)))
             self.pg_heading_box.setChecked(
-                bool(pg.get("mulu_heading_merge", True)))
+                bool(pg.get("mulu_heading_merge", False)))
             self.pg_smart_box.setChecked(bool(pg.get("mulu_smart_merge", True)))
             try:
                 _f = float(pg.get("mulu_smart_max_frac", 1.0 / 3.0))
