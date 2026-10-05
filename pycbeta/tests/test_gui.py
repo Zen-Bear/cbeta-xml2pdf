@@ -2322,14 +2322,12 @@ class TestNotesTab(unittest.TestCase):
             panel.close()
 
     def test_notes_on_label_and_row(self):
-        from PySide6.QtWidgets import QFormLayout, QScrollArea
+        from PySide6.QtWidgets import QFormLayout
         panel = self._panel()
         try:
             tab = next(panel.tabs.widget(i)
                        for i in range(panel.tabs.count())
                        if panel.tabs.tabText(i) == "注释")
-            if isinstance(tab, QScrollArea):   # 页内容套滚动区，取内层
-                tab = tab.widget()
             fl = tab.layout()
             self.assertIsInstance(fl, QFormLayout)
 
