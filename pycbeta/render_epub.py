@@ -29,7 +29,8 @@ class EpubRenderer:
                  note_inline_brackets=None, figure_base=None, corr_cbeta=False,
                  siddham_text=False, mulu_break=True, mulu_levels=(1,),
                  mulu_zhang_break=False,
-                 pre_dedent=False, pre_dedent_spaces=4):
+                 pre_dedent=False, pre_dedent_spaces=4,
+                 suppress_orphan_orig=True):
         # theme=None → 纯基底（官方基底默认）；pdf_docx 主题不再进 epub
         #（render_html 章节与 style.css 同源 base_css）。
         self.theme = theme
@@ -51,6 +52,8 @@ class EpubRenderer:
         self.mulu_levels = mulu_levels    # 触发拆 spine 的 mulu level 集合（转内部 HtmlRenderer）
         self.mulu_zhang_break = bool(mulu_zhang_break)  # 章信号（第X章）也拆 spine
         self.pre_dedent = bool(pre_dedent)          # 预排去缩进（转内部 HtmlRenderer）
+        # 被 mod 取代的 orig 注：epub 连尾注块一起不出（官方 txt/epub 均无孤注；默认开）
+        self.suppress_orphan_orig = bool(suppress_orphan_orig)
         try:
             self.pre_dedent_spaces = max(0, int(pre_dedent_spaces))
         except (TypeError, ValueError):
@@ -77,7 +80,8 @@ class EpubRenderer:
                                   mulu_levels=self.mulu_levels,
                                   mulu_zhang_break=self.mulu_zhang_break,
                                   pre_dedent=self.pre_dedent,
-                                  pre_dedent_spaces=self.pre_dedent_spaces)
+                                  pre_dedent_spaces=self.pre_dedent_spaces,
+                                  suppress_orphan_orig=self.suppress_orphan_orig)
             html_files = inner.render_work(work, tmp)
             self.missing_figures = list(inner.missing_figures)
             md = work.metadata

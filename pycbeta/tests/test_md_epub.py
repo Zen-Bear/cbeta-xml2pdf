@@ -112,6 +112,32 @@ class TestEpubMuluSplit(unittest.TestCase):
                           E(tag="p", attrs={}, children=[Text("乙文")])],
                     notes_by_n={}, apps=[], simplified=False)
 
+    def test_epub_suppress_orphan_orig(self):
+        # 被 mod(a/b) 取代的 orig 注：epub 连尾注块一起不出（官方 txt/epub 无孤注）
+        from pycbeta.model import E, Note, NoteRef, Text, Work
+        orig = Note(tag="note", attrs={}, n="0028009", ntype="orig",
+                    children=[Text(text="其積又火＝")])
+        ma = Note(tag="note", attrs={}, n="0028009a", ntype="mod",
+                  children=[Text(text="其積【大】")])
+        w = Work(id="T", source_file="",
+                 metadata={"title": "t", "author": ""},
+                 body=[E(tag="p", attrs={}, children=[
+                     Text("燃"), NoteRef(n="0028009", notes=[orig]),
+                     NoteRef(n="0028009a", notes=[ma])])],
+                 notes_by_n={"0028009": [orig], "0028009a": [ma]},
+                 apps=[], simplified=False)
+        d = tempfile.mkdtemp()
+        self.addCleanup(__import__("shutil").rmtree, d, True)
+        fn = EpubRenderer().render_work(w, d)
+        z = zipfile.ZipFile(fn)
+        blob = "".join(z.read(n).decode("utf-8")
+                       for n in z.namelist() if n.endswith(".xhtml"))
+        self.assertNotIn('note_anchor_0028009"', blob)   # 正文锚点不出
+        self.assertNotIn("id='n0028009'", blob)          # 尾注孤注也不出
+        self.assertNotIn("其積又火＝", blob)
+        self.assertIn('note_anchor_0028009a"', blob)     # mod 注照常
+        self.assertIn("其積【大】", blob)
+
     def test_split_spine_by_mulu(self):
         import re
         d = tempfile.mkdtemp()

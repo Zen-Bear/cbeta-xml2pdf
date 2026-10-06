@@ -127,7 +127,8 @@ class HtmlRenderer:
                  note_inline_brackets=None, title_t2s=True, siddham_text=False,
                  annotations=None, strip_head_no=False, corr_cbeta=False,
                  mulu_break=False, mulu_levels=(1,), mulu_zhang_break=False,
-                 pre_dedent=False, pre_dedent_spaces=4):
+                 pre_dedent=False, pre_dedent_spaces=4,
+                 suppress_orphan_orig=False):
         self.gaiji_db = gaiji_db if gaiji_db is not None else GaijiDb()
         self.theme = theme
         # 图片搜索目录：str | list[str]（{work}/figures → {work}/txt → 仓库 figures）
@@ -154,8 +155,11 @@ class HtmlRenderer:
         self._annotations = _ann_active(annotations)
         self._ann_seen = set()  # repeat first/page 已注词集合（render_work 起始终置零）
         self._work = None
-        # 被 mod(a/b) 取代的 orig 注：正文不出锚点，但尾注块保留（孤注，官方口径）
+        # 被 mod(a/b) 取代的 orig 注：正文不出锚点，但尾注块保留（孤注，官方 html 口径）
         self._orig_suppressed = set()
+        # epub 口径：压制注**连尾注块一起不出**（官方 txt/epub 均无该孤注；
+        # html 保持默认 False 保留孤注，与官方 html 一致）
+        self._suppress_orphan_orig = bool(suppress_orphan_orig)
         self._note_seq = 0
         self._old_seq = 0
         self._back_old = []  # orig/mod footnotes (old format), rendered first
@@ -774,7 +778,9 @@ class HtmlRenderer:
             )
             return f"<a id='cb_note_anchor{seq}' class='noteAnchor add' href='#cb_note_{seq}'>[A{seq}]</a>"
         n = note.n or ""
-        # 尾注块恒出（含被取代的 orig → 孤注，与官方一致）
+        if _sup and self._suppress_orphan_orig:
+            return ""   # epub 口径：连尾注块一起不出（官方 txt/epub 均无此孤注）
+        # 尾注块恒出（含被取代的 orig → 孤注，与官方 html 一致）
         self._back_old.append(
             f"<span class='footnote' id='n{_esc(n)}'><a href='#note_anchor_{_esc(n)}'>[{_esc(n)}]</a> {content}</span>\n"
         )

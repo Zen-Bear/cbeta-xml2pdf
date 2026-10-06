@@ -590,10 +590,10 @@ class TestSplitOrigSuppressedHtml(unittest.TestCase):
                     body=[E(tag="p", attrs={}, children=kids)],
                     notes_by_n=byn, apps=[], simplified=False)
 
-    def _html(self, with_mod):
+    def _html(self, with_mod, **kw):
         d = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, d, True)
-        files = HtmlRenderer().render_work(self._work(with_mod), d)
+        files = HtmlRenderer(**kw).render_work(self._work(with_mod), d)
         return "".join(open(os.path.join(d, f), encoding="utf-8").read()
                        for f in files)
 
@@ -609,6 +609,14 @@ class TestSplitOrigSuppressedHtml(unittest.TestCase):
         blob = self._html(False)
         self.assertIn('id="note_anchor_0028009"', blob)
         self.assertIn("其積又火＝", blob)
+
+    def test_suppress_orphan_orig_flag_drops_block(self):
+        # epub 口径：开关开时连尾注块一起不出
+        blob = self._html(True, suppress_orphan_orig=True)
+        self.assertNotIn('id="note_anchor_0028009"', blob)
+        self.assertNotIn("id='n0028009'", blob)
+        self.assertNotIn("其積又火＝", blob)
+        self.assertIn('id="note_anchor_0028009a"', blob)     # mod 注照常
 
 
 if __name__ == "__main__":
