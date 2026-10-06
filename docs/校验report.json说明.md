@@ -61,7 +61,8 @@ out/验证/X1077 准提净业（验证）/X1077_准提净业_校验报告.txt
       "extra": 0,
       "reason": null,
       "formal_outputs": ["…/X59n1077.docx"],
-      "report": "X1077_准提净业_校验报告.txt"
+      "report": "X1077_准提净业_校验报告.txt",
+      "diff_scope": "notes_only"
     }
   },
   "created_at": "2026-…"
@@ -70,6 +71,11 @@ out/验证/X1077 准提净业（验证）/X1077_准提净业_校验报告.txt
 
 - `xml_files` / `baselines` 只有 `name/size/mtime_ns`（无 sha；sha 只进指纹）。
 - `coverage` 只在请求了 `pdf` 时出现（`pdf` 无官方基线，结论随其管线源格式）。
+- `diff_scope`（2026-10-06 新增，可空）：差异范围旁路结论——把两侧注释（尾注/脚注）
+  段单独取出后**只比正文**，正文段**严格 0 差异**才为 `notes_only`（差异全在注释）；
+  否则 `body`（含正文差异）；该格式/基线组合分不出正文段为 `unknown`；未做旁路为
+  `null`。多记录聚合取最保守（`body` > `unknown` > `notes_only`）。**纯旁路信息，
+  不影响 `verdict`/`missing`/`extra`**。
 - 新增字段向后兼容；语义变化会升级 `schema` 或 `fingerprint_version`；未知字段请忽略。
 
 ## 4. 指纹复用契约（下游 Phase 2 用）

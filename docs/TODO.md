@@ -5,7 +5,7 @@
 - **当前优先级（2026-10-06 审计；2026-10-06 更新：X1077 用户实测全绿；publish 仓 P0–P4 已全完成，无遗留）**：
   - P0 收尾（已提交 `6ba95c5`/`c59ec8d`）：xml2pdf GUI（转换中/预填经名来源/光标落文件列）+ 外部引擎 URL + TODO 审计；publish 封面演示待提交。
   - P1：按卷范围 juan（用户立项，唯一大型待办；分阶段：`juan.py` spec/过滤 → CLI `--juan` → GUI/校验接线）。外部引擎分发已改走上游 URL（安装文档已写明，不传 Release）。
-  - P2：html/epub 用户 CSS（原定最低优先级，backlog，方案已定）。门禁外红灯已全消（2026-10-06：T0001/X1077 六格式全绿）。
+  - P2：html/epub 用户 CSS（原定最低优先级，backlog，方案已定）。门禁外红灯已全消（2026-10-06：T0001/X1077 六格式全绿）；校验报告「差异是否全在注释」已落地（Q3，`diff_scope`）；Q1（html 回退 txt）降为可选/低。
   - P3/关闭：body-placed foot 注渲染（大，需另行立项定范围）；T01 `_cbreader` 重合（数据卫生，低）；元素/字体扫描（已记录，无代码改动）；html2pdf 分页（决议不做）；`verify_one`/`build_report_json` 行级共享（收益小，暂不）。
 - [x] **已完成 render-time 按字回退**（2026-09-06 用户报 標楷體 U+43F6 预览/Word 双 tofu）：`RENDER_FALLBACKS=(SimSun,PMingLiU,微软雅黑)`，`_fb_emit` 按 cmap 查覆盖、缺字拆 run（只换 eastAsia）；无文件不断言保持原样；真全缺（如悉昙 PUA）保持 tofu + 预览点名。T0672 对账文本一致；单测 TestRenderFallback 6 项；全量 302 OK，verify 8/0
   - 追补（2026-09-06）：回退链分繁简（Hant 首选 PMingLiU，Hans 首选 SimSun；跟 gaiji_lang；含 SimSunExtB/CBETA Supplement）；`output.docx.gaijiFonts` 未动（删的只是顶层 font_sets）；`linkActivated` 改 flag 跟踪消 RuntimeWarning；Ranjana.ttf/Siddam.ttf 实测 0/58 样本 PUA（纯装饰 CJK，不接线）
@@ -78,9 +78,9 @@
     - **格式核对**：`epub` 走 `HtmlRenderer` 内核 → 自动同处理（实测正文锚点 0、孤注块 1）；`txt`/`md`/`docx` 官方基线**不含**该 orig 注（实测 `T0001_004.txt` 无 `其積又火`）→ 沿用全压制（`suppressed_orig_notes` 命中即整条不出），无需改动。
     - 附带：`normalize` 加 `html.unescape`（官方 html 正则剥标签后 `&quot;`/`&#39;` 实体残留，生成侧 raw 字符；T0001 html 104→12 大头）。
     - 仍留（非红灯，另行立项）：渲染 body-placed foot 注、T01 `_cbreader` charDecl 重合（卫生）；辅轨 `No.` 镜像已随 X1077 全绿作废。
-  - 校验设计决议（2026-10-06 用户点档 T0001 html 定位时确认）：
-    - Q1：html 失败**不**回退 txt（设计使然，非漏写）。`verify.bases.html=["html"]`，`resolve_bases` 只试链内；实质是结构对不上——html 侧校注 inline 保留（`strip_jiaozhu=False`），txt 基线经 `_norm_official_txt` 注挪文末，直接比必红；另写双侧重排属新功能，且会掩盖 html 特有问题。
-    - Q3：差异暂不区分正文/注释（现状 `normalize` 压平后无分类；抽取层本有结构，`_extract_html_parts` 分正文/脚注，做 span tracking 可实现，工作量中等，另立项）。
+  - 校验设计决议（2026-10-06 用户点档）：
+    - [x] **Q3 已提升并落地**：校验报告告知「差异是否全部在注释」。显式分段（html/epub `_extract_html_parts`/`_extract_epub_parts`；docx `_extract_docx_parts`；官方 txt `_extract_txt_parts`；我方 txt `_split_txt_ours`；md `_split_md_body`）+ 正文段**严格 0** 判定；`verify_one` trial/记录加 `body_missing/body_extra/diff_scope`；报告 trial 行下加 `正文差异 …` 行（行首不用 `[OK]/[FAIL]/[--]`，避免下游块标记误读）；`report.json` 加 `fmts.<fmt>.diff_scope`（多记录聚合 body>unknown>notes_only）。单测 `TestBodySidecar`（8）+ `test_report_json.TestBuildReportJson.test_diff_scope_aggregate`；全量 1126 OK。文档：`校验说明书.md` §5 + `校验report.json说明.md` §3。
+    - [ ] **（可选/低）Q1** html 校验失败回退 txt 基线：现决议**不回退**（设计使然，非漏写）——`verify.bases.html=["html"]`、`resolve_bases` 只试链内；实质结构对不上（html 侧校注 inline 保留 `strip_jiaozhu=False`，txt 基线经 `_norm_official_txt` 注挪文末，直接比必红），且会掩盖 html 特有问题（见 `校验说明书.md` §4.2d 排查要点）。仅作可选增强，默认不开。
 - [x] **已完成** GUI 转换后校验反馈修复（2026-09-10 用户点档：结果/进度/汇总）
   - 根因：`BatchWorker._verify_one` 仅 `log.emit`（接 statusBar 瞬时消息，被后续覆盖）；行状态不含校验；`total_units` 不含校验；无汇总/日志窗
   - 落点：`pycbeta/gui/__main__.py` — 新增信号 `row_verify(int,level)`/`verify_result(dict)`；`_verify_one` 返回记录 dict（status/missing/extra/total/official_kind/official/gen_cmp/src_cmp，异常 `status=error`）；`run()` 校验前状态列 `校验中（fmt）…`、校验单元计入总进度、逐行 `_row_outcome` 综合「渲染+校验」终态、**校验报告追加到文件列产物列表末尾**（`*_compare_*.txt`，与 docx/txt 同列可点击打开）；`_on_verify_level` 状态列着色（通过 `#2e7d32`/失败 `#c62828`/无基线灰）；`VerifySummaryDialog`（通过/失败/无基线计数 + 逐项明细 + 打开报告目录，报告落 `out/{fmt}/`；无结果不弹、失败不强制弹）；`_start` 重置结果并接线
