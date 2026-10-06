@@ -310,6 +310,34 @@ class TestMaterialize(unittest.TestCase):
                 "T0349", _presets(cbeta_ebook=e))
         self.assertEqual((paths, label), ([], ""))
 
+    def test_dry_run_predicts_without_side_effects(self):
+        # dry_run：只预测来源标签，不拷贝/不合册/不下载（GUI 列表预填用）
+        x = tempfile.mkdtemp()
+        e = tempfile.mkdtemp()
+        whole = os.path.join(x, "T0349 書", "T12n0349.xml")
+        os.makedirs(os.path.dirname(whole))
+        with open(whole, "w", encoding="utf-8") as f:
+            f.write("<TEI/>")
+        paths, label = materialize_work(
+            "T0349", _presets(xml_dir=x, cbeta_ebook=e), dry_run=True)
+        self.assertEqual((paths, label), ([], "xml_copy"))
+        # 未落盘：工作目录仍空（不创建、不拷贝）
+        self.assertEqual(
+            [d for d in os.listdir(e)
+             if os.path.isdir(os.path.join(e, d))], [])
+        # 需下载：catalog 收录则预测 downloaded，且不触网
+        with mock.patch("pycbeta.fetch._catalog_title", return_value="書"), \
+             mock.patch("pycbeta.fetch.fetch_work",
+                        side_effect=AssertionError("dry_run 不应下载")):
+            paths2, label2 = materialize_work(
+                "T0349", _presets(cbeta_ebook=e), dry_run=True)
+        self.assertEqual((paths2, label2), ([], "downloaded"))
+        # catalog 未收录 → 不预测来源
+        with mock.patch("pycbeta.fetch._catalog_title", return_value=""):
+            paths3, label3 = materialize_work(
+                "T0349", _presets(cbeta_ebook=e), dry_run=True)
+        self.assertEqual((paths3, label3), ([], ""))
+
 
 class TestFetchWork(unittest.TestCase):
     def test_ebook_required(self):

@@ -191,7 +191,7 @@ class XmlOptions:
 │ 设置     [XmlOptionsPanel 嵌入]                                │
 │ ┌─ 批量列表 ────────────────────────────────────────────────┐ │
 │ │ 经号        经名              来源    状态    进度          │ │
-│ │ T0349      彌勒菩薩所問本願經  本地XML  待转换  ████░░ 40% │ │
+│ │ T0349      彌勒菩薩所問本願經  本地XML  转换中  ████░░ 40% │ │
 │ │ X1116      毗尼日用切要香乳記  已下载  待转换  ░░░░░░  0%  │ │
 │ └───────────────────────────────────────────────────────────┘ │
 │ [转换] [取消]   ██████████░░░░░░░░ 进度条                      │
@@ -207,10 +207,11 @@ class XmlOptions:
    - `xml_dir`（只读候选源；**建议指向本地下载的 cbeta-org/xml-p5 全仓库副本（发布版 P5）**，勿指 CBReader）有 → 拷贝/碎片按组合册落 work 目录（来源标「本地拷贝/合册合成」）
     - **xml_dir 版本抽检**：`fetch.inspect_xml_source(xml_dir)` 抽样读 `<edition>`；非「XML TEI P5」（P5a/P5b）→ GUI 弹窗「仍使用 / 清除该路径 / 取消」（默认高亮清除；「清除」写回当前选中预设 `source.xml_dir=""`），转换首次也兜底检一次；CLI 打印警告后继续
    - 勾选「自动下载缺失 XML」且前两源无 → `fetch.fetch_work(id, ["xml"], presets, cbeta_ebook)`（来源标「已下载」）
-   - 全无 → 行状态标「缺 XML」跳过
+       - 全无 → 行状态标「缺 XML」跳过
+   - **列表预填**（转换开始前）：`materialize_work(..., dry_run=True)` 只预测来源标签（不拷贝/不合册/不下载），配合 catalog 经名，把每行「经名/来源」在「待转换」阶段先填好（后面的书不再等到轮到它才显示）；实际转换时用准确值覆盖，解析失败则清空来源。每轮开始还把光标/视图复位到第一行的「文件」列
 3. **（可选）官方电子书**：勾选「同时下载官方电子书」→ `fetch.ensure_baselines(id, ["html","docx","txt"], presets, cbeta_ebook)`（落 work 目录；docx/odt 非 T/X 静默失败）
 4. **转换**：`cli.render_one` 或子进程 `[sys.executable, "-m", "pycbeta", "-i", xml, "-f", fmt, "--page", opts.page, "-o", out_dir]`（`t2s=True` 时追加 `--t2s`；子进程 stdout 强制 `PYTHONIOENCODING=utf-8`，中文产物名方可回读）。**默认产物名 = `{佛典編號 书名}`**（`filename.default_output_name`，书名跟随 `source.title_t2s` 转简；`--name-template` 显式覆盖，html 仍 renderer 内部命名）
-5. **（可选）校验**：`verify.verify_one(xml, fmt, source, out_root)`，进度条把校验计入总单元；行状态显示 `完成｜校验 OK/失败N/无对照N` 并按结果着色（通过绿 `#2e7d32` / 失败红 `#c62828` / 无对照灰）；转换期间状态列先示 `校验中（fmt）…`；**校验产物独立成 `{输出}/{id 书名}（验证）/` 子目录**（内部保持 `{fmt}/` 结构：重生成文件 + 各格式 `*_compare_*.txt` + `report.txt`；渲染输出仍在输出根），文件列依次为「渲染产物 + **验证总报告 `{id 书名}（验证）/{stem}_verify_report.txt`（排最后）**」，均可单击打开（各格式 `*_compare_*.txt` 仍落盘但**不列文件列**）；总报告由 `verify.format_verify_report(records, diff_lines, max_diff)` 生成，**逐条列出每个尝试过的对照**：`[OK]|[FAIL] ({fmt}→{对照kind} 缺X/多Y ≤|>阈值N)` + `【源】/【新】` + 前 N 条【源】【新】差异（N=`verify.diffLines` 默认 5，绿灯但非 缺0/多0 也列）；全部结束弹 `VerifySummaryDialog` 汇总（通过/失败/无对照计数 + 逐项明细 + 「打开报告目录」，失败不强制弹窗）。信号：`row_verify(int, level)`、`verify_result(dict)`（简体转换开启时官方文档同步转简体后比对）。**PDF 走源格式校验**：`docx2pdf`→按 docx、`html2pdf`→按 html；源格式已选中则标灰色「已覆盖」不重复，未选中则委托该类校验（显示 `pdf→docx`/`pdf→html`）
+5. **（可选）校验**：`verify.verify_one(xml, fmt, source, out_root)`，进度条把校验计入总单元；行状态显示 `完成｜校验 OK/失败N/无对照N` 并按结果着色（通过绿 `#2e7d32` / 失败红 `#c62828` / 无对照灰）；某行确认有 XML 待转换后状态列先由「待转换」转 `转换中…`（解析/下载阶段仍显示「待转换」），进入校验再示 `校验中（fmt）…`；**校验产物独立成 `{输出}/{id 书名}（验证）/` 子目录**（内部保持 `{fmt}/` 结构：重生成文件 + 各格式 `*_compare_*.txt` + `report.txt`；渲染输出仍在输出根），文件列依次为「渲染产物 + **验证总报告 `{id 书名}（验证）/{stem}_verify_report.txt`（排最后）**」，均可单击打开（各格式 `*_compare_*.txt` 仍落盘但**不列文件列**）；总报告由 `verify.format_verify_report(records, diff_lines, max_diff)` 生成，**逐条列出每个尝试过的对照**：`[OK]|[FAIL] ({fmt}→{对照kind} 缺X/多Y ≤|>阈值N)` + `【源】/【新】` + 前 N 条【源】【新】差异（N=`verify.diffLines` 默认 5，绿灯但非 缺0/多0 也列）；全部结束弹 `VerifySummaryDialog` 汇总（通过/失败/无对照计数 + 逐项明细 + 「打开报告目录」，失败不强制弹窗）。信号：`row_verify(int, level)`、`verify_result(dict)`（简体转换开启时官方文档同步转简体后比对）。**PDF 走源格式校验**：`docx2pdf`→按 docx、`html2pdf`→按 html；源格式已选中则标灰色「已覆盖」不重复，未选中则委托该类校验（显示 `pdf→docx`/`pdf→html`）
 
 > 校验卡「清理校验产物…」：确认后删除**输出目录**下全部 `{id 书名}（验证）/`（及 `（驗證）/`）子目录——可重生成的中间产物，成品不受影响；完成后提示删除数量。清理逻辑 `panel.clean_verify_dirs(out_dir)`（纯函数，可单测）。
 

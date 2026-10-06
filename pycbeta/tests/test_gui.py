@@ -1909,6 +1909,30 @@ class TestMainWindowUx(unittest.TestCase):
         finally:
             w.close()
 
+    def test_reset_table_view_returns_to_first_row(self):
+        # 每轮转换前光标/视图回到第一行（上轮结束常停在末行）
+        from PySide6.QtWidgets import QTableWidgetItem
+        from pycbeta.gui.__main__ import MainWindow
+        w = MainWindow()
+        try:
+            w.table.setRowCount(200)
+            for r in range(200):
+                for c in range(5):
+                    w.table.setItem(r, c, QTableWidgetItem(f"{r}-{c}"))
+            w.show()
+            self.app.processEvents()
+            w.table.scrollToBottom()
+            w.table.setCurrentCell(199, 4)
+            self.app.processEvents()
+            self.assertNotEqual(w.table.verticalScrollBar().value(), 0)
+            w._reset_table_view()
+            self.app.processEvents()
+            self.assertEqual(w.table.currentRow(), 0)
+            self.assertEqual(w.table.currentColumn(), 4)   # 光标落「文件」列
+            self.assertEqual(w.table.verticalScrollBar().value(), 0)
+        finally:
+            w.close()
+
     def test_open_cell_routing(self):
         import tempfile
         from PySide6.QtCore import Qt
@@ -2111,6 +2135,37 @@ class TestBatchMergeResolve(unittest.TestCase):
             self.assertEqual(labels3[-1], "缺 XML（下载失败）")
         finally:
             shutil.rmtree(ebook, ignore_errors=True)
+
+    def test_prefetch_meta_fills_title_and_source(self):
+        # 转换前预填：id 行在「待转换」阶段即应显示经名（catalog）与来源（预测）
+        import shutil
+        import tempfile
+        from unittest import mock
+        from pycbeta import fetch
+        from pycbeta.gui.__main__ import BatchWorker
+        tmp = tempfile.mkdtemp(prefix="gpref-")
+        cat = os.path.join(tmp, "sutra_mapping.txt")
+        with open(cat, "w", encoding="utf-8") as f:
+            f.write("x")
+        try:
+            w = BatchWorker([], None, {}, {"auto_xml": True})
+            titles, sources = [], []
+            w.row_title.connect(lambda i, t: titles.append(t))
+            w.row_source.connect(lambda i, t: sources.append(t))
+            presets = {"source": {"catalog": cat}}
+            with mock.patch("pycbeta.fetch.resolve_catalog",
+                            return_value=cat), \
+                 mock.patch("pycbeta.fetch.catalog_lookup",
+                            return_value=[{"title": "彌勒菩薩所問本願經"}]), \
+                 mock.patch("pycbeta.fetch.materialize_work",
+                            return_value=([], "downloaded")):
+                w._prefetch_meta(0, {"kind": "id", "id": "T0349"},
+                                 fetch, presets)
+            self.assertEqual(titles, ["彌勒菩薩所問本願經"])
+            self.assertEqual(sources, ["已下载"])
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
     """BatchWorker._resolve 合册分支：碎片 ID → 按册合成路径 + 行标签。"""
 
     @classmethod
@@ -5111,6 +5166,38 @@ class TestVerifyFeedback(unittest.TestCase):
             w.wait(1)
         self.assertEqual(progress[-1], (1, 1))
         self.assertTrue(all(d <= t for d, t in progress), progress)
+
+    def test_run_emits_converting_status(self):
+        # 一行确认有 XML 待转换时，状态应先变「转换中…」，行末再变「完成」
+        import tempfile
+        from types import SimpleNamespace
+        import pycbeta.gui.__main__ as M
+        tmp = tempfile.mkdtemp(prefix="gconv-")
+        xml = os.path.join(tmp, "T1.xml")
+        rendered = os.path.join(tmp, "T1.txt")
+        for p in (xml, rendered):
+            with open(p, "w", encoding="utf-8") as f:
+                f.write("x")
+        opts = SimpleNamespace(verify={"enabled": False}, formats=["txt"],
+                               t2s=False, output={"convert_report": False})
+        w = M.BatchWorker([{"id": "T1"}], opts,
+                          {"presets": {}, "run": {}, "out": tmp}, {})
+        w._resolve = lambda job, idx, fetch, presets: [xml]
+        w._title_of = lambda x, i, P: ("T1", "T1")
+        w._out_name_for = lambda *a, **k: "T1.txt"
+        w._render_one = lambda x, fmt, o, cfg, out_name=None: (True, [rendered])
+        orig = (M.write_temp_presets, M.write_temp_run)
+        M.write_temp_presets = lambda presets, opts: os.path.join(tmp, "p.json")
+        M.write_temp_run = lambda run, snap: os.path.join(tmp, "r.json")
+        labels = []
+        w.row_status.connect(lambda i, t: labels.append(t))
+        try:
+            w.run()
+        finally:
+            M.write_temp_presets, M.write_temp_run = orig
+            w.wait(1)
+        self.assertIn("转换中…", labels)
+        self.assertLess(labels.index("转换中…"), labels.index("完成"))
 
     def test_verify_one_pdf_delegates_to_source(self):
         from types import SimpleNamespace

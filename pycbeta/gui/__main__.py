@@ -86,6 +86,10 @@ _RE_PER_FMT = re.compile(r"_转换报告_[a-z0-9]+\.txt$")
 # 合并后的转换报告（文件列置末）
 _RE_REPORT = re.compile(r"_转换报告\.txt$")
 
+# fetch.materialize_work 来源 label → 列表「来源」列显示
+_SOURCE_LABELS = {"cbeta_ebook": "本地XML", "xml_copy": "本地拷贝",
+                  "xml_merge": "合册合成", "downloaded": "已下载"}
+
 
 def _last_error_line(text):
     """从子进程输出取最可能的错误行（截 300 字）。
@@ -218,6 +222,16 @@ class BatchWorker(QThread):
             # 每 job 先按 1 个 XML 预算，解析后再按实际 XML 数校正（见下）。
             total_units = sum(n_fmt for _j in self.jobs) * _factor
             done_units = 0
+            # 预填元信息：转换开始前先把每行经名/来源尽量填好（离线、不下载/
+            # 不落盘），否则后面的书在「待转换」期间经名/来源为空，须等轮到
+            # 它才开始出现（用户反馈）。
+            for _i, _job in enumerate(self.jobs):
+                if self._cancel:
+                    break
+                try:
+                    self._prefetch_meta(_i, _job, fetch, presets)
+                except Exception:
+                    pass
             used_names = {}  # 本轮命名状态（多源同名统一回退，与 CLI 同规则）
             for idx, job in enumerate(self.jobs):
                 if self._cancel:
@@ -228,12 +242,18 @@ class BatchWorker(QThread):
                     # 该 job 无产物：扣除预算，否则进度永不达 100%
                     total_units -= n_fmt * _factor
                     self.total_progress.emit(done_units, max(total_units, 1))
+                    # 清掉预填的来源预测（下载/合册失败时避免「已下载」与
+                    # 「缺 XML」自相矛盾）
+                    self.row_source.emit(idx, "")
                     continue
                 if len(xmls) != 1:
                     # 多册经一个 job 展开多个 XML（如 TX0001→TX01n0001/TX02n0001）：
                     # 按实际 XML 数补足预算，避免提前冲到 100% 后干等
                     total_units += (len(xmls) - 1) * n_fmt * _factor
                     self.total_progress.emit(done_units, max(total_units, 1))
+                # 确认有 XML 待转换：状态由「待转换」转「转换中」（解析/下载阶段
+                # 仍显示「待转换」，真正开始渲染前再切换）
+                self.row_status.emit(idx, "转换中…")
                 row_ver = []      # 本行校验结果
                 row_produced = []  # 本行全部产物（跨 xml 累积，行末一次发文件列）
                 render_errors = []
@@ -400,6 +420,55 @@ class BatchWorker(QThread):
                 pass
             self.finished_all.emit()
 
+    def _prefetch_meta(self, idx, job, fetch, presets):
+        """转换前预填该行经名/来源（离线，不下载/不落盘），供「待转换」阶段显示。
+
+        file：直接解析 XML 取经名；id/merged：catalog 取经名 + 预测来源标签。
+        实际转换时 `_resolve`/`_title_of` 会用准确值覆盖。"""
+        kind = job.get("kind")
+        if kind == "file":
+            xml = job.get("xml") or ""
+            if os.path.isfile(xml):
+                from pycbeta.parser import P5Parser
+                self._title_of(xml, idx, P5Parser)
+            return
+        src = presets.get("source") or {}
+        cat = fetch.resolve_catalog(src.get("catalog", ""))
+        if kind == "merged":
+            try:
+                canon, _vol, no = job["group"][0]
+            except Exception:
+                return
+            if os.path.isfile(cat):
+                for rec in fetch.catalog_lookup(cat, canon, no):
+                    if rec.get("title"):
+                        self.row_title.emit(idx, rec["title"])
+                        break
+            self.row_source.emit(idx, _SOURCE_LABELS["xml_merge"])
+            return
+        wid = job.get("id") or ""
+        if not fetch.is_work_id(wid):
+            return
+        try:
+            canon, no = fetch.parse_work_id(
+                fetch.canonical_work_id(wid, presets))
+        except Exception:
+            return
+        if os.path.isfile(cat):
+            for rec in fetch.catalog_lookup(cat, canon, no):
+                if rec.get("title"):
+                    self.row_title.emit(idx, rec["title"])
+                    break
+        try:
+            _paths, label = fetch.materialize_work(
+                wid, presets, download=bool(self.flags.get("auto_xml")),
+                quiet=True, dry_run=True)
+        except Exception:
+            label = ""
+        disp = _SOURCE_LABELS.get(label, "")
+        if disp:
+            self.row_source.emit(idx, disp)
+
     def _resolve(self, job, idx, fetch, presets):
         try:
             xml_dir, cbeta_ebook = fetch.resolve_source(presets)
@@ -434,10 +503,7 @@ class BatchWorker(QThread):
             self.row_status.emit(idx, f"未配置: {e}")
             return []
         if found:
-            self.row_source.emit(idx, {
-                "cbeta_ebook": "本地XML", "xml_copy": "本地拷贝",
-                "xml_merge": "合册合成", "downloaded": "已下载",
-            }.get(label, ""))
+            self.row_source.emit(idx, _SOURCE_LABELS.get(label, ""))
             if self.flags.get("auto_base"):
                 try:
                     fetch.ensure_baselines(wid, ["html", "docx", "txt_notes"],
@@ -876,6 +942,7 @@ class MainWindow(QMainWindow):
             self.table.item(i, 3).setText("待转换")
             if job["kind"] == "file":
                 self.table.item(i, 4).setText(job["xml"])
+        self._reset_table_view()
         flags = {"auto_xml": self.auto_xml.isChecked(),
                  "auto_base": self.auto_base.isChecked()}
         self.worker = BatchWorker(jobs, opts,
@@ -898,6 +965,14 @@ class MainWindow(QMainWindow):
         self.btn_cancel.setEnabled(True)
         self.progress.setValue(0)
         self.worker.start()
+
+    def _reset_table_view(self):
+        """光标/视图回到第一行：上一轮结束光标常停在末行，列表滚动亦然。"""
+        if not self.table.rowCount():
+            return
+        self.table.clearSelection()
+        self.table.setCurrentCell(0, 4)   # 光标落到「文件」列（末列）
+        self.table.scrollToTop()
 
     def _on_status(self, i, text):
         if self.table.item(i, 3) is not None:

@@ -406,13 +406,17 @@ def _fetch_one(work_id: str, fmt: str, canon: str, no: str,
 def materialize_work(work_id: str, presets: Optional[Dict] = None,
                      xml_dir: Optional[str] = None,
                      cbeta_ebook: Optional[str] = None,
-                     download: bool = True, quiet: bool = False):
+                     download: bool = True, quiet: bool = False,
+                     dry_run: bool = False):
     """编号流三源材料化：cbeta_ebook（已材料化）→ xml_dir（拷/合册）→ URL（下载）。
 
     返回 (paths, label)；paths = work 目录内 XML 列表；label 说明来源
     ∈ {"cbeta_ebook","xml_copy","xml_merge","downloaded",""}。
     本地源刷新：xml_dir 源文件比工作目录副本新时重拷/重合力
     （整文件比 mtime；碎片合并自带 mtime 跳过）。
+    dry_run=True：只预测来源标签（不拷贝/不合册/不下载，无副作用），
+    供 GUI 列表在「待转换」阶段提前显示经名/来源；本地命中给准确标签，
+    需下载时 catalog 收录则预测 "downloaded"，否则 ""。
     """
     from .merge import collect_work_frags, merge_groups_to_dir
     if presets is None:
@@ -422,12 +426,15 @@ def materialize_work(work_id: str, presets: Optional[Dict] = None,
     work_id = canonical_work_id(work_id, presets)
     canon, no = parse_work_id(work_id)
     title = _catalog_title(presets, canon, no)
-    wdir = work_dir(cbeta_ebook, work_id, title, presets, create=bool(xml_dir))
+    wdir = work_dir(cbeta_ebook, work_id, title, presets,
+                    create=bool(xml_dir) and not dry_run)
     have = find_local_xml(wdir, canon, no) if wdir else []
 
     whole = find_local_xml(xml_dir, canon, no) if xml_dir else []
     frags = collect_work_frags(xml_dir, canon, no) if xml_dir else {}
     if whole or frags:
+        if dry_run:
+            return [], ("xml_copy" if whole else "xml_merge")
         wdir = work_dir(cbeta_ebook, work_id, title, presets, create=True)
         if whole:
             changed = False
@@ -451,8 +458,13 @@ def materialize_work(work_id: str, presets: Optional[Dict] = None,
         return have, "xml_merge"
 
     if have:
-        _ensure_work_figures(work_id, presets, cbeta_ebook)
+        if not dry_run:
+            _ensure_work_figures(work_id, presets, cbeta_ebook)
         return have, "cbeta_ebook"
+    if dry_run:
+        if download and title:
+            return [], "downloaded"
+        return [], ""
     if not download:
         return [], ""
     res = fetch_work(work_id, ["xml"], presets, cbeta_ebook)
