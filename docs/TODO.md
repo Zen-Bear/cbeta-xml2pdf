@@ -75,7 +75,7 @@
   - 已知局限（非 bug）：主轨 txt-vs-官方txt 与 md 同类红（官方 txt 把全部注变体行内化 + 版头 boilerplate，生成侧注文末集中——语义差异，非丢字；md 同理既有）；`_extract_xml_parts` 与 parser 共享缺字数据（GaijiDb）与版头选取语义，盲区仅限缺字解析本身
   - [x] **已消**（2026-10-06：T0001 六格式实测全绿，X1077 全绿，门禁外已无红）
     - **T0001（T01n0001 長阿含經）根因**：官方对「被 mod(a/b) 拆分取代的 orig 注（`nkr_note_orig_*`）」的处理 = **正文锚点压制 + 尾注块保留（孤注）**；我方 html 此前正文多出锚点（全 22 卷唯一差异 `0028009`），致比对错位 12/12。修复：`render_html._render_noteref` 接 `model.suppressed_orig_notes`——`_orig_suppressed` 命中时**尾注块照常入 `_back_old`**（孤注），正文锚点返回空、不占标记号；`inline` 分支直接压制。单测 `TestSplitOrigSuppressedHtml`。
-    - **格式核对**：`epub` 走 `HtmlRenderer` 内核 → 自动同处理（实测正文锚点 0、孤注块 1）；`txt`/`md`/`docx` 官方基线**不含**该 orig 注（实测 `T0001_004.txt` 无 `其積又火`）→ 沿用全压制（`suppressed_orig_notes` 命中即整条不出），无需改动。
+    - **格式核对**：`txt`/`md`/`docx` 官方基线**不含**该 orig 注（实测 `T0001_004.txt` 无 `其積又火`）→ 全压制；`epub` 亦**整条不出**（官方 epub 为全内联注、无尾注区；`EpubRenderer(suppress_orphan_orig=True)` 转内部 `HtmlRenderer`，2026-10-06 补：epub 的 `txt_notes` trial 由「多12」转 0/0）；仅 `html` 保留孤注（与官方 html 一致）。
     - 附带：`normalize` 加 `html.unescape`（官方 html 正则剥标签后 `&quot;`/`&#39;` 实体残留，生成侧 raw 字符；T0001 html 104→12 大头）。
     - 仍留（非红灯，另行立项）：渲染 body-placed foot 注、T01 `_cbreader` charDecl 重合（卫生）；辅轨 `No.` 镜像已随 X1077 全绿作废。
   - 校验设计决议（2026-10-06 用户点档）：
