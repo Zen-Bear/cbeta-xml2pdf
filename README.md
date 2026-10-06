@@ -81,7 +81,7 @@ python -m pycbeta -i 经文.xml -f docx,pdf --config my.json
 | msword / word | MS Word COM 导出（保真度最高，需 Office + pywin32）|
 | wps | WPS Office COM 导出（需 WPS + pywin32）|
 | libreoffice | soffice 命令行（自定义路径在 engines.paths 配置）|
-| minipdf / docbuilder | 外部引擎（engines.external 注册，未安装自动跳过）；`minipdf.exe` / `cbetapdf.exe` 从 **Releases** 下载放入 `engines/` |
+| minipdf / docbuilder | 外部引擎（engines.external 注册，未安装自动跳过）；`minipdf.exe` 从上游下载（见安装说明 §2）放入 `engines/`；`cbetapdf.exe` 暂无公开下载（可选），有文件放 `engines/` 即可 |
 
 > **已知（不改）**：源 XML 标题的全角空格（U+3000，如「緒　言」「第一章　釋尊略史」）经 DOCX→PDF（WPS/Word 系）导出后，PDF 里被编码为**定位间隙、无空格字形**，导致 **PDF 的拷贝/检索**把标题拆成两行。显示正常，逐字校验不受影响（折叠空白），DOCX/HTML/EPUB/TXT 拷贝正常。本管线保持与官方版式一致，不替换该空格。详见 `docs/功能清单.md` §7。
 

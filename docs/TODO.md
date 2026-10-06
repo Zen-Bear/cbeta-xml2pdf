@@ -2,6 +2,11 @@
 
 - **铁律（2026-09-06 用户确认）：改 `pycbeta/styles/pdf_docx.css` 前必须先经用户确认（出值才动手），plan 模式只展示不动。**
 - **死命令（2026-09-07 用户确认）：任何新 XML 元素（cb:* 等）必须入左栏 `EDITABLE_ROWS` + `TAG_SELECTOR` 映射 + CSS 变量/规则，验收 = 左栏可见可调。**
+- **当前优先级（2026-10-06 审计；publish 仓 P0–P4 已全完成，无遗留）**：
+  - P0 收尾（未提交）：xml2pdf GUI（转换中/预填经名来源/光标落文件列，1112 OK）待提交；publish 封面演示（`docs/封面布局演示/` + `tests/test_cover_demo.py`）待提交；提交前还原测试污染（`presets/宋体.css`、`pycbeta/data/annotations.txt`，勿入仓）。
+  - P1：按卷范围 juan（用户立项，唯一大型待办；分阶段：`juan.py` spec/过滤 → CLI `--juan` → GUI/校验接线）。外部引擎分发已改走上游 URL（安装文档已写明，不传 Release）。
+  - P2：辅轨 `No.` 令牌镜像（约 5 行小修，门禁外）；html/epub 用户 CSS（原定最低优先级，backlog，方案已定）。
+  - P3/关闭：body-placed foot 注渲染（大，需另行立项定范围）；T01 `_cbreader` 重合（数据卫生，低）；元素/字体扫描（已记录，无代码改动）；html2pdf 分页（决议不做）；`verify_one`/`build_report_json` 行级共享（收益小，暂不）。
 - [x] **已完成 render-time 按字回退**（2026-09-06 用户报 標楷體 U+43F6 预览/Word 双 tofu）：`RENDER_FALLBACKS=(SimSun,PMingLiU,微软雅黑)`，`_fb_emit` 按 cmap 查覆盖、缺字拆 run（只换 eastAsia）；无文件不断言保持原样；真全缺（如悉昙 PUA）保持 tofu + 预览点名。T0672 对账文本一致；单测 TestRenderFallback 6 项；全量 302 OK，verify 8/0
   - 追补（2026-09-06）：回退链分繁简（Hant 首选 PMingLiU，Hans 首选 SimSun；跟 gaiji_lang；含 SimSunExtB/CBETA Supplement）；`output.docx.gaijiFonts` 未动（删的只是顶层 font_sets）；`linkActivated` 改 flag 跟踪消 RuntimeWarning；Ranjana.ttf/Siddam.ttf 实测 0/58 样本 PUA（纯装饰 CJK，不接线）
   - RJ 悉昙接线（2026-09-06）：官方 docx 实锤 `eastAsia="Ranjana"` + rjchar 常规字（不用 PUA）；parser 收 `rjchar`，`_resolve_gaiji` RJ 优先，`_ranjana_font_for` 按覆盖选字体（Ranjana→Siddam），无则主题字体直显（可读）；sample plane-16 PUA 清零，101 Ranjana run；单测 TestRanjana 5 项；全量 308 OK，verify 8/0
@@ -68,7 +73,7 @@
   - 主轨 txt/md 对齐 A 落地（2026-09-10）：官方 txt 侧 `_norm_official_txt`（版头 `#` 块剥离 + `    [n]` 注记块识别挪文末，繁简通用，三比对入口同构；`No.` 行不搬——生成侧 docNumber 本就在体首；`relocate` 试过方向反了已 revert）+ 生成侧 md 标记剥离 `_strip_md_marks`（`## 校注` + `[^n]: `，官方无此体系）；T0349 主轨 txt 624→15；md 经此与 txt 逐字同分（T0672 1012→12，证两者除标记外同一文本）；全集 11 部有官方 txt 者 txt 12~21、missing 全 0，md 与 txt 同分；无官方 txt 者回退 html（先天红，门禁外）；残留=注全变体vs单选每注几个字 + 题署/No. 顺序噪声，门禁仍只看 docx/html+辅轨；单测 +3（432 OK）
   - txt 不回退（2026-09-10）：无官方 txt 直接 `no_baseline`（三入口 `fmt != "txt"` 门控各两处；t2s 的 `txt_notes` 优先保留，仍是 txt 族；`auto_fetch` 先下载、仍无才报）；单测 `test_no_txt_no_html_fallback` 锁死；全量 433 OK
   - 已知局限（非 bug）：主轨 txt-vs-官方txt 与 md 同类红（官方 txt 把全部注变体行内化 + 版头 boilerplate，生成侧注文末集中——语义差异，非丢字；md 同理既有）；`_extract_xml_parts` 与 parser 共享缺字数据（GaijiDb）与版头选取语义，盲区仅限缺字解析本身
-  - [ ] **待办** 门禁外 6 红后续（2026-09-10 取证，详见校验说明书 §5“门禁外已知红”；无一回归，门禁口径不变）：
+  - [ ] **待办** 门禁外 6 红后续（2026-09-10 取证，详见校验说明书 §5“门禁外已知红”；无一回归，门禁口径不变；2026-10-06 审计：按 3→2→1 顺序做，1 需另行立项定范围）：
     1. 渲染 body-placed foot 注（parser 收编 + 六渲染器出注 + aux 镜像 + 全门禁回归；收 TX08 类注 + T01 stub，T01 25k 本体仍红——输入就没有）；
     2. T01 `_cbreader` 重合（9/5 旧版 charDecl 4/应 70，卫生；与 17k 缺失无关）；
     3. 辅轨 `No.` 令牌镜像剥离（5 行；`strip_head_no=true` 时 aux 16 缺转 0）
@@ -428,10 +433,10 @@
   - 我方现状：判定信息已具备（`app.lem.wit`），但正文夹在 `<anchor beg.../>…<anchor end.../>` 之间，parser 丢弃 `end` 锚点且不记区间 → IR 无法定位校改字；三渲染器均无 `corr`，golden 只有未用的 `.cbeta`、无 `.corr`
   - 拟定实施（范围待定，未做）：parser `_traverse` 维护 corr 区间栈（`beg` 且 lem 含 `#wit.cbeta` 开，匹配 `end` 闭），包合成 IR 节点 `E(tag="corr", children=[…])`（App 一并包入、正文渲染为空无害；建议按**原始 `#wit.cbeta` id** 判，不依赖 label）；docx → 红字（官方字符样式或主题色内联）；epub → `span.corr` + golden `.corr{color:red}`；html/md/txt → 只渲染子节点不产生 span（与官方 html/txt 一致、保 golden 对照）；死命令三件套：`TAG_SELECTOR["corr"]="span.corr"` + `EDITABLE_ROWS ("span.corr","CBETA校改")` + CSS 规则
   - 待用户定：实现范围（docx+epub 对齐官方 / 六格式全标红(html 偏离官方) / 暂不做）与判定键（原始 `wit.cbeta` id（推荐）/ 解析后 `【CB` label）
-- [ ] **元素覆盖扫描（2026-09-10 三项并查，决议：都不加行，只记录）**
+- [x] **已记录（无代码改动）** 元素覆盖扫描（2026-09-10 三项并查，决议：都不加行，只记录）
   - test XML 19 文件 body 普查：左栏缺失但可见 = `l`（13/4819）/`caesura`（11/4747）/`cb:t/tt`（T01/X59n1077）/`list/item`（3 文件）/正文内 `title`（6/126）/`hi/seg[border]/note[hide]`/`space`（4/430）/`yin/zi/sg+entry/term`（X59/X60）/`figure/graphic`（3/74）/`g`（12/947）+`app/lem/rdg`/`div@type=orig/commentary/jing/pin/fen/w/other`（other 1808，左栏仅 xu/note）；`rend` 四行 19 文件零命中无样张；结构性无需调 = lb(70125)/pb/milestone/cb:juan/jhead/docNumber/mulu(2087)/anchor(9837)
   - schema（cbeta-p5.rnc）对照：唯一值得加的是 `table/row/cell`（走 bip-table，左栏无行）——本次不加；`list` 低优先级；其余透传/功能性不值得单列；header 无行系正确忽略
-- [ ] **字体扫描（2026-09-10，决议：只记录不动链）**
+- [x] **已记录（无代码改动）** 字体扫描（2026-09-10，决议：只记录不动链）
   - 真非系统：`cbetarc`（golden 网络字体，离线失效）/`CBETA Supplement`（随仓，缺则回退失效）/`Ranjana`/`Siddam`（随仓）/`Songti TC`（macOS）/`朝华标题B/ZhaohuaMinB`（my.css 用户预设，**免费商用**（用户提供知乎链接，本机随 WPS 已装），非系统自带，他机需自装）；回退链已有覆盖
   - 本机缺但属系统字（本机简体 Win 环境）：`新細明體/PMingLiU`/`標楷體/DFKaiShu`/`隸書/LiSu`——繁体首选链本机悬空，靠 Word 自身回退；根治须手动装字（语言包/繁体机拷贝），不动 CSS（铁律）
   - 系统自带已装：Calibri/Times/Arial/宋体/SimSun/黑体/楷体/仿宋/微軟正黑體/YaHei/ExtB/ExtG（简体链全绿）
@@ -587,7 +592,7 @@
   - 测试：`test_annotate`（规范化回退、去重含自动）、`test_docx.TestNoteAnnDedup`
     （正文注/脚注不重）、`test_gui`（三选一互斥+回读、词表只读+默认路径）；真机 T0032 实证
 
-- [ ] **html2pdf 管线分页未对齐 docx**（2026-09-28 用户确认「写进 todo，不做」）：`render_pdf.py` 目前只在 `juan` 边界 `break-before: page`，无 `mulu_level1`；如需 HTML 管线 PDF（及 html 成品）也按 level-1 非「卷」mulu 分页，应复用 `render_docx.split_sections` 同口径插断页。（epub 已对齐：`EpubRenderer` 按 mulu 拆 spine 章节，见 `render_epub._split_mulu_breaks`。）
+- [x] **决议不做（仅记录）** html2pdf 管线分页未对齐 docx（2026-09-28 用户确认「写进 todo，不做」）：`render_pdf.py` 目前只在 `juan` 边界 `break-before: page`，无 `mulu_level1`；如需 HTML 管线 PDF（及 html 成品）也按 level-1 非「卷」mulu 分页，应复用 `render_docx.split_sections` 同口径插断页。（epub 已对齐：`EpubRenderer` 按 mulu 拆 spine 章节，见 `render_epub._split_mulu_breaks`。）
 
 - [x] **已完成** 预排段（`<pre>`/`<p cb:type="pre">`）不两端对齐（2026-09-30 CC0003 实锤）
   - 现象：CC0003「卷第三十五科目」等预排大纲（全角空格手工对位 + 点线 + 页码）在 docx 里长行被**拉伸**（字距撑开、缩进错位），短行正常；官方 PDF 同页为「换行但左对齐、无拉伸」
@@ -601,6 +606,7 @@
   - 验证：X1077 A5 重渲 docx 259×479px、PDF 194.3×359.3pt（占页宽 46%，与官方一致）；单测 `test_figures.test_page_scaled_and_content_fit`；全量 920 OK（9 环境 error 与基线一致）
 
 - [ ] **待办** 按卷范围选取某部经的某卷/几卷（2026-10-01 用户立项；方案已定，未实施）
+  - 分阶段（2026-10-06 优化）：① `pycbeta/juan.py` 纯函数 + `test_juan.py`（可独立验收）；② CLI `--juan`/`-i ID:spec` + 渲染/命名（X1077 e2e）；③ GUI/校验接线 + 单卷基线下载（URL 形态 build 时实测）
   - 目标：支持 `T25n1509:34-100`（大智度論 34–100 卷）这类子集，渲染六格式并按卷子集校验
   - 卷范围语法（`--juan` 与 GUI 编号后缀 `:` 共用）：`34` / `34-100` / `34-36,40,42-45`；`-`/`~`/`～` 三认一（归一为 `-`）；多段用 `,`（CLI）/`+`（GUI 列表内，因 `,` 是任务分隔符）；闭区间、`lo<=hi`（`100-34` 报错不下调）；去重合并
   - 长编号：`T25n1509`/`X59n1077` 现被 `is_work_id` 拒（只认短编号）；新增我方层解析 `T25n1509→(T,25,1509)`（catalog 已命中 vol 25，`T25n1509.xml`），vol 感知 `find_local_xml` + 下载/基线复用 catalog rec；不动 vendored `cbeta_fetch.py`
@@ -613,11 +619,13 @@
   - 文档：README/安装说明（CLI 参数）、`GUI设计`（编号后缀：`ID:范围`、多段 `+`、`--juan`）、`校验说明书`（子集语义/整包基线必红/P3 不支持/单卷下载）、`主题与样式`+`兜底值清单`（`output.juan_suffix_template`）
   - 非目标：品名选择（如“初序品”，另议）、XML 预过滤（先全量 parse，正确性优先）、按卷下载 XML（整包一次）
 
-- [ ] **待办** 发布 v0.1 Release + 上传外部引擎（2026-10-01 用户立项）
+- [x] **已完成** 外部引擎改走上游下载（2026-10-01 用户立项；2026-10-06 用户决议**不上传附件**，安装文档给 URL）
   - 仓库已公开：https://github.com/Zen-Bear/cbeta-xml2pdf（Public、GPL-3.0、分支 `main`、tag `v0.1`）
-  - `engines/*.exe`（`cbetapdf.exe` ~90MB、`minipdf.exe` ~10MB）体积大，已从 git 历史移除（`git-filter-repo`）、`.gitignore` 忽略，改由 **GitHub Releases** 分发
-  - **待办**：创建 `v0.1` Release，并上传 `engines/cbetapdf.exe`、`engines/minipdf.exe` 作附件（本机 `engines/` 目录下）；上传前先实测两 exe 可用
-  - 发布页：https://github.com/Zen-Bear/cbeta-xml2pdf/releases/new
+  - `engines/*.exe`（`cbetapdf.exe` ~90MB、`minipdf.exe` ~10MB）体积大，已从 git 历史移除（`git-filter-repo`）、`.gitignore` 忽略，**不随包、不传 Release**
+  - `minipdf.exe` = MiniPdf.Cli v0.38.5，上游直链（已验证与本机逐字节一致）：
+    https://github.com/mini-software/MiniPdf/releases/download/v0.38.5/minipdf-win-x64.zip
+    （解压即得，放入 `engines/`）；`cbetapdf.exe`（自研 v1.0.0）暂无公开下载，文档标注为可选
+  - 落点：`docs/安装说明.md` §2 拆行写明两引擎去向 + `engines/README.md` + GUI `INSTALL_HINTS` + `README.md` §后端说明同步
 
 - [x] **已完成** 开校验时基线目录被重复递归扫描（2026-10-05 立项并落地）
   - 实测（优化前）：`find_official` 对已配置基线根（如 `E:\CBETA\2026r2\cbeta-text-with-notes`）递归 `**` 扫描 **~1.35s/次**；`verify_fingerprint` **~1.85s/次**。`build_report_json` 自己扫一遍 5 种基线，又对每个请求格式各调一次 `verify_fingerprint` → **(1+N) 次大目录扫描**（N=6 时 ~13s）。
