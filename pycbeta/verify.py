@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """校验库：供 CLI --verify、test/verify_text.py 及 GUI 复用。"""
-import difflib, glob, hashlib, json, os, re, sys, zipfile
+import difflib, glob, hashlib, html as _html, json, os, re, sys, zipfile
 from typing import List, Dict, Optional
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -18,6 +18,9 @@ from .render_txt import TxtRenderer
 from .theme import load_presets, load_effective_presets, _PRESETS_PATH, strip_head_no
 
 def normalize(text: str, ruby_brackets=None) -> str:
+    # HTML 转义归一：官方 HTML 经正则剥标签，`&quot;`/`&#39;` 等实体原样残留，
+    # 生成侧输出 raw 字符；unescape 使两侧等价（无实体/未知实体零操作，原样保留）
+    text = _html.unescape(text or "")
     # 官方基线 unclear 用 ▆，本管线渲染用 □（U+25A1）：两侧归一到 □ 再比较
     text = text.replace("▆", "□")
     # 悉昙/缺字占位：官方 txt 用 ◇（U+25C7），生成侧用私用区字（PUA）；统一为 □

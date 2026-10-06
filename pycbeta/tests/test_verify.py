@@ -1066,6 +1066,23 @@ class TestNormalizeWithLines(unittest.TestCase):
         self.assertEqual(line_of, [])
 
 
+class TestNormalizeEntities(unittest.TestCase):
+    def test_html_entities_unescaped(self):
+        # 官方 HTML 经正则剥标签，`&quot;`/`&#39;` 等残留；生成侧为 raw 字符。
+        # normalize 须归一，否则 T0001 类巴利引文整段计缺。
+        from pycbeta.verify import normalize
+        self.assertEqual(normalize('～&quot;Aggo &#39;ham asmi&quot;'),
+                         normalize('～"Aggo \'ham asmi"'))
+        self.assertEqual(normalize('a&amp;b'), normalize('a&b'))
+        self.assertEqual(normalize('a&lt;b&gt;c'), normalize('a<b>c'))
+
+    def test_unknown_entity_kept_and_plain_unchanged(self):
+        from pycbeta.verify import normalize
+        # 未知实体原样保留（`&not` 是合法遗留实体会变 `¬`，故用无歧义词缀）
+        self.assertEqual(normalize('&xyzabc;'), '&xyzabc;')
+        self.assertEqual(normalize('甲乙丙'), '甲乙丙')
+
+
 class TestReportCtxLocation(unittest.TestCase):
     def test_report_marks_span_and_line(self):
         from pycbeta.verify import format_verify_report
