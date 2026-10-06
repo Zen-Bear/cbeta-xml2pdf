@@ -493,6 +493,7 @@ class BatchWorker(QThread):
         wid = job["id"]
         if not fetch.is_work_id(wid):
             self.row_status.emit(idx, "非法編號")
+            self.row_verify.emit(idx, "fail")   # 非法书号状态列红字
             return []
         # 三源材料化：cbeta_ebook → 本地候选源（拷/合册）→ 官方下载
         try:

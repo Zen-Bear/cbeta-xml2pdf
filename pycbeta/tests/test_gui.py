@@ -2136,6 +2136,27 @@ class TestBatchMergeResolve(unittest.TestCase):
         finally:
             shutil.rmtree(ebook, ignore_errors=True)
 
+    def test_resolve_illegal_id_marks_fail(self):
+        # 非法书号：状态列红字（row_verify=fail）
+        import shutil
+        import tempfile
+        from pycbeta import fetch
+        from pycbeta.gui.__main__ import BatchWorker
+        ebook = tempfile.mkdtemp()
+        try:
+            w = BatchWorker([], None, {}, {"auto_xml": False})
+            labels, levels = [], []
+            w.row_status.connect(lambda i, t: labels.append(t))
+            w.row_verify.connect(lambda i, t: levels.append(t))
+            presets = {"source": {"xml_dir": "", "cbeta_ebook": ebook}}
+            out = w._resolve({"kind": "id", "id": "NOTANID"}, 0, fetch,
+                             presets)
+            self.assertEqual(out, [])
+            self.assertEqual(labels[-1], "非法編號")
+            self.assertEqual(levels[-1], "fail")
+        finally:
+            shutil.rmtree(ebook, ignore_errors=True)
+
     def test_prefetch_meta_fills_title_and_source(self):
         # 转换前预填：id 行在「待转换」阶段即应显示经名（catalog）与来源（预测）
         import shutil
