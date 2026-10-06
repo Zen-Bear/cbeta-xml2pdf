@@ -136,8 +136,23 @@ class TestBuildReportJson(JsonFixture):
         j = self.build([self.rec()])
         self.assertEqual(
             sorted(j["fmts"]["html"]),
-            ["extra", "fingerprint", "formal_outputs", "missing",
+            ["diff_scope", "extra", "fingerprint", "formal_outputs", "missing",
              "reason", "report", "verdict"])
+
+    def test_diff_scope_aggregate(self):
+        # 旁路正文比对结论：body > unknown > notes_only；无记录 → None
+        def rec(scope, **kw):
+            r = self.rec(**kw)
+            if scope is not None:
+                r["diff_scope"] = scope
+            return r
+        self.assertIsNone(self.build([self.rec()])["fmts"]["html"]["diff_scope"])
+        self.assertEqual(self.build([rec("notes_only")])["fmts"]["html"]["diff_scope"],
+                         "notes_only")
+        self.assertEqual(self.build([rec("notes_only"), rec("unknown")])
+                         ["fmts"]["html"]["diff_scope"], "unknown")
+        self.assertEqual(self.build([rec("notes_only"), rec("body")])
+                         ["fmts"]["html"]["diff_scope"], "body")
 
     def test_pass_record(self):
         j = self.build([self.rec()])

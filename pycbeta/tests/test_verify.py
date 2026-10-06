@@ -864,6 +864,111 @@ class TestExtractTxtParts(unittest.TestCase):
                          len(s.split("\n")))
 
 
+class TestBodySidecar(unittest.TestCase):
+    """旁路「仅正文」比对（差异是否全在注释）：分段 helper + 严格 0 判定。"""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(__import__("shutil").rmtree, self.tmp, True)
+
+    def _html(self, name, body, notes):
+        p = os.path.join(self.tmp, name)
+        with open(p, "w", encoding="utf-8") as f:
+            f.write("<html><body><p>" + body + "</p>\n"
+                    "<span class='footnote' id='n1'>"
+                    "<a href='#note_anchor_1'>[1]</a> " + notes + "</span>\n"
+                    "</body></html>")
+        return p
+
+    def _docx(self, name, body, notes=None):
+        p = os.path.join(self.tmp, name)
+        with zipfile.ZipFile(p, "w") as z:
+            z.writestr("word/document.xml",
+                       "<w:document><w:body><w:p><w:r><w:t>" + body
+                       + "</w:t></w:r></w:p></w:body></w:document>")
+            if notes is not None:
+                z.writestr("word/footnotes.xml",
+                           "<w:footnotes><w:footnote><w:p><w:r><w:t>" + notes
+                           + "</w:t></w:r></w:p></w:footnote></w:footnotes>")
+        return p
+
+    def test_split_txt_ours_tail_notes(self):
+        from pycbeta.verify import _split_txt_ours
+        body, notes = _split_txt_ours("正文一\n正文二\n\n[1] 注一\n\n[2] 注二")
+        self.assertEqual(body, "正文一\n正文二")
+        self.assertIn("[1] 注一", notes)
+        self.assertIn("[2] 注二", notes)
+        # 无注块：原样
+        b2, n2 = _split_txt_ours("正文一\n正文二")
+        self.assertEqual((b2, n2), ("正文一\n正文二", ""))
+
+    def test_split_md_body(self):
+        from pycbeta.verify import _split_md_body
+        body, notes = _split_md_body("正文一\n\n## 校注\n\n[^1]: 注一")
+        self.assertEqual(body, "正文一\n\n")
+        self.assertIn("## 校注", notes)
+        self.assertEqual(_split_md_body("无注")[1], "")
+
+    def test_extract_docx_parts(self):
+        from pycbeta.verify import _extract_docx_parts, extract_text
+        p = self._docx("a.docx", "正文甲", "注甲")
+        body, notes = _extract_docx_parts(p)
+        self.assertEqual(body.strip(), "正文甲")
+        self.assertEqual(notes.strip(), "注甲")
+        # 与 extract_text 逐字节一致（正文 + "\n" + 脚注）
+        self.assertEqual(extract_text(p), body + "\n" + notes)
+        p2 = self._docx("b.docx", "正文乙")
+        self.assertIsNone(_extract_docx_parts(p2)[1])
+        self.assertEqual(extract_text(p2).strip(), "正文乙")
+
+    def test_body_sidecar_notes_only(self):
+        from pycbeta.verify import _body_sidecar
+        gen = self._html("gen.html", "正文甲", "注一")
+        off = self._html("off.html", "正文甲", "注二")   # 正文同、注释异
+        bm, be, notes_only = _body_sidecar([gen], "html", off, "html")
+        self.assertEqual((bm, be), (0, 0))
+        self.assertTrue(notes_only)
+
+    def test_body_sidecar_body_diff(self):
+        from pycbeta.verify import _body_sidecar
+        gen = self._html("gen2.html", "正文甲", "注一")
+        off = self._html("off2.html", "正文乙", "注一")   # 正文异
+        bm, be, notes_only = _body_sidecar([gen], "html", off, "html")
+        self.assertGreater(bm + be, 0)
+        self.assertFalse(notes_only)
+
+    def test_body_sidecar_unsupported(self):
+        from pycbeta.verify import _body_sidecar
+        gen = self._html("gen3.html", "正文甲", "注一")
+        bm, be, notes_only = _body_sidecar([gen], "html", "x.odt", "odt")
+        self.assertIsNone(notes_only)
+        self.assertIsNone(bm)
+        self.assertIsNone(be)
+
+    def test_report_line_scope(self):
+        from pycbeta.verify import _format_verify_record
+        rec = {"xml": "x.xml", "fmt": "html", "status": "fail",
+               "missing": 5, "extra": 0,
+               "trials": [{"kind": "html", "official": "o.html",
+                           "missing": 5, "extra": 0, "total": 5, "ok": False,
+                           "ctx": [], "ctx_loc": [],
+                           "body_missing": 0, "body_extra": 0,
+                           "diff_scope": "notes_only"}]}
+        txt = "\n".join(_format_verify_record(rec, 5, 10))
+        self.assertIn("正文差异 0（差异全部在注释）", txt)
+        self.assertNotIn("  [OK] 正文", txt)
+
+    def test_report_line_scope_unknown(self):
+        from pycbeta.verify import _format_verify_record
+        rec = {"xml": "x.xml", "fmt": "odt", "status": "fail",
+               "missing": 3, "extra": 0,
+               "trials": [{"kind": "odt", "official": "o.odt",
+                           "missing": 3, "extra": 0, "total": 3, "ok": False,
+                           "ctx": [], "ctx_loc": [], "diff_scope": "unknown"}]}
+        txt = "\n".join(_format_verify_record(rec, 5, 10))
+        self.assertIn("正文无法判定", txt)
+
+
 class TestTxtNotesDiscovery(unittest.TestCase):
     def setUp(self):
         self.root = tempfile.mkdtemp()

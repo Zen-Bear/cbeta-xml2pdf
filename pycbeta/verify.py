@@ -344,6 +344,42 @@ def _body_only(raw: str) -> str:
     return m.group(1) if m else raw
 
 
+def _extract_docx_parts(path: str):
+    """docx → (正文, 脚注文本 或 None)。None = 无 `word/footnotes.xml` 部件。
+    抽取口径与 `extract_text` 的 docx 分支逐字节一致（正文 + "\\n" + 脚注）。"""
+    with zipfile.ZipFile(path) as z:
+        xml = z.read("word/document.xml").decode("utf-8")
+        xml = _EQ_RE.sub(_eq_base, xml)
+        xml = _W_RUBY_RE.sub("", xml)
+        # 行内 <w:br/>（同段目录/偈颂/预排的分行）保留为换行，避免剥标签后
+        # 多行连成一行；与 html 侧「一行一条」口径一致（官方/生成同规）
+        xml = re.sub(r"</w:p[^>]*>", "\n", xml)
+        xml = re.sub(r"<w:br[^>]*>", "\n", xml)
+        body = _TAG_RE.sub("", xml)
+        try:
+            fn = z.read("word/footnotes.xml").decode("utf-8")
+        except KeyError:
+            return body, None
+        fn = _EQ_RE.sub(_eq_base, fn)
+        fn = _W_RUBY_RE.sub("", fn)
+        fn = re.sub(r"</w:p[^>]*>", "\n", fn)
+        fn = re.sub(r"<w:br[^>]*>", "\n", fn)
+        return body, _TAG_RE.sub("", fn)
+
+
+def _extract_epub_parts(path: str):
+    """epub → (正文, 脚注)：各章按 `class='footnote'` 拆正文/注记后分别拼接。"""
+    with zipfile.ZipFile(path) as z:
+        raws = [_body_only(z.read(n).decode("utf-8", "replace"))
+                for n in _epub_content_names(z)]
+    bodies, notes = [], []
+    for raw in raws:
+        b, f = _split_html_text(raw)
+        bodies.append(b)
+        notes.append(f)
+    return "".join(bodies), "".join(notes)
+
+
 def extract_text(path: str, strip_jiaozhu: bool = True) -> str:
     """抽取可比对文本。html 分支默认剥离 `<hr><h1>校注</h1>` 标题
     （docx/md/txt 比对：生成侧无此标题，官方侧须同步剥离）；
@@ -364,25 +400,8 @@ def extract_text(path: str, strip_jiaozhu: bool = True) -> str:
             parts.append(_TAG_RE.sub("", txt))
         return "".join(parts)
     if ext == ".docx":
-        with zipfile.ZipFile(path) as z:
-            xml = z.read("word/document.xml").decode("utf-8")
-            xml = _EQ_RE.sub(_eq_base, xml)
-            xml = _W_RUBY_RE.sub("", xml)
-            # 行内 <w:br/>（同段目录/偈颂/预排的分行）保留为换行，避免剥标签后
-            # 多行连成一行；与 html 侧「一行一条」口径一致（官方/生成同规）
-            xml = re.sub(r"</w:p[^>]*>", "\n", xml)
-            xml = re.sub(r"<w:br[^>]*>", "\n", xml)
-            txt = _TAG_RE.sub("", xml)
-            try:
-                fn = z.read("word/footnotes.xml").decode("utf-8")
-                fn = _EQ_RE.sub(_eq_base, fn)
-                fn = _W_RUBY_RE.sub("", fn)
-                fn = re.sub(r"</w:p[^>]*>", "\n", fn)
-                fn = re.sub(r"<w:br[^>]*>", "\n", fn)
-                txt += "\n" + _TAG_RE.sub("", fn)
-            except KeyError:
-                pass
-            return txt
+        body, notes = _extract_docx_parts(path)
+        return body + ("\n" + notes if notes is not None else "")
     if ext == ".odt":
         with zipfile.ZipFile(path) as z:
             return _TAG_RE.sub("", z.read("content.xml").decode("utf-8"))
@@ -997,6 +1016,114 @@ def _extract_txt_parts(text: str):
         else:
             bodies.append(ln)
     return "\n".join(bodies), "\n".join(notes)
+
+
+#: 我方 TxtRenderer 文末注块行（`[n] 内容`，render_txt.py 恒追加文末）
+_TXT_OURS_NOTE_RE = re.compile(r"^\[\d+\] ")
+#: 我方 MdRenderer 注块头（`## 校注` 独占行，其下 `[^n]: ` 定义）
+_MD_NOTES_RE = re.compile(r"(?m)^## 校注\s*$")
+
+
+def _split_txt_ours(text: str):
+    """我方 TxtRenderer 输出 → (正文, 注记)：文末连续 `[n] 内容` 块。
+    注块恒在文末（render_txt.py:72-75），取最大注记行后缀（空行夹带不破）。"""
+    lines = text.split("\n")
+    i = len(lines)
+    found = False
+    while i > 0:
+        ln = lines[i - 1]
+        if not ln.strip():
+            i -= 1
+            continue
+        if _TXT_OURS_NOTE_RE.match(ln):
+            found = True
+            i -= 1
+            continue
+        break
+    if not found:
+        return text, ""
+    return "\n".join(lines[:i]), "\n".join(lines[i:])
+
+
+def _split_md_body(text: str):
+    """我方 MdRenderer 输出 → (正文, 注记)：按最后一个 `## 校注` 标题切分。"""
+    last = None
+    for m in _MD_NOTES_RE.finditer(text):
+        last = m
+    if last is None:
+        return text, ""
+    return text[:last.start()], text[last.start():]
+
+
+def _body_of(path: str, kind: str):
+    """文件 → 正文段（不含注释）；不支持的 kind 返回 None。
+    kind：生成侧 = fmt（html/docx/epub/md/txt）；官方侧 = 基线类别
+    （html/docx/epub/txt_notes/odt，同 verify.bases）。"""
+    try:
+        if kind == "html":
+            return _extract_html_parts(path)[0]
+        if kind == "docx":
+            return _extract_docx_parts(path)[0]
+        if kind == "epub":
+            return _extract_epub_parts(path)[0]
+        if kind == "txt_notes":
+            with open(path, encoding="utf-8", errors="replace") as f:
+                return _extract_txt_parts(f.read())[0]
+        if kind == "md":
+            with open(path, encoding="utf-8", errors="replace") as f:
+                return _split_md_body(f.read())[0]
+        if kind == "txt":
+            with open(path, encoding="utf-8", errors="replace") as f:
+                return _split_txt_ours(f.read())[0]
+    except Exception:
+        return None
+    return None
+
+
+def _body_sidecar(gen_paths, fmt, bpath, bkind, *, title="", docnumber="",
+                  series="", compare_infos=False, strip_tokens=None,
+                  t2s=False, ruby_brackets=None):
+    """旁路「仅正文」比对（校验报告用）：返回 (body_missing, body_extra, notes_only)。
+
+    - 两侧各自取正文段（`_body_of`，注释不参与），套与主 trial 相同的预处理；
+    - 判定**严格 0**：正文段归一后 0 差异 ⇒ notes_only=True（差异全在注释）；
+    - 任一侧分不出正文段（如 odt / 未知 kind）⇒ (None, None, None)（unknown）。
+    """
+    paths = [bpath] if isinstance(bpath, str) else list(bpath or [])
+    gb = []
+    for p in gen_paths:
+        b = _body_of(p, fmt)
+        if b is None:
+            return None, None, None
+        gb.append(b)
+    ob = []
+    for p in paths:
+        b = _body_of(p, bkind)
+        if b is None:
+            return None, None, None
+        ob.append(b)
+    gen_body = "".join(gb)
+    off_body = "".join(ob)
+    if fmt == "docx":
+        gen_body = strip_docx_head(gen_body, title, docnumber, series)
+    if fmt == "md":
+        gen_body = _strip_md_marks(gen_body)
+    if not compare_infos:
+        gen_body = strip_infos(gen_body)
+    if bkind == "docx" or (bkind == "html" and fmt == "docx"):
+        off_body = strip_docx_head(off_body, title, docnumber, series)
+    if bkind == "txt_notes":
+        off_body = _strip_txt_head(off_body)
+    if not compare_infos:
+        off_body = strip_infos(off_body)
+    if strip_tokens:
+        off_body = _strip_official_no(off_body, strip_tokens)
+    if t2s:
+        off_body = t2s_baseline(off_body)
+    gn = normalize(_display_text(gen_body), ruby_brackets)
+    on = normalize(_display_text(off_body), ruby_brackets)
+    _m, bm, be, _ctx = diff_stats(gn, on, 0)
+    return bm, be, (bm + be == 0)
 
 
 _TXT_HEAD_RE = re.compile(r"\A(#.*\n|[ \t]*\n)+")
@@ -1869,6 +1996,14 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
             src_cmp = gen_cmp = ""
         m, mi, ex, ctx = diff_stats(t_ours, theirs, diff_lines)
         total = mi + ex
+        # 旁路「仅正文」比对：差异是否全在注释（严格 0；分不出 → unknown）
+        _bm, _be, _notes_only = _body_sidecar(
+            gen_path if isinstance(gen_path, list) else [gen_path],
+            fmt, bpath, bkind, title=t_title, docnumber=t_docnumber,
+            series=t_series, compare_infos=compare_infos,
+            strip_tokens=strip_tokens, t2s=t2s, ruby_brackets=ruby_brackets)
+        _scope = ("unknown" if _notes_only is None
+                  else ("notes_only" if _notes_only else "body"))
         trials.append({"kind": bkind, "official": bpath_disp, "missing": mi,
                        "extra": ex, "total": total, "ok": total <= max_diff,
                        "official_files": list(bpath) if isinstance(bpath, list)
@@ -1876,16 +2011,20 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
                        "ctx": ctx, "norm_official": theirs,
                        "norm_gen": t_ours,
                        "ctx_loc": ctx_locations(ctx, t_line, theirs_line),
-                       "src_cmp": src_cmp, "gen_cmp": gen_cmp})
+                       "src_cmp": src_cmp, "gen_cmp": gen_cmp,
+                       "body_missing": _bm, "body_extra": _be,
+                       "diff_scope": _scope})
         cur = (bkind, bpath_disp, m, mi, ex, ctx, total, src_cmp, gen_cmp, theirs,
-               ctx_locations(ctx, t_line, theirs_line), t_ours)
+               ctx_locations(ctx, t_line, theirs_line), t_ours,
+               _bm, _be, _scope)
         if best is None or total < best[6]:
             best = cur
         if total <= max_diff:
             st = "fail" if struct_issues else "ok"
-            return {"xml": xml_fn, "fmt": fmt, "status": st, "gen": gen_path, "official": bpath_disp, "official_kind": bkind, "matched": m, "missing": mi, "extra": ex, "total": total, "ctx": ctx, "src_cmp": src_cmp, "gen_cmp": gen_cmp, "norm_gen": t_ours, "norm_official": theirs, "trials": trials, "struct_issues": struct_issues}
-    bkind, bpath, m, mi, ex, ctx, total, src_cmp, gen_cmp, best_theirs, best_loc, best_ours = best
-    return {"xml": xml_fn, "fmt": fmt, "status": "fail", "gen": gen_path, "official": bpath, "official_kind": bkind, "matched": m, "missing": mi, "extra": ex, "total": total, "ctx": ctx, "ctx_loc": best_loc, "src_cmp": src_cmp, "gen_cmp": gen_cmp, "norm_gen": best_ours, "norm_official": best_theirs, "trials": trials, "struct_issues": struct_issues}
+            return {"xml": xml_fn, "fmt": fmt, "status": st, "gen": gen_path, "official": bpath_disp, "official_kind": bkind, "matched": m, "missing": mi, "extra": ex, "total": total, "ctx": ctx, "src_cmp": src_cmp, "gen_cmp": gen_cmp, "norm_gen": t_ours, "norm_official": theirs, "trials": trials, "struct_issues": struct_issues, "body_missing": _bm, "body_extra": _be, "diff_scope": _scope}
+    (bkind, bpath, m, mi, ex, ctx, total, src_cmp, gen_cmp, best_theirs,
+     best_loc, best_ours, best_bm, best_be, best_scope) = best
+    return {"xml": xml_fn, "fmt": fmt, "status": "fail", "gen": gen_path, "official": bpath, "official_kind": bkind, "matched": m, "missing": mi, "extra": ex, "total": total, "ctx": ctx, "ctx_loc": best_loc, "src_cmp": src_cmp, "gen_cmp": gen_cmp, "norm_gen": best_ours, "norm_official": best_theirs, "trials": trials, "struct_issues": struct_issues, "body_missing": best_bm, "body_extra": best_be, "diff_scope": best_scope}
 
 
 def format_verify_report(records, diff_lines: int = 5, max_diff: int = 10):
@@ -1960,6 +2099,17 @@ def _format_verify_record(r, diff_lines: int = 5, max_diff: int = 10):
         op = "≤" if ok else ">"
         lines.append(f"  {mark} ({fmt}→{t.get('kind')} 缺{t.get('missing')}/"
                      f"多{t.get('extra')} {op}阈值{max_diff})")
+        # 旁路结论：差异是否全在注释（正文段严格 0；行首不用 [OK]/[FAIL]/[--]，
+        # 避免下游按块标记解析时误读）
+        _ds = t.get("diff_scope")
+        if _ds == "notes_only":
+            _has = (t.get("missing") or 0) + (t.get("extra") or 0) > 0
+            lines.append("      正文差异 0" + ("（差异全部在注释）" if _has else ""))
+        elif _ds == "body":
+            lines.append(f"      正文差异 缺{t.get('body_missing')}/"
+                         f"多{t.get('body_extra')}（含正文差异）")
+        elif _ds == "unknown":
+            lines.append("      正文无法判定（该格式未支持分段）")
         if t.get("official"):
             lines.append(f"  {fmt} 【源】{t['official']}")
             if t.get("src_cmp"):
@@ -2598,6 +2748,17 @@ def _build_report_json_inner(work_id, records, xml_files, config_path,
         if not grp:
             best = "undetermined"
             reasons = ["no_record"]
+        # 差异范围（旁路正文比对）：body 含正文差异 / notes_only 差异全在注释 /
+        # unknown 未支持分段；多记录聚合取最保守
+        _scopes = [r.get("diff_scope") for r in grp if r.get("diff_scope")]
+        if "body" in _scopes:
+            _scope = "body"
+        elif "unknown" in _scopes:
+            _scope = "unknown"
+        elif "notes_only" in _scopes:
+            _scope = "notes_only"
+        else:
+            _scope = None
         fmts[fmt] = {
             "verdict": best,
             "fingerprint": fp,
@@ -2606,6 +2767,7 @@ def _build_report_json_inner(work_id, records, xml_files, config_path,
             "reason": "; ".join(reasons) if reasons else None,
             "formal_outputs": sorted(gens),
             "report": report_name,
+            "diff_scope": _scope,
         }
     try:
         from datetime import datetime as _dt
