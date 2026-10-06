@@ -2,10 +2,10 @@
 
 - **铁律（2026-09-06 用户确认）：改 `pycbeta/styles/pdf_docx.css` 前必须先经用户确认（出值才动手），plan 模式只展示不动。**
 - **死命令（2026-09-07 用户确认）：任何新 XML 元素（cb:* 等）必须入左栏 `EDITABLE_ROWS` + `TAG_SELECTOR` 映射 + CSS 变量/规则，验收 = 左栏可见可调。**
-- **当前优先级（2026-10-06 审计；publish 仓 P0–P4 已全完成，无遗留）**：
-  - P0 收尾（未提交）：xml2pdf GUI（转换中/预填经名来源/光标落文件列，1112 OK）待提交；publish 封面演示（`docs/封面布局演示/` + `tests/test_cover_demo.py`）待提交；提交前还原测试污染（`presets/宋体.css`、`pycbeta/data/annotations.txt`，勿入仓）。
+- **当前优先级（2026-10-06 审计；2026-10-06 更新：X1077 用户实测全绿；publish 仓 P0–P4 已全完成，无遗留）**：
+  - P0 收尾（已提交 `6ba95c5`/`c59ec8d`）：xml2pdf GUI（转换中/预填经名来源/光标落文件列）+ 外部引擎 URL + TODO 审计；publish 封面演示待提交。
   - P1：按卷范围 juan（用户立项，唯一大型待办；分阶段：`juan.py` spec/过滤 → CLI `--juan` → GUI/校验接线）。外部引擎分发已改走上游 URL（安装文档已写明，不传 Release）。
-  - P2：辅轨 `No.` 令牌镜像（约 5 行小修，门禁外）；html/epub 用户 CSS（原定最低优先级，backlog，方案已定）。
+  - P2：html/epub 用户 CSS（原定最低优先级，backlog，方案已定）。门禁外红灯已全消（2026-10-06：T0001/X1077 六格式全绿）。
   - P3/关闭：body-placed foot 注渲染（大，需另行立项定范围）；T01 `_cbreader` 重合（数据卫生，低）；元素/字体扫描（已记录，无代码改动）；html2pdf 分页（决议不做）；`verify_one`/`build_report_json` 行级共享（收益小，暂不）。
 - [x] **已完成 render-time 按字回退**（2026-09-06 用户报 標楷體 U+43F6 预览/Word 双 tofu）：`RENDER_FALLBACKS=(SimSun,PMingLiU,微软雅黑)`，`_fb_emit` 按 cmap 查覆盖、缺字拆 run（只换 eastAsia）；无文件不断言保持原样；真全缺（如悉昙 PUA）保持 tofu + 预览点名。T0672 对账文本一致；单测 TestRenderFallback 6 项；全量 302 OK，verify 8/0
   - 追补（2026-09-06）：回退链分繁简（Hant 首选 PMingLiU，Hans 首选 SimSun；跟 gaiji_lang；含 SimSunExtB/CBETA Supplement）；`output.docx.gaijiFonts` 未动（删的只是顶层 font_sets）；`linkActivated` 改 flag 跟踪消 RuntimeWarning；Ranjana.ttf/Siddam.ttf 实测 0/58 样本 PUA（纯装饰 CJK，不接线）
@@ -73,10 +73,14 @@
   - 主轨 txt/md 对齐 A 落地（2026-09-10）：官方 txt 侧 `_norm_official_txt`（版头 `#` 块剥离 + `    [n]` 注记块识别挪文末，繁简通用，三比对入口同构；`No.` 行不搬——生成侧 docNumber 本就在体首；`relocate` 试过方向反了已 revert）+ 生成侧 md 标记剥离 `_strip_md_marks`（`## 校注` + `[^n]: `，官方无此体系）；T0349 主轨 txt 624→15；md 经此与 txt 逐字同分（T0672 1012→12，证两者除标记外同一文本）；全集 11 部有官方 txt 者 txt 12~21、missing 全 0，md 与 txt 同分；无官方 txt 者回退 html（先天红，门禁外）；残留=注全变体vs单选每注几个字 + 题署/No. 顺序噪声，门禁仍只看 docx/html+辅轨；单测 +3（432 OK）
   - txt 不回退（2026-09-10）：无官方 txt 直接 `no_baseline`（三入口 `fmt != "txt"` 门控各两处；t2s 的 `txt_notes` 优先保留，仍是 txt 族；`auto_fetch` 先下载、仍无才报）；单测 `test_no_txt_no_html_fallback` 锁死；全量 433 OK
   - 已知局限（非 bug）：主轨 txt-vs-官方txt 与 md 同类红（官方 txt 把全部注变体行内化 + 版头 boilerplate，生成侧注文末集中——语义差异，非丢字；md 同理既有）；`_extract_xml_parts` 与 parser 共享缺字数据（GaijiDb）与版头选取语义，盲区仅限缺字解析本身
-  - [ ] **待办** 门禁外 6 红后续（2026-09-10 取证，详见校验说明书 §5“门禁外已知红”；无一回归，门禁口径不变；2026-10-06 审计：按 3→2→1 顺序做，1 需另行立项定范围）：
-    1. 渲染 body-placed foot 注（parser 收编 + 六渲染器出注 + aux 镜像 + 全门禁回归；收 TX08 类注 + T01 stub，T01 25k 本体仍红——输入就没有）；
-    2. T01 `_cbreader` 重合（9/5 旧版 charDecl 4/应 70，卫生；与 17k 缺失无关）；
-    3. 辅轨 `No.` 令牌镜像剥离（5 行；`strip_head_no=true` 时 aux 16 缺转 0）
+  - [x] **已消**（2026-10-06：T0001 六格式实测全绿，X1077 全绿，门禁外已无红）
+    - **T0001（T01n0001 長阿含經）根因**：官方对「被 mod(a/b) 拆分取代的 orig 注（`nkr_note_orig_*`）」的处理 = **正文锚点压制 + 尾注块保留（孤注）**；我方 html 此前正文多出锚点（全 22 卷唯一差异 `0028009`），致比对错位 12/12。修复：`render_html._render_noteref` 接 `model.suppressed_orig_notes`——`_orig_suppressed` 命中时**尾注块照常入 `_back_old`**（孤注），正文锚点返回空、不占标记号；`inline` 分支直接压制。单测 `TestSplitOrigSuppressedHtml`。
+    - **格式核对**：`epub` 走 `HtmlRenderer` 内核 → 自动同处理（实测正文锚点 0、孤注块 1）；`txt`/`md`/`docx` 官方基线**不含**该 orig 注（实测 `T0001_004.txt` 无 `其積又火`）→ 沿用全压制（`suppressed_orig_notes` 命中即整条不出），无需改动。
+    - 附带：`normalize` 加 `html.unescape`（官方 html 正则剥标签后 `&quot;`/`&#39;` 实体残留，生成侧 raw 字符；T0001 html 104→12 大头）。
+    - 仍留（非红灯，另行立项）：渲染 body-placed foot 注、T01 `_cbreader` charDecl 重合（卫生）；辅轨 `No.` 镜像已随 X1077 全绿作废。
+  - 校验设计决议（2026-10-06 用户点档 T0001 html 定位时确认）：
+    - Q1：html 失败**不**回退 txt（设计使然，非漏写）。`verify.bases.html=["html"]`，`resolve_bases` 只试链内；实质是结构对不上——html 侧校注 inline 保留（`strip_jiaozhu=False`），txt 基线经 `_norm_official_txt` 注挪文末，直接比必红；另写双侧重排属新功能，且会掩盖 html 特有问题。
+    - Q3：差异暂不区分正文/注释（现状 `normalize` 压平后无分类；抽取层本有结构，`_extract_html_parts` 分正文/脚注，做 span tracking 可实现，工作量中等，另立项）。
 - [x] **已完成** GUI 转换后校验反馈修复（2026-09-10 用户点档：结果/进度/汇总）
   - 根因：`BatchWorker._verify_one` 仅 `log.emit`（接 statusBar 瞬时消息，被后续覆盖）；行状态不含校验；`total_units` 不含校验；无汇总/日志窗
   - 落点：`pycbeta/gui/__main__.py` — 新增信号 `row_verify(int,level)`/`verify_result(dict)`；`_verify_one` 返回记录 dict（status/missing/extra/total/official_kind/official/gen_cmp/src_cmp，异常 `status=error`）；`run()` 校验前状态列 `校验中（fmt）…`、校验单元计入总进度、逐行 `_row_outcome` 综合「渲染+校验」终态、**校验报告追加到文件列产物列表末尾**（`*_compare_*.txt`，与 docx/txt 同列可点击打开）；`_on_verify_level` 状态列着色（通过 `#2e7d32`/失败 `#c62828`/无基线灰）；`VerifySummaryDialog`（通过/失败/无基线计数 + 逐项明细 + 打开报告目录，报告落 `out/{fmt}/`；无结果不弹、失败不强制弹）；`_start` 重置结果并接线

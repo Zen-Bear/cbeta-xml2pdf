@@ -24,7 +24,8 @@ def _norm_levels(raw) -> set:
         if 1 <= iv <= 9:
             out.add(iv)
     return out
-from .model import App, E, Gaiji, Lb, Note, NoteRef, Pb, Text, Work
+from .model import (App, E, Gaiji, Lb, Note, NoteRef, Pb, Text, Work,
+                     suppressed_orig_notes)
 from .theme import strip_head_no, bracket_pair, first_text_sourceline
 
 # 官方格式基底 CSS：styles/html_epub_official.css（html/epub 用）。
@@ -153,6 +154,8 @@ class HtmlRenderer:
         self._annotations = _ann_active(annotations)
         self._ann_seen = set()  # repeat first/page 已注词集合（render_work 起始终置零）
         self._work = None
+        # 被 mod(a/b) 取代的 orig 注：正文不出锚点，但尾注块保留（孤注，官方口径）
+        self._orig_suppressed = set()
         self._note_seq = 0
         self._old_seq = 0
         self._back_old = []  # orig/mod footnotes (old format), rendered first
@@ -197,6 +200,9 @@ class HtmlRenderer:
         for n in self._iter_all(work.body):
             if isinstance(n, App) and n.key:
                 self._app_by_n[n.key[3:]] = n
+        # 整体 orig 注被拆分 mod(a/b) 取代：官方正文不出其锚点（尾注块仍保留，孤注）；
+        # 与 docx/txt/md 的 suppressed_orig_notes 同源 helper（见 model）
+        self._orig_suppressed = suppressed_orig_notes(work.notes_by_n)
         juans = self._split_juans(work.body)
         written = []
         for juan_no, nodes in juans:
@@ -728,6 +734,10 @@ class HtmlRenderer:
         if not notes:
             return ""
         note = self._pick_note(notes)
+        # 被 mod(a/b) 拆分取代的 orig 注：官方正文不出锚点（尾注块仍保留，孤注）；
+        # inline 模式无尾注区，直接压制（与 docx/txt/md 全压制一致）
+        _sup = (note.ntype == "orig"
+                and (note.n or "") in self._orig_suppressed)
         # 注内容独立作用域：即使引用锚点落在块级对照表内，注记悉昙照常出读音/占位
         prev_sa = self._drop_sa_tt
         self._drop_sa_tt = False
@@ -736,6 +746,8 @@ class HtmlRenderer:
         finally:
             self._drop_sa_tt = prev_sa
         if self.notes == "inline":
+            if _sup:
+                return ""
             app = self._app_by_n.get(note.n or "")
             if app is not None and app.lem is not None:
                 cfs = [c for c in app.lem.children
@@ -762,11 +774,14 @@ class HtmlRenderer:
             )
             return f"<a id='cb_note_anchor{seq}' class='noteAnchor add' href='#cb_note_{seq}'>[A{seq}]</a>"
         n = note.n or ""
-        self._old_seq += 1
-        seq = self._old_seq
+        # 尾注块恒出（含被取代的 orig → 孤注，与官方一致）
         self._back_old.append(
             f"<span class='footnote' id='n{_esc(n)}'><a href='#note_anchor_{_esc(n)}'>[{_esc(n)}]</a> {content}</span>\n"
         )
+        if _sup:
+            return ""   # 正文锚点压制（不占标记号）
+        self._old_seq += 1
+        seq = self._old_seq
         return f'<a id="note_anchor_{_esc(n)}" class="noteAnchor" href="#n{_esc(n)}">[{seq}]</a>'
 
     def _render_star_app(self, app: App) -> str:

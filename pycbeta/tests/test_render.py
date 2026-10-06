@@ -567,5 +567,49 @@ class TestPreDedent(unittest.TestCase):
         self.assertNotIn("\n\n", blob.split("<pre", 1)[1].split("</pre>")[0])
 
 
+class TestSplitOrigSuppressedHtml(unittest.TestCase):
+    """被 mod(a/b) 拆分取代的 orig 注：html 正文不出锚点，但尾注块保留（孤注）。
+    T0001 [0028009] 实证（官方 T0001_004.html：正文无 note_anchor_0028009，
+    尾注仍有 id='n0028009'）；见 model.suppressed_orig_notes。"""
+
+    def _work(self, with_mod=True):
+        orig = Note(tag="note", attrs={}, n="0028009", ntype="orig",
+                    children=[Text(text="其積又火＝")])
+        byn = {"0028009": [orig]}
+        kids = [Text(text="燃"), NoteRef(n="0028009", notes=[orig])]
+        if with_mod:
+            ma = Note(tag="note", attrs={}, n="0028009a", ntype="mod",
+                      children=[Text(text="其積【大】")])
+            mb = Note(tag="note", attrs={}, n="0028009b", ntype="mod",
+                      children=[Text(text="火又【CB】")])
+            byn.update({"0028009a": [ma], "0028009b": [mb]})
+            kids += [NoteRef(n="0028009a", notes=[ma]),
+                     NoteRef(n="0028009b", notes=[mb])]
+        kids.append(Text(text="其積，火又不燃"))
+        return Work(id="T", source_file="", metadata={"title": "t", "author": ""},
+                    body=[E(tag="p", attrs={}, children=kids)],
+                    notes_by_n=byn, apps=[], simplified=False)
+
+    def _html(self, with_mod):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        files = HtmlRenderer().render_work(self._work(with_mod), d)
+        return "".join(open(os.path.join(d, f), encoding="utf-8").read()
+                       for f in files)
+
+    def test_body_anchor_suppressed_orphan_block_kept(self):
+        blob = self._html(True)
+        self.assertNotIn('id="note_anchor_0028009"', blob)   # 正文锚点压制
+        self.assertIn("id='n0028009'", blob)                 # 尾注块保留（孤注）
+        self.assertIn("其積又火＝", blob)
+        self.assertIn('id="note_anchor_0028009a"', blob)
+        self.assertIn('id="note_anchor_0028009b"', blob)
+
+    def test_standalone_orig_kept(self):
+        blob = self._html(False)
+        self.assertIn('id="note_anchor_0028009"', blob)
+        self.assertIn("其積又火＝", blob)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
