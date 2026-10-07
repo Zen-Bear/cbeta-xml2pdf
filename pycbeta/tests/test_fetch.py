@@ -10,7 +10,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from pycbeta.fetch import (resolve_source, fetch_work, catalog_lookup,
                            work_dir, materialize_work, title_t2s,
                            check_ebook_updates, canonical_work_id,
-                           parse_work_id, DEFAULT_DOWNLOADS, find_local_xml)
+                           parse_work_id, DEFAULT_DOWNLOADS, find_local_xml,
+                           fetch_baseline_juan)
 
 
 def _presets(xml_dir="", cbeta_ebook="", **extra):
@@ -156,6 +157,122 @@ class TestLetterSuffixId(unittest.TestCase):
                         .endswith("/epub/TX/TXa001.epub"))
 
 
+class TestLongWorkId(unittest.TestCase):
+    """长编号 `T25n1509`（canon+册号+n+编号）：我方层解析 + 册号消歧。"""
+
+    def test_parse_long(self):
+        from pycbeta.fetch import (parse_long_work_id, is_long_work_id,
+                                   long_to_short)
+        self.assertEqual(parse_long_work_id("T25n1509"), ("T", "25", "1509"))
+        self.assertEqual(parse_long_work_id("X59n1077"), ("X", "59", "1077"))
+        self.assertEqual(parse_long_work_id("GA11n0010"), ("GA", "11", "0010"))
+        self.assertEqual(parse_long_work_id("t25n1509"), ("T", "25", "1509"))
+        self.assertIsNone(parse_long_work_id("T1509"))
+        self.assertIsNone(parse_long_work_id("T0349"))
+        self.assertTrue(is_long_work_id("T25n1509"))
+        self.assertFalse(is_long_work_id("T0349"))
+        self.assertEqual(long_to_short("T25n1509"), "T1509")
+        self.assertEqual(long_to_short("T0349"), "T0349")
+
+    def test_find_local_xml_vol_scoped(self):
+        d = tempfile.mkdtemp()
+        for name in ("G114n2302.xml", "G118n2302.xml"):
+            with open(os.path.join(d, name), "w", encoding="utf-8") as f:
+                f.write("<TEI/>")
+        all_hits = find_local_xml(d, "G", "2302")
+        self.assertEqual(sorted(os.path.basename(p) for p in all_hits),
+                         ["G114n2302.xml", "G118n2302.xml"])
+        hit = find_local_xml(d, "G", "2302", vol="118")
+        self.assertEqual([os.path.basename(p) for p in hit], ["G118n2302.xml"])
+
+    def test_find_local_xml_canon_exact(self):
+        # `T*n0001.xml` 通配不得误收 TX 藏同编号文件
+        d = tempfile.mkdtemp()
+        for name in ("T01n0001.xml", "TX01n0001.xml"):
+            with open(os.path.join(d, name), "w", encoding="utf-8") as f:
+                f.write("<TEI/>")
+        hit = find_local_xml(d, "T", "0001")
+        self.assertEqual([os.path.basename(p) for p in hit], ["T01n0001.xml"])
+
+    def test_catalog_title_vol_scoped(self):
+        # catalog 钉死内置（自定义路径一律忽略）：用内置库真实跨册重复项验证
+        from pycbeta.fetch import _catalog_title
+        self.assertEqual(_catalog_title({}, "G", "2302"),
+                         "佛學名相彙解(第1卷-第8卷)")
+        self.assertEqual(_catalog_title({}, "G", "2302", vol="118"),
+                         "佛學名相彙解(第54卷-第68卷)")
+
+
+class TestFetchBaselineJuan(unittest.TestCase):
+    """子集校验单卷基线：html 单文件端点 / txt_notes 单卷 zip / 其余整包 fallback。"""
+
+    def test_html_single_volume(self):
+        e = tempfile.mkdtemp()
+        calls = []
+
+        def fake_dl(url, dest, **k):
+            calls.append(url)
+            with open(dest, "w", encoding="utf-8") as f:
+                f.write("x")
+            return True
+
+        with mock.patch("pycbeta.fetch._http_download", side_effect=fake_dl):
+            got = fetch_baseline_juan("T0001", "html", [1, 3],
+                                      _presets(cbeta_ebook=e))
+        self.assertEqual(len(got), 2)
+        self.assertTrue(calls[0].endswith("/html/T0001_001.html"))
+        self.assertTrue(calls[1].endswith("/html/T0001_003.html"))
+        self.assertTrue(os.path.isfile(got[0]) and os.path.isfile(got[1]))
+
+    def test_skips_existing(self):
+        e = tempfile.mkdtemp()
+        # 先落一卷（经 mock），再跑：只补缺的那一卷
+        calls = []
+
+        def fake_dl(url, dest, **k):
+            calls.append(url)
+            with open(dest, "w", encoding="utf-8") as f:
+                f.write("x")
+            return True
+
+        with mock.patch("pycbeta.fetch._http_download", side_effect=fake_dl):
+            got1 = fetch_baseline_juan("T0001", "html", [2],
+                                       _presets(cbeta_ebook=e))
+            self.assertEqual(len(calls), 1)
+            got2 = fetch_baseline_juan("T0001", "html", [2, 4],
+                                       _presets(cbeta_ebook=e))
+        self.assertEqual(len(calls), 2)          # 卷2 已存在不重下，只补卷4
+        self.assertEqual(len(got1), 1)
+        self.assertEqual(len(got2), 2)
+
+    def test_txt_notes_single_zip(self):
+        import zipfile
+        e = tempfile.mkdtemp()
+        calls = []
+
+        def fake_dl(url, dest, **k):
+            calls.append(url)
+            with zipfile.ZipFile(dest, "w") as z:
+                z.writestr("T0001_002.txt", "x")
+            return True
+
+        with mock.patch("pycbeta.fetch._http_download", side_effect=fake_dl):
+            got = fetch_baseline_juan("T0001", "txt_notes", [2],
+                                      _presets(cbeta_ebook=e))
+        self.assertTrue(calls[0].endswith("/text-with-notes/T0001_002.txt.zip"))
+        self.assertEqual([os.path.basename(p) for p in got], ["T0001_002.txt"])
+        self.assertTrue(os.path.isfile(got[0]))
+
+    def test_docx_falls_back_to_whole(self):
+        e = tempfile.mkdtemp()
+        with mock.patch("pycbeta.fetch.fetch_work",
+                        return_value={"docx": ["x.docx"]}) as F:
+            got = fetch_baseline_juan("T0001", "docx", [1],
+                                      _presets(cbeta_ebook=e))
+        self.assertEqual(got, ["x.docx"])
+        F.assert_called_once()
+
+
 class TestWorkDir(unittest.TestCase):
     def test_create_with_t2s_title(self):
         d = tempfile.mkdtemp()
@@ -289,7 +406,7 @@ class TestMaterialize(unittest.TestCase):
     def test_download_source(self):
         e = tempfile.mkdtemp()
 
-        def fake_fetch(wid, fmts, presets, cbeta_ebook):
+        def fake_fetch(wid, fmts, presets, cbeta_ebook, vol=None):
             d = os.path.join(cbeta_ebook, "T0349 書")
             os.makedirs(d, exist_ok=True)
             p = os.path.join(d, "T12n0349.xml")

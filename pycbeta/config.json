@@ -109,6 +109,8 @@
     "page_border": false,        // [docx|pdf] true=每页四周加框（页面边框）
     "bookmarks": true,           // [docx|pdf] true=按卷加目录书签（PDF 侧栏大纲；DOCX 书签+导航窗格大纲，默认用卷号/卷标题）
     "split_juan": false,         // [docx|pdf] true=按卷输出多个文档（每卷一个文件，文件名带「_卷N」）；默认不分卷
+    "juan_suffix_template": "",  // [六格式] 卷范围子集（--juan / -i ID:范围）输出名后缀模板；空=默认「（卷34-36、40）」；
+                                 //   必须含 {label} 才生效（否则回退默认并警告）；显式 -o 文件路径不加
     "show_close_juan": false,    // [docx] true=显示结束卷标题（<cb:juan fun="close">，默认隐藏且不加书签）
     "suppress_jhead_dup": true,  // [docx] true=仅 jhead 去重（卷头 <title> 与书名重复时去重，head 保留书名，默认 true）
     "inline_brackets": "fullwidth", // [六格式] 正文夹注（<note place="inline">，原文）括号形态：halfwidth="()" 对齐CBETA官方，fullwidth="（）"（默认全角）

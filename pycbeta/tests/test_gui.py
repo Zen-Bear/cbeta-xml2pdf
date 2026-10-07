@@ -5001,7 +5001,7 @@ class TestVerifyFeedback(unittest.TestCase):
                 f.write("<TEI/>")
 
             def fake_verify(x, fmt, source, out_root, max_diff=10,
-                            diff_lines=5, config_path=None, t2s=False):
+                            diff_lines=5, config_path=None, t2s=False, juan=None):
                 return {"status": "ok", "missing": 0, "extra": 0,
                         "official_kind": "docx", "gen_cmp": "g.txt",
                         "src_cmp": "s.txt"}
@@ -5033,8 +5033,8 @@ class TestVerifyFeedback(unittest.TestCase):
         w._resolve = lambda job, idx, fetch, presets: [xml]
         w._title_of = lambda x, i, P: ("T0349", "T0349")
         w._out_name_for = lambda *a, **k: "T12n0349.txt"
-        w._render_one = lambda x, fmt, o, cfg, out_name=None: (True, [rendered])
-        w._verify_one = lambda x, fmt, o, cfg, vo, wid="", gen_name="": {
+        w._render_one = lambda x, fmt, o, cfg, out_name=None, juan=None: (True, [rendered])
+        w._verify_one = lambda x, fmt, o, cfg, vo, wid="", gen_name="", juan=None: {
             "id": wid, "fmt": fmt, "xml": x, "status": "fail", "missing": 0,
             "extra": 15, "gen_cmp": gcmp, "src_cmp": scmp}
         orig = (M.write_temp_presets, M.write_temp_run)
@@ -5062,8 +5062,8 @@ class TestVerifyFeedback(unittest.TestCase):
         self.assertIn("=== T12n0349.xml", body)
         self.assertIn("[FAIL]", body)
         self.assertIn("缺0/多15", body)
-        jrep = os.path.splitext(report)[0] + ".json"
-        self.assertTrue(os.path.isfile(jrep))       # 机读结论与 txt 配对
+        jrep = os.path.join(vdir, "report.json")
+        self.assertTrue(os.path.isfile(jrep))       # 机读结论固定名 report.json
         j = json.load(open(jrep, encoding="utf-8"))
         self.assertEqual(j["fmts"]["txt"]["verdict"], "fail")
         self.assertEqual(j["fmts"]["txt"]["extra"], 15)
@@ -5094,7 +5094,7 @@ class TestVerifyFeedback(unittest.TestCase):
         os.makedirs(os.path.join(vdir, "txt"), exist_ok=True)
         pfmt = os.path.join(vdir, "txt", f"{name}_转换报告_txt.txt")
 
-        def fake_render(x, fmt, o, cfg, out_name=None):
+        def fake_render(x, fmt, o, cfg, out_name=None, juan=None):
             with open(pfmt, "w", encoding="utf-8") as f:
                 f.write(f"# 转换报告 T0349 [{fmt}]\n"
                         f"1. [字体替换] [{fmt}] XML 行 9：x\n")
@@ -5139,7 +5139,7 @@ class TestVerifyFeedback(unittest.TestCase):
         w._resolve = lambda job, idx, fetch, presets: [x1, x2]
         w._title_of = lambda x, i, P: ("TX0001", "TX0001")
         w._out_name_for = lambda *a, **k: "TX0001.txt"
-        w._render_one = lambda x, fmt, o, cfg, out_name=None: (True, [rendered])
+        w._render_one = lambda x, fmt, o, cfg, out_name=None, juan=None: (True, [rendered])
         orig = (M.write_temp_presets, M.write_temp_run)
         M.write_temp_presets = lambda presets, opts: os.path.join(tmp, "p.json")
         M.write_temp_run = lambda run, snap: os.path.join(tmp, "r.json")
@@ -5174,7 +5174,7 @@ class TestVerifyFeedback(unittest.TestCase):
                       [] if job["id"] == "A" else [xml])
         w._title_of = lambda x, i, P: ("B", "B")
         w._out_name_for = lambda *a, **k: "T1.txt"
-        w._render_one = lambda x, fmt, o, cfg, out_name=None: (True, [rendered])
+        w._render_one = lambda x, fmt, o, cfg, out_name=None, juan=None: (True, [rendered])
         orig = (M.write_temp_presets, M.write_temp_run)
         M.write_temp_presets = lambda presets, opts: os.path.join(tmp, "p.json")
         M.write_temp_run = lambda run, snap: os.path.join(tmp, "r.json")
@@ -5206,7 +5206,7 @@ class TestVerifyFeedback(unittest.TestCase):
         w._resolve = lambda job, idx, fetch, presets: [xml]
         w._title_of = lambda x, i, P: ("T1", "T1")
         w._out_name_for = lambda *a, **k: "T1.txt"
-        w._render_one = lambda x, fmt, o, cfg, out_name=None: (True, [rendered])
+        w._render_one = lambda x, fmt, o, cfg, out_name=None, juan=None: (True, [rendered])
         orig = (M.write_temp_presets, M.write_temp_run)
         M.write_temp_presets = lambda presets, opts: os.path.join(tmp, "p.json")
         M.write_temp_run = lambda run, snap: os.path.join(tmp, "r.json")
@@ -5302,6 +5302,127 @@ class TestVerifyFeedback(unittest.TestCase):
             self.assertIn("nope", rec["detail"])
         finally:
             w.wait(1)
+
+
+class TestJuanGui(unittest.TestCase):
+    """GUI 卷范围：编号 token 解析 / 命令 `--juan` / 后缀计划 / 目录后缀。"""
+
+    def test_make_id_job_plain(self):
+        from pycbeta.gui.__main__ import _make_id_job
+        j = _make_id_job("t0349")
+        self.assertEqual(j["wid"], "T0349")
+        self.assertIsNone(j["juan"])
+        self.assertIsNone(j["bad_juan"])
+
+    def test_make_id_job_long_and_spec(self):
+        from pycbeta.gui.__main__ import _make_id_job
+        j = _make_id_job("T25n1509:34-36+40")
+        self.assertEqual((j["wid"], j["vol"]), ("T1509", "25"))
+        self.assertEqual(j["juan"], "34-36+40")
+        self.assertEqual(j["juan_segments"], [(34, 36), (40, 40)])
+        self.assertIsNone(j["bad_juan"])
+
+    def test_make_id_job_bad_spec(self):
+        from pycbeta.gui.__main__ import _make_id_job
+        j = _make_id_job("T0349:100-34")
+        self.assertIsNotNone(j["bad_juan"])
+
+    def test_parse_work_ids_file_with_spec(self):
+        import tempfile
+        from pycbeta.gui.__main__ import parse_work_ids_file
+        p = os.path.join(tempfile.mkdtemp(), "ids.txt")
+        with open(p, "w", encoding="utf-8") as f:
+            f.write("# 注释\n1. T0349:2-3\nT25n1509:34-100\nbad\nX1077\n")
+        self.assertEqual(parse_work_ids_file(p),
+                         ["T0349:2-3", "T25N1509:34-100", "X1077"])
+
+    def test_build_render_cmd_juan(self):
+        from types import SimpleNamespace
+        from pycbeta.gui.__main__ import build_render_cmd
+        opts = SimpleNamespace(page="a4", font_lang=None, t2s=False,
+                               font_scale=1.0, vertical=False, engine=None)
+        cmd = build_render_cmd(opts, "x.xml", "txt", "o", "c.json",
+                               out_name="n.txt", juan="2-3")
+        self.assertIn("--juan", cmd)
+        self.assertEqual(cmd[cmd.index("--juan") + 1], "2-3")
+        cmd2 = build_render_cmd(opts, "x.xml", "txt", "o", "c.json")
+        self.assertNotIn("--juan", cmd2)
+
+    def test_juan_plan_full_and_subset(self):
+        from types import SimpleNamespace
+        from pycbeta.gui.__main__ import BatchWorker
+        w = BatchWorker([], SimpleNamespace(verify={}, formats=[]), {}, {})
+        job = {"juan": "1-2", "juan_segments": [(1, 2)]}
+        self.assertEqual(w._juan_plan(job, {1, 2}, {}), ([(1, 2)], ""))
+        segs, sfx = w._juan_plan(job, {1, 2, 3}, {})
+        self.assertEqual(segs, [(1, 2)])
+        self.assertEqual(sfx, "（卷1-2）")
+        spec_job = {"juan": "1-3", "juan_segments": [(1, 3)]}
+        self.assertEqual(w._juan_plan(spec_job, {1, 2, 3}, {}), ([(1, 3)], ""))
+        self.assertEqual(w._juan_plan({}, {1}, {}), (None, ""))
+
+    def test_verify_dir_suffix(self):
+        import tempfile
+        from types import SimpleNamespace
+        from pycbeta.gui.__main__ import BatchWorker
+        tmp = tempfile.mkdtemp(prefix="gverjs-")
+        w = BatchWorker([], SimpleNamespace(verify={}, formats=[]), {}, {})
+        w._title_t2s = False
+        d = w._verify_dir(tmp, "X1077", "准提净业", "", sfx="（卷2-3）")
+        self.assertTrue(d.endswith("X1077 准提净业（卷2-3）（验证）"))
+        self.assertTrue(os.path.isdir(d))
+
+    def test_out_name_suffix(self):
+        import tempfile
+        from pycbeta.gui.__main__ import BatchWorker
+        from types import SimpleNamespace
+        w = BatchWorker([], SimpleNamespace(verify={}, formats=[]), {}, {})
+        w._title_t2s = False
+        d = tempfile.mkdtemp(prefix="goutjs-")
+        name = w._out_name_for({}, d, "X1077", "准提净业", "X59n1077", "docx",
+                               sfx="（卷2-3）")
+        self.assertIsNone(name)     # 单源不改名 → CLI 默认名（含后缀）
+
+
+class TestVerifyRootOverride(unittest.TestCase):
+    """GUI 独立窗 `--verify-root`：显式 ＞ 预设 source.verify_root ＞ 默认。"""
+
+    def test_pick_verify_root_precedence(self):
+        from pycbeta.gui.__main__ import _pick_verify_root
+        presets = {"source": {"verify_root": "P:/preset"}}
+        self.assertEqual(_pick_verify_root("X:/explicit", presets), "X:/explicit")
+        self.assertEqual(_pick_verify_root("", presets), "P:/preset")
+        self.assertEqual(_pick_verify_root(None, presets), "P:/preset")
+        self.assertEqual(_pick_verify_root("  ", presets), "P:/preset")
+        self.assertEqual(_pick_verify_root("", {}), "")
+        self.assertEqual(_pick_verify_root("", None), "")
+        self.assertEqual(_pick_verify_root("X:/e", {"source": None}), "X:/e")
+
+    def test_apply_launch_args_sets_override(self):
+        from types import SimpleNamespace
+        from pycbeta.gui.__main__ import _apply_launch_args
+        win = SimpleNamespace()
+        _apply_launch_args(win, SimpleNamespace(verify_root="X:/vr"))
+        self.assertEqual(win._verify_root_override, "X:/vr")
+
+    def test_apply_launch_args_no_override_leaves_attr(self):
+        from types import SimpleNamespace
+        from pycbeta.gui.__main__ import _apply_launch_args
+        win = SimpleNamespace()
+        _apply_launch_args(win, SimpleNamespace())
+        self.assertFalse(hasattr(win, "_verify_root_override"))
+
+    def test_worker_paths_override_wins(self):
+        # _start 把覆盖值并入 worker paths；run() 经 _pick_verify_root 取生效值
+        from types import SimpleNamespace
+        from pycbeta.gui.__main__ import BatchWorker, _pick_verify_root
+        w = BatchWorker([], SimpleNamespace(verify={}, formats=[]),
+                        {"presets": {"source": {"verify_root": "P:/preset"}},
+                         "run": {}, "out": "o",
+                         "verify_root": "X:/override"}, {})
+        self.assertEqual(
+            _pick_verify_root(w.paths.get("verify_root"), w.paths["presets"]),
+            "X:/override")
 
 
 if __name__ == "__main__":

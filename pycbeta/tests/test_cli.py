@@ -76,6 +76,27 @@ class TestResolveOutputCollision(unittest.TestCase):
                               _work(), {})
         self.assertEqual(n, "mine.txt")
 
+    def test_juan_suffix_appended(self):
+        w = _work("T0670")
+        w.juan_suffix = "（卷34-36、40）"
+        _d, n = resolve_output("/s/T16n0670.xml", "txt", _args("/o"), w)
+        self.assertEqual(n, "T0670（卷34-36、40）.txt")
+
+    def test_juan_suffix_explicit_file_respected(self):
+        w = _work("T0670")
+        w.juan_suffix = "（卷2）"
+        out = os.path.join(tempfile.mkdtemp(), "mine.txt")
+        _d, n = resolve_output("/s/T16n0670.xml", "txt", _args(out), w, {})
+        self.assertEqual(n, "mine.txt")
+
+    def test_juan_suffix_html_dir(self):
+        w = _work("T0670")
+        w.juan_suffix = "（卷2）"
+        args = SimpleNamespace(output=None, name_template=None)
+        d, n = resolve_output("/s/T16n0670.xml", "html", args, w)
+        self.assertIsNone(n)
+        self.assertTrue(d.endswith("T16n0670（卷2）_html"))
+
 
 class TestProcessFileErrors(unittest.TestCase):
     def test_oserror_continues_and_counts(self):
@@ -92,6 +113,60 @@ class TestProcessFileErrors(unittest.TestCase):
             n = cli.process_file("x.xml", ["docx", "txt"], args, None)
         self.assertEqual(n, 1)
         self.assertEqual(R.call_count, 2)
+
+
+class TestProcessFileJuan(unittest.TestCase):
+    """process_file 卷范围：filtered 置 `work.juan_suffix` 并照常渲染；
+    无交集返回失败计数且不渲染。"""
+
+    def _work3(self):
+        from pycbeta.model import E, Text, Work
+
+        def ms(n):
+            return E(tag="milestone", attrs={"unit": "juan", "n": str(n)})
+
+        return Work(id="T1", source_file="", metadata={"title": "書"},
+                    body=[ms(1), Text("一"), ms(2), Text("二")],
+                    notes_by_n={}, apps=[], simplified=False)
+
+    def test_filtered_renders_and_stamps_suffix(self):
+        from types import SimpleNamespace
+        from unittest import mock
+        import pycbeta.cli as cli
+        from pycbeta.model import Text
+        args = SimpleNamespace(t2s=False, font_check=False,
+                               juan_segments=[(2, 2)], juan_suffix="（卷2）")
+        w = self._work3()
+        seen = {}
+
+        def fake_render(ww, fmt, out_dir, out_name, *a, **k):
+            seen["suffix"] = getattr(ww, "juan_suffix", None)
+
+        with mock.patch.object(cli, "P5Parser") as P, \
+                mock.patch.object(cli, "resolve_output",
+                                  return_value=("d", "n")), \
+                mock.patch.object(cli, "render_one", side_effect=fake_render):
+            P.return_value.parse.return_value = w
+            rc = cli.process_file("x.xml", ["txt"], args, None)
+        self.assertEqual(rc, 0)
+        self.assertEqual(seen["suffix"], "（卷2）")
+        self.assertEqual([n.text for n in w.body if isinstance(n, Text)],
+                         ["二"])
+
+    def test_empty_intersection_skips_render(self):
+        from types import SimpleNamespace
+        from unittest import mock
+        import pycbeta.cli as cli
+        args = SimpleNamespace(t2s=False, font_check=False,
+                               juan_segments=[(9, 9)], juan_suffix="（卷9）")
+        with mock.patch.object(cli, "P5Parser") as P, \
+                mock.patch.object(cli, "resolve_output",
+                                  return_value=("d", "n")), \
+                mock.patch.object(cli, "render_one") as R:
+            P.return_value.parse.return_value = self._work3()
+            rc = cli.process_file("x.xml", ["txt"], args, None)
+        self.assertEqual(rc, 1)
+        R.assert_not_called()
 
 
 class TestProcessFileConvertReport(unittest.TestCase):
@@ -521,7 +596,7 @@ class TestResolveVerifyEbook(unittest.TestCase):
                     mock.patch("pycbeta.verify.find_official",
                                return_value=[]), \
                     mock.patch("pycbeta.fetch.ensure_baselines",
-                               side_effect=lambda w, n, p, e:
+                               side_effect=lambda w, n, p, e, juan=None:
                                seen.update(wid=w, need=n, ebook=e)):
                 P.return_value.parse.return_value = work
                 with redirect_stdout(io.StringIO()):
@@ -628,7 +703,7 @@ class TestEpubTxtNeed(unittest.TestCase):
                     mock.patch("pycbeta.verify.find_official",
                                return_value=[]), \
                     mock.patch("pycbeta.fetch.ensure_baselines",
-                               side_effect=lambda w, n, p, e:
+                               side_effect=lambda w, n, p, e, juan=None:
                                seen.update(need=n)):
                 P.return_value.parse.return_value = work
                 with redirect_stdout(io.StringIO()):

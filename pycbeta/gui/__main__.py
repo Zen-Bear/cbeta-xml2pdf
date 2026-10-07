@@ -57,16 +57,19 @@ def parse_produced_paths(log):
     return out
 
 
-def build_render_cmd(opts, xml, fmt, out_dir, tmpcfg, out_name=None):
+def build_render_cmd(opts, xml, fmt, out_dir, tmpcfg, out_name=None, juan=None):
     """子进程桥命令（纯函数，可单测）：批量渲染一行。
 
     - 字库语言只在简体时传 --font-lang（默认繁体省略；t2s 自动简体）；
     - tmpcfg 是临时 run.json（5 槽组合单；主题走槽，不传 --theme）。
     - out_name 给定时 -o 指向确切文件（多源同名统一回退用；html 忽略，见残留）。
+    - juan（原始范围串）给定时传 --juan（子集渲染/校验；GUI 侧算后缀命名）。
     """
     out_target = os.path.join(out_dir, out_name) if out_name else out_dir
     cmd = [sys.executable, "-m", "pycbeta", "-i", xml, "-f", fmt,
            "--page", opts.page, "--config", tmpcfg, "-o", out_target]
+    if juan:
+        cmd += ["--juan", str(juan)]
     if (opts.font_lang or "zh-Hant") == "zh-Hans" and not opts.t2s:
         cmd += ["--font-lang", "zh-Hans"]
     if abs(float(opts.font_scale or 1.0) - 1.0) > 1e-9:
@@ -113,11 +116,13 @@ def _last_error_line(text):
 
 
 def parse_work_ids_file(path):
-    """从 ID 列表文本解析佛典编号：逐行取 `is_work_id` 命中的 token（去重保序）。
+    """从 ID 列表文本解析佛典编号：逐行取命中的 token（去重保序）。
 
     兼容 `test/mini-test.txt` 形态（`T0349 彌勒菩薩所問本願經`）、逗号/分号/顿号
-    分隔、行首序号与 `#` 注释；无命中返回 []。"""
-    from pycbeta.fetch import is_work_id
+    分隔、行首序号与 `#` 注释；token 可带卷范围后缀（`T0349:2-3` / `T25n1509:34-100`，
+    多段用 `+`，因 `,` 是列表分隔符）；无命中返回 []。"""
+    from pycbeta.fetch import is_work_id, is_long_work_id
+    from pycbeta.juan import split_id_juan
     try:
         with open(path, encoding="utf-8-sig") as f:
             text = f.read()
@@ -132,11 +137,51 @@ def parse_work_ids_file(path):
         line = line.split("#", 1)[0]
         for tok in re.split(r"[\s,;，；、]+", line):
             tok = tok.strip().strip(".").strip()
-            if tok and is_work_id(tok):
-                up = tok.upper()
-                if up not in out:
-                    out.append(up)
+            if not tok:
+                continue
+            rid, spec = split_id_juan(tok)
+            if not (is_work_id(rid) or is_long_work_id(rid)):
+                continue
+            full = f"{rid.upper()}:{spec}" if spec else rid.upper()
+            if full not in out:
+                out.append(full)
     return out
+
+
+def _pick_verify_root(override, presets):
+    """校验根生效值：显式启动参数（`--verify-root`）＞ 预设 `source.verify_root`
+    ＞ `""`（调用方 `_verify_dir` 再走 `default_verify_root`＝`{输出}/验证`）。
+    与 CLI `_cli_verify_custom` 同优先级；显式值只本次运行生效，不写回预设。"""
+    ov = str(override or "").strip()
+    if ov:
+        return ov
+    try:
+        return ((presets.get("source") or {}).get("verify_root") or "")
+    except Exception:
+        return ""
+
+
+def _make_id_job(tok):
+    """编号 token → job：`T0349` / `T25n1509`（长编号消歧册号）/ `T0349:2-3`。
+
+    非法卷范围记 `bad_juan`（`_resolve` 标红）；`wid` 为规范化短编号（材料化/校验用）。"""
+    from pycbeta.fetch import parse_long_work_id
+    from pycbeta.juan import split_id_juan, parse_juan_spec
+    rid, spec = split_id_juan(tok)
+    rid = (rid or "").strip().upper()
+    p = parse_long_work_id(rid)
+    wid = f"{p[0]}{p[2]}" if p else rid
+    vol = p[1] if p else None
+    juan_segments = None
+    bad_juan = None
+    if spec:
+        try:
+            juan_segments = parse_juan_spec(spec)
+        except ValueError as e:
+            bad_juan = str(e)
+    return {"kind": "id", "id": (tok or "").strip().upper(), "wid": wid,
+            "vol": vol, "juan": spec, "juan_segments": juan_segments,
+            "bad_juan": bad_juan}
 
 
 def _row_outcome(render_ok, row_ver, verify_on, render_errors=None):
@@ -208,11 +253,10 @@ class BatchWorker(QThread):
             snapshot = write_temp_presets(presets, self.opts)
             tmpcfg = write_temp_run(run, snapshot)
             verify_on = bool(self.opts.verify.get("enabled"))
-            try:
-                self._verify_custom = (
-                    (presets.get("source") or {}).get("verify_root") or "")
-            except Exception:
-                self._verify_custom = ""
+            # 校验根优先级与 CLI 一致：显式启动参数（--verify-root）＞ 预设
+            # source.verify_root ＞ {输出}/验证（后者由 _verify_dir 兜底）。
+            self._verify_custom = _pick_verify_root(
+                self.paths.get("verify_root"), presets)
             want_report = bool(
                 (getattr(self.opts, "output", None) or {}).get("convert_report",
                                                                False))
@@ -270,6 +314,8 @@ class BatchWorker(QThread):
                     if self._cancel:
                         break
                     title, wid = self._title_of(xml, idx, P5Parser)
+                    job_segs, job_sfx = self._juan_plan(
+                        job, getattr(self, "_last_work_juans", set()), presets)
                     if row_stem is None:
                         row_stem = wid or os.path.splitext(
                             os.path.basename(xml))[0]
@@ -279,11 +325,13 @@ class BatchWorker(QThread):
                         # 校验产物独立成 {(id) 书名}（验证）/ 子目录（保持 {fmt}/ 结构）；
                         # 根：source.verify_root 自选优先，否则 {输出}/验证
                         verify_dir = self._verify_dir(out_dir, wid, title,
-                                                      self._verify_custom)
+                                                      self._verify_custom,
+                                                      sfx=job_sfx)
                     if want_report and row_report_dir is None and row_wid:
                         # 报告目录与校验报告同处（不依赖校验开关）
                         row_report_dir = self._verify_dir(
-                            out_dir, row_wid, row_title, self._verify_custom)
+                            out_dir, row_wid, row_title, self._verify_custom,
+                            sfx=job_sfx)
                         from pycbeta.filename import default_output_name
                         row_report_name = default_output_name(
                             row_wid, row_title, getattr(self, "_title_t2s", True))
@@ -292,9 +340,11 @@ class BatchWorker(QThread):
                             break
                         out_name = self._out_name_for(
                             used_names, out_dir, wid, title,
-                            os.path.splitext(os.path.basename(xml))[0], fmt)
-                        ok, paths = self._render_one(xml, fmt, out_dir, tmpcfg,
-                                                     out_name=out_name)
+                            os.path.splitext(os.path.basename(xml))[0], fmt,
+                            sfx=job_sfx)
+                        ok, paths = self._render_one(
+                            xml, fmt, out_dir, tmpcfg, out_name=out_name,
+                            juan=(job.get("juan") or None))
                         if want_report:
                             # per-fmt 报告不进文件列（行末合并为一份）
                             paths = [p for p in paths
@@ -311,7 +361,8 @@ class BatchWorker(QThread):
                             self.row_status.emit(idx, f"校验中（{fmt}）…")
                             vr = self._verify_one(xml, fmt, verify_dir or out_dir,
                                                   tmpcfg, verify_one, wid,
-                                                  gen_name=gen_name)
+                                                  gen_name=gen_name,
+                                                  juan=job_segs)
                             row_ver.append(vr)
                             self.verify_result.emit(vr)
                             done_units += 1
@@ -392,7 +443,7 @@ class BatchWorker(QThread):
                             vertical=bool(getattr(self.opts, "vertical",
                                                   False)),
                             report_name=os.path.basename(report))
-                        _jp = os.path.splitext(report)[0] + ".json"
+                        _jp = os.path.join(os.path.dirname(report), "report.json")
                         with open(_jp, "w", encoding="utf-8") as _f:
                             _json.dump(_j, _f, ensure_ascii=False,
                                        sort_keys=True, indent=1)
@@ -446,7 +497,7 @@ class BatchWorker(QThread):
                         break
             self.row_source.emit(idx, _SOURCE_LABELS["xml_merge"])
             return
-        wid = job.get("id") or ""
+        wid = job.get("wid") or job.get("id") or ""
         if not fetch.is_work_id(wid):
             return
         try:
@@ -454,15 +505,18 @@ class BatchWorker(QThread):
                 fetch.canonical_work_id(wid, presets))
         except Exception:
             return
+        vol = job.get("vol")
         if os.path.isfile(cat):
             for rec in fetch.catalog_lookup(cat, canon, no):
+                if vol and rec.get("vol") != vol:
+                    continue
                 if rec.get("title"):
                     self.row_title.emit(idx, rec["title"])
                     break
         try:
             _paths, label = fetch.materialize_work(
                 wid, presets, download=bool(self.flags.get("auto_xml")),
-                quiet=True, dry_run=True)
+                quiet=True, dry_run=True, vol=vol)
         except Exception:
             label = ""
         disp = _SOURCE_LABELS.get(label, "")
@@ -490,7 +544,11 @@ class BatchWorker(QThread):
             if paths:
                 self.row_source.emit(idx, "合册合成")
             return paths
-        wid = job["id"]
+        wid = job.get("wid") or job["id"]
+        if job.get("bad_juan"):
+            self.row_status.emit(idx, f"非法卷范围: {job['bad_juan']}")
+            self.row_verify.emit(idx, "fail")
+            return []
         if not fetch.is_work_id(wid):
             self.row_status.emit(idx, "非法編號")
             self.row_verify.emit(idx, "fail")   # 非法书号状态列红字
@@ -499,7 +557,8 @@ class BatchWorker(QThread):
         try:
             found, label = fetch.materialize_work(
                 wid, presets, xml_dir=xml_dir, cbeta_ebook=cbeta_ebook,
-                download=bool(self.flags.get("auto_xml")), quiet=True)
+                download=bool(self.flags.get("auto_xml")), quiet=True,
+                vol=job.get("vol"))
         except ValueError as e:
             self.row_status.emit(idx, f"未配置: {e}")
             return []
@@ -533,15 +592,38 @@ class BatchWorker(QThread):
         return "缺 XML（下载失败）"
 
     def _title_of(self, xml, idx, P5Parser):
+        self._last_work_juans = set()
         try:
             w = P5Parser().parse(xml)
+            try:
+                from pycbeta.verify import work_juan_numbers
+                self._last_work_juans = work_juan_numbers(w)
+            except Exception:
+                pass
             title = (w.metadata.get("title") or "").strip() or w.id
             self.row_title.emit(idx, title)
             return title, w.id
         except Exception:
             return os.path.basename(xml), ""
 
-    def _out_name_for(self, used, out_dir, wid, title, stem, fmt):
+    def _juan_plan(self, job, all_juans, presets):
+        """job 卷范围 → (segments|None, 后缀)。全覆盖/无范围 → 不加后缀（CLI no-op）。"""
+        spec = job.get("juan")
+        if not spec:
+            return None, ""
+        from pycbeta.juan import (parse_juan_spec, juan_set,
+                                  format_juan_label, resolve_juan_suffix)
+        try:
+            segs = job.get("juan_segments") or parse_juan_spec(spec)
+        except ValueError:
+            return None, ""
+        if all_juans and set(all_juans) <= juan_set(segs):
+            return segs, ""
+        tpl = ((presets.get("output") or {}).get("juan_suffix_template") or "")
+        sfx, _fb = resolve_juan_suffix(tpl, format_juan_label(segs))
+        return segs, sfx
+
+    def _out_name_for(self, used, out_dir, wid, title, stem, fmt, sfx=""):
         """本轮统一命名：默认 `{workid 书名}`（title_t2s 跟随 source）。
         多源同名全组改输入基名（与 CLI 同规则，共 filename helper）。
         返回最终名；None 表示沿用默认（单文件/html/无 wid）。改名执行缺失忽略。"""
@@ -553,7 +635,7 @@ class BatchWorker(QThread):
         if not ext:
             return None
         default = default_output_name(
-            wid, title, getattr(self, "_title_t2s", True)) + ext
+            wid, title, getattr(self, "_title_t2s", True)) + (sfx or "") + ext
         final, renames = dedupe_run_outputs(used, out_dir, default, stem)
         for old, new in renames:
             try:
@@ -566,13 +648,13 @@ class BatchWorker(QThread):
             self._row_renames.extend(renames)
         return None if final == default else final
 
-    def _verify_dir(self, out_dir, wid, title, verify_root=""):
+    def _verify_dir(self, out_dir, wid, title, verify_root="", sfx=""):
         """校验产物子目录 `{校验根}/{id 书名}（验证）/`（内部保持 {fmt}/ 结构）。
-        校验根：自选（source.verify_root）优先，否则 {输出}/验证。"""
+        校验根：自选（source.verify_root）优先，否则 {输出}/验证；卷子集带后缀。"""
         from pycbeta.filename import default_output_name
         from pycbeta.verify import default_verify_root
         name = default_output_name(
-            wid or "", title, getattr(self, "_title_t2s", True))
+            wid or "", title, getattr(self, "_title_t2s", True)) + (sfx or "")
         custom = (verify_root or "").strip()
         root = os.path.abspath(custom) if custom \
             else default_verify_root(out_dir)
@@ -580,9 +662,9 @@ class BatchWorker(QThread):
         os.makedirs(path, exist_ok=True)
         return path
 
-    def _render_one(self, xml, fmt, out_dir, tmpcfg, out_name=None):
+    def _render_one(self, xml, fmt, out_dir, tmpcfg, out_name=None, juan=None):
         cmd = build_render_cmd(self.opts, xml, fmt, out_dir, tmpcfg,
-                               out_name=out_name)
+                               out_name=out_name, juan=juan)
         self.log.emit("$ " + " ".join(cmd))
         self._last_render_err = ""
         try:
@@ -608,7 +690,8 @@ class BatchWorker(QThread):
         finally:
             self._proc = None
 
-    def _verify_one(self, xml, fmt, out_dir, tmpcfg, verify_one, wid="", gen_name=""):
+    def _verify_one(self, xml, fmt, out_dir, tmpcfg, verify_one, wid="",
+                    gen_name="", juan=None):
         v = self.opts.verify
         rec = {"id": wid or os.path.basename(xml), "fmt": fmt, "xml": xml,
                "gen_name": gen_name}
@@ -629,7 +712,8 @@ class BatchWorker(QThread):
                            out_dir,
                            max_diff=int(v.get("maxDiff", 10) or 10),
                            diff_lines=int(v.get("diffLines", 5) or 5),
-                           config_path=tmpcfg, t2s=self.opts.t2s)
+                           config_path=tmpcfg, t2s=self.opts.t2s,
+                           juan=juan)
             if isinstance(r, dict):
                 rec.update(r)
             rec["id"] = wid or os.path.basename(xml)
@@ -884,9 +968,9 @@ class MainWindow(QMainWindow):
         if self.mode_ids.isChecked():
             import re
             for tok in re.split(r"[,;\s，；]+", self.ids_edit.text()):
-                tok = tok.strip().upper()
+                tok = tok.strip()
                 if tok:
-                    jobs.append({"kind": "id", "id": tok})
+                    jobs.append(_make_id_job(tok))
         else:
             src = self.path_edit.text().strip()
             if os.path.isfile(src):
@@ -894,8 +978,8 @@ class MainWindow(QMainWindow):
                     jobs.append({"kind": "file", "id": os.path.basename(src), "xml": src})
                 else:
                     # ID 列表文本（如 test/mini-test.txt）：逐行取佛典編號批量转换
-                    for wid in parse_work_ids_file(src):
-                        jobs.append({"kind": "id", "id": wid})
+                    for tok in parse_work_ids_file(src):
+                        jobs.append(_make_id_job(tok))
             elif os.path.isdir(src):
                 from pycbeta.merge import split_paths
                 walked = []
@@ -948,7 +1032,9 @@ class MainWindow(QMainWindow):
                  "auto_base": self.auto_base.isChecked()}
         self.worker = BatchWorker(jobs, opts,
                                    {"presets": presets, "run": _run,
-                                    "out": out_dir},
+                                    "out": out_dir,
+                                    "verify_root": getattr(
+                                        self, "_verify_root_override", "")},
                                    flags)
         self._verify_results = []
         self._out_dir = out_dir
@@ -1091,6 +1177,9 @@ def _apply_launch_args(win, a):
         win.mode_file.setChecked(True)
     if getattr(a, "out", None):
         win.out_edit.setText(a.out)
+    if getattr(a, "verify_root", None):
+        # 校验根显式覆盖（本次运行生效，不写回预设；优先级高于 source.verify_root）
+        win._verify_root_override = str(a.verify_root).strip()
     if getattr(a, "preset", None):
         import os as _os
         box = win.panel.cfg_preset_box
@@ -1137,6 +1226,8 @@ def main(argv=None):
     _ap.add_argument("--preset", default=None, help="预设（stem/文件名/路径），选中即载入面板")
     _ap.add_argument("--formats", default=None, help="逗号分隔输出格式，如 pdf,epub（预填格式勾选）")
     _ap.add_argument("--verify", action="store_true", help="打开转换后校验")
+    _ap.add_argument("--verify-root", default=None,
+                     help="校验根预填（为空=跟随预设 source.verify_root 或 {输出}/验证）")
     _ap.add_argument("--autostart", action="store_true", help="窗现即开始转换")
     _raw = sys.argv[1:] if argv is None else list(argv)
     _known, _rest = _ap.parse_known_args(_raw)

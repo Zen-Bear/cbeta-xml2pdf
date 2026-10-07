@@ -101,20 +101,20 @@ class TestFindVerifyReports(unittest.TestCase):
         self.assertEqual(e["report_json"], os.path.join(hit, "report.json"))
         self.assertEqual(e["report_txt"], os.path.join(hit, "report.txt"))
 
-    def test_gui_style_pairing(self):
-        hit = os.path.join(self.vroot, "T0349 T0349（验证）")
-        _write(os.path.join(hit, "T12n0349_verify_report.json"), "{}")
-        _write(os.path.join(hit, "T12n0349_verify_report.txt"), "t")
-        (got,) = V.find_verify_reports(self.vroot)
-        self.assertTrue(got["report_json"].endswith("_verify_report.json"))
-        self.assertTrue(got["report_txt"].endswith("_verify_report.txt"))
-
-    def test_new_style_pairing(self):
+    def test_json_fallback_removed(self):
+        # 机读结论只认 report.json：旧命名（stem / verify_report）不再发现
         hit = os.path.join(self.vroot, "T0349 書（验证）")
         _write(os.path.join(hit, "T0349_書_校验报告.json"), "{}")
+        _write(os.path.join(hit, "T12n0349_verify_report.json"), "{}")
+        (got,) = V.find_verify_reports(self.vroot)
+        self.assertEqual(got["report_json"], "")
+
+    def test_txt_fallback_still_supported(self):
+        # txt 回退保留：stem 命名仍可发现（与 JSON 无关）
+        hit = os.path.join(self.vroot, "T0349 書（验证）")
         _write(os.path.join(hit, "T0349_書_校验报告.txt"), "t")
         (got,) = V.find_verify_reports(self.vroot)
-        self.assertTrue(got["report_json"].endswith("_校验报告.json"))
+        self.assertEqual(got["report_json"], "")
         self.assertTrue(got["report_txt"].endswith("_校验报告.txt"))
 
     def test_no_reports_still_listed(self):

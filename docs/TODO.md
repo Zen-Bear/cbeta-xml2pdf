@@ -4,7 +4,7 @@
 - **死命令（2026-09-07 用户确认）：任何新 XML 元素（cb:* 等）必须入左栏 `EDITABLE_ROWS` + `TAG_SELECTOR` 映射 + CSS 变量/规则，验收 = 左栏可见可调。**
 - **当前优先级（2026-10-06 审计；2026-10-06 更新：X1077 用户实测全绿；publish 仓 P0–P4 已全完成，无遗留）**：
   - P0 收尾（已提交 `6ba95c5`/`c59ec8d`）：xml2pdf GUI（转换中/预填经名来源/光标落文件列）+ 外部引擎 URL + TODO 审计；publish 封面演示待提交。
-  - P1：按卷范围 juan（用户立项，唯一大型待办；分阶段：`juan.py` spec/过滤 → CLI `--juan` → GUI/校验接线）。外部引擎分发已改走上游 URL（安装文档已写明，不传 Release）。
+  - P1：按卷范围 juan **已落地（2026-10-07，见文末「已完成 按卷范围」）**；外部引擎分发已改走上游 URL（安装文档已写明，不传 Release）。
   - P2：html/epub 用户 CSS（原定最低优先级，backlog，方案已定）。门禁外红灯已全消（2026-10-06：T0001/X1077 六格式全绿）；校验报告「差异是否全在注释」已落地（Q3，`diff_scope`）；Q1（html 回退 txt）降为可选/低。
   - P3/关闭：body-placed foot 注渲染（大，需另行立项定范围）；T01 `_cbreader` 重合（数据卫生，低）；元素/字体扫描（已记录，无代码改动）；html2pdf 分页（决议不做）；`verify_one`/`build_report_json` 行级共享（收益小，暂不）。
 - [x] **已完成 render-time 按字回退**（2026-09-06 用户报 標楷體 U+43F6 预览/Word 双 tofu）：`RENDER_FALLBACKS=(SimSun,PMingLiU,微软雅黑)`，`_fb_emit` 按 cmap 查覆盖、缺字拆 run（只换 eastAsia）；无文件不断言保持原样；真全缺（如悉昙 PUA）保持 tofu + 预览点名。T0672 对账文本一致；单测 TestRenderFallback 6 项；全量 302 OK，verify 8/0
@@ -609,8 +609,9 @@
   - 修法：`render_docx._fit_image_px`——① 先按 `min(page_w/11906, page_h/16838, 1)` 随纸张等比缩小（A4/license 更大页为 1，输出与旧版一致）；② 再宽、高双向适配正文区防溢出；全程只缩不放
   - 验证：X1077 A5 重渲 docx 259×479px、PDF 194.3×359.3pt（占页宽 46%，与官方一致）；单测 `test_figures.test_page_scaled_and_content_fit`；全量 920 OK（9 环境 error 与基线一致）
 
-- [ ] **待办** 按卷范围选取某部经的某卷/几卷（2026-10-01 用户立项；方案已定，未实施）
-  - 分阶段（2026-10-06 优化）：① `pycbeta/juan.py` 纯函数 + `test_juan.py`（可独立验收）；② CLI `--juan`/`-i ID:spec` + 渲染/命名（X1077 e2e）；③ GUI/校验接线 + 单卷基线下载（URL 形态 build 时实测）
+- [x] **已完成** 按卷范围选取某部经的某卷/几卷（2026-10-01 用户立项；2026-10-07 落地）
+  - 落地：① `pycbeta/juan.py`（`parse_juan_spec`/`juan_set`/`format_juan_label`/`split_id_juan`/`resolve_juan_suffix`/`filter_work_juan`）+ `test_juan.py` 20 项；② CLI `--juan`/`-i ID:范围`（互斥；`resolve_output`/html/转换报告/校验目录加后缀）+ 长编号 `T25n1509` 消歧（`fetch.parse_long_work_id`，vol 感知 `find_local_xml`/`_catalog_title`/`materialize_work`/`fetch_work`）；③ `verify.verify_one(juan=)`、`ensure_baselines(juan=)`、`fetch_baseline_juan`（html `…/html/{ID}_{NNN}.html`、txt_notes `…/text-with-notes/{ID}_{NNN}.txt.zip` 实测端点；docx 无单卷 404 → 整包 fallback）、GUI `_make_id_job`/`_juan_plan`/`--juan`/`_verify_dir` 后缀；`output.juan_suffix_template`（config.json 注记 + 兜底值清单）。文档：README/安装说明/GUI设计/校验说明书 §4.4/主题与样式/兜底值清单/功能清单/第三方调用说明。实测：T0670 全范围 no-op 字节一致；`--juan 1 --verify` 单卷基线自动下载 + `0/0` 通过；GUI/CLI 单测补 10+ 项
+  - 原分阶段（2026-10-06 优化）：① `pycbeta/juan.py` 纯函数 + `test_juan.py`（可独立验收）；② CLI `--juan`/`-i ID:spec` + 渲染/命名（X1077 e2e）；③ GUI/校验接线 + 单卷基线下载（URL 形态 build 时实测）
   - 目标：支持 `T25n1509:34-100`（大智度論 34–100 卷）这类子集，渲染六格式并按卷子集校验
   - 卷范围语法（`--juan` 与 GUI 编号后缀 `:` 共用）：`34` / `34-100` / `34-36,40,42-45`；`-`/`~`/`～` 三认一（归一为 `-`）；多段用 `,`（CLI）/`+`（GUI 列表内，因 `,` 是任务分隔符）；闭区间、`lo<=hi`（`100-34` 报错不下调）；去重合并
   - 长编号：`T25n1509`/`X59n1077` 现被 `is_work_id` 拒（只认短编号）；新增我方层解析 `T25n1509→(T,25,1509)`（catalog 已命中 vol 25，`T25n1509.xml`），vol 感知 `find_local_xml` + 下载/基线复用 catalog rec；不动 vendored `cbeta_fetch.py`
@@ -636,3 +637,43 @@
   - 修法：抽 `_official_superset`/`_fp_roots_cfg`；`build_report_json` 只扫一次 `official`，连同 `presets`/`canon`/`impl` 经内部 `_ctx` 传给每个 `verify_fingerprint`（`_verify_fingerprint_inner` 检测到就跳过重扫/重算）。实测 3 格式 `build_report_json` 由 ~7s 降到 ~2.6s；指纹与独立调用逐字一致。
   - 单测：`test_report_json.TestBuildReportJson.test_discovery_reused_across_formats`（计数 `find_official` ≤5 次 = 5 kind × 1，而非 (1+N)×5）。
   - 未做：`verify_one` 与 `build_report_json` 的"行级共享"（两者仍各扫一次）；收益较小，暂不。
+
+- [ ] **待办** 方向2：publish 官方缓存 → xml2pdf 校验复用（2026-10-07 用户立项；2026-10-07 审核：须附带 GUI 补 html 行，未实施）
+  - 代码（否则手改 JSON 会被 GUI 保存覆盖丢键）：`panel.py` 三处加 `html` 行——数据源窗口「本地官方电子书」tab 显示行（`2586-2591`，该 tab 无 html 行）、保存键（`2935-2937`）、`_dialog_presets`（`2754-2756`）；`fetch.py:107-113` 的 `BASELINE_DIR_HINTS` 加 `("html", ("html","htm"))`（自动检测可填）
+  - 配置：`source.baselines.html = E:\dev\cbeta\cbeta_ebook\html`（GUI 配）
+  - 依据：`extra_roots` 优先、单根胜出（`verify.py:1872-1879`；CLI `cli.py:1047-1052`）；publish 缓存 `{fmt}/{work}/` 平展文件递归可命中（vendor 平展解压 `_vendor/cbeta_fetch.py:192-200`），`_is_flat` 排序正常
+  - 只配 html：`txt_notes/docx/epub` 继续 2026r2 全量库，不动；同格式不双配；同字节基线指纹身份相同（`_file_identity` 只含 basename/size/sha256），为 P2 铺路
+  - 测试：`test_gui` 补 html 行往返（显示/保存/检测）；`test_fetch` 补 hints
+  - 验证：T0001 移走 `work/html` 后 `--verify`，断言 `report.json` 的 `inputs.baselines.html` 路径在 `cbeta_ebook` 下
+  - 非目标：txt（xml2pdf 无纯 txt 基线，publish txt 只能自下，互不干扰）
+
+- [ ] **待办** 方向3：`sync-fmt-root` 把 work 基线镜像成格式优先布局（2026-10-07 用户立项；改在 xml2pdf 侧，publish 零改动，未实施）
+  - 用户决议（2026-10-07）：独立同步命令 + 镜像根复用空的 `E:\dev\cbeta\cbeta_ebook`（publish `official_ebooks_dir` 已指它，零配置变化）+ 第一版只 CLI/命令行传目录 + 单命令自动补下缺失源基线 + 默认只补缺失/`--force` 全刷
+  - 落点：`fetch.sync_fmt_root(work_ids, fmt_root, kinds, presets, force=False)` + `pycbeta.fetch` CLI 加 `--sync-fmt-root DIR`（复用其 `-f/--cbeta-ebook/load_presets`；默认关闭零行为变化；主 CLI 以后再挂）
+  - 流程：`fetch_work` 先补下缺失源基线（404 静默跳过）→ 镜像；收集复用 `_collect_fmt`（`fetch.py:315-324`）
+  - 映射（publish `local_path` 口径，publish `official_ebook_source.py:58-69`；注意源/目标目录名不对称）：`{wdir}/{fmtdir}/{id}_NNN.ext` → `{fmt_root}/{fmt}/{CanonicalWork}/{id}_NNN.ext`，其中 txt_notes 源目录是 `txt/`、目标是 `txt_notes/`；epub 单文件 → `{fmt_root}/epub/{CanonicalWork}.epub`；odt 同理；`copy2` 保 mtime（publish 无水位判过期走 mtime 比较，`official_state.py:145-148`，镜像通常不误报）；只补缺失，`--force` 全刷；不镜像 xml/figures/pdf（publish 不消费：无 XML 下载逻辑、成品内嵌、无 pdf 基线）
+  - `CanonicalWork` 用 `canonical_work_id`（同源 cbeta-fetch，`fetch.py:198` vs publish `catalog/work_id.py:24-25`）；混合大小写 id（TXa001/T0128a 等）双边对照测试防 drift；运行时两侧 catalog 不一致会静默 miss（测试覆盖）
+  - 缺口注明：纯 txt 无镜像（xml2pdf 基线无纯 txt，plain text 已弃用 `fetch.py:5-6`）
+  - 测试：新 `test_fetch_fmt_mirror.py`（布局/补缺/force/epub/命名）；T0001 实测后按 publish `local_path` 形态逐 kind 断言；全量回归
+  - 文档：`docs/第三方调用说明.md` 加"格式优先镜像根"契约节（布局/目录名不对称/canonical 对齐/txt 缺口）+ `docs/功能清单.md` 加一行
+
+- [ ] **待办（P2，排在方向2/3后）** 校验结论跨边复用：共享指纹记录，不共享原始报告目录（2026-10-07 用户立项；机制已查实，未实施）
+  - 查实（2026-10-07）：指纹内容哈希无路径（`verify.py:2207-2220/2301-2307/2521-2539`）；基线按 basename，同名文件跨布局指纹相同；publish 库 `config/verify_records.json` 存上游指纹（publish `verify_cache.py:1-12`），跳过三元（publish `main_window.py:5388-5389`）；report.json 每格式有 `verdict`+`fingerprint`（`verify.py:2762-2771`）
+  - 不共享 `（验证）` 原始目录：一次性 staging，publish 删旧重跑（publish `xml2pdf_bridge.py:699-704`）+ 清理删全部
+  - 待做①阈值对齐（用户决议 2026-10-07：向 5 对齐）：xml2pdf 预设 `verify.maxDiff=5`（GUI 生效）；CLI 校验带 `--verify-max-diff 5`（argparse 默认 10 且不读预设，`cli.py:740`，文档写明）；publish 不动
+  - 待做②指纹形态修正（publish 侧小改）：`verify_fingerprint` 改用 run 包装路径计算（与 publish 校验运行同形；xml2pdf GUI 报告指纹用临时 run.json `tmpcfg`，`gui/__main__.py:385`，裸预设形态大概率不等，因规范形含 `theme_css/annotations/strip_head_no`，`verify.py:2361-2367`）；现有库记录一次性作废；文档注明 xml2pdf CLI 用 `--config run.json` 才同形
+  - 待做③报告导入（publish 侧）：新增键 `xml2pdf.verify_reports_dir`（默认 `{xml2pdf.path}/verify`，正好等于当前预设 `source.verify_root`）；发现走上游公开接口 `pycbeta.verify.find_verify_reports(verify_root)`（`verify.py:2838-2877`，进程内经 bridge 导入），读其 `report_json`（即 `{校验根}/{id 书名}（验证）/report.json`；空则跳过），按 `id` 匹配并核对 JSON 内 `work`；四条件齐才 `record_pass`：`verdict=="pass"` + 指纹相等 + publish 产物存在（`find_built`）+ `formal_outputs` 非空
+  - 验证：T0001 xml2pdf GUI 校验通过 → publish 复用命中跳过（不渲染）；双边指纹逐字比对
+  - 收益：整轮渲染+校验（分钟级/部）→ 指纹预检（秒级，`verify.py:2402-2408`）
+  - 风险/前提：首选基线缺失指纹为 None（`verify.py:2507`），方向2/3 先行；预设文本键不一致永不命中（静默）；跨机器不主张；`regen_all`/强制重验不读库
+
+- [x] **已完成** 校验 `report.json` 命名统一（2026-10-07 用户立项并落地）
+  - GUI 原写 `{id}_{书名}_校验报告.json`（`gui/__main__.py:395`）→ 统一为 `report.json`（与 CLI 同名；每 `（验证）/` 目录一书一档，无冲突）；txt 仍 `{id}_{书名}_校验报告.txt`
+  - 删除 `find_verify_reports` 的 JSON 回退（`verify.py:2838-2877`）——机读结论只认 `report.json`；txt 回退保留（当前 stem 命名靠它，`report.txt` / `*_verify_report.txt` / `*_校验报告.txt`）
+  - 文档：`校验report.json说明.md` §1/§4；单测 `test_verify_dirs` 两例改「JSON 回退已删 / txt 回退仍在」
+
+- [x] **已完成（下游 publish 请求）** GUI 独立窗加 `--verify-root`（2026-10-07 请求并落地）
+  - 与 CLI 同名同语义：显式 `--verify-root` ＞ 预设 `source.verify_root` ＞ `{输出}/验证`；只影响校验产物落点，不写回预设
+  - 落地 3 处：`gui/__main__.py` argparse 加 `--verify-root`；`_apply_launch_args` 记 `win._verify_root_override`；`_start` 并入 worker `paths`；`BatchWorker.run()` 经新纯函数 `_pick_verify_root(override, presets)` 取生效值（`_verify_dir` 已接受 `verify_root` 形参）
+  - 单测 `test_gui.TestVerifyRootOverride` 4 项（优先级/预填/缺省不设/worker paths）；`test_gui` 285 OK
+  - 提案全文（背景/现状/最小改动/优先级/验收/publish 影响）：`docs/上游-GUI校验根参数提案.md`；publish 侧对应 `docs/上游-GUI校验根参数提案.md`（其 P7 可收尾：`_open_xml2pdf_window` 追加 `--verify-root <丛书校验目录>/验证`）

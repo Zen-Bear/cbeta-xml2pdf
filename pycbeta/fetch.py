@@ -183,6 +183,32 @@ def is_work_id(s: str) -> bool:
     return _cf.is_work_id(s)
 
 
+#: 长编号（含册号）：`T25n1509` / `X59n1077` / `GA11n0010`（canon + 两位册号 + n + 编号）
+_LONG_ID_RE = re.compile(r"^([A-Za-z]{1,2})(\d{2,3})[nN](\d{4,6}[A-Za-z]?)$")
+
+
+def parse_long_work_id(work_id: str):
+    """长编号 → (canon 大写, 册号原样, 编号原样)；不匹配返回 None。
+
+    `T25n1509 → ("T","25","1509")`。仅我方层解析（不动 vendored cbeta_fetch）：
+    短编号 `T1509` 在同 canon+编号跨册重复时（catalog 有 66 组）无法区分，
+    长编号按册号消歧（find_local_xml 卷感知 + catalog rec 过滤）。"""
+    m = _LONG_ID_RE.match((work_id or "").strip())
+    if not m:
+        return None
+    return m.group(1).upper(), m.group(2), m.group(3)
+
+
+def is_long_work_id(s: str) -> bool:
+    return parse_long_work_id(s) is not None
+
+
+def long_to_short(work_id: str) -> str:
+    """长编号 → 短编号（`T25n1509 → T1509`）；非长编号原样返回。"""
+    p = parse_long_work_id(work_id)
+    return f"{p[0]}{p[2]}" if p else (work_id or "")
+
+
 def parse_work_id(work_id: str) -> tuple:
     """(canon, no)。canon 可能为多字母（GA/GB/LC/TX/YP/ZS/ZW/CC）。
     canon 转大写、no **保留原大小写**（如 `("TX","a001")`）。"""
@@ -203,7 +229,8 @@ def canonical_work_id(work_id: str, presets=None) -> str:
     return _cf.canonical_work_id(work_id, cat)
 
 
-def find_local_xml(xml_dir: str, canon: str, no: str) -> List[str]:
+def find_local_xml(xml_dir: str, canon: str, no: str,
+                   vol: Optional[str] = None) -> List[str]:
     """本地 XML 源中查找 {canon}*n{no}.xml（无任何目录名排除）。
 
     统一根目录（如 E:\\dev\\cbeta\\test）下两档查找：
@@ -212,6 +239,7 @@ def find_local_xml(xml_dir: str, canon: str, no: str) -> List[str]:
     - 仓库次之：全树递归，含 github 镜像布局 `{canon}/{canon}{vol}/`
       （如 `YP/YP14/YP14n0021.xml`；下载落盘即此布局）。
     同一文件只返回一次，平展命中排在前面。
+    `vol` 给定时只认该册（长编号 `T25n1509` 消歧同 canon+编号跨册重复）。
     说明：曾按目录名排除 `out/`（输出目录），但工作根本身就可能叫 out
     （如 cbeta_ebook/out），误杀整库且用户无从得知；现彻底去掉该隐藏限制。"""
     out, seen = [], set()
@@ -222,19 +250,22 @@ def find_local_xml(xml_dir: str, canon: str, no: str) -> List[str]:
             seen.add(ap)
             out.append(ap)
 
+    vol_pat = re.escape(vol) if vol else r"\d{2,3}"
+    name_pat = rf"{canon}{vol_pat}n{re.escape(no)}\.xml"
     work_id = f"{canon}{no}"
     for entry in sorted(glob.glob(os.path.join(xml_dir, f"{work_id}*"))):
         if os.path.isdir(entry):
             for p in sorted(glob.glob(os.path.join(entry, "**", f"{canon}*n{no}.xml"),
                                       recursive=True)):
-                add(p)
+                if re.fullmatch(name_pat, os.path.basename(p)):
+                    add(p)
         elif (os.path.isfile(entry)
-                and re.fullmatch(rf"{canon}.*n{re.escape(no)}\.xml",
-                                 os.path.basename(entry))):
+                and re.fullmatch(name_pat, os.path.basename(entry))):
             add(entry)
     for p in sorted(glob.glob(os.path.join(xml_dir, "**", f"{canon}*n{no}.xml"),
                                recursive=True)):
-        add(p)
+        if re.fullmatch(name_pat, os.path.basename(p)):
+            add(p)
     return out
 
 
@@ -295,9 +326,12 @@ def work_dir(root: str, work_id: str, title: str = "", presets=None,
     return path
 
 
-def _catalog_title(presets, canon: str, no: str) -> str:
+def _catalog_title(presets, canon: str, no: str, vol: str = "") -> str:
+    """catalog 书名；`vol` 给定时只认该册（长编号消歧）。"""
     cfg = (presets.get("source") or {}) if isinstance(presets, dict) else {}
     for rec in catalog_lookup(resolve_catalog(cfg.get("catalog", "")), canon, no):
+        if vol and rec.get("vol") != vol:
+            continue
         if rec.get("title"):
             return rec["title"]
     return ""
@@ -377,11 +411,14 @@ def _present_baseline_formats(wdir: str, work_id: str) -> List[str]:
 
 def _fetch_one(work_id: str, fmt: str, canon: str, no: str,
                dl: Dict, source_cfg: Dict, cbeta_ebook: str,
-               presets=None) -> List[str]:
-    """下载单个格式，失败静默返回 []。一律落平展 work 目录。"""
+               presets=None, vol: str = "") -> List[str]:
+    """下载单个格式，失败静默返回 []。一律落平展 work 目录。
+    `vol` 给定时 XML 只取该册（长编号消歧）。"""
     title = ""
     if fmt == "xml":
         files = catalog_lookup(resolve_catalog(source_cfg.get("catalog", "")), canon, no)
+        if vol:
+            files = [r for r in files if r.get("vol") == vol]
         if not files:
             print(f"{work_id}: catalog 未收录（书名/冊号缺失），无法拼 XML 下载地址")
             return []
@@ -407,7 +444,7 @@ def materialize_work(work_id: str, presets: Optional[Dict] = None,
                      xml_dir: Optional[str] = None,
                      cbeta_ebook: Optional[str] = None,
                      download: bool = True, quiet: bool = False,
-                     dry_run: bool = False):
+                     dry_run: bool = False, vol: Optional[str] = None):
     """编号流三源材料化：cbeta_ebook（已材料化）→ xml_dir（拷/合册）→ URL（下载）。
 
     返回 (paths, label)；paths = work 目录内 XML 列表；label 说明来源
@@ -425,12 +462,12 @@ def materialize_work(work_id: str, presets: Optional[Dict] = None,
         presets, xml_dir=xml_dir, cbeta_ebook=cbeta_ebook)
     work_id = canonical_work_id(work_id, presets)
     canon, no = parse_work_id(work_id)
-    title = _catalog_title(presets, canon, no)
+    title = _catalog_title(presets, canon, no, vol=vol or "")
     wdir = work_dir(cbeta_ebook, work_id, title, presets,
                     create=bool(xml_dir) and not dry_run)
-    have = find_local_xml(wdir, canon, no) if wdir else []
+    have = find_local_xml(wdir, canon, no, vol=vol) if wdir else []
 
-    whole = find_local_xml(xml_dir, canon, no) if xml_dir else []
+    whole = find_local_xml(xml_dir, canon, no, vol=vol) if xml_dir else []
     frags = collect_work_frags(xml_dir, canon, no) if xml_dir else {}
     if whole or frags:
         if dry_run:
@@ -444,13 +481,13 @@ def materialize_work(work_id: str, presets: Optional[Dict] = None,
                         os.path.getmtime(src) > os.path.getmtime(dst):
                     shutil.copy2(src, dst)
                     changed = True
-            have = find_local_xml(wdir, canon, no)
+            have = find_local_xml(wdir, canon, no, vol=vol)
             if not quiet and changed:
                 print(f"{work_id}: 本地源拷贝 → {len(have)} 文件（{wdir}）")
             _ensure_work_figures(work_id, presets, cbeta_ebook)
             return have, "xml_copy"
         merge_groups_to_dir(frags, wdir, quiet=quiet)
-        have = find_local_xml(wdir, canon, no)
+        have = find_local_xml(wdir, canon, no, vol=vol)
         if not quiet:
             n = sum(len(v) for v in frags.values())
             print(f"{work_id}: 碎片合册 → {len(have)} 册（{n} 碎片，{wdir}）")
@@ -467,9 +504,9 @@ def materialize_work(work_id: str, presets: Optional[Dict] = None,
         return [], ""
     if not download:
         return [], ""
-    res = fetch_work(work_id, ["xml"], presets, cbeta_ebook)
+    res = fetch_work(work_id, ["xml"], presets, cbeta_ebook, vol=vol)
     wdir = work_dir(cbeta_ebook, work_id, title, presets, create=False)
-    have = find_local_xml(wdir, canon, no) if wdir else []
+    have = find_local_xml(wdir, canon, no, vol=vol) if wdir else []
     if have and not quiet:
         print(f"{work_id}: 官方下载 → {len(have)} 文件（{wdir}）")
     _ensure_work_figures(work_id, presets, cbeta_ebook)
@@ -477,10 +514,12 @@ def materialize_work(work_id: str, presets: Optional[Dict] = None,
 
 
 def fetch_work(work_id: str, formats: List[str], presets: Optional[Dict] = None,
-               cbeta_ebook: Optional[str] = None) -> Dict[str, List[str]]:
+               cbeta_ebook: Optional[str] = None,
+               vol: Optional[str] = None) -> Dict[str, List[str]]:
     """下载一部经的多个格式；返回 {fmt: [路径]}（失败格式为 []）。
     一律落平展 work 目录 `cbeta_ebook/{id} {书名}/`。
     presets: load_presets() 结果（含 source/downloads）；缺省读默认配置。
+    `vol`（长编号册号）给定时 XML 只取该册。
     """
     if presets is None:
         presets = load_presets()
@@ -495,27 +534,108 @@ def fetch_work(work_id: str, formats: List[str], presets: Optional[Dict] = None,
             out[fmt] = []
             continue
         out[fmt] = _fetch_one(work_id, fmt, canon, no, dl, source_cfg,
-                              cbeta_ebook, presets)
+                              cbeta_ebook, presets, vol=vol or "")
+    return out
+
+
+def fetch_baseline_juan(work_id: str, kind: str, juans, presets: Optional[Dict] = None,
+                        cbeta_ebook: Optional[str] = None,
+                        quiet: bool = False) -> List[str]:
+    """单卷基线补下（子集校验用）：html/txt_notes 只下所需卷，其余格式整包 fallback。
+
+    端点（2026-10-07 实测 cbdata）：
+    - html： `…/html/{ID}_{NNN}.html`（原整包模板 `{id}.html.zip` 去 `.zip` 换 `…_{NNN}`）；
+    - txt_notes：`…/text-with-notes/{ID}_{NNN}.txt.zip`（zip 平展解压）；
+    - docx/odt/epub：无单卷形态（404）→ 整包 `fetch_work`。
+    返回本次落盘/已存在的文件列表（失败静默 []）。只补缺失，不重复下载。
+    """
+    if presets is None:
+        presets = load_presets()
+    source_cfg = {**DEFAULT_SOURCE, **(presets.get("source") or {})}
+    dl = {**DEFAULT_DOWNLOADS, **(presets.get("downloads") or {})}
+    _, cbeta_ebook = resolve_source(presets, cbeta_ebook=cbeta_ebook)
+    work_id = canonical_work_id(work_id, presets)
+    canon, no = parse_work_id(work_id)
+    nums = sorted({int(n) for n in (juans or []) if int(n) > 0})
+    if not nums:
+        return []
+    if kind not in ("html", "txt_notes"):
+        return fetch_work(work_id, [kind], presets, cbeta_ebook).get(kind) or []
+    title = _catalog_title(presets, canon, no)
+    wdir = work_dir(cbeta_ebook, work_id, title, presets, create=True)
+    tmpl = dl.get(kind, DEFAULT_DOWNLOADS.get(kind, ""))
+    if not tmpl:
+        return []
+    dest_dir = os.path.join(wdir, _fmt_dir(kind))
+    os.makedirs(dest_dir, exist_ok=True)
+    out = []
+    got_new = 0
+    for n in nums:
+        token = f"{work_id}_{n:03d}"
+        ext = _fmt_ext(kind)
+        dest = os.path.join(dest_dir, token + ext)
+        if os.path.isfile(dest) and os.path.getsize(dest) > 0:
+            out.append(dest)
+            continue
+        url = tmpl.format(id=token)
+        if kind == "html":
+            # 整包模板 `{id}.html.zip` → 单卷 `{id}_{NNN}.html`（去 zip）
+            if url.endswith(".zip"):
+                url = url[:-4]
+            if _http_download(url, dest):
+                out.append(dest)
+                got_new += 1
+            continue
+        # txt_notes：单卷 zip → 平展解压到格式目录
+        import tempfile as _tf
+        fd, zip_path = _tf.mkstemp(prefix=f"{token}.", suffix=".zip")
+        os.close(fd)
+        try:
+            if _http_download(url, zip_path):
+                try:
+                    _unzip_flat(zip_path, dest_dir)
+                    got_new += 1
+                except zipfile.BadZipFile:
+                    pass
+        finally:
+            try:
+                os.remove(zip_path)
+            except OSError:
+                pass
+        out += [p for p in _collect_fmt(wdir, kind, work_id) if p not in out]
+    if not quiet and got_new:
+        print(f"  {work_id}: 官方基线缺失，已下载 {kind} 单卷（{got_new} 卷）")
     return out
 
 
 def ensure_baselines(work_id: str, kinds: List[str], presets: Optional[Dict],
-                     cbeta_ebook: str) -> Dict[str, List[str]]:
+                     cbeta_ebook: str, juan=None) -> Dict[str, List[str]]:
     """校验按需调用：对缺失的基线格式下载（docx/odt 非 T/X 等 404 静默跳过）。
 
     xml 不是基线（由 -i/列表模式另行保证）、odt 从不参与比对，故跳过；
-    其余 html/txt_notes/docx/epub 缺啥下啥。返回本次新获取的 {kind: [路径]}。"""
+    其余 html/txt_notes/docx/epub 缺啥下啥。返回本次新获取的 {kind: [路径]}。
+    `juan`（卷号集合）给定时为子集校验：html/txt_notes 走单卷端点（缺哪卷下哪卷），
+    其余格式整包 fallback。"""
     from .verify import find_official
     fetched = {}
     work_id = canonical_work_id(work_id, presets)
     canon, no = parse_work_id(work_id)
     title = _catalog_title(presets or {}, canon, no)
     wdir = work_dir(cbeta_ebook, work_id, title, presets, create=bool(kinds))
+    _jn = set(juan) if juan else None
     for kind in kinds:
         if kind in ("xml", "odt"):
             continue
-        existing = find_official(wdir, work_id, kind) if wdir else []
+        existing = find_official(wdir, work_id, kind,
+                                 juan=_jn if kind in ("html", "txt_notes") else None) \
+            if wdir else []
         if existing:
+            continue
+        if _jn:
+            res_list = fetch_baseline_juan(work_id, kind, sorted(_jn),
+                                           presets, cbeta_ebook)
+            if res_list:
+                fetched[kind] = res_list
             continue
         res = fetch_work(work_id, [kind], presets, cbeta_ebook)
         if res.get(kind):

@@ -128,7 +128,7 @@ class HtmlRenderer:
                  annotations=None, strip_head_no=False, corr_cbeta=False,
                  mulu_break=False, mulu_levels=(1,), mulu_zhang_break=False,
                  pre_dedent=False, pre_dedent_spaces=4,
-                 suppress_orphan_orig=False):
+                 suppress_orphan_orig=False, juan_suffix=""):
         self.gaiji_db = gaiji_db if gaiji_db is not None else GaijiDb()
         self.theme = theme
         # 图片搜索目录：str | list[str]（{work}/figures → {work}/txt → 仓库 figures）
@@ -145,6 +145,7 @@ class HtmlRenderer:
         self.inline_brackets = inline_brackets  # 正文夹注（place=inline，原文）括号
         self.note_inline_brackets = note_inline_brackets or inline_brackets  # 校注内联括号（缺省回退）
         self.title_t2s = title_t2s  # 输出文件名书名转简（与其他格式 default_output_name 同口径）
+        self.juan_suffix = juan_suffix or ""  # 卷子集后缀（`（卷34-36、40）`；默认名/模板名追加）
         self.strip_head_no = strip_head_no  # 去 head/jhead 行首 No. 令牌（默认 false 保留）
         self.corr_cbeta = corr_cbeta        # CBETA 校改字标红（corr-cbeta；默认 false）
         self.mulu_break = mulu_break        # 非「卷」mulu 断页标记（epub 拆 spine 用；默认 false）
@@ -226,13 +227,15 @@ class HtmlRenderer:
             html_out = self._wrap(body, work, juan_no)
             if self.name_template:
                 from .filename import apply_template
-                fn = apply_template(self.name_template, work, juan=juan_no) + ".html"
+                fn = apply_template(self.name_template, work, juan=juan_no) \
+                    + self.juan_suffix + ".html"
             else:
                 # 默认名与其他格式统一 `{id 书名}`（单卷无后缀，多卷加 `_NNN`）；
-                # 卷数固定一部一值，不会左右横跳
+                # 卷数固定一部一值，不会左右横跳；卷子集追加后缀防与整本互覆盖
                 from .filename import default_output_name
                 base = default_output_name(
-                    work.id, work.metadata.get("title"), self.title_t2s)
+                    work.id, work.metadata.get("title"), self.title_t2s) \
+                    + self.juan_suffix
                 fn = f"{base}.html" if len(juans) == 1 \
                     else f"{base}_{juan_no:03d}.html"
             with open(os.path.join(out_dir, fn), "w", encoding="utf-8") as f:

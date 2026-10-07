@@ -257,6 +257,7 @@ def render_one(w, fmt, out_dir, out_name, args, theme, html_base=None, figure_ba
                          title_t2s=getattr(args, "title_t2s", True),
                          pre_dedent=getattr(args, "pre_dedent", False),
                          pre_dedent_spaces=getattr(args, "pre_dedent_spaces", 4),
+                         juan_suffix=getattr(w, "juan_suffix", ""),
                          figure_base=figure_base)
         files = r.render_work(w, out_dir)
         _report_missing_figures(w.id, fmt, r)
@@ -409,25 +410,30 @@ def resolve_output(xml_fn, fmt, args, work, _used=None):
     书名跟随 source.title_t2s）；
     _used 为本轮共享 dict 时：多输入同名全组统一改输入基名
     （`filename.dedupe_run_outputs`；首文件已落盘输出预先改名，缺失/锁定忽略）。
-    html 与显式 -o 文件走旧路径（前者 renderer 内部命名，后者用户强制）。"""
+    html 与显式 -o 文件走旧路径（前者 renderer 内部命名，后者用户强制）。
+    卷子集（`work.juan_suffix` 由 `filter_work_juan` 命中后置位）：默认名/模板名与
+    html 目录追加后缀防与整本互覆盖；显式 -o 文件路径尊重用户不加。"""
     ext = _FORMAT_EXT[fmt]
+    sfx = getattr(work, "juan_suffix", "") or ""
     src_dir = os.path.dirname(os.path.abspath(xml_fn))
     base = os.path.splitext(os.path.basename(xml_fn))[0]
     if args.output:
         out = args.output
         if fmt != "html" and out.lower().endswith(ext) and not os.path.isdir(out):
             return os.path.dirname(os.path.abspath(out)), os.path.basename(out)
-        out_name = apply_template(args.name_template, work) + ext if args.name_template else \
+        out_name = apply_template(args.name_template, work) + sfx + ext \
+            if args.name_template else \
             default_output_name(work.id, work.metadata.get("title"),
-                                getattr(args, "title_t2s", True)) + ext
+                                getattr(args, "title_t2s", True)) + sfx + ext
         out_dir = out
     elif fmt == "html":
-        return os.path.join(src_dir, base + "_html"), None
+        return os.path.join(src_dir, base + sfx + "_html"), None
     else:
         out_dir = src_dir
-        out_name = apply_template(args.name_template, work) + ext if args.name_template else \
+        out_name = apply_template(args.name_template, work) + sfx + ext \
+            if args.name_template else \
             default_output_name(work.id, work.metadata.get("title"),
-                                getattr(args, "title_t2s", True)) + ext
+                                getattr(args, "title_t2s", True)) + sfx + ext
     if _used is not None and fmt != "html":
         from .filename import dedupe_run_outputs
         out_name, renames = dedupe_run_outputs(_used, out_dir, out_name, base)
@@ -494,7 +500,8 @@ def _write_convert_reports(xml_fn, args, w, formats):
         from .report import report
         root = _convert_report_root(xml_fn, args)
         name = default_output_name(w.id, w.metadata.get("title"),
-                                   getattr(args, "title_t2s", True))
+                                   getattr(args, "title_t2s", True)) \
+            + (getattr(w, "juan_suffix", "") or "")
         vdir = os.path.join(root, f"{name}（验证）")
         for fmt in formats:
             try:
@@ -533,6 +540,21 @@ def process_file(xml_fn, formats, args, theme, html_base=None, _used=None,
             simplify_work(w)
             from .report import report
             report.add("简繁转换", "已转简体（OpenCC t2s）")
+        if getattr(args, "juan_segments", None):
+            from .juan import filter_work_juan
+            _jr = filter_work_juan(w, args.juan_segments)
+            if _jr["status"] == "filtered":
+                w.juan_suffix = getattr(args, "juan_suffix", "")
+                if want_report:
+                    from .report import report
+                    report.add("卷范围",
+                               f"仅输出卷 {_jr['label']}（共 {len(_jr['kept'])} 卷）")
+            elif _jr["status"] == "empty":
+                print(f"{w.id}: 卷范围与全书无交集"
+                      f"（实际卷 {sorted(_jr['all'])}）", file=sys.stderr)
+                return 1
+            elif _jr["status"] == "no_milestone":
+                print(f"{w.id}: 无卷 milestone，忽略卷范围", file=sys.stderr)
         if getattr(args, "font_check", False):
             try:
                 _fc_dir, _ = resolve_output(xml_fn, formats[0], args, w)
@@ -682,6 +704,11 @@ def main(argv=None):
     shared.add_argument("--name-template",
                         help='output filename template, e.g. "[id] [书名]（[作者]）" '
                              "(tokens: [id] [书名] [作者] [vol] [juan])")
+    shared.add_argument("--juan", default=None,
+                        help="按卷范围选取子集：34 / 34-100 / 34-36,40,42-45"
+                             "（`-`/`~`/`～` 三认一；`+` 同 `,`）；也可写 -i ID:范围"
+                             "（两者互斥）。全覆盖=不裁剪；子集输出名加「（卷…）」后缀"
+                             "（output.juan_suffix_template 可改）")
     shared.add_argument("--list-fonts", nargs="?", const="", default=None,
                         metavar="关键词",
                         help="列出本机已安装字体（家族名|路径），可带关键词过滤；"
@@ -812,6 +839,42 @@ def main(argv=None):
     args.page_presets = presets.get("pages") or PAGE_PRESETS
     out_defaults = presets.get("output") or {}
     engines_cfg = presets.get("engines") or {}
+
+    # 卷范围（juan）子集：`-i ID:范围` / `--juan 范围`（互斥）；长编号 `T25n1509`
+    # 消歧册号（短编号在同 canon+编号跨册重复时无法区分）。输入为实际路径时不拆 `:`。
+    from .juan import (split_id_juan as _split_juan,
+                       parse_juan_spec as _parse_juan,
+                       format_juan_label as _juan_label,
+                       resolve_juan_suffix as _juan_suffix)
+    from .fetch import (parse_long_work_id as _parse_long,
+                        is_work_id as _is_short_id)
+    args.juan_vol = None
+    if not os.path.exists(args.input or ""):
+        _id_part, _spec = _split_juan(args.input)
+        if _spec is not None and (_is_short_id(_id_part)
+                                  or _parse_long(_id_part)):
+            if args.juan:
+                ap.error("--juan 与 -i ID:范围 不能同时使用")
+            args.juan = _spec
+            args.input = _id_part
+        _long = _parse_long(args.input)
+        if _long:
+            args.juan_vol = _long[1]
+            args.input = f"{_long[0]}{_long[2]}"
+    args.juan_segments = None
+    args.juan_label = ""
+    args.juan_suffix = ""
+    if args.juan:
+        try:
+            args.juan_segments = _parse_juan(args.juan)
+        except ValueError as exc:
+            ap.error(f"--juan 无效：{exc}")
+        args.juan_label = _juan_label(args.juan_segments)
+        _tpl = out_defaults.get("juan_suffix_template", "")
+        args.juan_suffix, _fb = _juan_suffix(_tpl, args.juan_label)
+        if _fb and (str(_tpl or "")).strip():
+            print(f"警告：output.juan_suffix_template 不含 {{label}}，"
+                  f"回退默认 {args.juan_suffix}", file=sys.stderr)
 
     args.ignore_xml_style = bool(out_defaults.get("ignore_xml_style"))
     args.ignore_xml_space = bool(out_defaults.get("ignore_xml_space"))
@@ -966,7 +1029,7 @@ def main(argv=None):
         try:
             xmls, label = materialize_work(
                 args.input, presets, xml_dir=args.xml_dir,
-                cbeta_ebook=args.cbeta_ebook)
+                cbeta_ebook=args.cbeta_ebook, vol=args.juan_vol)
         except ValueError as exc:
             ap.error(str(exc))
         if not xmls:
@@ -1058,6 +1121,7 @@ def main(argv=None):
             block_failed = False
             summ = []  # 本经书各格式 (fmt, status, mi, ex)，末尾组总结行
             json_recs = []  # 本经书 report.json 用最小记录（与 summ 同步）
+            _juan_status = "full"
             # 为本文件确定每个格式的生成路径（与 resolve_output 一致）
             try:
                 from .parser import P5Parser as _P
@@ -1069,6 +1133,15 @@ def main(argv=None):
                 if args.t2s:
                     from .simplify import simplify_work as _sw
                     _sw(w)
+                # 卷范围子集：过滤后 work_juan_numbers 自动限定官方 _NNN 基线
+                if getattr(args, "juan_segments", None):
+                    from .juan import filter_work_juan as _fwj
+                    _jr = _fwj(w, args.juan_segments)
+                    _juan_status = _jr["status"]
+                    if _juan_status == "filtered":
+                        w.juan_suffix = getattr(args, "juan_suffix", "")
+                    elif _juan_status == "no_milestone":
+                        print(f"{w.id}: 无卷 milestone，忽略卷范围", file=sys.stderr)
                 # strip_head_no 联动：本文件 head/jhead 行首令牌表（生成档已剥则官方侧对等剥离）
                 _theirs_norm.toks = _v_htoks(w) if getattr(args, "strip_head_no", False) else []
             except Exception as e:
@@ -1077,8 +1150,15 @@ def main(argv=None):
                 block_failed = True
                 results.append((block_failed, name, block))
                 continue
+            if _juan_status == "empty":
+                block.append("  卷范围与全书无交集")
+                grand_fail += 1; grand_total += 1
+                block_failed = True
+                results.append((block_failed, name, block))
+                continue
             _vname = _default_out_name(
-                w.id, w.metadata.get("title"), getattr(args, "title_t2s", True))
+                w.id, w.metadata.get("title"),
+                getattr(args, "title_t2s", True)) + (getattr(w, "juan_suffix", "") or "")
             verify_dir = os.path.join(verify_root, f"{_vname}（验证）")
             for fmt_raw in formats:
                 disp = fmt_raw
@@ -1178,7 +1258,9 @@ def main(argv=None):
                     need = _v_need(base_kind)
                     _presets_af = load_effective_presets(args.config)
                     _ebook_af = resolve_verify_ebook(args, _presets_af, src)
-                    ensure_baselines(w.id, need, _presets_af, _ebook_af)
+                    ensure_baselines(
+                        w.id, need, _presets_af, _ebook_af,
+                        juan=_juan if getattr(args, "juan_segments", None) else None)
                     official = {}
                     for kind in ("html","txt_notes","docx","epub","odt"):
                         found = v_find(src, stem, kind, juan=_juan if kind in ("html", "docx", "txt_notes") else None,

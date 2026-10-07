@@ -1727,11 +1727,15 @@ def generate_formal(xml_fn: str, work, fmt: str, outdir: str, config_path: Optio
         return [os.path.join(outdir, TxtRenderer(theme=theme, notes="footnote", show_notes=True, inline_brackets=p("inline_brackets", "halfwidth"), annotations=_ann, strip_head_no=_shn, show_dharani_transliteration=bool(p("show_dharani_transliteration", False)), siddham_text=bool(p("siddham_text", False))).render_work(work, out_dir=outdir, filename=f"{stem}.txt"))]
     raise ValueError(f"unknown format {fmt}")
 
-def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int = 10, diff_lines: int = 5, config_path: Optional[str] = None, t2s: bool = False, baseline: str = "render", gen_paths: Optional[List[str]] = None, baseline_roots: Optional[dict] = None) -> Dict:
+def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int = 10, diff_lines: int = 5, config_path: Optional[str] = None, t2s: bool = False, baseline: str = "render", gen_paths: Optional[List[str]] = None, baseline_roots: Optional[dict] = None, juan: Optional[list] = None) -> Dict:
+    """…；`juan`（[(lo,hi)] 段列表）给定时按卷过滤（子集校验：基线自动限定所选卷）。"""
     if fmt == "pdf":
         # 官方无 PDF 基线：PDF 由 docx（docx2pdf）或 html（html2pdf）派生，正文已由该格式校验覆盖
         return {"xml": xml_fn, "fmt": fmt, "status": "no_baseline", "gen": [],
                 "detail": "PDF 无官方基线（正文由 docx/html 校验覆盖）"}
+    if juan and baseline == "xml":
+        # P3 辅轨直读整包官方 XML，无法按卷切片
+        raise ValueError("卷范围子集不支持 baseline=xml（P3 辅轨直读整包 XML）")
     work = P5Parser().parse(xml_fn)
     # 繁体剥离键：官方基线恒为繁体，官方侧 strip_docx_head 必须用繁体键
     t_title = (work.metadata.get("title") or "").strip()
@@ -1740,6 +1744,14 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
     if t2s:
         from .simplify import simplify_work
         simplify_work(work)
+    if juan:
+        from .juan import filter_work_juan
+        _jr = filter_work_juan(work, juan)
+        if _jr["status"] == "empty":
+            return {"xml": xml_fn, "fmt": fmt, "status": "error", "gen": [],
+                    "detail": f"卷范围与全书无交集（实际卷 {sorted(_jr['all'])}）"}
+        if _jr["status"] == "no_milestone":
+            print(f"{work.id}: 无卷 milestone，忽略卷范围", file=sys.stderr)
     outdir = os.path.join(out_root, fmt)
     if gen_paths is not None:
         # 只校验已有产物（--verify-only）：跳过 generate_formal，不重写正式输出
@@ -1894,7 +1906,8 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
         # 材料化模型：基线落 cbeta_ebook work 目录（缺省回退 source）
         ebook = ((presets.get("source") or {}).get("cbeta_ebook") or "").strip() \
             or source
-        ensure_baselines(work.id, need, presets, ebook)
+        ensure_baselines(work.id, need, presets, ebook,
+                         juan=_juan if juan else None)
         official = _discover()
     bases = _bases(official)
     if not bases:
@@ -2837,9 +2850,9 @@ def parse_verify_report_name(name):
 
 def find_verify_reports(verify_root):
     """新布局发现：只扫 `{verify_root}/*（验证）/` 直接子目录（不递归、不认旧平铺）。
-    每目录配对报告：report.json 优先，否则 `*_verify_report.json` /
-    `*_校验报告.json` 首个；txt 同理（report.txt / `*_verify_report.txt` /
-    `*_校验报告.txt`）；无报告文件的仍收录（字段记 ""）。
+    机读结论只认 `report.json`（CLI/GUI 统一命名，2026-10-07；不再回退旧 JSON 名）；
+    txt 兼容（report.txt / `*_verify_report.txt` / `*_校验报告.txt`）；
+    无报告文件的仍收录（字段记 ""）。
     返回 [{"id","title","dir","report_json","report_txt"}]，按 dir 排序；
     根不存在 → []。只读，不抛异常。"""
     out = []
@@ -2856,11 +2869,7 @@ def find_verify_reports(verify_root):
                     continue
                 rj = os.path.join(d, "report.json")
                 if not os.path.isfile(rj):
-                    cands = []
-                    for pat in ("*_verify_report.json", "*_校验报告.json"):
-                        cands += _glob.glob(os.path.join(d, pat))
-                    cands = sorted(cands)
-                    rj = cands[0] if cands else ""
+                    rj = ""
                 rt = os.path.join(d, "report.txt")
                 if not os.path.isfile(rt):
                     cands = []

@@ -10,8 +10,14 @@
 
 - CLI：`{校验根}/{id 书名}（验证）/report.json`
   （校验根默认 `{输出}/验证`；`--verify-root` 或配置 `source.verify_root` 可改）
-- GUI：`{校验根}/{id 书名}（验证）/{id}_{书名}_校验报告.json`
-  （与 `{id}_{书名}_校验报告.txt` 配对，不进文件列）
+- GUI：`{校验根}/{id 书名}（验证）/report.json`
+  （与 CLI 同名；校验根默认 `{输出}/验证`，`--verify-root` 启动参数 ＞
+  `source.verify_root` ＞ 默认，见 `上游-GUI校验根参数提案.md`；txt 为
+  `{id}_{书名}_校验报告.txt`，不进文件列）
+
+机读 JSON 统一名 `report.json`（CLI/GUI 一致，2026-10-07）；旧目录的
+`{id}_{书名}_校验报告.json` / `*_verify_report.json` 不再被
+`find_verify_reports` 发现（重跑一次校验即得新名）。
 
 文本报告（给人看）与 JSON（给机器读）同目录、每次覆盖写；
 `fail` / `undetermined` / `error` 照写不缺席。
@@ -19,7 +25,7 @@
 真实例子（X1077 docx，`verdict: pass`）：
 
 ```text
-out/验证/X1077 准提净业（验证）/X1077_准提净业_校验报告.json
+out/验证/X1077 准提净业（验证）/report.json
 out/验证/X1077 准提净业（验证）/X1077_准提净业_校验报告.txt
 ```
 
@@ -92,6 +98,8 @@ out/验证/X1077 准提净业（验证）/X1077_准提净业_校验报告.txt
   产物存在、复用开关开。
 - 发现接口：`pycbeta.verify.find_verify_reports(verify_root)` 掃
   `{校验根}/*（验证）/`，返回 `[{id, title, dir, report_json, report_txt}]`；
+  `report_json` 只认 `report.json`（不再回退旧 JSON 名），txt 仍兼容
+  `report.txt` / `*_verify_report.txt` / `*_校验报告.txt`；
   `parse_verify_report_name(name)` 解析目录名。
 
 ## 5. 文本报告兼容性
