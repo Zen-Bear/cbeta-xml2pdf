@@ -638,8 +638,10 @@
   - 单测：`test_report_json.TestBuildReportJson.test_discovery_reused_across_formats`（计数 `find_official` ≤5 次 = 5 kind × 1，而非 (1+N)×5）。
   - 未做：`verify_one` 与 `build_report_json` 的"行级共享"（两者仍各扫一次）；收益较小，暂不。
 
-- [ ] **待办** 方向2：publish 官方缓存 → xml2pdf 校验复用（2026-10-07 用户立项；2026-10-07 审核：须附带 GUI 补 html 行，未实施）
-  - 代码（否则手改 JSON 会被 GUI 保存覆盖丢键）：`panel.py` 三处加 `html` 行——数据源窗口「本地官方电子书」tab 显示行（`2586-2591`，该 tab 无 html 行）、保存键（`2935-2937`）、`_dialog_presets`（`2754-2756`）；`fetch.py:107-113` 的 `BASELINE_DIR_HINTS` 加 `("html", ("html","htm"))`（自动检测可填）
+- [x] **决议放弃（仅记录）** 方向2：publish 官方缓存 → xml2pdf 校验复用（2026-10-07 用户立项；2026-10-07 用户决议放弃）
+  - 放弃理由：publish 已配本地库 `official_library=E:\CBETA\2026r2`（pdf/epub/docx/txt_notes 全免下载）+ `default_source=xml`（官方源少用）→ publish 缓存基本为空，复用面窄；2026r2 无 html 目录，缺口仅 html（低频、一次性小下载）
+  - 遗留可选项（暂不做）：GUI 补 html 行（`panel.py` 3 处 + `fetch.py` hints，防手改被 GUI 保存覆盖丢键），将来若有本地 html 库可再指
+  - 原方案（存档）：代码（否则手改 JSON 会被 GUI 保存覆盖丢键）：`panel.py` 三处加 `html` 行——数据源窗口「本地官方电子书」tab 显示行（`2586-2591`，该 tab 无 html 行）、保存键（`2935-2937`）、`_dialog_presets`（`2754-2756`）；`fetch.py:107-113` 的 `BASELINE_DIR_HINTS` 加 `("html", ("html","htm"))`（自动检测可填）
   - 配置：`source.baselines.html = E:\dev\cbeta\cbeta_ebook\html`（GUI 配）
   - 依据：`extra_roots` 优先、单根胜出（`verify.py:1872-1879`；CLI `cli.py:1047-1052`）；publish 缓存 `{fmt}/{work}/` 平展文件递归可命中（vendor 平展解压 `_vendor/cbeta_fetch.py:192-200`），`_is_flat` 排序正常
   - 只配 html：`txt_notes/docx/epub` 继续 2026r2 全量库，不动；同格式不双配；同字节基线指纹身份相同（`_file_identity` 只含 basename/size/sha256），为 P2 铺路
@@ -647,8 +649,9 @@
   - 验证：T0001 移走 `work/html` 后 `--verify`，断言 `report.json` 的 `inputs.baselines.html` 路径在 `cbeta_ebook` 下
   - 非目标：txt（xml2pdf 无纯 txt 基线，publish txt 只能自下，互不干扰）
 
-- [ ] **待办** 方向3：`sync-fmt-root` 把 work 基线镜像成格式优先布局（2026-10-07 用户立项；改在 xml2pdf 侧，publish 零改动，未实施）
-  - 用户决议（2026-10-07）：独立同步命令 + 镜像根复用空的 `E:\dev\cbeta\cbeta_ebook`（publish `official_ebooks_dir` 已指它，零配置变化）+ 第一版只 CLI/命令行传目录 + 单命令自动补下缺失源基线 + 默认只补缺失/`--force` 全刷
+- [x] **决议放弃（仅记录）** 方向3：`sync-fmt-root` 把 work 基线镜像成格式优先布局（2026-10-07 用户立项；2026-10-07 用户决议放弃）
+  - 放弃理由：同方向2（本地库已覆盖 pdf/epub/docx/txt_notes + `default_source=xml`，publish 对官方 html 需求低频）；方向3 另有持续成本（新函数+CLI+测试+文档、双份磁盘、`--force` 新鲜度语义、canonical drift）；与方向2 同时做会被 `extra_root` 遮蔽、边际收益重叠
+  - 原方案（存档）：独立同步命令 + 镜像根复用空的 `E:\dev\cbeta\cbeta_ebook`（publish `official_ebooks_dir` 已指它，零配置变化）+ 第一版只 CLI/命令行传目录 + 单命令自动补下缺失源基线 + 默认只补缺失/`--force` 全刷
   - 落点：`fetch.sync_fmt_root(work_ids, fmt_root, kinds, presets, force=False)` + `pycbeta.fetch` CLI 加 `--sync-fmt-root DIR`（复用其 `-f/--cbeta-ebook/load_presets`；默认关闭零行为变化；主 CLI 以后再挂）
   - 流程：`fetch_work` 先补下缺失源基线（404 静默跳过）→ 镜像；收集复用 `_collect_fmt`（`fetch.py:315-324`）
   - 映射（publish `local_path` 口径，publish `official_ebook_source.py:58-69`；注意源/目标目录名不对称）：`{wdir}/{fmtdir}/{id}_NNN.ext` → `{fmt_root}/{fmt}/{CanonicalWork}/{id}_NNN.ext`，其中 txt_notes 源目录是 `txt/`、目标是 `txt_notes/`；epub 单文件 → `{fmt_root}/epub/{CanonicalWork}.epub`；odt 同理；`copy2` 保 mtime（publish 无水位判过期走 mtime 比较，`official_state.py:145-148`，镜像通常不误报）；只补缺失，`--force` 全刷；不镜像 xml/figures/pdf（publish 不消费：无 XML 下载逻辑、成品内嵌、无 pdf 基线）
@@ -657,15 +660,16 @@
   - 测试：新 `test_fetch_fmt_mirror.py`（布局/补缺/force/epub/命名）；T0001 实测后按 publish `local_path` 形态逐 kind 断言；全量回归
   - 文档：`docs/第三方调用说明.md` 加"格式优先镜像根"契约节（布局/目录名不对称/canonical 对齐/txt 缺口）+ `docs/功能清单.md` 加一行
 
-- [ ] **待办（P2，排在方向2/3后）** 校验结论跨边复用：共享指纹记录，不共享原始报告目录（2026-10-07 用户立项；机制已查实，未实施）
+- [ ] **提案待下游审核** P2：校验结论跨边复用（2026-10-07 用户立项；提案已起草，待 publish 审核；方向2/3 已放弃）
+  - **提案文档**：`docs/上游-P2校验结论跨边复用提案.md`（背景/现状/方案/优先级/验收/publish 影响/风险/开放问题）；阈值对齐与配置形态列为**开放问题**，留待下游审核时定
   - 查实（2026-10-07）：指纹内容哈希无路径（`verify.py:2207-2220/2301-2307/2521-2539`）；基线按 basename，同名文件跨布局指纹相同；publish 库 `config/verify_records.json` 存上游指纹（publish `verify_cache.py:1-12`），跳过三元（publish `main_window.py:5388-5389`）；report.json 每格式有 `verdict`+`fingerprint`（`verify.py:2762-2771`）
   - 不共享 `（验证）` 原始目录：一次性 staging，publish 删旧重跑（publish `xml2pdf_bridge.py:699-704`）+ 清理删全部
-  - 待做①阈值对齐（用户决议 2026-10-07：向 5 对齐）：xml2pdf 预设 `verify.maxDiff=5`（GUI 生效）；CLI 校验带 `--verify-max-diff 5`（argparse 默认 10 且不读预设，`cli.py:740`，文档写明）；publish 不动
+  - 待做①阈值对齐（**取值/方向待下游审核**，见提案 §8）：xml2pdf 预设 `verify.maxDiff`（GUI 生效）；CLI 校验带 `--verify-max-diff <同值>`（argparse 默认 10 且不读预设，`cli.py:740`，文档写明）
   - 待做②指纹形态修正（publish 侧小改）：`verify_fingerprint` 改用 run 包装路径计算（与 publish 校验运行同形；xml2pdf GUI 报告指纹用临时 run.json `tmpcfg`，`gui/__main__.py:385`，裸预设形态大概率不等，因规范形含 `theme_css/annotations/strip_head_no`，`verify.py:2361-2367`）；现有库记录一次性作废；文档注明 xml2pdf CLI 用 `--config run.json` 才同形
   - 待做③报告导入（publish 侧）：新增键 `xml2pdf.verify_reports_dir`（默认 `{xml2pdf.path}/verify`，正好等于当前预设 `source.verify_root`）；发现走上游公开接口 `pycbeta.verify.find_verify_reports(verify_root)`（`verify.py:2838-2877`，进程内经 bridge 导入），读其 `report_json`（即 `{校验根}/{id 书名}（验证）/report.json`；空则跳过），按 `id` 匹配并核对 JSON 内 `work`；四条件齐才 `record_pass`：`verdict=="pass"` + 指纹相等 + publish 产物存在（`find_built`）+ `formal_outputs` 非空
   - 验证：T0001 xml2pdf GUI 校验通过 → publish 复用命中跳过（不渲染）；双边指纹逐字比对
   - 收益：整轮渲染+校验（分钟级/部）→ 指纹预检（秒级，`verify.py:2402-2408`）
-  - 风险/前提：首选基线缺失指纹为 None（`verify.py:2507`），方向2/3 先行；预设文本键不一致永不命中（静默）；跨机器不主张；`regen_all`/强制重验不读库
+  - 风险/前提：首选基线缺失指纹为 None（`verify.py:2507`）；预设文本键不一致永不命中（静默）；跨机器不主张；`regen_all`/强制重验不读库；方向2/3 已放弃（本地库+自制源下收益低），不影响本项
 
 - [x] **已完成** 校验 `report.json` 命名统一（2026-10-07 用户立项并落地）
   - GUI 原写 `{id}_{书名}_校验报告.json`（`gui/__main__.py:395`）→ 统一为 `report.json`（与 CLI 同名；每 `（验证）/` 目录一书一档，无冲突）；txt 仍 `{id}_{书名}_校验报告.txt`
