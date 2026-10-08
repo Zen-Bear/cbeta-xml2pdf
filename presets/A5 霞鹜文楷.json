@@ -288,7 +288,7 @@
     "suppress_jhead_dup": false,
     "show_close_juan": true,
     "compareInfos": false,
-    "maxDiff": 10,
+    "maxDiff": 0,
     "diffLines": 5,
     "auto_fetch": true,
     "scope_juan": true,

@@ -235,8 +235,10 @@ def load_presets(path: str = _PRESETS_PATH) -> Dict[str, dict]:
 
 
 def load_effective_presets(path: Optional[str] = None) -> Dict[str, dict]:
-    """宽容读取配置：run.json（含任一 RUN_KEYS 槽）→ 按 5 槽合并后的 presets；
-    否则按 presets JSON 直读。path=None → 出厂 config.json。
+    """宽容读取配置：run.json（显式 `config-json` 槽或纯 5 槽）→ 按 5 槽合并后的
+    presets；基础配置 JSON（可带主题键）→ 自身即 `config-json` 槽 + 出厂深合并
+    （P2，2026-10-07：裸预设也走深合并口径，含主题键不再被误判为 run.json）。
+    path=None → 出厂 config.json。
 
     供既可能收到 run.json 又可能收到 presets 文件的调用方（如 verify_one）。"""
     if not path:
@@ -245,10 +247,12 @@ def load_effective_presets(path: Optional[str] = None) -> Dict[str, dict]:
         raw = load_presets(path)
     except (OSError, ValueError):
         return load_presets()
-    if isinstance(raw, dict) and any(k in raw for k in RUN_KEYS):
+    if _is_run_config(raw):
         run = load_run_config(path)
         return resolve_effective_config(run, os.path.dirname(os.path.abspath(path)))
-    return raw
+    run = dict(DEFAULT_RUN_CONFIG)
+    run["config-json"] = os.path.abspath(path)
+    return resolve_effective_config(run, os.path.dirname(os.path.abspath(path)))
 
 
 try:
@@ -608,6 +612,16 @@ DEFAULT_RUN_CONFIG = {
 }
 _LEGACY_CONFIG_KEYS = ("pages", "output", "engines", "theme", "verify",
                        "annotations", "source")
+
+
+def _is_run_config(data) -> bool:
+    """run.json 组合单判定：显式含 `config-json` 槽，或键集合 ⊆ RUN_KEYS。
+
+    基础配置 JSON 可携带同名主题键（见 PRESET_THEME_KEYS），不能再凭"含任一
+    RUN_KEYS 键"判定——否则整段 output/source/verify 会被丢弃（P2，2026-10-07，
+    本机 config.user.json 即此形态）。"""
+    return isinstance(data, dict) and (
+        "config-json" in data or set(data) <= set(RUN_KEYS))
 _RUN_TEMPLATE = """{{
   // 一次运行的组合单（5 槽；显式开关优先）。常改文件，不入库。
   // 分工约定：标准槽放 run.json 全局；增量槽建议放预设键跟预设走。
@@ -696,7 +710,7 @@ def resolve_config_arg(path=None, root=None):
         raise ValueError(
             f"--config 顶层必须是对象（{path}）：run.json 组合单或基础配置 JSON")
     ap = os.path.abspath(path)
-    if any(k in data for k in RUN_KEYS):
+    if _is_run_config(data):
         return load_run_config(path), os.path.dirname(ap)
     run = dict(DEFAULT_RUN_CONFIG)
     run["config-json"] = ap

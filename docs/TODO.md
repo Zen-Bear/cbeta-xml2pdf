@@ -660,16 +660,15 @@
   - 测试：新 `test_fetch_fmt_mirror.py`（布局/补缺/force/epub/命名）；T0001 实测后按 publish `local_path` 形态逐 kind 断言；全量回归
   - 文档：`docs/第三方调用说明.md` 加"格式优先镜像根"契约节（布局/目录名不对称/canonical 对齐/txt 缺口）+ `docs/功能清单.md` 加一行
 
-- [ ] **提案待下游审核** P2：校验结论跨边复用（2026-10-07 用户立项；提案已起草，待 publish 审核；方向2/3 已放弃）
-  - **提案文档**：`docs/上游-P2校验结论跨边复用提案.md`（背景/现状/方案/优先级/验收/publish 影响/风险/开放问题）；阈值对齐与配置形态列为**开放问题**，留待下游审核时定
-  - 查实（2026-10-07）：指纹内容哈希无路径（`verify.py:2207-2220/2301-2307/2521-2539`）；基线按 basename，同名文件跨布局指纹相同；publish 库 `config/verify_records.json` 存上游指纹（publish `verify_cache.py:1-12`），跳过三元（publish `main_window.py:5388-5389`）；report.json 每格式有 `verdict`+`fingerprint`（`verify.py:2762-2771`）
-  - 不共享 `（验证）` 原始目录：一次性 staging，publish 删旧重跑（publish `xml2pdf_bridge.py:699-704`）+ 清理删全部
-  - 待做①阈值对齐（**取值/方向待下游审核**，见提案 §8）：xml2pdf 预设 `verify.maxDiff`（GUI 生效）；CLI 校验带 `--verify-max-diff <同值>`（argparse 默认 10 且不读预设，`cli.py:740`，文档写明）
-  - 待做②指纹形态修正（publish 侧小改）：`verify_fingerprint` 改用 run 包装路径计算（与 publish 校验运行同形；xml2pdf GUI 报告指纹用临时 run.json `tmpcfg`，`gui/__main__.py:385`，裸预设形态大概率不等，因规范形含 `theme_css/annotations/strip_head_no`，`verify.py:2361-2367`）；现有库记录一次性作废；文档注明 xml2pdf CLI 用 `--config run.json` 才同形
-  - 待做③报告导入（publish 侧）：新增键 `xml2pdf.verify_reports_dir`（默认 `{xml2pdf.path}/verify`，正好等于当前预设 `source.verify_root`）；发现走上游公开接口 `pycbeta.verify.find_verify_reports(verify_root)`（`verify.py:2838-2877`，进程内经 bridge 导入），读其 `report_json`（即 `{校验根}/{id 书名}（验证）/report.json`；空则跳过），按 `id` 匹配并核对 JSON 内 `work`；四条件齐才 `record_pass`：`verdict=="pass"` + 指纹相等 + publish 产物存在（`find_built`）+ `formal_outputs` 非空
-  - 验证：T0001 xml2pdf GUI 校验通过 → publish 复用命中跳过（不渲染）；双边指纹逐字比对
+- [x] **上游已落地，待下游 P10 实施** P2：校验结论跨边复用（2026-10-07 用户立项；下游审核意见见提案 §9，上游复核见 §9.6/§9.8）
+  - **文档**：`docs/上游-P2校验结论跨边复用提案.md`（§1-8 原案；§9 下游审核意见；§9.6 上游复核）；`docs/上游-指纹presets入参提案.md`（含 §5 上游复核实测）
+  - **决策（§9.1）**：阈值两边统一 `max_diff=0`/`diff_lines=5`（旧记录按 0 重跑一次）；配置形态改为上游加 `verify_fingerprint(presets=<effective dict>)` 入参（不再用 run 包装）；只从上游 `report.json` 导入（逐源 + 验收档；`formal_outputs`/`inputs.xml_files` 仅非空校验）
+  - **验收档（§9.3，publish 侧）**：strict（`0/0`）自动入库；notes（≤10 且 `diff_scope=="notes_only"`）自动入库；其余人工且不记库（fail+notes_only 也接受，依赖 fail 时照写 `diff_scope`）
+  - **多源（§9.4/§9.6/§9.7）**：已定「输入集」模型——publish `entries[work][fmt].sets = [{fingerprint, inputs:[源基名…], …}]`，新鲜＝某 set 的 `inputs` 恰为当前全部源且指纹命中；GUI 聚合报告天然满足，CLI 单源等价、CLI 多源不导入（managed 当场记录）；**上游无需改 GUI**。注意指纹 `xml` 有序，publish 重算须按报告 `inputs.xml_files` 同序映射
+  - **上游待办（§9.5 + §9.6 + §9.8，2026-10-07 已全部落地）**：① `verify_fingerprint(presets=)` 入参（含 `_strip_no_from`/`_theme_css_digest`/`_canon_annotations` 改 presets 派生，见 presets 提案 §5）；② 预设 `verify.maxDiff` 改 0、`diff_lines=5`（tracked A5 两项 + 本地 config.user.json；factory 不动）；③ CLI 文档注明 `--verify-max-diff 0`（`docs/安装说明.md`）；④ `校验report.json说明.md` 补 fail 时也输出 `diff_scope`（已办）；⑤ 多源口径已定（publish 输入集模型，§9.7，上游无需改 GUI）；⑥ **分类器修复**（`theme.py` `_is_run_config`：含主题键的裸预设被误判 run.json → 预设各段被丢弃；附带修好 CLI `--config 裸预设`）
+  - 验证：单测 `test_verify_fingerprint.TestPresetsParam`（三形态等价 + 缺省回归 + 分类器 + `build_report_json` 透传）+ `test_theme` 分类器回归；全量回归；publish 复用命中跳过（`regen_all` 时仍重生成不校验，见 §9.2）
   - 收益：整轮渲染+校验（分钟级/部）→ 指纹预检（秒级，`verify.py:2402-2408`）
-  - 风险/前提：首选基线缺失指纹为 None（`verify.py:2507`）；预设文本键不一致永不命中（静默）；跨机器不主张；`regen_all`/强制重验不读库；方向2/3 已放弃（本地库+自制源下收益低），不影响本项
+  - 风险/前提：首选基线缺失指纹为 None（`verify.py:2507`）；预设文本键不一致永不命中（静默）；跨机器不主张；方向2/3 已放弃（本地库+自制源下收益低），不影响本项
 
 - [x] **已完成** 校验 `report.json` 命名统一（2026-10-07 用户立项并落地）
   - GUI 原写 `{id}_{书名}_校验报告.json`（`gui/__main__.py:395`）→ 统一为 `report.json`（与 CLI 同名；每 `（验证）/` 目录一书一档，无冲突）；txt 仍 `{id}_{书名}_校验报告.txt`

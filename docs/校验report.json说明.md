@@ -81,15 +81,20 @@ out/验证/X1077 准提净业（验证）/X1077_准提净业_校验报告.txt
   段单独取出后**只比正文**，正文段**严格 0 差异**才为 `notes_only`（差异全在注释）；
   否则 `body`（含正文差异）；该格式/基线组合分不出正文段为 `unknown`；未做旁路为
   `null`。多记录聚合取最保守（`body` > `unknown` > `notes_only`）。**纯旁路信息，
-  不影响 `verdict`/`missing`/`extra`**。
+  不影响 `verdict`/`missing`/`extra`**。`verdict=fail` 时同样输出（供下游验收档：
+  差异 ≤10 且 `notes_only` 可自动接受，见 `上游-P2校验结论跨边复用提案.md` §9.3）。
 - 新增字段向后兼容；语义变化会升级 `schema` 或 `fingerprint_version`；未知字段请忽略。
 
 ## 4. 指纹复用契约（下游 Phase 2 用）
 
 - 上游 API：`pycbeta.verify.verify_fingerprint(work_id, fmt, xml_files=…,
-  config_path=…, max_diff=…, diff_lines=…, …) -> str | None`。
+  config_path=…, max_diff=…, diff_lines=…, …, presets=None) -> str | None`。
   返回 `None` = "不能证明仍然有效"，**一律重验**（找不到 XML、基线缺失、
   配置不可解析、不支持的格式等都返回 `None`；无副作用，不下载不渲染不写文件）。
+  `presets=<effective dict>`（2026-10-07 新增）：直接采用生效配置，跳过
+  `load_effective_presets`，与 `config_path=<run.json>` 同口径逐字一致；
+  `presets=None` 保持现状。`build_report_json` 同样透传 `presets=`。
+  注音词表用相对路径时请绝对化后再传（见 `上游-指纹presets入参提案.md` §5）。
 - 指纹按 `(work, fmt)` 粒度，纳入：XML 内容标识、生效配置摘要、校验实现摘要
   （`pycbeta.__version__` + 相关模块源码哈希，改实现即失效）、实际基线、
   阈值与覆盖关系。本机有效，不保证跨机器可比。

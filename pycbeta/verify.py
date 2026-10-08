@@ -1242,9 +1242,16 @@ def _strip_official_no(text: str, tokens) -> str:
     return text
 
 
-def _strip_no_from(config_path=None) -> bool:
+def _strip_no_from(config_path=None, _presets=None) -> bool:
     """strip_head_no 开关读取（--config 双形态兼容，生成/官方双侧同源）。
-    presets 文件直读 output 槽；run.json 走组合单解算；任一为 true 即 true，全缺省 false。"""
+    presets 文件直读 output 槽；run.json 走组合单解算；任一为 true 即 true，全缺省 false。
+    `_presets`（生效配置 dict）给定时直接从其 output 槽取值（供 fingerprint
+    `presets=` 形态，跨边三形态一致用，P2，2026-10-07）。"""
+    if isinstance(_presets, dict):
+        try:
+            return bool((_presets.get("output") or {}).get("strip_head_no", False))
+        except Exception:
+            return False
     try:
         p = load_presets(config_path) if config_path else load_presets()
         if (p.get("output") or {}).get("strip_head_no", False):
@@ -2292,16 +2299,30 @@ def _canon_annotations(presets, config_path):
     }
 
 
-def _theme_css_digest(config_path=None):
+def _theme_css_digest(config_path=None, _presets=None):
     """与 generate_formal 同口径的主题 CSS 内容摘要（无路径）。
-    解析失败 → 出厂等价摘要；连出厂都不可读 → "unavailable"。"""
+    解析失败 → 出厂等价摘要；连出厂都不可读 → "unavailable"。
+    `_presets`（生效配置 dict）给定时从其主题键派生（跨边三形态一致用，
+    不再看 config_path；自定义主题相对路径时解析基为全局预设目录，边角见提案）。
+    P2，2026-10-07。"""
     text = None
-    try:
-        from .theme import resolve_config_arg, resolve_pdf_docx_css
-        _run, _rdir = resolve_config_arg(config_path)
-        text = resolve_pdf_docx_css(_run, _rdir)
-    except Exception:
-        text = None
+    if isinstance(_presets, dict):
+        try:
+            from .theme import resolve_pdf_docx_css
+            _run = {k: str(_presets.get(k) or "").strip() for k in
+                    ("pdf-docx-theme", "pdf-docx-user-theme",
+                     "html-epub-theme", "html-epub-user-theme")}
+            _run["config-json"] = ""
+            text = resolve_pdf_docx_css(_run, None)
+        except Exception:
+            text = None
+    else:
+        try:
+            from .theme import resolve_config_arg, resolve_pdf_docx_css
+            _run, _rdir = resolve_config_arg(config_path)
+            text = resolve_pdf_docx_css(_run, _rdir)
+        except Exception:
+            text = None
     if not isinstance(text, str) or not text:
         try:
             from .theme import Theme as _Theme
@@ -2348,7 +2369,7 @@ def _canonical_verify_config_inner(config_path=None, _presets=None):
     except Exception:
         t2s_flag = False
     try:
-        shn = bool(_strip_no_from(config_path))
+        shn = bool(_strip_no_from(config_path, _presets=presets))
     except Exception:
         shn = False
     return {
@@ -2376,7 +2397,7 @@ def _canonical_verify_config_inner(config_path=None, _presets=None):
         "scope_juan": bool(ver.get("scope_juan", True)),
         "bases": _canon_jsonable(ver.get("bases")),
         "annotations": _canon_annotations(presets, config_path),
-        "theme_css": _theme_css_digest(config_path),
+        "theme_css": _theme_css_digest(config_path, _presets=presets),
         "pages": _canon_jsonable(presets.get("pages") or {}),
     }
 
@@ -2411,12 +2432,15 @@ def _locate_xml_nosideeffects(work_id, presets):
 def verify_fingerprint(work_id, fmt, *, xml_files=None, config_path=None,
                        max_diff=10, diff_lines=5, t2s=None,
                        engine=None, vertical=None, baseline_roots=None,
-                       baseline="render", _ctx=None):
+                       baseline="render", presets=None, _ctx=None):
     """校验指纹（Phase 1）：判断“上次 pass 结论是否仍然有效”的廉价预检。
     返回 "verify-fp-1:sha256:…" 或 None（不能证明 → 调用方一律重验）。
     无副作用：不 parse、不渲染、不下载、不写文件、不打印（内部输出一律重定向吞掉）。
     本机有效，不保证跨机器可比。t2s/engine/vertical 为 None 时取有效配置值；
     baseline_roots 为 None 时取配置 source.baselines。
+    `presets`（生效配置 dict，可选）：非空时直接采用（跳过 load_effective_presets），
+    供跨边调用方从同一 effective 配置算指纹；`presets=None` 时保持现状
+    （由 config_path 解析）。P2，2026-10-07。
     `_ctx`（内部用）：预计算的 {presets,canon,official,impl}，供 build_report_json
     一次发现多格式复用，避免每格式重扫基线目录。"""
     if (fmt or "") not in _FP_FORMATS:
@@ -2428,7 +2452,8 @@ def verify_fingerprint(work_id, fmt, *, xml_files=None, config_path=None,
         with _redir(buf):
             return _verify_fingerprint_inner(
                 work_id, fmt, xml_files, config_path, max_diff, diff_lines,
-                t2s, engine, vertical, baseline_roots, baseline, _ctx)
+                t2s, engine, vertical, baseline_roots, baseline,
+                presets, _ctx)
     except Exception:
         return None
 
@@ -2463,15 +2488,16 @@ def _official_superset(source, stem, roots_cfg):
 
 def _verify_fingerprint_inner(work_id, fmt, xml_files, config_path,
                               max_diff, diff_lines, t2s, engine, vertical,
-                              baseline_roots, baseline, _ctx=None):
+                              baseline_roots, baseline, presets=None, _ctx=None):
     _ctx = _ctx or {}
-    if "presets" in _ctx:
-        presets = _ctx["presets"]
-    else:
-        try:
-            presets = load_effective_presets(config_path)
-        except Exception:
-            return None
+    if presets is None:
+        if "presets" in _ctx:
+            presets = _ctx["presets"]
+        else:
+            try:
+                presets = load_effective_presets(config_path)
+            except Exception:
+                return None
     if not isinstance(presets, dict):
         return None
     out = presets.get("output") or {}
@@ -2625,10 +2651,12 @@ def build_report_json(work_id, records, *, xml_files=None, config_path=None,
                       requested_formats=None, max_diff=10, diff_lines=5,
                       t2s=None, engine=None, vertical=None,
                       baseline_roots=None, baseline="render",
-                      report_name="report.txt"):
+                      report_name="report.txt", presets=None):
     """verify_one 记录列表 → report.json 载荷 dict（指纹提案 §4 口径）。
-    纯装配：只读文件哈希，不写文件、不打印（内部输出重定向吞掉）；
-    算不出的字段记 None，绝不抛异常（极端失败回退最小骨架）。"""
+    纯装配：只读文件哈希，不写文件、不打印（内部输出一律重定向吞掉）；
+    算不出的字段记 None，绝不抛异常（极端失败回退最小骨架）。
+    `presets`（生效配置 dict，可选）：非空时直接采用；`presets=None` 时保持现状
+    （由 config_path 解析）。P2，2026-10-07。"""
     import io as _io
     from contextlib import redirect_stdout as _redir
     buf = _io.StringIO()
@@ -2638,7 +2666,7 @@ def build_report_json(work_id, records, *, xml_files=None, config_path=None,
                 work_id, records, xml_files, config_path,
                 requested_formats, max_diff, diff_lines,
                 t2s, engine, vertical, baseline_roots, baseline,
-                report_name)
+                report_name, presets)
     except Exception:
         return {"schema": 1, "work": work_id, "fmts": {},
                 "error": "build_failed"}
@@ -2647,7 +2675,7 @@ def build_report_json(work_id, records, *, xml_files=None, config_path=None,
 def _build_report_json_inner(work_id, records, xml_files, config_path,
                              requested_formats, max_diff, diff_lines,
                              t2s, engine, vertical, baseline_roots, baseline,
-                             report_name):
+                             report_name, presets=None):
     import pycbeta as _pkg
     recs = [r for r in (records or []) if isinstance(r, dict)]
     groups = {}
@@ -2660,10 +2688,11 @@ def _build_report_json_inner(work_id, records, xml_files, config_path,
         wanted = [str(f).strip() or "?" for f in requested_formats]
         for f in wanted:
             groups.setdefault(f, [])
-    try:
-        presets = load_effective_presets(config_path)
-    except Exception:
-        presets = {}
+    if presets is None:
+        try:
+            presets = load_effective_presets(config_path)
+        except Exception:
+            presets = {}
     if not isinstance(presets, dict):
         presets = {}
     canon = canonical_verify_config(config_path, _presets=presets)

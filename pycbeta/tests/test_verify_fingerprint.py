@@ -94,6 +94,72 @@ class TestDeterminism(FingerprintFixture):
             "T0001", "docx", xml_files=[self.xml], config_path=self.cfg))
 
 
+class TestPresetsParam(FingerprintFixture):
+    """`verify_fingerprint(presets=)`：同一 effective 配置下三种调用逐字一致；
+    `presets=None` 保持现状；裸预设（含主题键）走出厂深合并（分类器回归）。
+
+    P2、下游 presets 入参提案 §3/§6 验收。"""
+
+    def _setup_configs(self):
+        st = os.path.join(self.d, "st.json")
+        with open(st, "w", encoding="utf-8") as f:
+            json.dump({"output": {"strip_head_no": False},
+                        "verify": {"scope_juan": True},
+                        "pdf-docx-user-theme": "large-print.css"}, f)
+        run = os.path.join(self.d, "run.json")
+        with open(run, "w", encoding="utf-8") as f:
+            json.dump({"config-json": st,
+                       "html-epub-theme": "html_epub_official.css",
+                       "html-epub-user-theme": "",
+                       "pdf-docx-theme": "pdf_docx.css",
+                       "pdf-docx-user-theme": ""}, f)
+        return st, run
+
+    def test_three_forms_identical(self):
+        from pycbeta.theme import load_effective_presets
+        st, run = self._setup_configs()
+        eff = load_effective_presets(run)
+        kw = dict(xml_files=[self.xml])
+        a = V.verify_fingerprint("T0001", "html", config_path=st, **kw)
+        b = V.verify_fingerprint("T0001", "html", config_path=run, **kw)
+        c = V.verify_fingerprint("T0001", "html", presets=eff, **kw)
+        self.assertIsNotNone(a)
+        self.assertEqual(a, b)
+        self.assertEqual(b, c)
+
+    def test_presets_none_keeps_config_path_behavior(self):
+        st, run = self._setup_configs()
+        kw = dict(xml_files=[self.xml])
+        a = V.verify_fingerprint("T0001", "html", config_path=run, **kw)
+        b = V.verify_fingerprint(
+            "T0001", "html", config_path=run, presets=None, **kw)
+        self.assertIsNotNone(a)
+        self.assertEqual(a, b)
+
+    def test_classifier_deep_merges_theme_keyed_preset(self):
+        from pycbeta.theme import (load_effective_presets, load_presets,
+                                    deep_merge)
+        st, run = self._setup_configs()
+        self.assertEqual(load_effective_presets(st),
+                         deep_merge(load_presets(), load_presets(st)))
+        self.assertEqual(load_effective_presets(st),
+                         load_effective_presets(run))
+
+    def test_build_report_json_presets_passthrough(self):
+        from pycbeta.theme import load_effective_presets
+        st, run = self._setup_configs()
+        eff = load_effective_presets(run)
+        rec = {"fmt": "html", "xml": self.xml, "status": "ok", "missing": 0,
+               "extra": 0, "gen": [self.base]}
+        kw = dict(xml_files=[self.xml], config_path=run,
+                  requested_formats=["html"])
+        j1 = V.build_report_json("T0001", [rec], **kw)
+        j2 = V.build_report_json("T0001", [rec], presets=eff, **kw)
+        self.assertEqual(j1, j2)
+        self.assertTrue(j1["fmts"]["html"]["fingerprint"].startswith(
+            "verify-fp-1:sha256:"))
+
+
 class TestNoneCases(FingerprintFixture):
     def test_unknown_fmt(self):
         self.assertIsNone(V.verify_fingerprint(

@@ -926,6 +926,37 @@ class TestLoadEffectivePresets(unittest.TestCase):
         self.assertEqual(load_effective_presets(None).get("output", {}).get("notes"),
                          "footnote")
 
+    def test_theme_keyed_preset_is_base_not_run(self):
+        # 含主题键的裸预设不得被误判为 run.json（P2，2026-10-07）：
+        # PRESET_THEME_KEYS 与 RUN_KEYS 同名，判定只能凭 config-json/纯 5 槽
+        from pycbeta.theme import (load_effective_presets, load_presets,
+                                    deep_merge)
+        d = tempfile.mkdtemp()
+        cfg = os.path.join(d, "q.json")
+        with open(cfg, "w", encoding="utf-8") as f:
+            json.dump({"output": {"notes": "inline"},
+                       "pdf-docx-user-theme": "large-print.css"}, f)
+        p = load_effective_presets(cfg)
+        self.assertEqual(p, deep_merge(load_presets(), load_presets(cfg)))
+        self.assertEqual((p.get("output") or {}).get("notes"), "inline")
+        self.assertEqual(p.get("pdf-docx-user-theme"), "large-print.css")
+
+    def test_resolve_config_arg_theme_keyed_preset_is_base(self):
+        import json
+        import tempfile
+        from pycbeta.theme import resolve_config_arg
+        fd, fn = tempfile.mkstemp(suffix=".json")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump({"output": {"notes": "inline"},
+                           "pdf-docx-user-theme": "large-print.css"}, f)
+            run, rdir = resolve_config_arg(fn)
+            self.assertEqual(os.path.abspath(run["config-json"]),
+                             os.path.abspath(fn))
+            self.assertEqual(rdir, os.path.dirname(os.path.abspath(fn)))
+        finally:
+            os.remove(fn)
+
 
 class TestVerticalUncenter(unittest.TestCase):
     def test_constant(self):
