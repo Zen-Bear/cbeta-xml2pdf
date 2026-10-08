@@ -1155,6 +1155,30 @@ class TestPresetThemeKeys(unittest.TestCase):
         got2 = resolve_html_base_css(run, rdir, user="")
         self.assertNotIn("#123456", got2)  # 显式空胜预设
 
+    def test_html_user_explicit_param_wins_over_run_slot(self):
+        from pycbeta.theme import resolve_html_base_css
+        root, css = self._root()
+        other = os.path.join(root, "other.css")
+        with open(other, "w", encoding="utf-8") as f:
+            f.write("p.other{color:red}")
+        run, rdir = self._run(root, {"html-epub-user-theme": "other.css"})
+        got = resolve_html_base_css(run, rdir, user=css)
+        self.assertIn("presetmark", got)      # 显式 user 参数胜 run 槽/预设键
+        self.assertNotIn("p.other", got)
+
+    def test_html_user_missing_file_falls_back(self):
+        import io
+        from contextlib import redirect_stdout
+        from pycbeta.theme import resolve_html_base_css
+        root, _css = self._root()
+        run, rdir = self._run(root, {})
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            got = resolve_html_base_css(
+                run, rdir, user=os.path.join(root, "no.css"))
+        self.assertIn("cbetarc", got)          # 基底仍在，不抛
+        self.assertNotIn("presetmark", got)
+
     def test_std_preset_override_warns(self):
         import io
         from contextlib import redirect_stdout

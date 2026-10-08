@@ -102,6 +102,81 @@ class TestGenerateFormalBracketFallback(unittest.TestCase):
             shutil.rmtree(d, ignore_errors=True)
 
 
+class TestGenerateFormalHtmlTheme(unittest.TestCase):
+    """generate_formal html/epub：与转换同 CSS（基底 + html-epub-user-theme 增量）。"""
+
+    def _work(self):
+        from pycbeta.model import Work
+        return Work(id="T", source_file="", metadata={}, body=[],
+                    notes_by_n={}, apps=[], simplified=False)
+
+    def _pre(self, d, user=None):
+        import json
+        pre = os.path.join(d, "presets.json")
+        cfg = {"output": {}, "verify": {}}
+        if user:
+            cfg["html-epub-user-theme"] = user
+        with open(pre, "w", encoding="utf-8") as f:
+            json.dump(cfg, f)
+        return pre
+
+    def test_html_receives_base_css(self):
+        import tempfile
+        from unittest import mock
+        import pycbeta.verify as V
+        d = tempfile.mkdtemp()
+        try:
+            up = os.path.join(d, "u.css")
+            with open(up, "w", encoding="utf-8") as f:
+                f.write("div.usermark{color:red}")
+            with mock.patch.object(V, "HtmlRenderer") as M:
+                M.return_value.render_work.return_value = ["x.html"]
+                V.generate_formal("x.xml", self._work(), "html",
+                                  os.path.join(d, "out"),
+                                  config_path=self._pre(d, up))
+                base = M.call_args.kwargs.get("base_css")
+            self.assertIn("cbetarc", base)       # 官方基底仍在
+            self.assertIn("div.usermark{color:red}", base)  # 增量追加在后
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_epub_receives_base_css(self):
+        import tempfile
+        from unittest import mock
+        import pycbeta.verify as V
+        d = tempfile.mkdtemp()
+        try:
+            up = os.path.join(d, "u.css")
+            with open(up, "w", encoding="utf-8") as f:
+                f.write("div.usermark{color:red}")
+            with mock.patch.object(V, "EpubRenderer") as M:
+                M.return_value.render_work.return_value = "x.epub"
+                V.generate_formal("x.xml", self._work(), "epub",
+                                  os.path.join(d, "out"),
+                                  config_path=self._pre(d, up))
+                base = M.call_args.kwargs.get("base_css")
+            self.assertIn("cbetarc", base)
+            self.assertIn("div.usermark{color:red}", base)
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_no_user_theme_stays_official(self):
+        import tempfile
+        from unittest import mock
+        import pycbeta.verify as V
+        d = tempfile.mkdtemp()
+        try:
+            with mock.patch.object(V, "HtmlRenderer") as M:
+                M.return_value.render_work.return_value = ["x.html"]
+                V.generate_formal("x.xml", self._work(), "html",
+                                  os.path.join(d, "out"),
+                                  config_path=self._pre(d))
+                base = M.call_args.kwargs.get("base_css")
+            self.assertIn("cbetarc", base)       # user 空时行为零变化
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+
 class TestBaselineRoots(unittest.TestCase):
     """配置基线目录（source.baselines）：2026r2 布局发现 + 首个非空根胜出。"""
 

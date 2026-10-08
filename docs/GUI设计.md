@@ -129,7 +129,10 @@ class XmlOptions:
 
 > 注（2026-09-06）：上图为初版草图，当前实际为八卡——输出格式 / **样式表** / 页面 / 分页 /
 > 排版 / 注释 / 注音 / 校验。样式表卡 = CSS 下拉（当前默认第一+（默认）标记）+ 设为默认
-> + 打开用户目录 + 两默认 CSS 路径（可打开）；输出格式卡有"模式"组
+> + 打开用户目录 + 两默认 CSS 路径（可打开）+ **「html/epub 增量」行**（2026-10-07：
+> `CssComboBox` 出厂三件套参数化，默认"无（官方原样）"；下拉选 css 后"设为默认"写
+> run.json `html-epub-user-theme` 槽；追加在官方基底之后，层叠后胜；`set_user_theme`
+> 加 `slot` 参数）；输出格式卡有"模式"组
 > （竖排直书 + 简体转换 + 字库繁简两态同行，竖排在左；GUI 经 `--vertical`/`--font-lang` 进子进程；
 > 复选框长说明收进 tooltip）；注音卡词表行下有实际路径
 > hint + 打开按钮；注释卡注码相关项、引擎组（单引擎+自动）说明同样收进 tooltip；
@@ -198,10 +201,13 @@ class XmlOptions:
 └──────────────────────────────────────────────────────────────┘
 ```
 
+独立窗启动参数（publish 一键送校验用）：`--ids-file/--out/--preset/--formats/--verify/--verify-root/--autostart`（`--verify-root` 只本次运行覆写校验根，见第三方调用说明 §6.3）。
+
 ### 4.2 佛典編號列表流程（走当前逻辑）
 
 对列表内每个 ID：
-1. `fetch.is_work_id(id)` 校验；`parse_work_id` → `(canon, no)`
+0. **token 语法**：`T0349` / 长编号 `T25n1509`（按册号消歧）/ 卷范围 `T0349:2-3`、`T25n1509:34-100`（`:`/`：`；多段用 `+`，因 `,` 是列表分隔符）；token 间用空白/`，`/`;`/`；`/`、`分隔，`#` 后为注释，大写归一；非法编号标「非法編號」红字，非法卷范围标「非法卷范围」红字（`parse_work_ids_file`，`.txt` 列表同规则）
+1. `fetch.is_work_id(id)` 校验（长编号先归一短编号+册号）；`parse_work_id` → `(canon, no)`
 2. **三源材料化**：`fetch.materialize_work(id, presets, xml_dir, cbeta_ebook)`
    - `cbeta_ebook/{id} {书名}/` 已有 → 直接用（来源标「本地XML」）
    - `xml_dir`（只读候选源；**建议指向本地下载的 cbeta-org/xml-p5 全仓库副本（发布版 P5）**，勿指 CBReader）有 → 拷贝/碎片按组合册落 work 目录（来源标「本地拷贝/合册合成」）

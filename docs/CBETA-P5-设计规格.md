@@ -395,14 +395,14 @@ Note 与 App 的**归属版本**（witness 解析后的【大】【宋】…）�
 ```
 python -m pycbeta -i <xml|目录> -f <format> [-o <输出>] [选项]
 
- 共享参数（所有格式）: -i/--input  -o/--output  -f/--format{html,pdf,docx,md,epub,txt,all}
-                     --theme  --name-template
+共享参数（所有格式）: -i/--input  -o/--output  -f/--format{html,pdf,docx,md,epub,txt,all}
+                     --theme  --name-template  --juan 范围（或 -i ID:范围，见安装说明）
 注释（所有格式）   : --notes{footnote,endnote,inline}
 页面（pdf/docx）   : --page{a4,a5,信纸,手机,平板8寸,平板9寸,平板11寸,32开,16开}
 PDF 专属           : --vertical  --engine{chromium,docx2pdf,prince,weasyprint}
 ```
 
-`-f` 支持逗号组合（`html,pdf,docx`）或 `all`（全部 5 种）；**一次解析 IR，内存内多次渲染**（不持久化）。
+`-f` 支持逗号组合（`html,pdf,docx`）或 `all`（全部 6 种）；**一次解析 IR，内存内多次渲染**（不持久化）。
 
 **输出文件名模板（`--name-template`）**：
 - 占位符：`[id]`（作品 ID）`[书名]` `[作者]` `[vol]`（册号）`[juan]`（卷号，按卷输出补零 001）

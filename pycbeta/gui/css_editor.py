@@ -1353,14 +1353,18 @@ def current_theme_value(root=None):
     return current_theme_source(root)[0]
 
 
-def set_user_theme(value, root=None):
-    """run.json 的 pdf-docx-user-theme 槽写入（只改此槽；无文件按缺省建）。
-    值归一化带 .css 后缀（下拉给的是去后缀 stem）。返回 run.json 路径。"""
-    from pycbeta.theme import set_run_slot
+def set_user_theme(value, root=None, slot="pdf-docx-user-theme"):
+    """run.json 主题槽写入（只改此槽；无文件按缺省建）。
+    值归一化带 .css 后缀（下拉给的是去后缀 stem）。返回 run.json 路径。
+    slot 缺省 "pdf-docx-user-theme"（pdf/docx）；html/epub 增量传
+    "html-epub-user-theme"（P2 后者，2026-10-07）。"""
+    from pycbeta.theme import set_run_slot, RUN_KEYS
+    if slot not in RUN_KEYS:
+        raise ValueError(f"未知主题槽：{slot!r}")
     v = (value or "").strip()
     if v and not v.lower().endswith(".css"):
         v += ".css"
-    return set_run_slot("pdf-docx-user-theme", v, root)
+    return set_run_slot(slot, v, root)
 
 
 class CssComboBox(QComboBox):
@@ -1371,18 +1375,25 @@ class CssComboBox(QComboBox):
     选中只选择不写默认；设默认走独立按钮（set_user_theme）。
     """
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, factory_value="pdf_docx.css",
+                 factory_label="出厂默认样式（pdf_docx.css）", factory_path="",
+                 factory_tip="随包分发的出厂样式；直接改它先经确认，一般只读不管"):
+        """出厂行三件套（html/epub 增量默认无 CSS 传 "", "无（官方原样）", None）。"""
         super().__init__(parent)
+        self._factory_value = factory_value
+        self._factory_label = factory_label
+        self._factory_path = factory_path
+        self._factory_tip = factory_tip
         self.setMinimumWidth(220)
         self.refresh("")
 
     def refresh(self, current=""):
         from pycbeta.theme import list_presets
-        cur = (current or "").strip() or "pdf_docx.css"
+        cur = (current or "").strip() or self._factory_value
         items = list_presets()
         builtin_css = os.path.abspath(os.path.join(
             os.path.dirname(os.path.abspath(__file__)), "..", "styles",
-            "pdf_docx.css"))
+            "pdf_docx.css")) if self._factory_path == "" else self._factory_path
 
         def add_row(label, data, tip=""):
             self.addItem(label, data)
@@ -1390,8 +1401,8 @@ class CssComboBox(QComboBox):
                 self.model().item(self.count() - 1).setToolTip(tip)
 
         def find_current():
-            if cur == "pdf_docx.css":
-                return ("pdf_docx.css", builtin_css)
+            if cur == self._factory_value:
+                return (cur, builtin_css)
             stem = cur[:-4] if cur.lower().endswith(".css") else cur
             for _k, n, p in items:
                 if n == stem or n.lower() == stem.lower():
@@ -1408,7 +1419,7 @@ class CssComboBox(QComboBox):
                     # 除出厂默认外全是用户 CSS，［用户］前缀是噪音；
                     # 仅残留内置（已退役，查找兼容）保留标记。
                     return f"［内置］{n}" if k == "builtin" else n
-            return "出厂默认样式（pdf_docx.css）"
+            return self._factory_label
 
         with QSignalBlocker(self):
             self.clear()
@@ -1419,9 +1430,9 @@ class CssComboBox(QComboBox):
             else:
                 add_row(f"（默认）{cur}（找不到）",
                         {"value": cur, "path": None})
-            add_row("出厂默认样式（pdf_docx.css）",
-                    {"value": "pdf_docx.css", "path": builtin_css},
-                    "随包分发的出厂样式；直接改它先经确认，一般只读不管")
+            add_row(self._factory_label,
+                    {"value": self._factory_value, "path": builtin_css},
+                    self._factory_tip)
             add_row("── 用户预设 ──", None)
             self.model().item(self.count() - 1).setEnabled(False)
             for k, n, p in items:
@@ -1431,7 +1442,7 @@ class CssComboBox(QComboBox):
 
     def selected_value(self):
         d = self.currentData() or {}
-        return d.get("value", "pdf_docx.css")
+        return d.get("value", self._factory_value)
 
     def selected_path(self):
         d = self.currentData() or {}

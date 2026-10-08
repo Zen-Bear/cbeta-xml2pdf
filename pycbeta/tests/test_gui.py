@@ -267,6 +267,49 @@ class TestPanelSmoke(unittest.TestCase):
         self.assertTrue(panel.vert_box.isChecked())
 
 
+class TestHtmlThemeRow(unittest.TestCase):
+    """样式表卡「html/epub 增量」行：下拉 + 设为默认写 run.json html 槽。"""
+
+    @classmethod
+    def setUpClass(cls):
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PySide6.QtWidgets import QApplication
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_set_user_theme_slot(self):
+        import tempfile
+        from pycbeta.gui.css_editor import set_user_theme
+        from pycbeta.theme import load_run_config
+        d = tempfile.mkdtemp()
+        p = set_user_theme("mark", root=d, slot="html-epub-user-theme")
+        run = load_run_config(p)
+        self.assertEqual(run.get("html-epub-user-theme"), "mark.css")
+        self.assertEqual(run.get("pdf-docx-user-theme"), "")  # pdf 槽不动
+        with self.assertRaises(ValueError):
+            set_user_theme("x", root=d, slot="nope")
+
+    def test_row_exists_and_refresh(self):
+        from pycbeta.gui.panel import XmlOptionsPanel
+        from pycbeta.theme import load_presets
+        panel = XmlOptionsPanel(load_presets())
+        self.assertIsNotNone(panel.html_box)
+        panel._refresh_html_box(keep_value="")
+        self.assertEqual(panel.html_box.selected_value(), "")
+        panel._refresh_html_box(keep_value="large-print")
+        self.assertEqual(panel.html_box.selected_value(), "large-print")
+
+    def test_save_writes_html_slot(self):
+        import unittest.mock as mock
+        from pycbeta.gui.panel import XmlOptionsPanel
+        from pycbeta.theme import load_presets
+        panel = XmlOptionsPanel(load_presets())
+        panel._refresh_html_box(keep_value="large-print")
+        with mock.patch("pycbeta.gui.css_editor.set_user_theme") as m:
+            panel._on_html_theme_default()
+            m.assert_called_once_with("large-print",
+                                      slot="html-epub-user-theme")
+
+
 class TestSourceBaselineTab(unittest.TestCase):
     """数据源「校验基线」tab（排第一）：4 行顺序/键映射/保存。"""
 

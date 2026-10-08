@@ -379,7 +379,8 @@
   - 后代选择器（2026-09-04）：T0672 序标题 `<head>` 在 div-xu 内，命中 p.head 蓝色覆盖 div 黑色（与浏览器优先级一致）；引擎新增两段 `A B` 后代支持（`_parse_css_tags` 收 compounds，`_props`/`docx_para` 凭完整标签栈匹配，`css()` 原样回写，`scale_font_sizes` 跟随；三段+/属性选择器忽略）；pdf_docx.css 加 `div.div-xu p.head` 规则（用户自改为 #408080 + 標楷體，实证 run 同时生效）；连带修 3 位简写色 `#000` 写出非法 `w:val="000"`（`_hex6` 展开，docx_run/_marker_rpr 共用）；仓内源文件颜色统一 6 位（golden `#00f`→`#0000ff`，xu/w/note 灰系展开，注释内一并统一；用户自定义 CSS 仍由 `_hex6` 兜底）。单测 177 OK
   - 验收：五格式注音均可见；单测 120 OK；verify 繁体 16/0、简体 16/0 保持
 
-- [ ] **最低优先级（最后）** html/epub 使用 CSS（用户增量）方案已定（2026-09-17 用户要求列出；未实施）
+- [x] **已完成** html/epub 使用 CSS（用户增量）（2026-09-17 用户要求列出；2026-10-07 落地，取代 2026-09-08 纯 golden 决议）
+  - 落地：`verify.generate_formal` html/epub 分支传 `base_css`（与转换同 CSS；文本提取不受 CSS 影响）；GUI 样式表卡加「html/epub 增量」行（`CssComboBox` 出厂三件套参数化 + `set_user_theme(slot=)` + `run.json html-epub-user-theme` 槽保存）；其余 4 点此前已就绪（resolver user 层 + 去占位警告 + CLI help + 测试）。实测 T0670 html 产物含用户 CSS。单测 `test_verify.TestGenerateFormalHtmlTheme`（3）+ `test_theme`（2）+ `test_gui.TestHtmlThemeRow`（3）
   - 现状：html/epub 基底 = `theme.resolve_html_base_css(run, run_dir, std=args.html_epub_theme, user=args.html_epub_user_theme)`（`cli.py:663`）→ `HtmlRenderer/EpubRenderer(base_css=…)`；`render_html._wrap` 里 `<style>` 顺序 = `base_css` → `theme.raw_css`（html/epub theme=None，无）→ inline_rule → ann_rule → gray_rule
   - 槽分工（run.json）：`html-epub-theme`＝整套替换基底（默认 `cbeta_golden.css`，一般不动）；`html-epub-user-theme`＝**增量**，追加基底之后（层叠后胜）——当前仅占位警告（`theme.py` `check_run_placeholders`）
   - 目标：把 `html-epub-user-theme` 接成 html/epub 的用户 CSS 层，与 pdf/docx 的 `pdf-docx-user-theme` 对称；md/txt 无 CSS 不涉

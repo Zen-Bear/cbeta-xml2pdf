@@ -1200,7 +1200,20 @@ class XmlOptionsPanel(QWidget):
         self.theme_status.setWordWrap(True)
         self.theme_status.setStyleSheet("color: gray")
         form.addRow("", self.theme_status)
+        hrow = QHBoxLayout()
+        self.html_box = CssComboBox(factory_value="", factory_label="无（官方原样）",
+                                    factory_path=None,
+                                    factory_tip="html/epub 默认纯官方样式，不追加用户 CSS")
+        self.html_box.setToolTip("html/epub 增量 CSS：追加在官方基底之后（层叠后胜）；"
+                                 "点右侧按钮写入 run.json 槽（永久生效）")
+        hrow.addWidget(self.html_box, 1)
+        self.html_default_btn = QPushButton("设为默认")
+        self.html_default_btn.setToolTip("写入 run.json html-epub-user-theme 槽（永久生效）")
+        self.html_default_btn.clicked.connect(self._on_html_theme_default)
+        hrow.addWidget(self.html_default_btn)
+        form.addRow("html/epub 增量", hrow)
         self._refresh_theme_box()
+        self._refresh_html_box()
         self._update_theme_button()
         self.style_rows = {}
         for name, desc in STYLE_FILES:
@@ -1263,6 +1276,42 @@ class XmlOptionsPanel(QWidget):
             self.theme_status.setStyleSheet("color: red")
         else:
             self.theme_status.setStyleSheet("color: gray")
+
+    def _selected_preset_html_theme(self):
+        """当前选中预设的 html/epub 增量 → 值；无选中/无键 → ""。"""
+        from pycbeta.theme import preset_file_theme_keys
+        path = self._selected_preset()
+        if not path:
+            return ""
+        keys = preset_file_theme_keys(path)
+        return (keys or {}).get("html-epub-user-theme") or ""
+
+    def _refresh_html_box(self, keep_value=None):
+        """html/epub 增量下拉：预设键 > run.json 槽 > 无（官方原样）。"""
+        if keep_value is not None:
+            cur = keep_value
+        else:
+            cur = self._selected_preset_html_theme()
+            if not cur:
+                try:
+                    from pycbeta.theme import load_run_config
+                    cur = (load_run_config() or {}).get("html-epub-user-theme") or ""
+                except Exception:
+                    cur = ""
+        self.html_box.refresh(cur)
+
+    def _on_html_theme_default(self):
+        """html/epub 增量落盘：写入 run.json html-epub-user-theme 槽（永久生效）。"""
+        from pycbeta.gui.css_editor import set_user_theme
+        value = self.html_box.selected_value()
+        try:
+            set_user_theme(value, slot="html-epub-user-theme")
+        except (OSError, ValueError) as exc:
+            self.theme_status.setText(f"写入失败：{exc}")
+            self.theme_status.setStyleSheet("color: red")
+            return
+        self._refresh_html_box(keep_value=value)
+        self._changed()
 
     def _on_theme_box_changed(self, _index):
         """下拉改选：本次运行即时生效（不落盘），右侧按钮仍用于永久保存。"""
@@ -1980,6 +2029,7 @@ class XmlOptionsPanel(QWidget):
         self._set_cfg_title()
         self._update_preset_buttons()
         self._refresh_theme_box()  # 预设自带主题键时跟走显示
+        self._refresh_html_box()  # html/epub 增量同理跟走
         self._update_theme_button()  # 落盘目标跟走（预设生效/设为默认）
         self._changed()
 

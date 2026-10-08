@@ -55,7 +55,7 @@ python -m pycbeta -i 经文.xml -f docx,pdf --config my.json
 | `--name-template` | 输出文件名模板（`[id]`/`[书名]`/`[作者]`/`[vol]`/`[juan]`）；缺省 `{佛典編號 书名}.{ext}`（书名跟随 `source.title_t2s` 转简）|
 | `--juan`（或 `-i ID:范围`）| 按卷范围选取子集：`34` / `34-100` / `34-36,40,42-45`（`-`/`~`/`～` 三认一；`+` 同 `,`）。全覆盖=不裁剪；子集输出名加 `（卷…）` 后缀（`output.juan_suffix_template` 可改）；长编号 `T25n1509` 按册号消歧 |
 | `--list-fonts [关键词]` | 列出本机字体（家族名\|路径），仅列表不渲染 |
-| `--verify` | 生成后逐字校验（对比官方文档；`--verify-max-diff` 阈值默认 10，`--verify-diff-lines` 默认 5）|
+| `--verify` | 生成后逐字校验（对比官方文档；`--verify-max-diff` 出厂默认 10（校验预设已统一 0），`--verify-diff-lines` 默认 5）|
 | `--font-check` | 豆腐字检测（逐字覆盖率报告，不中断渲染）|
 
 ## PDF 输出：管线与引擎

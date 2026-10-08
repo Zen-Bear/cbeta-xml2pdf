@@ -51,7 +51,7 @@ out/验证/X1077 准提净业（验证）/X1077_准提净业_校验报告.txt
                    "algorithm": "verify-1"},
   "work": "X1077",
   "requested_formats": ["docx"],
-  "thresholds": {"max_diff": 5, "diff_lines": 5},
+  "thresholds": {"max_diff": 0, "diff_lines": 5},
   "inputs": {
     "xml_files": [{"name": "X59n1077.xml", "size": 317298,
                    "mtime_ns": 1790017377561217800}],
