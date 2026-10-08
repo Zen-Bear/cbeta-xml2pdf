@@ -82,6 +82,21 @@ class TestLabelAndSplit(unittest.TestCase):
         self.assertEqual(J.split_id_juan("T0349:"), ("T0349", None))
         self.assertEqual(J.split_id_juan(""), ("", None))
 
+    def test_split_id_juan_nnn(self):
+        # 官方分卷后缀形态：`T0001_001` ≡ `T0001:1`（1-3 位归一；`:` 优先）
+        self.assertEqual(J.split_id_juan("T0001_001"), ("T0001", "1"))
+        self.assertEqual(J.split_id_juan("T0001_1"), ("T0001", "1"))
+        self.assertEqual(J.split_id_juan("T0001_01"), ("T0001", "1"))
+        self.assertEqual(J.split_id_juan("T25n1509_034"), ("T25n1509", "34"))
+        self.assertEqual(J.split_id_juan("T0001_000"), ("T0001", "0"))
+        self.assertEqual(J.split_id_juan("T0001_0001"), ("T0001_0001", None))
+        self.assertEqual(J.split_id_juan("T0001_"), ("T0001_", None))
+        self.assertEqual(J.split_id_juan("T0001:1_002"), ("T0001", "1_002"))
+        with self.assertRaises(ValueError):
+            J.parse_juan_spec(J.split_id_juan("T0001_000")[1])
+        with self.assertRaises(ValueError):
+            J.parse_juan_spec(J.split_id_juan("T0001:1_002")[1])
+
 
 class TestResolveSuffix(unittest.TestCase):
     def test_default_template(self):

@@ -116,8 +116,8 @@ class TestBuildReportJson(JsonFixture):
         j = self.build([self.rec()])
         self.assertEqual(
             sorted(j), ["created_at", "fingerprint_version", "fmts",
-                        "inputs", "requested_formats", "schema", "thresholds",
-                        "tool", "verify_impl", "work"])
+                        "inputs", "juan", "requested_formats", "schema",
+                        "thresholds", "tool", "verify_impl", "work"])
         self.assertEqual(j["schema"], 1)
         self.assertEqual(j["fingerprint_version"], "verify-fp-1")
         self.assertEqual(j["work"], "T0001")
@@ -131,6 +131,18 @@ class TestBuildReportJson(JsonFixture):
         self.assertEqual(
             sorted(j["inputs"]),
             ["baselines", "config_digest", "coverage", "xml_files"])
+
+    def test_juan_self_described_and_passthrough(self):
+        j = self.build([self.rec()], juan=[(2, 3)])
+        self.assertEqual(j["juan"], {"segments": [[2, 3]], "label": "2-3"})
+        self.assertEqual(
+            j["fmts"]["html"]["fingerprint"],
+            V.verify_fingerprint("T0001", "html", xml_files=[self.xml],
+                                 config_path=self.cfg, juan=[(2, 3)]))
+
+    def test_juan_none_by_default(self):
+        self.assertIsNone(self.build([self.rec()])["juan"])
+        self.assertIsNone(self.build([self.rec()], juan=[])["juan"])
 
     def test_fmt_entry_keys(self):
         j = self.build([self.rec()])

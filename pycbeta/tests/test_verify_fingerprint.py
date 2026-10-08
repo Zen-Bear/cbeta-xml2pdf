@@ -160,6 +160,48 @@ class TestPresetsParam(FingerprintFixture):
             "verify-fp-1:sha256:"))
 
 
+class TestJuanParam(FingerprintFixture):
+    """`verify_fingerprint(juan=)`（P11）：None 逐字回归；归一等价/互异；
+    非法 → None；基线卷限定。"""
+
+    def test_none_matches_legacy(self):
+        self.assertEqual(self.fp(), self.fp(juan=None))
+
+    def test_empty_list_is_none(self):
+        self.assertEqual(self.fp(), self.fp(juan=[]))
+
+    def test_normalization_equivalent(self):
+        a = self.fp(juan=[(40, 40), (34, 36)])
+        b = self.fp(juan=[(34, 36), (40, 40)])
+        self.assertIsNotNone(a)
+        self.assertEqual(a, b)
+
+    def test_none_vs_subset_and_subsets_differ(self):
+        whole = self.fp()
+        s1 = self.fp(juan=[(1, 2)])
+        s2 = self.fp(juan=[(3, 4)])
+        self.assertNotEqual(whole, s1)
+        self.assertNotEqual(s1, s2)
+
+    def test_invalid_returns_none(self):
+        for bad in ([(0, 1)], [(2, 1)], [("a", 1)], "2-3", [(1,)]):
+            self.assertIsNone(self.fp(juan=bad), msg=repr(bad))
+
+    def test_baseline_scoped(self):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        for n in ("001", "002"):
+            _write(os.path.join(d, f"T0001_{n}.html"), "<html/>")
+        scoped = V._official_superset(d, "T0001", {}, juan=[(1, 1)])
+        self.assertEqual(
+            [os.path.basename(p) for p in scoped.get("html", [])],
+            ["T0001_001.html"])
+        whole = V._official_superset(d, "T0001", {})
+        self.assertEqual(
+            sorted(os.path.basename(p) for p in whole.get("html", [])),
+            ["T0001_001.html", "T0001_002.html"])
+
+
 class TestNoneCases(FingerprintFixture):
     def test_unknown_fmt(self):
         self.assertIsNone(V.verify_fingerprint(

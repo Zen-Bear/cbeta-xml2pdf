@@ -5370,6 +5370,19 @@ class TestJuanGui(unittest.TestCase):
         j = _make_id_job("T0349:100-34")
         self.assertIsNotNone(j["bad_juan"])
 
+    def test_make_id_job_nnn(self):
+        from pycbeta.gui.__main__ import _make_id_job
+        j = _make_id_job("T0349_002")
+        self.assertEqual(j["wid"], "T0349")
+        self.assertEqual(j["juan"], "2")
+        self.assertEqual(j["juan_segments"], [(2, 2)])
+        self.assertIsNone(j["bad_juan"])
+        j = _make_id_job("T25n1509_034")
+        self.assertEqual((j["wid"], j["vol"]), ("T1509", "25"))
+        self.assertEqual(j["juan_segments"], [(34, 34)])
+        j = _make_id_job("T0349_000")
+        self.assertIsNotNone(j["bad_juan"])
+
     def test_parse_work_ids_file_with_spec(self):
         import tempfile
         from pycbeta.gui.__main__ import parse_work_ids_file
@@ -5378,6 +5391,15 @@ class TestJuanGui(unittest.TestCase):
             f.write("# 注释\n1. T0349:2-3\nT25n1509:34-100\nbad\nX1077\n")
         self.assertEqual(parse_work_ids_file(p),
                          ["T0349:2-3", "T25N1509:34-100", "X1077"])
+
+    def test_parse_work_ids_file_with_nnn(self):
+        import tempfile
+        from pycbeta.gui.__main__ import parse_work_ids_file
+        p = os.path.join(tempfile.mkdtemp(), "ids.txt")
+        with open(p, "w", encoding="utf-8") as f:
+            f.write("T0349_002\nT0001_0001\nreport_24\n")
+        # `_002` 归一为 `:2`；4 位后缀与非法 head 照旧跳过
+        self.assertEqual(parse_work_ids_file(p), ["T0349:2"])
 
     def test_build_render_cmd_juan(self):
         from types import SimpleNamespace
@@ -5396,13 +5418,16 @@ class TestJuanGui(unittest.TestCase):
         from pycbeta.gui.__main__ import BatchWorker
         w = BatchWorker([], SimpleNamespace(verify={}, formats=[]), {}, {})
         job = {"juan": "1-2", "juan_segments": [(1, 2)]}
-        self.assertEqual(w._juan_plan(job, {1, 2}, {}), ([(1, 2)], ""))
+        # 全覆盖 → 归 None（不裁剪、不加后缀，指纹与整本一致，P11）
+        self.assertEqual(w._juan_plan(job, {1, 2}, {}), (None, ""))
         segs, sfx = w._juan_plan(job, {1, 2, 3}, {})
         self.assertEqual(segs, [(1, 2)])
         self.assertEqual(sfx, "（卷1-2）")
         spec_job = {"juan": "1-3", "juan_segments": [(1, 3)]}
-        self.assertEqual(w._juan_plan(spec_job, {1, 2, 3}, {}), ([(1, 3)], ""))
+        self.assertEqual(w._juan_plan(spec_job, {1, 2, 3}, {}), (None, ""))
         self.assertEqual(w._juan_plan({}, {1}, {}), (None, ""))
+        # 无 milestone（all_juans 空）→ None（与 CLI 警告忽略一致，不加后缀）
+        self.assertEqual(w._juan_plan(job, set(), {}), (None, ""))
 
     def test_verify_dir_suffix(self):
         import tempfile

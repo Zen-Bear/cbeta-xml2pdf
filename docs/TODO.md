@@ -681,3 +681,10 @@
   - 落地 3 处：`gui/__main__.py` argparse 加 `--verify-root`；`_apply_launch_args` 记 `win._verify_root_override`；`_start` 并入 worker `paths`；`BatchWorker.run()` 经新纯函数 `_pick_verify_root(override, presets)` 取生效值（`_verify_dir` 已接受 `verify_root` 形参）
   - 单测 `test_gui.TestVerifyRootOverride` 4 项（优先级/预填/缺省不设/worker paths）；`test_gui` 285 OK
   - 提案全文（背景/现状/最小改动/优先级/验收/publish 影响）：`docs/上游-GUI校验根参数提案.md`；publish 侧对应 `docs/上游-GUI校验根参数提案.md`（其 P7 可收尾：`_open_xml2pdf_window` 追加 `--verify-root <丛书校验目录>/验证`）
+
+- [x] **已完成（下游 P11 请求，2026-10-08 复核并落地）** 卷维度指纹：`verify_fingerprint(juan=)` + report 自描述
+  - 背景（correctness）：子集与整本同 XML/同超集基线 → 指纹逐字相同，跨边复用会把「子集 pass」当「整本 pass」；publish 有「子集恒验」绕行（不阻塞）
+  - 提案与复核：`docs/上游-指纹juan入参提案.md`（§8：Q1–Q5 答复 + 实现清单）
+  - 落地：`juan.normalize_segments`（排序合并；空→None；非法 ValueError）；`verify_fingerprint(juan=)`（非 None 才入 payload，None 逐字回归；`_official_superset` 卷限定 html/docx/txt_notes）；`build_report_json(..., juan=)` 顶层 `juan{segments,label}|None` 恒输出 + 透传每 fmt；CLI 校验流（`_juan_status=="filtered"` 才传）、GUI（`_juan_plan` full/无 milestone → None 并传 `_v_json`，顺带修无 milestone 仍加后缀的既有小 bug）
+  - 测试：`test_verify_fingerprint.TestJuanParam`（6：None/空回归、归一等价、None vs 子集互异、非法→None、基线卷限定）+ `test_report_json`（2：自描述+透传、默认 None）+ `test_cli.TestVerifyReportJuan`（2：子集/全覆盖）+ `test_gui` `_juan_plan` 更新
+  - 文档：`校验report.json说明.md` §3/§4、`校验说明书.md` §4.4；`schema` 保持 1

@@ -20,7 +20,7 @@ from .model import App, E, NoteRef, Work
 
 __all__ = ["parse_juan_spec", "juan_set", "format_juan_label",
            "split_id_juan", "resolve_juan_suffix", "filter_work_juan",
-           "DEFAULT_SUFFIX_TEMPLATE"]
+           "normalize_segments", "DEFAULT_SUFFIX_TEMPLATE"]
 
 #: 卷号上限（防 `1-99999999` 类输入炸内存）
 _MAX_JUAN = 9999
@@ -82,17 +82,56 @@ def format_juan_label(segs) -> str:
     return "、".join(parts)
 
 
-def split_id_juan(text) -> Tuple[str, Optional[str]]:
-    """`T25n1509:34-100` → ("T25n1509", "34-100")；无分隔符 → (原文, None)。
+def normalize_segments(segs) -> Optional[List[Tuple[int, int]]]:
+    """段列表归一（排序、合并重叠/相邻）→ [(lo, hi)]。
 
-    `:` 与全角 `：` 都认；spec 为空串视为无（返回 None）。
+    `[]`/None → None（无卷范围）；非法（非二元、非整数、`lo<1`、`lo>hi`）抛
+    `ValueError`（与 `parse_juan_spec` 同口径；供指纹/报告等已解析入参复用，
+    调用方据此判"不能证明"或报错）。
+    """
+    out: List[List[int]] = []
+    for it in (segs or []):
+        try:
+            lo, hi = int(it[0]), int(it[1])
+        except (TypeError, ValueError, IndexError, KeyError):
+            raise ValueError(f"卷范围非法: {it!r}（应为 (lo, hi)）")
+        if lo < 1 or hi < 1:
+            raise ValueError(f"卷号从 1 起: {it!r}")
+        if lo > hi:
+            raise ValueError(f"卷范围起止颠倒: {it!r}")
+        out.append([lo, hi])
+    if not out:
+        return None
+    out.sort()
+    merged = [out[0]]
+    for lo, hi in out[1:]:
+        if lo <= merged[-1][1] + 1:
+            merged[-1][1] = max(merged[-1][1], hi)
+        else:
+            merged.append([lo, hi])
+    return [(lo, hi) for lo, hi in merged]
+
+
+def split_id_juan(text) -> Tuple[str, Optional[str]]:
+    """`T25n1509:34-100` → ("T25n1509", "34-100")；
+    `T0001_001` → ("T0001", "1")；无分隔符 → (原文, None)。
+
+    `:` 与全角 `：` 都认，优先于 `_NNN`（`T0001:1_002` 走冒号分支，spec
+    `1_002` 交给下游报错）；spec 为空串视为无（返回 None）。
+    `_NNN` 认 1–3 位数字（官方分卷后缀形态；`_001`/`_01`/`_1` 归一为整数串；
+    `_0`/`_000` 返回 "0" 交给 `parse_juan_spec` 报"卷号从 1 起"；4 位以上不认）。
+    head 合法性由调用方判定（本函数不校验：非法 head 后续走"非法編號"/文件
+    不存在原有报错路径）。
     """
     s = (text or "").strip()
     m = re.match(r"^([^:：]+)[:：](.*)$", s)
-    if not m:
-        return s, None
-    spec = m.group(2).strip()
-    return m.group(1).strip(), (spec or None)
+    if m:
+        spec = m.group(2).strip()
+        return m.group(1).strip(), (spec or None)
+    m2 = re.match(r"^(.+)_(\d{1,3})$", s)
+    if m2:
+        return m2.group(1), str(int(m2.group(2)))
+    return s, None
 
 
 def resolve_juan_suffix(template, label) -> Tuple[str, bool]:

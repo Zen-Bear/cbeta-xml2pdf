@@ -2441,7 +2441,7 @@ def _locate_xml_nosideeffects(work_id, presets):
 def verify_fingerprint(work_id, fmt, *, xml_files=None, config_path=None,
                        max_diff=10, diff_lines=5, t2s=None,
                        engine=None, vertical=None, baseline_roots=None,
-                       baseline="render", presets=None, _ctx=None):
+                       baseline="render", presets=None, juan=None, _ctx=None):
     """校验指纹（Phase 1）：判断“上次 pass 结论是否仍然有效”的廉价预检。
     返回 "verify-fp-1:sha256:…" 或 None（不能证明 → 调用方一律重验）。
     无副作用：不 parse、不渲染、不下载、不写文件、不打印（内部输出一律重定向吞掉）。
@@ -2450,6 +2450,10 @@ def verify_fingerprint(work_id, fmt, *, xml_files=None, config_path=None,
     `presets`（生效配置 dict，可选）：非空时直接采用（跳过 load_effective_presets），
     供跨边调用方从同一 effective 配置算指纹；`presets=None` 时保持现状
     （由 config_path 解析）。P2，2026-10-07。
+    `juan`（卷范围 [(lo,hi)]，可选）：非空时进 payload 并限定基线发现；
+    `None`（整本）时 payload 与旧版**逐字一致**（旧记录继续有效）。归一后
+    `40,34-36` ≡ `34-36,40`；非法/空列表经公开契约返回 None（不抛）。
+    P11，2026-10-08。
     `_ctx`（内部用）：预计算的 {presets,canon,official,impl}，供 build_report_json
     一次发现多格式复用，避免每格式重扫基线目录。"""
     if (fmt or "") not in _FP_FORMATS:
@@ -2462,7 +2466,7 @@ def verify_fingerprint(work_id, fmt, *, xml_files=None, config_path=None,
             return _verify_fingerprint_inner(
                 work_id, fmt, xml_files, config_path, max_diff, diff_lines,
                 t2s, engine, vertical, baseline_roots, baseline,
-                presets, _ctx)
+                presets, juan, _ctx)
     except Exception:
         return None
 
@@ -2478,16 +2482,27 @@ def _fp_roots_cfg(presets, baseline_roots):
     return baseline_roots if isinstance(baseline_roots, dict) else {}
 
 
-def _official_superset(source, stem, roots_cfg):
-    """基线超集发现（juan=None，不过滤；只增不减方向安全）→ {kind: [paths]}。
+def _official_superset(source, stem, roots_cfg, juan=None):
+    """基线发现 → {kind: [paths]}。`juan`（[(lo,hi)]）给定时按卷限定
+    html/docx/txt_notes（与 `verify_one` 实际比对口径一致；epub/odt 无卷形态
+    不过滤）；`None`＝不过滤（整本，旧行为）。
     只读；单种失败跳过。build_report_json 与 verify_fingerprint 共用（扫一次复用）。"""
+    _jn = None
+    if juan:
+        try:
+            from .juan import juan_set
+            _jn = juan_set(juan) or None
+        except Exception:
+            _jn = None
     out = {}
     for kind in _FP_KINDS:
         v = roots_cfg.get(kind, "") if isinstance(roots_cfg, dict) else ""
         extra = [v.strip()] if isinstance(v, str) and v.strip() else []
         try:
-            found = find_official(source, stem, kind, juan=None,
-                                  extra_roots=extra)
+            found = find_official(
+                source, stem, kind,
+                juan=_jn if kind in ("html", "docx", "txt_notes") else None,
+                extra_roots=extra)
         except Exception:
             found = []
         if found:
@@ -2497,8 +2512,15 @@ def _official_superset(source, stem, roots_cfg):
 
 def _verify_fingerprint_inner(work_id, fmt, xml_files, config_path,
                               max_diff, diff_lines, t2s, engine, vertical,
-                              baseline_roots, baseline, presets=None, _ctx=None):
+                              baseline_roots, baseline, presets=None,
+                              juan=None, _ctx=None):
     _ctx = _ctx or {}
+    # 卷范围归一：[] → None（整本）；非法 → None（不能证明，公开契约不抛）
+    try:
+        from .juan import normalize_segments
+        juan = normalize_segments(juan) if juan is not None else None
+    except ValueError:
+        return None
     if presets is None:
         if "presets" in _ctx:
             presets = _ctx["presets"]
@@ -2543,12 +2565,12 @@ def _verify_fingerprint_inner(work_id, fmt, xml_files, config_path,
         canon = canonical_verify_config(config_path, _presets=presets)
     if canon is None:
         return None
-    # 基线超集（juan=None，不过滤；只增不减方向安全）+ 首选缺失即 None
+    # 基线发现（juan 给定时按卷限定，与实际比对口径一致）+ 首选缺失即 None
     if "official" in _ctx:
         official = _ctx["official"]
     else:
         roots_cfg = _fp_roots_cfg(presets, baseline_roots)
-        official = _official_superset(source, stem, roots_cfg)
+        official = _official_superset(source, stem, roots_cfg, juan=juan)
     ver = presets.get("verify") or {}
     chains_cfg = ver.get("bases")
     chain = chain_for(eff, chains_cfg)
@@ -2583,6 +2605,9 @@ def _verify_fingerprint_inner(work_id, fmt, xml_files, config_path,
         "baseline": baseline,
         "impl": impl,
     }
+    if juan is not None:
+        # 仅卷子集才入载荷：`None`（整本）保持旧 payload 逐字一致 → 旧记录继续有效
+        payload["juan"] = [[lo, hi] for lo, hi in juan]
     return "verify-fp-1:sha256:" + _sha256_bytes(json.dumps(
         payload, sort_keys=True, ensure_ascii=True).encode("utf-8"))
 
@@ -2660,12 +2685,14 @@ def build_report_json(work_id, records, *, xml_files=None, config_path=None,
                       requested_formats=None, max_diff=10, diff_lines=5,
                       t2s=None, engine=None, vertical=None,
                       baseline_roots=None, baseline="render",
-                      report_name="report.txt", presets=None):
+                      report_name="report.txt", presets=None, juan=None):
     """verify_one 记录列表 → report.json 载荷 dict（指纹提案 §4 口径）。
     纯装配：只读文件哈希，不写文件、不打印（内部输出一律重定向吞掉）；
     算不出的字段记 None，绝不抛异常（极端失败回退最小骨架）。
     `presets`（生效配置 dict，可选）：非空时直接采用；`presets=None` 时保持现状
-    （由 config_path 解析）。P2，2026-10-07。"""
+    （由 config_path 解析）。P2，2026-10-07。
+    `juan`（卷范围 [(lo,hi)]，可选）：顶层 `"juan": {segments,label}|None`
+    自描述，并透传每 fmt 指纹（限定基线）。P11，2026-10-08。"""
     import io as _io
     from contextlib import redirect_stdout as _redir
     buf = _io.StringIO()
@@ -2675,7 +2702,7 @@ def build_report_json(work_id, records, *, xml_files=None, config_path=None,
                 work_id, records, xml_files, config_path,
                 requested_formats, max_diff, diff_lines,
                 t2s, engine, vertical, baseline_roots, baseline,
-                report_name, presets)
+                report_name, presets, juan)
     except Exception:
         return {"schema": 1, "work": work_id, "fmts": {},
                 "error": "build_failed"}
@@ -2684,8 +2711,13 @@ def build_report_json(work_id, records, *, xml_files=None, config_path=None,
 def _build_report_json_inner(work_id, records, xml_files, config_path,
                              requested_formats, max_diff, diff_lines,
                              t2s, engine, vertical, baseline_roots, baseline,
-                             report_name, presets=None):
+                             report_name, presets=None, juan=None):
     import pycbeta as _pkg
+    from .juan import normalize_segments, format_juan_label
+    try:
+        juan = normalize_segments(juan) if juan is not None else None
+    except ValueError:
+        raise  # 非法卷范围 → 外层骨架（error），不产出误导性报告
     recs = [r for r in (records or []) if isinstance(r, dict)]
     groups = {}
     for r in recs:
@@ -2722,14 +2754,14 @@ def _build_report_json_inner(work_id, records, xml_files, config_path,
         ident = _public_file_identity(f)
         if ident is not None:
             xmlrecs.append(ident)
-    # 基线超集（与 verify_fingerprint 同口径：juan=None；只增不减方向安全）
+    # 基线发现（与 verify_fingerprint 同口径：juan 给定时按卷限定）
     official = {}
     blrecs = {}
     if xml_files:
         source = os.path.dirname(os.path.abspath(xml_files[0]))
         stem = os.path.splitext(os.path.basename(xml_files[0]))[0]
         roots_cfg = _fp_roots_cfg(presets, baseline_roots)
-        official = _official_superset(source, stem, roots_cfg)
+        official = _official_superset(source, stem, roots_cfg, juan=juan)
         for kind, found in official.items():
             ids = []
             for p in found:
@@ -2793,7 +2825,8 @@ def _build_report_json_inner(work_id, records, xml_files, config_path,
                 work_id, fmt, xml_files=xml_files, config_path=config_path,
                 max_diff=max_diff, diff_lines=diff_lines, t2s=t2s,
                 engine=engine, vertical=vertical,
-                baseline_roots=baseline_roots, baseline=baseline, _ctx=_ctx)
+                baseline_roots=baseline_roots, baseline=baseline,
+                juan=juan, _ctx=_ctx)
         except Exception:
             fp = None
         if not grp:
@@ -2832,6 +2865,8 @@ def _build_report_json_inner(work_id, records, xml_files, config_path,
         "verify_impl": {"module": "pycbeta.verify", "digest": impl_digest,
                         "algorithm": "verify-1"},
         "work": work_id,
+        "juan": ({"segments": [[lo, hi] for lo, hi in juan],
+                  "label": format_juan_label(juan)} if juan else None),
         "requested_formats": list(wanted),
         "thresholds": {"max_diff": int(max_diff), "diff_lines": int(diff_lines)},
         "inputs": {"xml_files": xmlrecs, "config_digest": config_digest,

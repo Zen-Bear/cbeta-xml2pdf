@@ -1504,7 +1504,9 @@ def main(argv=None):
                              t2s=True if getattr(args, "t2s", False) else None,
                              engine=getattr(args, "engine", None),
                              vertical=bool(getattr(args, "vertical", False)),
-                             baseline_roots=_bl, report_name=_rep_base + ".txt")
+                             baseline_roots=_bl, report_name=_rep_base + ".txt",
+                             juan=(args.juan_segments
+                                   if _juan_status == "filtered" else None))
                 _jp = os.path.join(verify_dir, "report.json")
                 with open(_jp, "w", encoding="utf-8") as _f:
                     json.dump(_j, _f, ensure_ascii=False, sort_keys=True,

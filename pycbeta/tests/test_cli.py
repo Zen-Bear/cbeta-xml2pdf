@@ -169,6 +169,111 @@ class TestProcessFileJuan(unittest.TestCase):
         R.assert_not_called()
 
 
+class TestJuanNnnInput(unittest.TestCase):
+    def test_nnn_input_splits_and_names(self):
+        # `-i T0670_002` ≡ `-i T0670 --juan 2`：拆分 + 子集命名（渲染内容不断言）
+        import io
+        import json
+        from contextlib import redirect_stdout
+        from unittest import mock
+        from pycbeta.cli import main
+        from pycbeta.model import E, Text, Work
+        d = tempfile.mkdtemp()
+        cfgp = os.path.join(d, "cfg.json")
+        with open(cfgp, "w", encoding="utf-8") as f:
+            json.dump({"verify": {"auto_fetch": False}}, f)
+
+        def ms(n):
+            return E(tag="milestone", attrs={"unit": "juan", "n": str(n)})
+
+        w = Work(id="T0670", source_file="", metadata={},
+                 body=[ms(1), Text("一"), ms(2), Text("二")],
+                 notes_by_n={}, apps=[], simplified=False)
+        seen = {}
+
+        def fake_render(ww, fmt, out_dir, out_name, *a, **k):
+            seen["out_name"] = out_name
+
+        cwd = os.getcwd()
+        try:
+            os.chdir(d)
+            out = io.StringIO()
+            with mock.patch("pycbeta.fetch.materialize_work",
+                            return_value=(["x.xml"], "downloaded")), \
+                    mock.patch("pycbeta.cli.P5Parser") as P, \
+                    mock.patch("pycbeta.cli.render_one",
+                               side_effect=fake_render):
+                P.return_value.parse.return_value = w
+                with redirect_stdout(out):
+                    rc = main(["--config", cfgp, "-i", "T0670_002",
+                               "-f", "txt", "-o", os.path.join(d, "out")])
+        finally:
+            os.chdir(cwd)
+        self.assertEqual(rc, 0)
+        self.assertEqual(seen.get("out_name"), "T0670（卷2）.txt")
+
+
+class TestVerifyReportJuan(unittest.TestCase):
+    """CLI 校验：子集时 report.json 顶层 `juan` 自描述（P11）。"""
+
+    def _run(self, d, extra):
+        import io
+        import json
+        from contextlib import redirect_stdout
+        from unittest import mock
+        from pycbeta.cli import main
+        from pycbeta.model import E, Text, Work
+
+        def ms(n):
+            return E(tag="milestone", attrs={"unit": "juan", "n": str(n)})
+
+        w = Work(id="T0001", source_file="", metadata={},
+                 body=[ms(1), Text("一"), ms(2), Text("二")],
+                 notes_by_n={}, apps=[], simplified=False)
+        with mock.patch("pycbeta.parser.P5Parser") as P, \
+                mock.patch("pycbeta.cli.process_file"):
+            P.return_value.parse.return_value = w
+            with redirect_stdout(io.StringIO()):
+                main(["--config", os.path.join(d, "cfg.json"), "-i",
+                      os.path.join(d, "T01n0001.xml"), "-f", "txt",
+                      "--verify-only", *extra])
+        hits = []
+        for dp, _dn, fns in os.walk(d):
+            if "report.json" in fns:
+                hits.append(os.path.join(dp, "report.json"))
+        self.assertTrue(hits)
+        with open(hits[0], encoding="utf-8") as f:
+            return json.load(f)
+
+    def _setup(self):
+        import json
+        d = tempfile.mkdtemp()
+        with open(os.path.join(d, "T01n0001.xml"), "w",
+                  encoding="utf-8") as f:
+            f.write("<TEI/>")
+        with open(os.path.join(d, "cfg.json"), "w", encoding="utf-8") as f:
+            json.dump({"verify": {"auto_fetch": False}}, f)
+        return d
+
+    def test_subset_report_json_has_juan(self):
+        import shutil
+        d = self._setup()
+        try:
+            j = self._run(d, ["--juan", "2"])
+            self.assertEqual(j["juan"], {"segments": [[2, 2]], "label": "2"})
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_full_report_json_juan_none(self):
+        import shutil
+        d = self._setup()
+        try:
+            j = self._run(d, ["--juan", "1-2"])   # 全覆盖 → 归 None
+            self.assertIsNone(j["juan"])
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+
 class TestProcessFileConvertReport(unittest.TestCase):
     """process_file 转换报告落盘：开关关（裸 args）零副作用；开则写
     {验证}/{id 书名}（验证）/{name}_转换报告.txt 并打印 `->` 供 GUI 抓取。"""

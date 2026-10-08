@@ -50,6 +50,7 @@ out/验证/X1077 准提净业（验证）/X1077_准提净业_校验报告.txt
   "verify_impl": {"module": "pycbeta.verify", "digest": "sha256:…",
                    "algorithm": "verify-1"},
   "work": "X1077",
+  "juan": {"segments": [[2, 3]], "label": "2-3"},
   "requested_formats": ["docx"],
   "thresholds": {"max_diff": 0, "diff_lines": 5},
   "inputs": {
@@ -77,6 +78,11 @@ out/验证/X1077 准提净业（验证）/X1077_准提净业_校验报告.txt
 
 - `xml_files` / `baselines` 只有 `name/size/mtime_ns`（无 sha；sha 只进指纹）。
 - `coverage` 只在请求了 `pdf` 时出现（`pdf` 无官方基线，结论随其管线源格式）。
+- `juan`（2026-10-08 新增，可空）：卷子集自描述——`{"segments": [[lo,hi],…],
+  "label": "34-36、40"}`（`label` 与输出目录后缀同源）；整本为 `null`。
+  子集的每 fmt `fingerprint` 含该卷维度（与独立 `verify_fingerprint(juan=…)`
+  逐字一致），故下游按 `(work, fmt, juan.label)` 记录即可区分整本/子集
+  （见 `上游-指纹juan入参提案.md`）。
 - `diff_scope`（2026-10-06 新增，可空）：差异范围旁路结论——把两侧注释（尾注/脚注）
   段单独取出后**只比正文**，正文段**严格 0 差异**才为 `notes_only`（差异全在注释）；
   否则 `body`（含正文差异）；该格式/基线组合分不出正文段为 `unknown`；未做旁路为
@@ -88,13 +94,20 @@ out/验证/X1077 准提净业（验证）/X1077_准提净业_校验报告.txt
 ## 4. 指纹复用契约（下游 Phase 2 用）
 
 - 上游 API：`pycbeta.verify.verify_fingerprint(work_id, fmt, xml_files=…,
-  config_path=…, max_diff=…, diff_lines=…, …, presets=None) -> str | None`。
+  config_path=…, max_diff=…, diff_lines=…, …, presets=None, juan=None)
+  -> str | None`。
   返回 `None` = "不能证明仍然有效"，**一律重验**（找不到 XML、基线缺失、
   配置不可解析、不支持的格式等都返回 `None`；无副作用，不下载不渲染不写文件）。
   `presets=<effective dict>`（2026-10-07 新增）：直接采用生效配置，跳过
   `load_effective_presets`，与 `config_path=<run.json>` 同口径逐字一致；
   `presets=None` 保持现状。`build_report_json` 同样透传 `presets=`。
   注音词表用相对路径时请绝对化后再传（见 `上游-指纹presets入参提案.md` §5）。
+  `juan=[(lo,hi),…]`（2026-10-08 新增）：卷子集——归一（排序合并；`40,34-36`
+  ≡ `34-36,40`）后进 payload，并按卷限定 html/docx/txt_notes 基线发现；
+  `None`/空列表＝整本，payload **与旧版逐字一致**（旧记录继续有效）；非法输入
+  经公开契约返回 `None`（不抛）。整本与任一子集、不同子集之间指纹互异。
+  全覆盖（子集覆盖全部卷）请由调用方归一为 `None`（CLI/GUI 已如此，与
+  「不裁剪、不加后缀」同一口径）。
 - 指纹按 `(work, fmt)` 粒度，纳入：XML 内容标识、生效配置摘要、校验实现摘要
   （`pycbeta.__version__` + 相关模块源码哈希，改实现即失效）、实际基线、
   阈值与覆盖关系。本机有效，不保证跨机器可比。

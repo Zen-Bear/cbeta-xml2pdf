@@ -310,6 +310,7 @@ class BatchWorker(QThread):
                 row_report_dir = None
                 row_report_name = None
                 self._row_renames = []  # 本行输出改名（并入转换报告）
+                job_segs = None         # 本行卷子集（None=整本；报告自描述用）
                 for xml in xmls:
                     if self._cancel:
                         break
@@ -442,7 +443,8 @@ class BatchWorker(QThread):
                             engine=getattr(self.opts, "engine", None),
                             vertical=bool(getattr(self.opts, "vertical",
                                                   False)),
-                            report_name=os.path.basename(report))
+                            report_name=os.path.basename(report),
+                            juan=job_segs)
                         _jp = os.path.join(os.path.dirname(report), "report.json")
                         with open(_jp, "w", encoding="utf-8") as _f:
                             _json.dump(_j, _f, ensure_ascii=False,
@@ -617,8 +619,10 @@ class BatchWorker(QThread):
             segs = job.get("juan_segments") or parse_juan_spec(spec)
         except ValueError:
             return None, ""
-        if all_juans and set(all_juans) <= juan_set(segs):
-            return segs, ""
+        # 无 milestone（all_juans 空）：CLI 警告忽略、不裁剪不加后缀 → 归 None；
+        # 全覆盖：不裁剪不加后缀（字节一致）→ 归 None（指纹与整本一致，P11）。
+        if not all_juans or set(all_juans) <= juan_set(segs):
+            return None, ""
         tpl = ((presets.get("output") or {}).get("juan_suffix_template") or "")
         sfx, _fb = resolve_juan_suffix(tpl, format_juan_label(segs))
         return segs, sfx
