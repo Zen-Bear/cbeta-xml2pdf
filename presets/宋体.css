@@ -1,4 +1,6 @@
 /* 可视化编辑器生成：只覆盖字体四属性，后定义优先 */
+h1.title { font-weight: normal; }
+p.head { font-weight: normal; }
 :root { --font-title: 朝华标题B, ZhaohuaMinB; --font-p: 細明體, MingLiU; --font-head: 朝華標題B, ZhaohuaMinB; }
-html[lang="zh-Hans"] { --font-head: 朝華標題B, ZhaohuaMinB; --font-title: 朝華標題B, ZhaohuaMinB; --font-p: 宋体, SimSun; }
+html[lang="zh-Hans"] { --font-title: 朝華標題B, ZhaohuaMinB; --font-p: 宋体, SimSun; --font-head: 朝華標題B, ZhaohuaMinB; }
 /* 我的样式：用户定制。覆盖块（出厂+本块层叠，本块胜出）。 */
