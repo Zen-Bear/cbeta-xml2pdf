@@ -1,5 +1,6 @@
 import os
 import json
+import shutil
 import sys
 import tempfile
 import unittest
@@ -1205,6 +1206,28 @@ class TestPresetThemeKeys(unittest.TestCase):
         with redirect_stdout(buf3):
             resolve_html_base_css(run3, rdir)
         self.assertIn("官方基底", buf3.getvalue())
+
+
+class TestFactoryPath(unittest.TestCase):
+    """出厂配置文件名/位置（2026-10-08 由 pycbeta/config.json 改名入 presets/）。"""
+
+    def test_path_is_presets_factory(self):
+        from pycbeta.theme import _PRESETS_PATH, load_presets
+        self.assertEqual(
+            os.path.basename(_PRESETS_PATH), "config.factory.json")
+        self.assertEqual(os.path.basename(os.path.dirname(_PRESETS_PATH)),
+                         "presets")
+        self.assertTrue(os.path.isfile(_PRESETS_PATH))   # 随包文件在
+        self.assertIn("output", load_presets())          # 可解析（含注释）
+
+    def test_base_sentinel_names(self):
+        # run.json 缺省哨兵名与旧名（config.json）都解析到出厂文件
+        from pycbeta.theme import resolve_base_config, _PRESETS_PATH
+        self.assertEqual(resolve_base_config({}, None), _PRESETS_PATH)
+        self.assertEqual(resolve_base_config(
+            {"config-json": "config.json"}, None), _PRESETS_PATH)
+        self.assertEqual(resolve_base_config(
+            {"config-json": "config.factory.json"}, None), _PRESETS_PATH)
 
 
 if __name__ == "__main__":

@@ -1012,11 +1012,9 @@ class TestGaijiFonts(unittest.TestCase):
             self.assertEqual(out.count("<w:rFonts"), 1)
 
     def test_builtin_config_chains(self):
-        from pycbeta.theme import load_presets
-        import os as _os
-        cfg = load_presets(_os.path.join(
-            _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
-            "config.json")).get("output", {}).get("docx", {}).get("gaijiFonts")
+        from pycbeta.theme import load_presets, _PRESETS_PATH
+        cfg = load_presets(_PRESETS_PATH).get(
+            "output", {}).get("docx", {}).get("gaijiFonts")
         self.assertEqual(cfg["zh-Hant"], ["CBETA Supplement"])
         self.assertEqual(cfg["zh-Hans"], ["SimSun-ExtB", "SimSun-ExtG",
                                           "CBETA Supplement"])
@@ -1153,11 +1151,8 @@ class TestRenderFallback(unittest.TestCase):
         self.assertEqual(rs._fallback_for("Kai", "䏶"), "SimSun")
 
     def test_config_fallback_keys(self):
-        from pycbeta.theme import load_presets
-        import os as _os
-        cfg = load_presets(_os.path.join(
-            _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
-            "config.json")).get("output", {}).get("docx", {})
+        from pycbeta.theme import load_presets, _PRESETS_PATH
+        cfg = load_presets(_PRESETS_PATH).get("output", {}).get("docx", {})
         self.assertEqual(cfg["fallbackFonts"]["zh-Hant"][0], "PMingLiU")
         self.assertEqual(cfg["fallbackFonts"]["zh-Hans"][0], "SimSun")
         self.assertEqual(cfg["fallbackFonts"]["zh-Hant"][-1],
@@ -1284,12 +1279,9 @@ class TestMarker(unittest.TestCase):
         self.assertIn('w:ascii="宋体"', xml)
 
     def test_config_key_and_legacy_fallback(self):
-        import os as _os
         from pycbeta.cli import _notes_marker_font
-        from pycbeta.theme import load_presets
-        cfg = load_presets(_os.path.join(
-            _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
-            "config.json")).get("output", {})
+        from pycbeta.theme import load_presets, _PRESETS_PATH
+        cfg = load_presets(_PRESETS_PATH).get("output", {})
         self.assertEqual(cfg.get("notes_marker_font"), "Times New Roman")
         self.assertEqual(_notes_marker_font({}), None)
         self.assertEqual(_notes_marker_font({"marker_font": "旧"}), "旧")

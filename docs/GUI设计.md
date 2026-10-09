@@ -157,12 +157,15 @@ class XmlOptions:
 > 预设库（单目录 `presets/`，入库随包分发）：样式 `*.css` + 配置 `*.json` 混放（按扩展名区分）
 > + 样张 `sample.xml`；内置 `pycbeta/styles/presets/`（删不掉）。编辑器顶部预设行切换只装载（切换/另存/删除用户预设）；
 > "设为默认"写 run.json 的 `pdf-docx-user-theme`（面板样式表卡同动作）；`恢复出厂`只装载出厂缓冲（不删预设、不改默认）。
-> 面板配置框预设下拉：一切以选中项为准——`presets/*.json`（首项“（出厂默认）”=空）。
-> 选中即载入；**保存**=覆盖选中（出厂默认项置灰）；**另存…**=新建；
+> 面板配置框预设下拉：一切以选中项为准——`presets/*.json`（首项“（出厂默认）”=空；
+> 出厂文件 `presets/config.factory.json` 不是可选预设，`list_config_presets` 排除）。
+> 选中即载入；**保存**=覆盖选中（出厂默认项置灰，出厂只读）；**另存…**=新建；
 > **删除**=删选中（删除前确认；删的正是默认指向的预设则自动清空槽，避免悬空警告）；
 > **设为默认**=run.json 的 `config-json` 槽指选中（出厂默认=清空槽）；
 > 保存/设默认等成功后配置框标题常驻最后动作（如“配置（已保存）”，换预设/还原出厂后复原）。
-> **还原出厂**=面板回出厂值（不写盘）。默认用户预设 = `presets/config.user.json`（git 忽略）。
+> **还原出厂**=面板回 `presets/config.factory.json` 值（不写盘）。默认用户预设 =
+> `presets/config.user.json`（git 忽略；run.json 默认指向）。出厂文件 GUI 永不写；
+> 要改出厂默认需手动编辑该文件（2026-10-08 由 `pycbeta/config.json` 改名，带注释）。
 > 运行组合单见 `run.json`（5 槽；`config-json` 可指 `presets/*.json`）。
 >
 > 备忘（2026-09-06）：预览技术选型 QTextEdit vs QWebEngineView，以后再议——

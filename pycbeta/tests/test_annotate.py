@@ -767,7 +767,7 @@ class TestCliSource(unittest.TestCase):
     def test_builtin_source_no_config(self):
         from pycbeta.cli import _annotations_source
         spec, base = _annotations_source(None, None)
-        self.assertTrue(base.endswith("config.json"))
+        self.assertTrue(base.endswith("config.factory.json"))
         self.assertIsInstance(spec, dict)  # 内置顶层 annotations 存在（开关状态不假定，随仓库现状）
         self.assertIn(spec.get("scheme", "pinyin"), ("pinyin", "zhuyin"))
         # 开关语义：关→None，开→可装载（与 resolve_annotations 一致）

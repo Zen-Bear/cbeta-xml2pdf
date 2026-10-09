@@ -688,3 +688,9 @@
   - 落地：`juan.normalize_segments`（排序合并；空→None；非法 ValueError）；`verify_fingerprint(juan=)`（非 None 才入 payload，None 逐字回归；`_official_superset` 卷限定 html/docx/txt_notes）；`build_report_json(..., juan=)` 顶层 `juan{segments,label}|None` 恒输出 + 透传每 fmt；CLI 校验流（`_juan_status=="filtered"` 才传）、GUI（`_juan_plan` full/无 milestone → None 并传 `_v_json`，顺带修无 milestone 仍加后缀的既有小 bug）
   - 测试：`test_verify_fingerprint.TestJuanParam`（6：None/空回归、归一等价、None vs 子集互异、非法→None、基线卷限定）+ `test_report_json`（2：自描述+透传、默认 None）+ `test_cli.TestVerifyReportJuan`（2：子集/全覆盖）+ `test_gui` `_juan_plan` 更新
   - 文档：`校验report.json说明.md` §3/§4、`校验说明书.md` §4.4；`schema` 保持 1
+
+- [x] **已完成（用户立项，2026-10-08）** 出厂配置改名 `config.json` → `presets/config.factory.json`（与 user 对称；撤"出厂覆盖层"）
+  - 经过：先做了"出厂覆盖层 + GUI 存为出厂"，用户复审后决议**简化**——不引入独立覆盖文件，直接把出厂文件改名进 `presets/`（与 `presets/config.user.json` 对称），GUI 出厂项仍只读
+  - 落地：`git mv pycbeta/config.json presets/config.factory.json`（注释保留）；`theme._PRESETS_PATH` 指新路径、`resolve_base_config` 哨兵名 `config.factory.json`（旧名 `config.json` 兼容认）、`DEFAULT_RUN_CONFIG`/`_RUN_TEMPLATE` 注释同步；撤 `factory_override_path`/`load_factory_presets`/`save_factory_override` 与 `panel` 双模式（「保存」回"覆盖选中、出厂项置灰"）；`panel.FACTORY_NAME`/`slot_paths`/`reset_factory`/`load_slot("factory")` 走新路径；`list_config_presets` 排除出厂文件（GUI/publish 预设下拉不出现）；`.gitignore` 去掉 `presets/backup/`
+  - 测试：`test_theme.TestFactoryPath`（路径/哨兵名）+ `test_gui`（slot_paths/出厂项保存置灰/`list_config_presets` 排除）+ `test_annotate`/`test_docx` 三处改指 `_PRESETS_PATH`；全量回归
+  - 文档：README/安装说明/主题与样式/GUI设计/第三方调用说明（§3.1b 改写）/功能清单/校验说明书 全部改指新名

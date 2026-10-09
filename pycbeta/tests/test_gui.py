@@ -20,8 +20,8 @@ class TestSlots(unittest.TestCase):
     def setUp(self):
         import shutil
         self.root = tempfile.mkdtemp()
-        os.makedirs(os.path.join(self.root, "pycbeta"))
-        with open(os.path.join(self.root, "pycbeta", "config.json"),
+        os.makedirs(os.path.join(self.root, "presets"))
+        with open(os.path.join(self.root, "presets", "config.factory.json"),
                   "w", encoding="utf-8") as f:
             json.dump({"output": {"t2s": True}, "x": 1}, f)
         self._shutil = shutil
@@ -57,7 +57,8 @@ class TestSlots(unittest.TestCase):
 
     def test_slot_paths(self):
         factory, user = slot_paths(self.root)
-        self.assertTrue(factory.endswith("config.json"))
+        self.assertTrue(factory.endswith(
+            os.path.join("presets", "config.factory.json")))
         self.assertTrue(user.endswith(os.path.join("presets", "config.user.json")))
 
 
@@ -265,6 +266,30 @@ class TestPanelSmoke(unittest.TestCase):
         self.assertTrue(o.vertical)
         panel.set_options(o)
         self.assertTrue(panel.vert_box.isChecked())
+
+    def test_list_config_presets_excludes_factory(self):
+        import tempfile
+        from pycbeta.gui.panel import list_config_presets
+        d = tempfile.mkdtemp()
+        os.makedirs(os.path.join(d, "presets"))
+        for n in ("config.factory.json", "A5.json", "config.user.json"):
+            with open(os.path.join(d, "presets", n), "w",
+                      encoding="utf-8") as f:
+                f.write("{}")
+        stems = [s for s, _p in list_config_presets(d)]
+        self.assertNotIn("config.factory", stems)   # 出厂不是可选预设
+        self.assertIn("A5", stems)
+        self.assertIn("config.user", stems)         # 用户预设照旧列出
+
+    def test_factory_item_save_disabled(self):
+        from PySide6.QtCore import QSignalBlocker
+        from pycbeta.gui.panel import XmlOptionsPanel
+        panel = XmlOptionsPanel(load_presets())
+        with QSignalBlocker(panel.cfg_preset_box):
+            panel.cfg_preset_box.setCurrentIndex(0)   # 出厂项
+        panel._update_preset_buttons()
+        self.assertFalse(panel.btn_save.isEnabled())  # 出厂只读
+        self.assertFalse(hasattr(panel, "btn_save_factory"))
 
 
 class TestHtmlThemeRow(unittest.TestCase):
@@ -572,7 +597,7 @@ class TestConfigBar(unittest.TestCase):
         import pycbeta.gui.panel as pm
         panel = self._panel()
         try:
-            panel.cfg_preset_box.setCurrentIndex(0)  # 出厂默认
+            panel.cfg_preset_box.setCurrentIndex(0)  # 出厂默认（只读）
             panel._update_preset_buttons()
             self.assertFalse(panel.btn_save.isEnabled())
             self.assertFalse(panel.btn_preset_del.isEnabled())

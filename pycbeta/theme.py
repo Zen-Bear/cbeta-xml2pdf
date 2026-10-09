@@ -183,9 +183,10 @@ FALLBACKS = {
     "body_font": "微軟正黑體",    # body 无字体时 docDefaults eastAsia
 }
 
-# 预设（字体方案 + 页面设置）：外部 JSON 配置，见 styles/presets.json，
-# 用户可直接改或复制后用 --presets-file 指定。
-_PRESETS_PATH = os.path.join(os.path.dirname(__file__), "config.json")
+# 出厂配置：随包默认值（2026-10-08 由 pycbeta/config.json 改名入 presets/，
+# 与默认用户预设 presets/config.user.json 对称）；带 // 注释，只读。
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_PRESETS_PATH = os.path.join(_REPO_ROOT, "presets", "config.factory.json")
 
 
 def _strip_json_comments(text: str) -> str:
@@ -238,7 +239,7 @@ def load_effective_presets(path: Optional[str] = None) -> Dict[str, dict]:
     """宽容读取配置：run.json（显式 `config-json` 槽或纯 5 槽）→ 按 5 槽合并后的
     presets；基础配置 JSON（可带主题键）→ 自身即 `config-json` 槽 + 出厂深合并
     （P2，2026-10-07：裸预设也走深合并口径，含主题键不再被误判为 run.json）。
-    path=None → 出厂 config.json。
+    path=None → 出厂 config.factory.json。
 
     供既可能收到 run.json 又可能收到 presets 文件的调用方（如 verify_one）。"""
     if not path:
@@ -500,7 +501,7 @@ USER_PRESETS_DIRNAME = "presets"
 def user_presets_dir(root=None):
     """用户预设目录（仓库根 presets/；随仓库发布）。
     样式预设 *.css 与配置预设 *.json 混放，按扩展名区分；另有编辑器样张 sample.xml。"""
-    base = root or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    base = root or _REPO_ROOT
     return os.path.join(base, USER_PRESETS_DIRNAME)
 
 
@@ -595,7 +596,8 @@ def resolve_theme_css(value, base_dir=None):
 # ---------------- run.json（一次运行的组合单；替代旧 --config 全量快照） ----------------
 # 5 槽：config-json（基础配置）+ 按格式分的标准/增量主题槽。
 # 优先级（逐槽）：显式开关 > 预设键（基础配置 JSON 顶层同名键）> run.json 槽 > 内置默认。
-# 不带 --config 时自动读仓库根 run.json（没有就全出厂）；config.user.json 已废弃。
+# 不带 --config 时自动读仓库根 run.json（没有就全出厂）；本机默认预设 config.user.json
+# （run.json 的 config-json 槽默认指向它；GUI「保存」写它；git 忽略）。
 RUN_CONFIG_NAME = "run.json"
 RUN_KEYS = ("config-json", "html-epub-theme", "html-epub-user-theme",
             "pdf-docx-theme", "pdf-docx-user-theme")
@@ -604,7 +606,7 @@ RUN_KEYS = ("config-json", "html-epub-theme", "html-epub-user-theme",
 PRESET_THEME_KEYS = ("html-epub-theme", "html-epub-user-theme",
                      "pdf-docx-theme", "pdf-docx-user-theme")
 DEFAULT_RUN_CONFIG = {
-    "config-json": "config.json",          # 基础配置：出厂 pycbeta/config.json
+    "config-json": "config.factory.json",  # 基础配置：出厂 presets/config.factory.json
     "html-epub-theme": "html_epub_official.css",  # html/epub 标准基底（官方）
     "html-epub-user-theme": "",            # 占位：非空警告+忽略（纯官方基底）
     "pdf-docx-theme": "pdf_docx.css",      # pdf/docx 标准（整套替换出厂全文）
@@ -625,7 +627,7 @@ def _is_run_config(data) -> bool:
 _RUN_TEMPLATE = """{{
   // 一次运行的组合单（5 槽；显式开关优先）。常改文件，不入库。
   // 分工约定：标准槽放 run.json 全局；增量槽建议放预设键跟预设走。
-  // config-json：基础配置（名或路径；缺省出厂 pycbeta/config.json；
+  // config-json：基础配置（名或路径；缺省出厂 presets/config.factory.json；
   //   也可指 presets/ 下命名快照，如 "presets/我的配置.json"）
   "config-json": {config_json},
   // html/epub 标准基底（全局，默认官方 html_epub_official.css，一般不动）
@@ -694,7 +696,7 @@ def resolve_config_arg(path=None, root=None):
     - `path=None`：仓库根 run.json（缺失则全出厂）。
     - 文件含任一 `RUN_KEYS` → run.json 模式（`load_run_config`）。
     - 否则为 JSON 对象 → 基础配置模式（config.user.json / presets/*.json /
-      出厂 config.json）：把它当 `config-json` 槽，其余槽用出厂默认。
+      出厂 config.factory.json）：把它当 `config-json` 槽，其余槽用出厂默认。
     - 解析失败/非对象 → ValueError（提示两种合法形态）。
     """
     if not path:
@@ -746,9 +748,10 @@ def _read_text(path):
 
 
 def resolve_base_config(run, run_dir=None):
-    """config-json 槽 → 基础配置文件 abspath（默认出厂；缺文件警告+出厂）。"""
-    value = (run.get("config-json") or "").strip() or "config.json"
-    if value == "config.json":
+    """config-json 槽 → 基础配置文件 abspath（默认出厂；缺文件警告+出厂）。
+    出厂哨兵名 `config.factory.json`（旧名 `config.json` 兼容认）。"""
+    value = (run.get("config-json") or "").strip() or "config.factory.json"
+    if value in ("config.factory.json", "config.json"):
         return _PRESETS_PATH
     hit = _resolve_run_file(value, run_dir, "config-json")
     return hit or _PRESETS_PATH

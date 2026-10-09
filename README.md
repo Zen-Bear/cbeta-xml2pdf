@@ -88,7 +88,8 @@ python -m pycbeta -i 经文.xml -f docx,pdf --config my.json
 
 ## 配置文件
 
-- **`pycbeta/config.json`** — 全局配置：字库语言（font_lang）、页面方案（pages）、
+- **`presets/config.factory.json`** — 出厂配置（2026-10-08 由 `pycbeta/config.json` 改名，
+  与默认用户预设 `presets/config.user.json` 对称）：字库语言（font_lang）、页面方案（pages）、
   输出处理（output，含 docx 脚注分隔/字体回退/悉昙字体）、注音（annotations）、校验（verify）、
   转换引擎与后端链（engines）。支持 `//` 注释；复制后用 `--config` 指定。
 - **`pycbeta/styles/pdf_docx.css`** — PDF/DOCX 默认主题（各语义标签的观感）。

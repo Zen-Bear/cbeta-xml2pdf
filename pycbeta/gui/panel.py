@@ -5,7 +5,8 @@
 
 配置预设统一放仓库根 `presets/*.json`（随仓库发布）：下拉选中即载入，
 保存=覆盖选中、另存为=新建、删除=删选中、设为默认=run.json 的 config-json 槽指选中。
-出厂只读 `pycbeta/config.json`；默认用户预设 `presets/config.user.json`（git 忽略）。
+出厂只读 `presets/config.factory.json`（带注释）；默认用户预设
+`presets/config.user.json`（git 忽略；run.json 默认指向）。
 """
 import copy
 import json
@@ -37,7 +38,7 @@ STYLE_FILES = (
     ("pdf_docx.css", "印刷主题（pdf/docx 专用）"),
     ("html_epub_official.css", "电子书基底（html/epub；官方电子书样式）"),
 )
-FACTORY_NAME = os.path.join("pycbeta", "config.json")
+FACTORY_NAME = os.path.join("presets", "config.factory.json")
 # 默认用户预设（在 presets/ 内，git 忽略）；下拉首项“出厂默认”为空值
 USER_PRESET_NAME = "config.user.json"
 PRESET_DIRNAME = "presets"
@@ -253,14 +254,14 @@ def slot_paths(root=None):
 
 
 def _read_json(path):
-    # 出厂 config.json 含 // 注释，走 load_presets 去注释解析；
+    # 出厂 config.factory.json 含 // 注释，走 load_presets 去注释解析；
     # 用户预设文件为本模块纯 JSON 写出，同样兼容。
     from pycbeta.theme import load_presets
     return load_presets(path)
 
 
 def load_slot(which="user", root=None):
-    """读默认用户预设（which='user'）或出厂（which='factory'）。
+    """读默认用户预设（which='user'）或出厂（which='factory'，只读）。
     用户预设缺失回退出厂。返回 (data, actual)，actual ∈ {"user","factory"}。"""
     factory, user = slot_paths(root)
     if which == "factory":
@@ -281,7 +282,7 @@ def save_current(data, root=None):
 
 
 def reset_factory(root=None):
-    """读出厂配置（只读，不写盘）。返回出厂数据。"""
+    """读出厂配置（presets/config.factory.json；只读，不写盘）。返回出厂数据。"""
     factory, _user = slot_paths(root)
     return _read_json(factory)
 
@@ -294,13 +295,15 @@ def config_presets_dir(root=None):
 
 
 def list_config_presets(root=None):
-    """命名配置快照 → [(stem, path)]（仅 presets/*.json，按名排序）。"""
+    """命名配置快照 → [(stem, path)]（仅 presets/*.json，按名排序）。
+    排除出厂文件 `config.factory.json`（它是基线，不是可选预设）。"""
     d = os.path.abspath(config_presets_dir(root))
     if not os.path.isdir(d):
         return []
+    reserved = os.path.basename(FACTORY_NAME).lower()
     out = []
     for fn in sorted(os.listdir(d)):
-        if fn.lower().endswith(".json"):
+        if fn.lower().endswith(".json") and fn.lower() != reserved:
             out.append((os.path.splitext(fn)[0], os.path.join(d, fn)))
     return out
 
