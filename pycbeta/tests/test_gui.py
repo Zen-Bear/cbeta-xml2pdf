@@ -4775,6 +4775,47 @@ class TestCssEditor(unittest.TestCase):
         cmd0 = build_render_cmd(opts, "x.xml", "txt", "out", "tmp.json")
         self.assertEqual(cmd0[cmd0.index("-o") + 1], "out")
 
+    def test_build_render_cmd_frozen(self):
+        # 冻结包：exe 自身即 CLI 入口（见 _frozen_cli_args），无 "-m pycbeta"
+        import sys
+        from pycbeta.gui.__main__ import build_render_cmd
+        from pycbeta.gui.panel import XmlOptions
+        opts = XmlOptions(page="a4", font_lang="zh-Hant", engine="docx2pdf",
+                          formats=["txt"], t2s=False, vertical=False)
+        had = getattr(sys, "frozen", None)
+        try:
+            sys.frozen = True
+            cmd = build_render_cmd(opts, "x.xml", "txt", "out", "tmp.json")
+            self.assertEqual(cmd[:3], [sys.executable, "-i", "x.xml"])
+            self.assertNotIn("-m", cmd)
+            self.assertNotIn("pycbeta", cmd)
+        finally:
+            if had is None:
+                del sys.frozen
+            else:
+                sys.frozen = had
+        cmd2 = build_render_cmd(opts, "x.xml", "txt", "out", "tmp.json")
+        self.assertEqual(cmd2[:4], [sys.executable, "-m", "pycbeta", "-i"])
+
+    def test_frozen_cli_args(self):
+        import sys
+        from pycbeta.gui.__main__ import _frozen_cli_args
+        had = getattr(sys, "frozen", None)
+        try:
+            sys.frozen = True
+            self.assertTrue(_frozen_cli_args(["exe", "-i", "T0349"]))
+            self.assertTrue(_frozen_cli_args(["exe", "--input", "T0349"]))
+            self.assertFalse(_frozen_cli_args(["exe"]))
+            self.assertFalse(_frozen_cli_args(["exe", "--ids-file", "x.txt"]))
+            self.assertFalse(_frozen_cli_args(["exe", "--verify"]))
+        finally:
+            if had is None:
+                del sys.frozen
+            else:
+                sys.frozen = had
+        # 非冻结态恒 False（开发行为不变）
+        self.assertFalse(_frozen_cli_args(["exe", "-i", "T0349"]))
+
     def test_out_name_for_uniform_group(self):
         # worker 命名与 CLI 同规则：首文件 legacy，后续统一 stem
         import pycbeta.gui.__main__ as M

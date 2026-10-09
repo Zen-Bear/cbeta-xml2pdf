@@ -4,6 +4,11 @@ __pycache__/
 *.egg-info/
 .venv/
 
+# PyInstaller 打包产物（GUI Release 附件，不入库）
+dist/
+build/
+*.spec
+
 # 产物（可再生）
 out/
 test/out*/
@@ -18,12 +23,12 @@ test/X1077/
 engines/*.exe
 
 # 预设库 presets/（样式 *.css + 配置 *.json + 样张，随仓库发布给用户）
-# 仅本机默认用户预设/旧槽不入库：
-presets/config.user.json
+# config.user.json 自 v0.5 起入库为标准预设（机器路径已清洗）；
+# 仅轮转旧槽不入库：
 presets/config.last.json
-# 旧根槽（已迁入 presets/，保留忽略以防残留）
-config.user.json
-config.last.json
+# 旧根槽（已迁入 presets/，保留忽略以防残留；前导 / 锚定仓库根，勿匹配 presets/ 下同名入库文件）
+/config.user.json
+/config.last.json
 # run.json（一次运行的组合单，常改，不入库；模板见 docs/主题与样式.md）
 run.json
 

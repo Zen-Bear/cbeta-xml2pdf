@@ -66,8 +66,13 @@ def build_render_cmd(opts, xml, fmt, out_dir, tmpcfg, out_name=None, juan=None):
     - juan（原始范围串）给定时传 --juan（子集渲染/校验；GUI 侧算后缀命名）。
     """
     out_target = os.path.join(out_dir, out_name) if out_name else out_dir
-    cmd = [sys.executable, "-m", "pycbeta", "-i", xml, "-f", fmt,
-           "--page", opts.page, "--config", tmpcfg, "-o", out_target]
+    if getattr(sys, "frozen", False):
+        # 冻结包：exe 自身即 CLI 入口（见 _frozen_cli_args），"-m pycbeta" 无意义
+        head = [sys.executable]
+    else:
+        head = [sys.executable, "-m", "pycbeta"]
+    cmd = head + ["-i", xml, "-f", fmt,
+                  "--page", opts.page, "--config", tmpcfg, "-o", out_target]
     if juan:
         cmd += ["--juan", str(juan)]
     if (opts.font_lang or "zh-Hant") == "zh-Hans" and not opts.t2s:
@@ -1296,5 +1301,19 @@ def main(argv=None):
     return app.exec()
 
 
+def _frozen_cli_args(argv):
+    """冻结包入口分流：子进程桥调 `exe -i ...` 时走 CLI（纯函数，可单测）。
+
+    冻结 exe 没有 `-m` 语义；桥命令恒以 `-i/--input` 开头（见 build_render_cmd），
+    GUI 启动参数（--ids-file/--out/--preset/--formats/--verify/--verify-root/
+    --autostart）永不以 `-i` 开头，故判首参即可。非冻结态恒 False（开发行为不变）。
+    """
+    return (getattr(sys, "frozen", False) and len(argv) > 1
+            and argv[1] in ("-i", "--input"))
+
+
 if __name__ == "__main__":
+    if _frozen_cli_args(sys.argv):
+        from pycbeta.cli import main as _cli_main
+        raise SystemExit(_cli_main(sys.argv[1:]))
     raise SystemExit(main())

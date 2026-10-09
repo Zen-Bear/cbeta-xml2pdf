@@ -167,7 +167,7 @@ class XmlOptions:
 > **设为默认**=run.json 的 `config-json` 槽指选中（出厂默认=清空槽）；
 > 保存/设默认等成功后配置框标题常驻最后动作（如“配置（已保存）”，换预设/还原出厂后复原）。
 > **还原出厂**=面板回 `presets/config.factory.json` 值（不写盘）。默认用户预设 =
-> `presets/config.user.json`（git 忽略；run.json 默认指向）。出厂文件 GUI 永不写；
+> `presets/config.user.json`（v0.5 起入库标准预设，机器路径已清洗；run.json 默认指向）。出厂文件 GUI 永不写；
 > 要改出厂默认需手动编辑该文件（2026-10-08 由 `pycbeta/config.json` 改名，带注释）。
 > 运行组合单见 `run.json`（5 槽；`config-json` 可指 `presets/*.json`）。
 >

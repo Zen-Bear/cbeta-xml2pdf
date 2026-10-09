@@ -92,6 +92,8 @@ python -m pycbeta -i 经文.xml -f docx,pdf --config my.json
   与默认用户预设 `presets/config.user.json` 对称）：字库语言（font_lang）、页面方案（pages）、
   输出处理（output，含 docx 脚注分隔/字体回退/悉昙字体）、注音（annotations）、校验（verify）、
   转换引擎与后端链（engines）。支持 `//` 注释；复制后用 `--config` 指定。
+- **`presets/config.user.json`** — 默认用户预设（v0.5 起入库标准预设；机器路径已清洗，
+  他机开箱即用；`run.json` 默认指向；GUI「保存」写它）。`verify.maxDiff` 为 0（P2 跨边口径）。
 - **`pycbeta/styles/pdf_docx.css`** — PDF/DOCX 默认主题（各语义标签的观感）。
 - **`pycbeta/styles/html_epub_official.css`** — HTML/EPUB 官方格式基底（逐字节对齐官方）。
 - **`presets/`** — 用户预设：配置 `*.json`（可自带主题键）+ 样式 `*.css` + 样张。
