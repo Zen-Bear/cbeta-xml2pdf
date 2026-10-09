@@ -967,7 +967,7 @@ class XmlOptionsPanel(QWidget):
         self.border_style_box = QComboBox()
         self.border_style_box.addItem("单线", "single")
         self.border_style_box.addItem("双线（古籍）", "double")
-        self.border_style_box.setToolTip("单线=内框规格；双线=古籍双框（外框=内框×3 全黑、间距 3pt）")
+        self.border_style_box.setToolTip("单线=内框规格；双线=外框＋header 内框（外=内×3黑，衬底每页）")
         self.border_style_box.currentIndexChanged.connect(lambda _i: self._changed())
         self.border_width_spin = QDoubleSpinBox()
         self.border_width_spin.setRange(0.25, 3.0)

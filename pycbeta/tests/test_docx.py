@@ -849,14 +849,41 @@ class TestDocxOptions(unittest.TestCase):
         self.assertIn('<w:top w:val="single" w:sz="8" w:space="24" w:color="FF0000"/>', doc)
 
     def test_page_border_double(self):
-        # 双线=古籍双框（Word 原生 thickThinMediumGap 近似，单边单色取外框黑；
-        # 默认内框 0.75 → 总线宽 3pt → sz=24）
+        # 双线=混合式：外框 pgBorders 单线（默认内框 0.75 → 外 2.25 → sz=18 黑），
+        # 内框 header2.xml 锚定矩形（behindDoc 衬底）；每节引 rId5
         fn = DocxRenderer(page_border=True,
                           page_border_style="double").render_work(
             self.work, self.tmp, "border-db.docx")
-        doc = zipfile.ZipFile(fn).read("word/document.xml").decode("utf-8")
+        z = zipfile.ZipFile(fn)
+        doc = z.read("word/document.xml").decode("utf-8")
         for side in ("top", "left", "bottom", "right"):
-            self.assertIn(f'<w:{side} w:val="thickThinMediumGap" w:sz="24" w:space="24" w:color="000000"/>', doc)
+            self.assertIn(f'<w:{side} w:val="single" w:sz="18" w:space="24" w:color="000000"/>', doc)
+        self.assertIn('<w:headerReference w:type="default" r:id="rId5"/>', doc)
+        self.assertIn("word/header2.xml", z.namelist())
+        hdr = z.read("word/header2.xml").decode("utf-8")
+        for pat in ('behindDoc="1"', "wps:wsp", 'prst="rect"', "noFill",
+                    'val="333333"', 'w="9525"', "posOffset"):
+            self.assertIn(pat, hdr)
+        # 自定义内框 1.0/红：外框 sz=24，内框 ln=12700 + FF0000
+        fn2 = DocxRenderer(page_border=True, page_border_width_pt=1.0,
+                           page_border_color="#FF0000",
+                           page_border_style="double").render_work(
+            self.work, self.tmp, "border-db2.docx")
+        z2 = zipfile.ZipFile(fn2)
+        doc2 = z2.read("word/document.xml").decode("utf-8")
+        self.assertIn('<w:top w:val="single" w:sz="24" w:space="24" w:color="000000"/>', doc2)
+        hdr2 = z2.read("word/header2.xml").decode("utf-8")
+        self.assertIn('val="FF0000"', hdr2)
+        self.assertIn('w="12700"', hdr2)
+
+    def test_page_border_single_has_no_frame_header(self):
+        # 单线不写 header2/rId5（回归：混合式只影响 double）
+        fn = DocxRenderer(page_border=True).render_work(
+            self.work, self.tmp, "border-sg.docx")
+        z = zipfile.ZipFile(fn)
+        self.assertNotIn("word/header2.xml", z.namelist())
+        doc = z.read("word/document.xml").decode("utf-8")
+        self.assertNotIn("rId5", doc)
 
 
 @requires_data
@@ -2253,6 +2280,34 @@ class TestNoteAnnDedup(unittest.TestCase):
         doc, fns = self._doc()
         self.assertIn("dù", doc)          # 正文注
         self.assertNotIn("dù", fns)       # 脚注同页不重复注
+
+
+class TestFrameHeaderXml(unittest.TestCase):
+    """混合双框 header 构造（免数据，直接调 _frame_header_xml）。"""
+
+    def test_header_rect_spec(self):
+        from pycbeta.render_docx import DocxRenderer
+        r = DocxRenderer(page_border=True, page_border_style="double")
+        hdr = r._frame_header_xml(11906, 16838)  # A4 twips
+        for pat in ('behindDoc="1"', "wps:wsp", 'prst="rect"', "noFill",
+                    'val="333333"', 'w="9525"', "posOffset", "页框内框"):
+            self.assertIn(pat, hdr)
+        # 内框距纸边 24+2.25+3=29.25pt → EMU；矩形 = A4 - 2×29.25pt
+        self.assertIn("<wp:posOffset>%d</wp:posOffset>"
+                      % round(29.25 * 12700), hdr)
+        self.assertIn('cx="%d"'
+                      % round((11906 / 20.0 - 58.5) * 12700), hdr)
+
+    def test_grayscale_blackens_inner(self):
+        from pycbeta.render_docx import DocxRenderer
+        r = DocxRenderer(page_border=True, page_border_style="double",
+                         page_border_color="#FF0000", grayscale=True)
+        self.assertIn('val="000000"', r._frame_header_xml(11906, 16838))
+
+    def test_tiny_page_empty(self):
+        from pycbeta.render_docx import DocxRenderer
+        r = DocxRenderer(page_border=True, page_border_style="double")
+        self.assertEqual(r._frame_header_xml(100, 100), "")
 
 
 if __name__ == "__main__":

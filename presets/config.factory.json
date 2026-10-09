@@ -106,10 +106,10 @@
     "verse_caesura": "　　",     // [docx] 偈颂 <caesura/> 分隔符（默认两个全角空格，可改）
     "verse_strip_quotes": false, // [docx] true=去掉偈颂首尾的「『 』」引号，并忽略 lg 的 text-indent 悬挂
     "grayscale": false,          // [docx|pdf] true=全局黑白输出，忽略所有颜色（程序与 CSS 定义的颜色一律不输出）
-    "page_border": false,        // [docx|pdf] true=每页四周加框（页面边框；单线=内框规格，双线=古籍双框）
-    "page_border_width_pt": 0.75, // [docx|pdf] 内框线宽 pt（单线即此线；双线外框=内框×3 全黑、内框按此值、间距恒 3pt）
-    "page_border_color": "#333333", // [docx|pdf] 内框颜色（单线即此色；双线外框恒黑 #000000；docx 双线单边单色取外框黑）
-    "page_border_style": "single", // [docx|pdf] 边框样式：single=单线 / double=古籍双框（外粗内细）；非法回 single
+    "page_border": false,        // [docx|pdf] true=每页四周加框（页面边框；单线=内框规格，双线=外框＋header 内框）
+    "page_border_width_pt": 0.75, // [docx|pdf] 内框线宽 pt（单线即此线；双线外框=内框×3，内框 header 矩形按此值，间距恒 3pt）
+    "page_border_color": "#333333", // [docx|pdf] 内框颜色（单线即此色；双线外框恒黑 #000000，内框 header 矩形同此色）
+    "page_border_style": "single", // [docx|pdf] 边框样式：single=单线 / double=双线（外框页边框＋header 内框矩形衬底；pdf/direct 精确，docx 混合全后端一致）；非法回 single
     "bookmarks": true,           // [docx|pdf] true=按卷加目录书签（PDF 侧栏大纲；DOCX 书签+导航窗格大纲，默认用卷号/卷标题）
     "split_juan": false,         // [docx|pdf] true=按卷输出多个文档（每卷一个文件，文件名带「_卷N」）；默认不分卷
     "juan_suffix_template": "",  // [六格式] 卷范围子集（--juan / -i ID:范围）输出名后缀模板；空=默认「（卷34-36、40）」；

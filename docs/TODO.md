@@ -701,3 +701,5 @@
   - 外观变更：单线默认色由黑变深灰（单线=内框的推论）；迁移注记见主题与样式/功能清单（显式设 `#000000` 回旧观）
   - 测试：`test_theme.TestPageBorderSpec` + `test_docx`（默认/内框规格/双线）+ `test_pdf.TestPageBorderDraw`（免数据，drawing 断言）+ `test_gui.TestPageBorderPanel`（roundtrip/禁用联动）
   - 附带：独立窗输入帮助 C 方案（编号框卷示例+tooltip+「？」按钮`_input_help_dialog` QLabel 换行；「？」在输入来源行佛典編號列表右；`TestInputHelp` 4 项）
+  - 追修（2026-10-09 用户报双线外框左/上线细）：根因非生成端（XML 四边逐字相同）而是渲染器镜像约定——`thickThinMediumGap` 粗细方向标准未定义，LO 实测不按边镜像（上/左翻转；`double` 对称正常、`thinThick` 呈镜像反转，反证成立），WPS 同症（用户所见），Word 按边镜像才正确
+  - 追修2（用户：双线还是细 + 给六步手工法）：等粗 `double` 两线皆细不像古籍。改混合式——外框 `pgBorders single`（宽=内框×3 黑，全后端通用）＋ 内框 header DrawingML 锚定矩形（`behindDoc` 衬底，`header2.xml`/rId5 全节引用，每页重复；`w:document` 根补 `xmlns:r`，休眠扩展点潜 bug）；合成 12 页 LO 实测每页外 2.25 黑/内 0.75 `#333`（像素色值 0/51/255 对齐），版式无扰动；`TestFrameHeaderXml` 免数据 3 项

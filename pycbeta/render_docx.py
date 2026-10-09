@@ -1064,6 +1064,68 @@ class DocxRenderer:
             para_xml = f"{start}{para_xml}{end}"
         return para_xml
 
+    def _frame_header_xml(self, pw_tw: int, ph_tw: int) -> str:
+        """双线内框 header（混合式）：DrawingML 锚定矩形，衬底，每页重复。
+
+        外框走 pgBorders 单线（见 border 块）；此函数只画内框：无填充、
+        轮廓=内框宽/色，`behindDoc="1"` 衬于文字下方，相对页面定位
+        （内框距纸边 = 24 + 外框宽 + 3 pt）。灰度时内框取黑（`_strip_color`
+        只剥 `w:color`，够不着 `srgbClr`，源头解决）。
+        独立部件 word/header2.xml（休眠扩展点 header1/rId4 不动）；
+        版心过小放不下时返回空（不写部件）。
+        """
+        w = self.border_inner_pt
+        ow = w * 3
+        d = 24.0 + ow + 3.0
+        page_w, page_h = pw_tw / 20.0, ph_tw / 20.0
+        rw, rh = page_w - 2 * d, page_h - 2 * d
+        if rw <= 0 or rh <= 0:
+            return ""
+        EMU = 12700
+        dx = dy = round(d * EMU)
+        cx, cy = round(rw * EMU), round(rh * EMU)
+        lnw = max(1270, round(w * EMU))
+        hexv = "000000" if self.grayscale else self.border_inner_hex
+        pos_h = ('<wp:positionH relativeFrom="page"><wp:posOffset>%d'
+                 "</wp:posOffset></wp:positionH>" % dx)
+        pos_v = ('<wp:positionV relativeFrom="page"><wp:posOffset>%d'
+                 "</wp:posOffset></wp:positionV>" % dy)
+        extent = '<wp:extent cx="%d" cy="%d"/>' % (cx, cy)
+        xfrm = ('<a:xfrm><a:off x="0" y="0"/><a:ext cx="%d" cy="%d"/>'
+                "</a:xfrm>" % (cx, cy))
+        ln = ('<a:ln w="%d"><a:solidFill><a:srgbClr val="%s"/>'
+              "</a:solidFill></a:ln>" % (lnw, hexv))
+        return (
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" '
+            'xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" '
+            'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" '
+            'xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape">'
+            "<w:p><w:r><w:drawing>"
+            '<wp:anchor distT="0" distB="0" distL="0" distR="0" simplePos="0" '
+            'relativeHeight="0" behindDoc="1" locked="0" layoutInCell="1" allowOverlap="1">'
+            '<wp:simplePos x="0" y="0"/>'
+            + pos_h + pos_v + extent +
+            '<wp:effectExtent l="0" t="0" r="0" b="0"/>'
+            "<wp:wrapNone/>"
+            '<wp:docPr id="1001" name="页框内框"/>'
+            "<wp:cNvGraphicFramePr/>"
+            '<a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingShape">'
+            "<wps:wsp><wps:cNvSp/>"
+            "<wps:spPr>" + xfrm +
+            '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>'
+            "<a:noFill/>" + ln +
+            "</wps:spPr>"
+            '<wps:style><a:lnRef idx="0"/><a:fillRef idx="0"/>'
+            '<a:effectRef idx="0"/><a:fontRef idx="minor"/></wps:style>'
+            "<wps:txbx><w:txbxContent><w:p/></w:txbxContent></wps:txbx>"
+            "<wps:bodyPr/>"
+            "</wps:wsp></a:graphicData></a:graphic>"
+            "</wp:anchor>"
+            "</w:drawing></w:r></w:p>"
+            "</w:hdr>"
+        )
+
     def render_work(self, work: Work, out_dir: str, filename: str = "") -> str:
         """默认返回单个文档路径；split=True 时返回按卷切分的路径列表。
         pagination.enabled 时按分页单元渲染，每个单元一个分节
@@ -2318,13 +2380,16 @@ class DocxRenderer:
                 if self.footnote_per_page else "")
         border = ""
         if self.page_border:
-            # 宽/色键都是内框；单线=内框；双线=古籍双框（外粗内细，Word 原生
-            # thickThinMediumGap 近似：间距由 Word 定、单边单色取外框黑）。
+            # 宽/色键都是内框；单线=内框；双线=混合式：外框 pgBorders 单线
+            # （全后端通用），内框 header 锚定矩形（见 _frame_header_xml）。
+            # 注：等粗 double 与 thickThin 系都因渲染器解释不一而弃用
+            # （thickThin 系 LO/WPS 上/左翻转已实测；double 每线宽解释不明）。
+            val = "single"
             if self.border_style == "double":
-                val, color = "thickThinMediumGap", "000000"
-                sz = max(2, round(self.border_inner_pt * 4 * 8))
+                color = "000000"
+                sz = max(1, round(self.border_inner_pt * 3 * 8))
             else:
-                val, color = "single", self.border_inner_hex
+                color = self.border_inner_hex
                 sz = max(1, round(self.border_inner_pt * 8))
             b = '<w:pgBorders w:offsetFrom="page">' \
                 f'<w:top w:val="{val}" w:sz="{sz}" w:space="24" w:color="{color}"/>' \
@@ -2354,6 +2419,9 @@ class DocxRenderer:
                     f'{self._fb_emit(series, _srpr)}</w:p>'
                 )
         header_xml = ""  # 保留扩展点：如需页眉可在此生成 header1.xml
+        frame_xml = ""  # 双线内框 header（混合式）：double 且开边框时生成 header2.xml
+        if self.page_border and self.border_style == "double":
+            frame_xml = self._frame_header_xml(pw, ph)
         # 内嵌图片（<figure><graphic>）：media 去重已在 _render_graphic 完成
         media = list(self._media)
         media_ct = {"gif": "image/gif", "png": "image/png",
@@ -2368,10 +2436,12 @@ class DocxRenderer:
         def sect_inner(typ: str = "") -> str:
             t = f'<w:type w:val="{typ}"/>' if typ else ""
             hr = '<w:headerReference w:type="first" r:id="rId4"/>' if header_xml else ""
+            fh = '<w:headerReference w:type="default" r:id="rId5"/>' if frame_xml else ""
             tp = '<w:titlePg/>' if header_xml else ""
             td = '<w:textDirection w:val="tbRl"/>' if self.vertical else ""
             # sectPr 子元素顺序：headerReference → footnotePr → type → pgSz → pgMar → pgBorders → titlePg → textDirection
-            return (f"{hr}{fnpr}{t}<w:pgSz w:w=\"{pw}\" w:h=\"{ph}\"/>"
+            # default 头（含内框）不设 titlePg，覆盖含首页在内全页；全节共用同一函数，一处改全覆盖
+            return (f"{fh}{hr}{fnpr}{t}<w:pgSz w:w=\"{pw}\" w:h=\"{ph}\"/>"
                     f'<w:pgMar w:top="{m["top"]}" w:right="{m["right"]}" '
                     f'w:bottom="{m["bottom"]}" w:left="{m["left"]}"/>{border}{tp}{td}')
 
@@ -2405,7 +2475,8 @@ class DocxRenderer:
             inner = f"{series_para}{title_para}{body}{en_section}{tei_page}{sect('')}"
         document = (
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" '
+            'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
             f'<w:body>{inner}'
             "</w:body></w:document>"
         )
@@ -2464,6 +2535,7 @@ class DocxRenderer:
             '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>'
             '<Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>'
             + ('<Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>' if header_xml else "")
+            + ('<Override PartName="/word/header2.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>' if frame_xml else "")
             + media_defaults
             + "</Types>"
         )
@@ -2480,6 +2552,7 @@ class DocxRenderer:
             '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes" Target="footnotes.xml"/>'
             '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>'
             + ('<Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/>' if header_xml else "")
+            + ('<Relationship Id="rId5" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header2.xml"/>' if frame_xml else "")
             + media_rels
             + "</Relationships>"
         )
@@ -2505,6 +2578,8 @@ class DocxRenderer:
                 z.writestr("word/_rels/footnotes.xml.rels", footnotes_rels)
             if header_xml:
                 z.writestr("word/header1.xml", header_xml)
+            if frame_xml:
+                z.writestr("word/header2.xml", frame_xml)
             for i, m in enumerate(media):
                 with open(m["path"], "rb") as f:
                     z.writestr(f"word/media/image{i + 1}.{m['ext']}", f.read())
