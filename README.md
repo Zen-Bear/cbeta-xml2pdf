@@ -168,8 +168,8 @@ pycbeta/
   render_docx.py   IR -> OOXML（真页底脚注、命名样式、按卷分节）
   render_epub.py   IR -> EPUB3
   render_md.py     IR -> Markdown
-  theme.py         主题：语义标签 -> 各格式样式；config.json 加载
-  config.json      全局配置（字体/页面/输出/引擎链）
+  theme.py         主题：语义标签 -> 各格式样式；出厂配置加载
+  presets/config.factory.json  出厂全局配置（字体/页面/输出/引擎链；只读）
   styles/          html_epub_official.css / pdf_docx.css / epub_print.css
 docs/              设计报告与规格
 test/              run_tests.py 端到端测试 + 样例 XML
