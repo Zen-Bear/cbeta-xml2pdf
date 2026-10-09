@@ -17,9 +17,9 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
 from PySide6.QtCore import Qt, QThread, Signal, QUrl
-from PySide6.QtGui import QDesktopServices, QKeySequence, QShortcut
+from PySide6.QtGui import QColor, QDesktopServices, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QAbstractItemView, QApplication, QCheckBox, QComboBox, QDialog,
+    QAbstractItemView, QApplication, QCheckBox, QComboBox, QColorDialog, QDialog,
     QDialogButtonBox, QDoubleSpinBox,
     QFileDialog, QFormLayout, QGridLayout, QGroupBox, QHBoxLayout, QInputDialog,
     QLabel, QLineEdit,
@@ -963,6 +963,35 @@ class XmlOptionsPanel(QWidget):
         _grow.addWidget(self.border_box)
         _grow.addStretch(1)
         form.addRow("", _grow)
+        # 边框规格：宽/色键都是内框；单线=内框；双线=古籍双框（外框=内框×3 全黑）
+        self.border_style_box = QComboBox()
+        self.border_style_box.addItem("单线", "single")
+        self.border_style_box.addItem("双线（古籍）", "double")
+        self.border_style_box.setToolTip("单线=内框规格；双线=古籍双框（外框=内框×3 全黑、间距 3pt）")
+        self.border_style_box.currentIndexChanged.connect(lambda _i: self._changed())
+        self.border_width_spin = QDoubleSpinBox()
+        self.border_width_spin.setRange(0.25, 3.0)
+        self.border_width_spin.setSingleStep(0.25)
+        self.border_width_spin.setDecimals(2)
+        self.border_width_spin.setSuffix(" pt")
+        self.border_width_spin.setValue(0.75)
+        self.border_width_spin.setToolTip("内框线宽（单线即此线；双线外框=内框×3）")
+        self.border_width_spin.valueChanged.connect(lambda _v: self._changed())
+        self.border_color_btn = QPushButton("#333333")
+        self.border_color_btn.setToolTip("内框颜色（单线即此色；双线外框恒黑）")
+        self.border_color_btn.clicked.connect(self._pick_border_color)
+        brow = QHBoxLayout()
+        brow.setContentsMargins(0, 0, 0, 0)
+        brow.addWidget(QLabel("样式"))
+        brow.addWidget(self.border_style_box)
+        brow.addWidget(QLabel("内框宽度"))
+        brow.addWidget(self.border_width_spin)
+        brow.addWidget(QLabel("内框颜色"))
+        brow.addWidget(self.border_color_btn)
+        brow.addStretch(1)
+        form.addRow("", brow)
+        self.border_box.toggled.connect(self._sync_border_enabled)
+        self._sync_border_enabled(self.border_box.isChecked())
         # 佛典丛书名（title level="s"）：仅首页左上角一行（无「每页」选项）
         _srow = QHBoxLayout()
         _srow.setContentsMargins(0, 0, 0, 0)
@@ -1732,6 +1761,26 @@ class XmlOptionsPanel(QWidget):
         self.note_brackets_box.setEnabled(
             self.notes_mode.currentData() == "inline")
 
+    def _sync_border_enabled(self, on=False):
+        """仅勾选页面边框时样式/内框宽/内框色可编辑。"""
+        for w in (self.border_style_box, self.border_width_spin,
+                  self.border_color_btn):
+            w.setEnabled(bool(on))
+
+    def _pick_border_color(self):
+        """内框颜色按钮 → 调色板（存 `#RRGGBB` 大写HEX 文本）。"""
+        cur = QColor(self.border_color_btn.text())
+        got = QColorDialog.getColor(cur if cur.isValid() else QColor("#333333"),
+                                    self, "内框颜色")
+        if got.isValid():
+            self.border_color_btn.setText(got.name().upper())
+            self._changed()
+
+    def _border_color_hex(self):
+        """按钮文本 → 6 位 HEX（非法回默认深灰，不写盘）。"""
+        from pycbeta.theme import _hex6
+        return (_hex6(self.border_color_btn.text()) or "333333").upper()
+
     def _tab_ann(self):
         w = QWidget()
         form = QFormLayout(w)
@@ -2208,6 +2257,9 @@ class XmlOptionsPanel(QWidget):
             output={
                 "grayscale": self.grayscale_box.isChecked(),
                 "page_border": self.border_box.isChecked(),
+                "page_border_width_pt": round(self.border_width_spin.value(), 2),
+                "page_border_color": self._border_color_hex(),
+                "page_border_style": self.border_style_box.currentData() or "single",
                 "show_notes": self.notes_on.isChecked(),
                 "notes": self.notes_mode.currentData() or "footnote",
                 "footnote_per_page": self.per_page_box.isChecked(),
@@ -2297,6 +2349,18 @@ class XmlOptionsPanel(QWidget):
             self._refresh_typo_display()
             self.grayscale_box.setChecked(bool(opts.output.get("grayscale", False)))
             self.border_box.setChecked(bool(opts.output.get("page_border", False)))
+            try:
+                self.border_width_spin.setValue(
+                    float(opts.output.get("page_border_width_pt", 0.75)))
+            except (TypeError, ValueError):
+                self.border_width_spin.setValue(0.75)
+            i = self.border_style_box.findData(
+                opts.output.get("page_border_style") or "single")
+            self.border_style_box.setCurrentIndex(i if i >= 0 else 0)
+            from pycbeta.theme import _hex6
+            _bc = _hex6(opts.output.get("page_border_color", "#333333"))
+            self.border_color_btn.setText("#" + (_bc or "333333").upper())
+            self._sync_border_enabled(self.border_box.isChecked())
             i = self.lang_box.findData(opts.font_lang or "zh-Hant")
             self.lang_box.setCurrentIndex(i if i >= 0 else 0)
             self.t2s_box.setChecked(bool(opts.t2s))

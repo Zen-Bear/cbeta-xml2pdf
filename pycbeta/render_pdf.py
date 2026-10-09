@@ -16,7 +16,8 @@ from typing import List, Optional
 
 from .model import App, E, Gaiji, Note, NoteRef, Pb, Text, Work
 from .render_html import HtmlRenderer, LINEHEAD_RE, _esc, split_juans
-from .theme import Theme, resolve_page, bracket_pair, ensure_page_typography
+from .theme import (Theme, resolve_page, bracket_pair, ensure_page_typography,
+                     page_border_spec, DOUBLE_GAP_PT)
 
 def _find_soffice() -> Optional[str]:
     # config.json engines.paths.libreoffice 优先（支持自定义安装位置）
@@ -413,19 +414,37 @@ def docx_to_pdf(docx_fn: str, pdf_fn: str, chain=None, used: dict = None) -> str
         f"(chain={list(chain)}); pywin32 required for COM. 尝试记录: {'; '.join(errors)}")
 
 
-def _draw_page_borders(pdf_fn: str, inset_pt: float = 24.0, width: float = 0.75) -> str:
-    """在最终 PDF 每页四周画一个黑框（pymupdf 后处理，适配任意引擎）。
+def _hex_to_rgb(h: str):
+    """6 位 HEX → pymupdf 0-1 三元组。"""
+    return tuple(int(h[i:i + 2], 16) / 255.0 for i in (0, 2, 4))
 
-    边框与 DOCX 版一致：0.75pt 单线，距纸边 24pt。Chromium 不支持 @page
+
+def _draw_page_borders(pdf_fn: str, inner_pt: float = 0.75,
+                       inner_hex: str = "333333", style: str = "single",
+                       inset_pt: float = 24.0) -> str:
+    """在最终 PDF 每页四周画框（pymupdf 后处理，适配任意引擎）。
+
+    宽/色键都是内框；单线=内框矩形；双线=古籍双框（外框=内框×3 全黑、
+    内框按给定值、间距恒 `DOUBLE_GAP_PT`）。Chromium 不支持 @page
     边框，故统一在生成后逐页绘制，保证 chromium/prince/weasyprint 行为一致。
     """
     import pymupdf  # PyMuPDF
     doc = pymupdf.open(pdf_fn)
     for page in doc:
         r = page.rect
-        page.draw_rect(pymupdf.Rect(inset_pt, inset_pt,
-                                    r.width - inset_pt, r.height - inset_pt),
-                       color=(0, 0, 0), width=width)
+        if style == "double":
+            outer_w = inner_pt * 3
+            page.draw_rect(pymupdf.Rect(inset_pt, inset_pt,
+                                        r.width - inset_pt, r.height - inset_pt),
+                           color=(0, 0, 0), width=outer_w)
+            i2 = inset_pt + outer_w + DOUBLE_GAP_PT
+            page.draw_rect(pymupdf.Rect(i2, i2,
+                                        r.width - i2, r.height - i2),
+                           color=_hex_to_rgb(inner_hex), width=inner_pt)
+        else:
+            page.draw_rect(pymupdf.Rect(inset_pt, inset_pt,
+                                        r.width - inset_pt, r.height - inset_pt),
+                           color=_hex_to_rgb(inner_hex), width=inner_pt)
     doc.save(pdf_fn, incremental=True, encryption=pymupdf.PDF_ENCRYPT_KEEP)
     doc.close()
     return os.path.abspath(pdf_fn)
@@ -508,6 +527,8 @@ class PdfRenderer(HtmlRenderer):
                  font_stack=None, footnotes=False, theme=None, engine=None,
                  notes="endnote", page_presets=None, ignore_xml_style=False,
                  ignore_xml_space=False, grayscale=False, page_border=False,
+                 page_border_width_pt=None, page_border_color=None,
+                 page_border_style=None,
                  bookmarks=True, split=False, show_notes=True,
                  html_engine_chain=None, zoom=1.0, annotations=None, strip_head_no=False,
                  inline_brackets="fullwidth", note_inline_brackets=None,
@@ -537,6 +558,10 @@ class PdfRenderer(HtmlRenderer):
                                   else [self.engine])
         self.grayscale = grayscale                # 全局黑白：忽略所有颜色（含 CSS 定义）
         self.page_border = page_border            # 每页四周加框
+        # 边框规格：宽/色键都是内框；单线=内框；双线=古籍双框（精确绘制）
+        spec = page_border_spec(None, page_border_width_pt,
+                                page_border_color, page_border_style)
+        self.border_inner_pt, self.border_inner_hex, self.border_style = spec
         self.bookmarks = bookmarks                # 每卷加目录书签（默认卷标题）
         self.split = split                        # 按卷输出多个文档
         self.zoom = zoom                          # HTML→PDF 缩放（Playwright page.pdf scale，范围 0.1-2.0）
@@ -777,7 +802,8 @@ a, a:visited {{ color: #000 !important; }}
                     "(built-in: chromium/prince/weasyprint; "
                     "external engines register in config.json engines.external)")
         if self.page_border:
-            _draw_page_borders(pdf_fn)
+            _draw_page_borders(pdf_fn, self.border_inner_pt,
+                               self.border_inner_hex, self.border_style)
         if self.bookmarks and not self.split and getattr(self, "_juan_headers", None):
             _add_pdf_bookmarks(pdf_fn, self._juan_headers)
         return os.path.abspath(pdf_fn)

@@ -298,6 +298,41 @@ def resolve_notes(presets=None, fmt: Optional[str] = None,
     val = (cfg.get("notes") or "").strip().lower()
     return val if val in NOTES_MODES else _DEFAULT_NOTE_MODE
 
+
+_PAGE_BORDER_STYLES = ("single", "double")
+_DEFAULT_BORDER_WIDTH_PT = 0.75
+_DEFAULT_BORDER_COLOR = "333333"
+#: 古籍双框定式：间距恒 3pt（无键）；外框恒黑、宽=内框×3
+DOUBLE_GAP_PT = 3.0
+
+
+def page_border_spec(presets=None, explicit_width=None, explicit_color=None,
+                     explicit_style=None):
+    """边框规格归一：显式 > presets `output` > 默认。返回 (内框宽pt, 内框色HEX, style)。
+
+    模型：宽/色键都是**内框**（UI/CLI 调的都是它）；单线=内框；
+    双线=古籍双框（外框=内框×3 全黑、间距恒 `DOUBLE_GAP_PT`）。
+    非法值静默回默认值（与 `resolve_notes` 同口径）。
+    """
+    cfg = (presets or {}).get("output") or {}
+    raw = (explicit_width if explicit_width is not None
+           else cfg.get("page_border_width_pt", _DEFAULT_BORDER_WIDTH_PT))
+    try:
+        w = float(raw)
+    except (TypeError, ValueError):
+        w = _DEFAULT_BORDER_WIDTH_PT
+    if isinstance(raw, bool) or not (0.25 <= w <= 3.0):
+        w = _DEFAULT_BORDER_WIDTH_PT
+    c = (explicit_color if explicit_color is not None
+         else cfg.get("page_border_color", _DEFAULT_BORDER_COLOR))
+    c = _hex6(c) or _DEFAULT_BORDER_COLOR
+    s = (explicit_style if explicit_style is not None
+         else (cfg.get("page_border_style") or "single"))
+    s = str(s).strip().lower()
+    if s not in _PAGE_BORDER_STYLES:
+        s = "single"
+    return (w, c.upper(), s)
+
 # CSS 通用字体族在序列化时保持不加引号，否则会变成普通字体名。
 _UNQUOTED_FONT_FAMILIES = frozenset({
     "serif", "sans-serif", "monospace", "cursive", "fantasy",

@@ -37,6 +37,9 @@ class XmlOptions:
 | | `pages.<page>.margins`（可选） | 数字输入（四边） | `xml_options.margins` |
 | | `output.grayscale` | 复选「黑白输出」 | `output.grayscale` |
 | | `output.page_border` | 复选「页面边框」 | `output.page_border` |
+| | `output.page_border_style` | 下拉「样式：单线/双线（古籍）」（未勾选禁用） | `output.page_border_style` |
+| | `output.page_border_width_pt` | 数字输入「内框宽度」（0.25–3 pt；未勾选禁用） | `output.page_border_width_pt` |
+| | `output.page_border_color` | 按钮「内框颜色」（调色板，存 `#RRGGBB`；未勾选禁用） | `output.page_border_color` |
 | | `output.pdf_zoom` | 数字输入「PDF 缩放」 | `output.pdf_zoom` |
 | 字体 | CSS :root 双栏变量 | 字库两态（繁/简） | `xml_options.font_lang` |
 | 引擎 | `engines.docx2pdf.chain` / `html2pdf` | 单选+单体下拉 | `xml_options.engine` |
@@ -78,6 +81,7 @@ class XmlOptions:
 │ 页面:                                                         │
 │   纸张 [a4 ▼]    边距 [使用页面预设 □]  上[ ] 下[ ] 左[ ] 右[ ] │
 │   ☐ 黑白输出(grayscale)  ☐ 页面边框(page_border)              │
+│     样式[单线 ▼] 内框宽度[0.75 pt] 内框颜色[#333333]（未勾选禁用） │
 │   佛典丛书名 ☑ 首页打印                                        │
 │     （经藏名 title level="s" 仅首页左上角；字体/字号走 CSS）   │
 ├───────────────────────────────────────────────────────────────┤
@@ -188,9 +192,9 @@ class XmlOptions:
 
 ```
 ┌─ xml2pdf（独立窗） ────────────────────────────────────────────┐
-│ 输入来源: (•) 目录/文件  ( ) 佛典編號列表                  [◂] │
+│ 输入来源: (•) 目录/文件  ( ) 佛典編號列表 [?]                [◂] │
 │ 目录/文件: [XML 目录 / 单个 .xml]  [目录…]                   │
-│ 編號列表:  [T0349…逗号/空格分隔；或用「文件…」选 ID 列表 .txt] [文件…] │
+│ 編號列表:  [T0349, X1116, T0001:1-2（逗号/空格分隔；卷用 ID:范围）] [文件…] │
 │            ☐ 自动下载缺失 XML（官方源）                         │
 │            ☐ 同时下载官方电子书（html/docx/txt_notes 供校验）   │
 │ 输出     [………………]  [浏览]                                    │
@@ -205,6 +209,8 @@ class XmlOptions:
 ```
 
 独立窗启动参数（publish 一键送校验用）：`--ids-file/--out/--preset/--formats/--verify/--verify-root/--autostart`（`--verify-root` 只本次运行覆写校验根，见第三方调用说明 §6.3）。
+
+输入帮助（C 方案）：输入来源行「佛典編號列表」右「？」按钮弹输入说明对话框（三形态 + 卷语法，文本 `gui.__main__.input_help_text()`，publish 可复用；`_input_help_dialog` 构造与展示分离可测）；对话框用 QLabel wordWrap（QMessageBox 按词边界换行、CJK 长行不断行）+ 最小宽 520 + 文本可选中；编号框 tooltip 为同内容精简版（显式换行）；「文件…」tooltip 注明列表 token 可带 `:范围` 后缀；CLI `-i` help 同步一句卷后缀说明。
 
 ### 4.2 佛典編號列表流程（走当前逻辑）
 

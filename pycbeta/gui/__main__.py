@@ -148,6 +148,26 @@ def parse_work_ids_file(path):
     return out
 
 
+def input_help_text():
+    """输入说明（「？」按钮弹窗用；纯文本，publish 可复用）。"""
+    return (
+        "【目录/文件】\n"
+        "填 XML 目录（递归扫描其中的 .xml）或单个 .xml；"
+        "「目录…」选目录，「文件…」选 ID 列表 .txt。\n"
+        "\n"
+        "【佛典编号列表】\n"
+        "如 T0349, X1116（逗号/空格分隔）；长编号如 T25n1509；"
+        "或用「文件…」选 ID 列表 .txt\n"
+        "（逐行取编号，兼容 test/mini-test.txt 形态，`#` 为注释）。\n"
+        "\n"
+        "【卷范围】编号可带 `ID:范围` 后缀，只转某卷/几卷：\n"
+        "T0349:2-3 ／ T25n1509:34-100；单卷如 T0001:1；"
+        "多段用 `+`（如 T0001:34+40，因 `,` 是列表分隔符）；\n"
+        "`-`/`~`/`～` 三认一。无该卷 milestone 时忽略；"
+        "非法范围在状态列报「非法卷范围」。"
+    )
+
+
 def _pick_verify_root(override, presets):
     """校验根生效值：显式启动参数（`--verify-root`）＞ 预设 `source.verify_root`
     ＞ `""`（调用方 `_verify_dir` 再走 `default_verify_root`＝`{输出}/验证`）。
@@ -838,6 +858,11 @@ class MainWindow(QMainWindow):
         mode_row.setContentsMargins(0, 0, 0, 0)
         mode_row.addWidget(self.mode_file)
         mode_row.addWidget(self.mode_ids)
+        self.help_btn = QPushButton("？")
+        self.help_btn.setFixedSize(22, 22)
+        self.help_btn.setToolTip("输入说明：目录/文件、编号列表、卷范围")
+        self.help_btn.clicked.connect(self._show_input_help)
+        mode_row.addWidget(self.help_btn)
         mode_row.addStretch(1)
         # 配置区总开关：蓝底白字小箭头（tab 区 +「配置」分组整体收起/复原，收起后批量列表放大）；
         # 各态同色（checked 也不变），只靠箭头方向区分
@@ -869,7 +894,7 @@ class MainWindow(QMainWindow):
         browse.setToolTip("选择 XML 目录（递归扫描其中的 .xml）")
         browse.clicked.connect(self._browse)
         browse_file = QPushButton("文件…")
-        browse_file.setToolTip("选择 ID 列表 .txt（逐行取佛典編號批量转换，如 test/mini-test.txt）")
+        browse_file.setToolTip("选择 ID 列表 .txt（逐行取佛典編號批量转换，如 test/mini-test.txt；\n编号可带 :范围 卷后缀，如 T0349:2-3）")
         browse_file.clicked.connect(self._browse_file)
         for b in (browse, browse_file):
             b.setFixedWidth(
@@ -878,7 +903,8 @@ class MainWindow(QMainWindow):
         src.addWidget(self.path_edit, 1, 1, 1, 2)
         src.addWidget(browse, 1, 3)
         self.ids_edit = QLineEdit()
-        self.ids_edit.setPlaceholderText("T0349, X1116（逗号/空格分隔）；或用右边的「文件…」选 ID 列表 .txt")
+        self.ids_edit.setPlaceholderText("T0349, X1116, T0001:1-2（逗号/空格分隔；卷用 ID:范围）")
+        self.ids_edit.setToolTip("编号可带卷范围后缀 `ID:范围`，只转某卷/几卷：T0349:2-3、T25n1509:34-100\n单卷如 T0001:1；多段用 +（如 T0001:34+40，逗号是列表分隔符）\n- / ~ / ～ 三认一；非法范围状态列报「非法卷范围」")
         self.ids_edit.textChanged.connect(lambda _t: self.mode_ids.setChecked(True))
         src.addWidget(QLabel("编号列表"), 2, 0)
         src.addWidget(self.ids_edit, 2, 1, 1, 2)
@@ -955,6 +981,29 @@ class MainWindow(QMainWindow):
     def _show_about(self):
         from pycbeta import __version__ as _ver
         QMessageBox.about(self, "关于", f"v{_ver}")
+
+    def _input_help_dialog(self):
+        """输入说明对话框（构造与展示分离，便于 offscreen 测试不断言模态）。
+
+        不用 QMessageBox.information：其 label 按词边界换行，CJK 长行无空格
+        就不断行（框被撑超宽）；QLabel wordWrap 可在 CJK 间断行。"""
+        dlg = QDialog(self)
+        dlg.setWindowTitle("输入说明")
+        lab = QLabel(input_help_text())
+        lab.setWordWrap(True)
+        lab.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        lay = QVBoxLayout(dlg)
+        lay.addWidget(lab)
+        box = QDialogButtonBox(QDialogButtonBox.Close)
+        box.button(QDialogButtonBox.Close).setText("关闭")
+        box.rejected.connect(dlg.reject)
+        lay.addWidget(box)
+        dlg.setMinimumWidth(520)
+        return dlg
+
+    def _show_input_help(self):
+        """「？」→ 输入说明弹窗（三形态 + 卷语法，文本见 input_help_text）。"""
+        self._input_help_dialog().exec()
 
     def _edit_source(self):
         from pycbeta.gui.panel import SourceDialog

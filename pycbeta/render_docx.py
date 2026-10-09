@@ -19,7 +19,7 @@ from .model import App, E, Gaiji, Lb, Note, NoteRef, Pb, Text, Work, \
 from .gaiji import GaijiDb
 from .theme import (Theme, resolve_page, _hex6, strip_head_no, bracket_pair,
                     VERTICAL_UNCENTER, ensure_page_typography, FALLBACKS,
-                    first_text_sourceline)
+                    first_text_sourceline, page_border_spec)
 from .fonts import preferred_family
 from .render_html import split_juans
 from .filename import apply_template
@@ -491,6 +491,8 @@ class DocxRenderer:
                  page_presets=None, ignore_xml_style=False, ignore_xml_space=False,
                  verse_caesura="　　", verse_strip_quotes=False,
                  grayscale=False, page_border=False,
+                 page_border_width_pt=None, page_border_color=None,
+                 page_border_style=None,
                  bookmarks=True, split=False, show_close_juan=False,
                  suppress_jhead_dup=True,
                  inline_brackets="fullwidth", note_inline_brackets=None,
@@ -514,6 +516,10 @@ class DocxRenderer:
         self.strip_verse_quotes = verse_strip_quotes  # 去掉偈颂首尾「『 』」（同时忽略悬挂）
         self.grayscale = grayscale                # 全局黑白：忽略所有颜色（含 CSS 定义）
         self.page_border = page_border            # 每页四周加框
+        # 边框规格：宽/色键都是内框；单线=内框；双线=古籍双框（Word 原生近似）
+        spec = page_border_spec(None, page_border_width_pt,
+                                page_border_color, page_border_style)
+        self.border_inner_pt, self.border_inner_hex, self.border_style = spec
         self.bookmarks = bookmarks                # 每卷加书签（默认卷号）
         self.show_close_juan = show_close_juan    # 显示结束卷标题（fun="close"，默认隐藏）
         self.suppress_jhead_dup = suppress_jhead_dup  # 仅 jhead 去重（默认 true，head 保留书名）
@@ -2312,12 +2318,19 @@ class DocxRenderer:
                 if self.footnote_per_page else "")
         border = ""
         if self.page_border:
-            # 页面四周加框：0.75pt 单线，距纸边 24pt（与 PDF 版一致的边框）
+            # 宽/色键都是内框；单线=内框；双线=古籍双框（外粗内细，Word 原生
+            # thickThinMediumGap 近似：间距由 Word 定、单边单色取外框黑）。
+            if self.border_style == "double":
+                val, color = "thickThinMediumGap", "000000"
+                sz = max(2, round(self.border_inner_pt * 4 * 8))
+            else:
+                val, color = "single", self.border_inner_hex
+                sz = max(1, round(self.border_inner_pt * 8))
             b = '<w:pgBorders w:offsetFrom="page">' \
-                f'<w:top w:val="single" w:sz="6" w:space="24" w:color="000000"/>' \
-                f'<w:left w:val="single" w:sz="6" w:space="24" w:color="000000"/>' \
-                f'<w:bottom w:val="single" w:sz="6" w:space="24" w:color="000000"/>' \
-                f'<w:right w:val="single" w:sz="6" w:space="24" w:color="000000"/></w:pgBorders>'
+                f'<w:top w:val="{val}" w:sz="{sz}" w:space="24" w:color="{color}"/>' \
+                f'<w:left w:val="{val}" w:sz="{sz}" w:space="24" w:color="{color}"/>' \
+                f'<w:bottom w:val="{val}" w:sz="{sz}" w:space="24" w:color="{color}"/>' \
+                f'<w:right w:val="{val}" w:sz="{sz}" w:space="24" w:color="{color}"/></w:pgBorders>'
             border = b
 
         # 经藏名（title level="s"）仅首页顶部一行：正文首段左上角（隶体/黑体，可配置）

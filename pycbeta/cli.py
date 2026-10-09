@@ -203,6 +203,9 @@ def build_docx_renderer(args, theme, figure_base, note_mode):
         verse_strip_quotes=args.verse_strip_quotes,
         grayscale=args.grayscale,
         page_border=args.page_border,
+        page_border_width_pt=getattr(args, "page_border_width", None),
+        page_border_color=getattr(args, "page_border_color", None),
+        page_border_style=getattr(args, "page_border_style", None),
         bookmarks=args.bookmarks,
         split=args.split_juan,
         show_close_juan=args.show_close_juan,
@@ -374,6 +377,9 @@ def render_one(w, fmt, out_dir, out_name, args, theme, html_base=None, figure_ba
                             ignore_xml_space=args.ignore_xml_space,
                             grayscale=args.grayscale,
                             page_border=args.page_border,
+                            page_border_width_pt=getattr(args, "page_border_width", None),
+                            page_border_color=getattr(args, "page_border_color", None),
+                            page_border_style=getattr(args, "page_border_style", None),
                             bookmarks=args.bookmarks,
                             split=args.split_juan,
                             show_notes=args.show_notes,
@@ -653,7 +659,8 @@ def main(argv=None):
     shared = ap.add_argument_group("共享参数（所有格式）")
     shared.add_argument("-i", "--input", required=False, default=None,
                         help="input XML file, directory, or CBETA 佛典編號 (e.g. T0349/T0099/A1057/X1271；"
-                             "編號从本地 XML 源查找，缺失则自动从官方下载)")
+                             "編號从本地 XML 源查找，缺失则自动从官方下载；"
+                             "編號可带卷后缀 ID:范围，如 T0001:1-2，长编号如 T25n1509)")
     shared.add_argument("-o", "--output",
                         help="output file or directory (default: same name+ext in source dir)")
     shared.add_argument("-f", "--format", required=False, default=None,
@@ -744,6 +751,16 @@ def main(argv=None):
                     help="页面方案名（缺省有效配置 default_page；config.json 的 "
                          "pages，键大小写不敏感；或内置 a4/a5/信纸/手机/平板8寸/"
                          "平板9寸/平板11寸/32开/16开/B5）")
+    pg.add_argument("--page-border-width", type=float, default=None,
+                    help="页面边框内框线宽 pt（缺省 config output.page_border_width_pt；"
+                         "单线即此线，双线外框=内框×3 全黑）")
+    pg.add_argument("--page-border-color", default=None,
+                    help="页面边框内框颜色（缺省 config output.page_border_color；"
+                         "单线即此色，双线外框恒黑）")
+    pg.add_argument("--page-border-style", default=None,
+                    choices=["single", "double"],
+                    help="页面边框样式 single=单线 / double=古籍双框"
+                         "（缺省 config output.page_border_style）")
 
     pdfg = ap.add_argument_group("PDF 专属")
     pdfg.add_argument("--vertical", action="store_true",
@@ -882,6 +899,13 @@ def main(argv=None):
     args.verse_strip_quotes = bool(out_defaults.get("verse_strip_quotes"))
     args.grayscale = bool(out_defaults.get("grayscale"))
     args.page_border = bool(out_defaults.get("page_border"))
+    # 显式开关优先；否则取 config output（None 时渲染器按内框默认值解）
+    if args.page_border_width is None:
+        args.page_border_width = out_defaults.get("page_border_width_pt")
+    if args.page_border_color is None:
+        args.page_border_color = out_defaults.get("page_border_color")
+    if args.page_border_style is None:
+        args.page_border_style = out_defaults.get("page_border_style")
     args.bookmarks = out_defaults.get("bookmarks", True)
     args.split_juan = bool(out_defaults.get("split_juan"))
     args.show_close_juan = bool(out_defaults.get("show_close_juan"))

@@ -828,16 +828,35 @@ class TestDocxOptions(unittest.TestCase):
         self.assertIn("<w:color", z2.read("word/document.xml").decode("utf-8"))
 
     def test_page_border(self):
+        # 默认单线=内框规格（0.75pt → sz=6，深灰 #333333）
         fn = DocxRenderer(page_border=True).render_work(self.work, self.tmp, "border.docx")
         z = zipfile.ZipFile(fn)
         doc = z.read("word/document.xml").decode("utf-8")
         self.assertIn('<w:pgBorders w:offsetFrom="page">', doc)
         for side in ("top", "left", "bottom", "right"):
-            self.assertIn(f'<w:{side} w:val="single" w:sz="6" w:space="24" w:color="000000"/>', doc)
+            self.assertIn(f'<w:{side} w:val="single" w:sz="6" w:space="24" w:color="333333"/>', doc)
         # 对照组：默认无边框
         fn2 = DocxRenderer().render_work(self.work, self.tmp, "noborder.docx")
         z2 = zipfile.ZipFile(fn2)
         self.assertNotIn("<w:pgBorders", z2.read("word/document.xml").decode("utf-8"))
+
+    def test_page_border_inner_spec(self):
+        # 单线用内框宽/色：1.0pt → sz=8，红色
+        fn = DocxRenderer(page_border=True, page_border_width_pt=1.0,
+                          page_border_color="#FF0000").render_work(
+            self.work, self.tmp, "border-sp.docx")
+        doc = zipfile.ZipFile(fn).read("word/document.xml").decode("utf-8")
+        self.assertIn('<w:top w:val="single" w:sz="8" w:space="24" w:color="FF0000"/>', doc)
+
+    def test_page_border_double(self):
+        # 双线=古籍双框（Word 原生 thickThinMediumGap 近似，单边单色取外框黑；
+        # 默认内框 0.75 → 总线宽 3pt → sz=24）
+        fn = DocxRenderer(page_border=True,
+                          page_border_style="double").render_work(
+            self.work, self.tmp, "border-db.docx")
+        doc = zipfile.ZipFile(fn).read("word/document.xml").decode("utf-8")
+        for side in ("top", "left", "bottom", "right"):
+            self.assertIn(f'<w:{side} w:val="thickThinMediumGap" w:sz="24" w:space="24" w:color="000000"/>', doc)
 
 
 @requires_data

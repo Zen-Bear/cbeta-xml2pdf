@@ -1230,5 +1230,48 @@ class TestFactoryPath(unittest.TestCase):
             {"config-json": "config.factory.json"}, None), _PRESETS_PATH)
 
 
+class TestPageBorderSpec(unittest.TestCase):
+    """边框规格归一：宽/色键都是内框；单线=内框；双线=古籍双框。"""
+
+    def test_defaults(self):
+        from pycbeta.theme import page_border_spec
+        self.assertEqual(page_border_spec(None), (0.75, "333333", "single"))
+        self.assertEqual(page_border_spec({}), (0.75, "333333", "single"))
+
+    def test_presets_and_explicit(self):
+        from pycbeta.theme import page_border_spec
+        p = {"output": {"page_border_width_pt": 1.5,
+                        "page_border_color": "#ff0000",
+                        "page_border_style": "DOUBLE"}}
+        self.assertEqual(page_border_spec(p), (1.5, "FF0000", "double"))
+        # 显式优先于预设
+        self.assertEqual(
+            page_border_spec(p, 1.0, "#000000", "single"),
+            (1.0, "000000", "single"))
+
+    def test_invalid_falls_back(self):
+        from pycbeta.theme import page_border_spec
+        bad = {"output": {"page_border_width_pt": "粗",
+                          "page_border_color": "zzz",
+                          "page_border_style": "triple"}}
+        self.assertEqual(page_border_spec(bad), (0.75, "333333", "single"))
+        for w in (True, 0, -1.0, 99):
+            self.assertEqual(
+                page_border_spec({"output": {"page_border_width_pt": w}})[0],
+                0.75)
+        # 3 位简写展开
+        self.assertEqual(
+            page_border_spec({"output": {"page_border_color": "#000"}})[1],
+            "000000")
+
+    def test_factory_keys_present(self):
+        # 出厂文件带三键（注释为内框语义）
+        from pycbeta.theme import load_presets
+        out = load_presets()["output"]
+        self.assertEqual(out["page_border_width_pt"], 0.75)
+        self.assertEqual(out["page_border_color"], "#333333")
+        self.assertEqual(out["page_border_style"], "single")
+
+
 if __name__ == "__main__":
     unittest.main()

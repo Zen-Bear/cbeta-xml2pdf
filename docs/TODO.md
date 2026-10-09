@@ -694,3 +694,10 @@
   - 落地：`git mv pycbeta/config.json presets/config.factory.json`（注释保留）；`theme._PRESETS_PATH` 指新路径、`resolve_base_config` 哨兵名 `config.factory.json`（旧名 `config.json` 兼容认）、`DEFAULT_RUN_CONFIG`/`_RUN_TEMPLATE` 注释同步；撤 `factory_override_path`/`load_factory_presets`/`save_factory_override` 与 `panel` 双模式（「保存」回"覆盖选中、出厂项置灰"）；`panel.FACTORY_NAME`/`slot_paths`/`reset_factory`/`load_slot("factory")` 走新路径；`list_config_presets` 排除出厂文件（GUI/publish 预设下拉不出现）；`.gitignore` 去掉 `presets/backup/`
   - 测试：`test_theme.TestFactoryPath`（路径/哨兵名）+ `test_gui`（slot_paths/出厂项保存置灰/`list_config_presets` 排除）+ `test_annotate`/`test_docx` 三处改指 `_PRESETS_PATH`；全量回归
   - 文档：README/安装说明/主题与样式/GUI设计/第三方调用说明（§3.1b 改写）/功能清单/校验说明书 全部改指新名
+
+- [x] **已完成（用户立项，2026-10-09）** 页面边框粗细颜色 + 古籍双框（宽/色键都是内框；单线=内框，双线外框=内框×3全黑）
+  - 模型：`output.page_border_width_pt`（默认 0.75）+ `page_border_color`（默认 `#333333`）+ `page_border_style`（single/double，默认 single），开关 `page_border` 不动；归一 `theme.page_border_spec`（显式>预设>默认，非法静默回退）；双线间距恒 3pt（`DOUBLE_GAP_PT`，无键）
+  - 落地：`render_docx`（单线内框规格；双线 `thickThinMediumGap` Word 原生近似，单边单色取外框黑）+ `render_pdf._draw_page_borders`（精确绘制）+ CLI `--page-border-width/color/style`（显式>config）+ GUI 页面卡样式下拉/内框宽数字/内框色按钮（未勾选禁用，roundtrip）；verify 不读，指纹白名单不收（边框不影响文本，与 `font_scale` 同例）
+  - 外观变更：单线默认色由黑变深灰（单线=内框的推论）；迁移注记见主题与样式/功能清单（显式设 `#000000` 回旧观）
+  - 测试：`test_theme.TestPageBorderSpec` + `test_docx`（默认/内框规格/双线）+ `test_pdf.TestPageBorderDraw`（免数据，drawing 断言）+ `test_gui.TestPageBorderPanel`（roundtrip/禁用联动）
+  - 附带：独立窗输入帮助 C 方案（编号框卷示例+tooltip+「？」按钮`_input_help_dialog` QLabel 换行；「？」在输入来源行佛典編號列表右；`TestInputHelp` 4 项）

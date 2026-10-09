@@ -5518,5 +5518,114 @@ class TestVerifyRootOverride(unittest.TestCase):
             "X:/override")
 
 
+class TestInputHelp(unittest.TestCase):
+    """输入帮助说明（就地文案 + 「？」按钮弹窗文本，三形态 + 卷语法）。"""
+
+    @classmethod
+    def setUpClass(cls):
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PySide6.QtWidgets import QApplication
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_help_text_sections(self):
+        from pycbeta.gui.__main__ import input_help_text
+        t = input_help_text()
+        for kw in ("目录/文件", "编号列表", "卷范围", "ID:范围",
+                   "mini-test.txt", "T25n1509", "非法卷范围"):
+            self.assertIn(kw, t)
+
+    def test_ids_edit_placeholder_and_tooltip(self):
+        from pycbeta.gui.__main__ import MainWindow
+        w = MainWindow()
+        try:
+            self.assertIn("ID:范围", w.ids_edit.placeholderText())
+            tip = w.ids_edit.toolTip()
+            self.assertIn("ID:范围", tip)
+            self.assertIn("\n", tip)
+        finally:
+            w.close()
+
+    def test_help_button_present(self):
+        from PySide6.QtWidgets import QPushButton
+        from pycbeta.gui.__main__ import MainWindow
+        w = MainWindow()
+        try:
+            btns = [b for b in w.findChildren(QPushButton) if b.text() == "？"]
+            self.assertEqual(len(btns), 1)
+            self.assertIn("输入说明", btns[0].toolTip())
+            self.assertTrue(callable(getattr(w, "_show_input_help", None)))
+        finally:
+            w.close()
+
+    def test_help_dialog_wraps(self):
+        # QMessageBox 按词边界换行、CJK 长行不断行；对话框改 QLabel wordWrap
+        from PySide6.QtWidgets import QLabel
+        from pycbeta.gui.__main__ import MainWindow
+        w = MainWindow()
+        try:
+            dlg = w._input_help_dialog()
+            try:
+                labs = dlg.findChildren(QLabel)
+                self.assertTrue(any(l.wordWrap() for l in labs))
+                self.assertGreaterEqual(dlg.minimumWidth(), 400)
+            finally:
+                dlg.close()
+        finally:
+            w.close()
+
+
+class TestPageBorderPanel(unittest.TestCase):
+    """页面边框三控件（样式/内框宽/内框色）roundtrip + 禁用联动。"""
+
+    @classmethod
+    def setUpClass(cls):
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PySide6.QtWidgets import QApplication
+        cls.app = QApplication.instance() or QApplication([])
+
+    def _panel(self):
+        from pycbeta.gui.panel import XmlOptionsPanel
+        return XmlOptionsPanel({"output": {}})
+
+    def test_disabled_until_checked(self):
+        p = self._panel()
+        try:
+            for w in (p.border_style_box, p.border_width_spin,
+                      p.border_color_btn):
+                self.assertFalse(w.isEnabled())
+            p.border_box.setChecked(True)
+            for w in (p.border_style_box, p.border_width_spin,
+                      p.border_color_btn):
+                self.assertTrue(w.isEnabled())
+        finally:
+            p.close()
+
+    def test_roundtrip(self):
+        from pycbeta.gui.panel import XmlOptionsPanel
+        p = self._panel()
+        try:
+            p.border_box.setChecked(True)
+            p.border_style_box.setCurrentIndex(
+                p.border_style_box.findData("double"))
+            p.border_width_spin.setValue(1.5)
+            p.border_color_btn.setText("#FF0000")
+            o = p.get_options()
+            self.assertTrue(o.output["page_border"])
+            self.assertEqual(o.output["page_border_style"], "double")
+            self.assertEqual(o.output["page_border_width_pt"], 1.5)
+            self.assertEqual(o.output["page_border_color"], "FF0000")
+            p2 = XmlOptionsPanel({"output": {}})
+            try:
+                p2.set_options(o)
+                self.assertTrue(p2.border_box.isChecked())
+                self.assertEqual(p2.border_style_box.currentData(), "double")
+                self.assertEqual(p2.border_width_spin.value(), 1.5)
+                self.assertEqual(p2.border_color_btn.text(), "#FF0000")
+            finally:
+                p2.close()
+        finally:
+            p.close()
+
+
 if __name__ == "__main__":
     unittest.main()

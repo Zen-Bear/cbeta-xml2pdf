@@ -130,6 +130,64 @@ class TestPdfHorizontal(unittest.TestCase):
         self.assertEqual(len(set(pages)), 2)  # 两卷不同页
 
 
+class TestPageBorderDraw(unittest.TestCase):
+    """边框绘制规格（免数据：空白 PDF + pymupdf drawing 断言）。
+
+    单线=内框；双线=古籍双框（外框=内框×3 全黑、内框按给定值、间距恒 3pt）。
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp()
+
+    @classmethod
+    def tearDownClass(cls):
+        import shutil
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def _blank_pdf(self, name):
+        import pymupdf
+        src = os.path.join(self.tmp, name)
+        d = pymupdf.open()
+        d.new_page(width=595, height=842)
+        d.save(src)
+        d.close()
+        return src
+
+    @staticmethod
+    def _rgb(drawing):
+        return tuple(round(v, 3) for v in drawing["color"])
+
+    def test_single_spec(self):
+        # 单线=内框：自定义 1.0pt 红
+        import pymupdf
+        src = self._blank_pdf("sp.pdf")
+        _draw_page_borders(src, 1.0, "FF0000", "single")
+        doc = pymupdf.open(src)
+        drawings = doc[0].get_drawings()
+        doc.close()
+        self.assertEqual(len(drawings), 1)
+        self.assertAlmostEqual(drawings[0]["width"], 1.0)
+        self.assertEqual(self._rgb(drawings[0]), (1.0, 0.0, 0.0))
+
+    def test_double_spec(self):
+        import pymupdf
+        from pycbeta.theme import DOUBLE_GAP_PT
+        src = self._blank_pdf("db.pdf")
+        _draw_page_borders(src, 0.75, "333333", "double")
+        doc = pymupdf.open(src)
+        drawings = doc[0].get_drawings()
+        doc.close()
+        self.assertEqual(len(drawings), 2)
+        drawings.sort(key=lambda d: d["rect"].width, reverse=True)
+        outer, inner = drawings
+        self.assertAlmostEqual(outer["width"], 2.25)
+        self.assertEqual(self._rgb(outer), (0.0, 0.0, 0.0))
+        self.assertAlmostEqual(inner["width"], 0.75)
+        self.assertEqual(self._rgb(inner), (0.2, 0.2, 0.2))
+        self.assertAlmostEqual(inner["rect"].x0, 24.0 + 2.25 + DOUBLE_GAP_PT)
+
+
 class TestVerticalWrap(unittest.TestCase):
     """竖排 body class 开关（纯字符串，不调引擎/字体）。"""
 
