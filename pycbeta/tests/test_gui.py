@@ -2493,19 +2493,26 @@ class TestNotesTab(unittest.TestCase):
                 label = lab.widget().text() if lab and lab.widget() else None
                 rows.append((label, field_widget(fl.itemAt(i, QFormLayout.FieldRole))))
             labels = [l for l, _ in rows if l]
-            for t in ("正文夹注", "注释总开关", "注释方式", "校注内联括号"):
+            for t in ("正文夹注", "注释总开关", "注释方式"):
                 self.assertIn(t, labels)
+            self.assertNotIn("校注内联括号", labels)  # 已并入注释方式行，非独立表单行
             fields = [w for _, w in rows]
             i_br = fields.index(panel.brackets_box)
             i_si = fields.index(panel.siddham_box)
             i_ms = fields.index(panel.notes_on)
             i_nm = fields.index(panel.notes_mode)
-            i_nb = fields.index(panel.note_brackets_box)
             # 正文设置（正文夹注/悉昙）排在「注释总开关」之前；悉昙在正文夹注之后
             self.assertLess(i_br, i_si)
             self.assertLess(i_si, i_ms)
             self.assertLess(i_ms, i_nm)
-            self.assertLess(i_nm, i_nb)
+            # 校注内联括号在注释方式下拉右边同行（含标签），且为末行
+            mode_row = fl.itemAt(i_nm, QFormLayout.FieldRole).layout()
+            in_row = [mode_row.itemAt(j).widget()
+                      for j in range(mode_row.count())]
+            self.assertIn(panel.note_brackets_box, in_row)
+            self.assertIn(panel.note_brackets_label, in_row)
+            self.assertEqual(panel.note_brackets_label.text(), "校注内联括号")
+            self.assertEqual(i_nm, fl.rowCount() - 1)
             # 注释方式下拉收窄
             self.assertLessEqual(panel.notes_mode.maximumWidth(), 120)
         finally:

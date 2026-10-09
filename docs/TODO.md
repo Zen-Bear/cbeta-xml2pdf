@@ -703,3 +703,8 @@
   - 附带：独立窗输入帮助 C 方案（编号框卷示例+tooltip+「？」按钮`_input_help_dialog` QLabel 换行；「？」在输入来源行佛典編號列表右；`TestInputHelp` 4 项）
   - 追修（2026-10-09 用户报双线外框左/上线细）：根因非生成端（XML 四边逐字相同）而是渲染器镜像约定——`thickThinMediumGap` 粗细方向标准未定义，LO 实测不按边镜像（上/左翻转；`double` 对称正常、`thinThick` 呈镜像反转，反证成立），WPS 同症（用户所见），Word 按边镜像才正确
   - 追修2（用户：双线还是细 + 给六步手工法）：等粗 `double` 两线皆细不像古籍。改混合式——外框 `pgBorders single`（宽=内框×3 黑，全后端通用）＋ 内框 header DrawingML 锚定矩形（`behindDoc` 衬底，`header2.xml`/rId5 全节引用，每页重复；`w:document` 根补 `xmlns:r`，休眠扩展点潜 bug）；合成 12 页 LO 实测每页外 2.25 黑/内 0.75 `#333`（像素色值 0/51/255 对齐），版式无扰动；`TestFrameHeaderXml` 免数据 3 项
+
+- [x] **已完成（用户点档）** 注释/校验两卡布局收紧
+  - 注释卡：校注内联括号并入注释方式下拉右边同行（下拉+标签同置灰 `_sync_note_brackets_enabled`）；注释总开关上方加横线（QFrame HLine/Sunken），与正文夹注组视觉分开
+  - 校验卡：两条灰字说明并入复选框同行（不折行，卡高度省两行）；scope 说明重写为用法（只用输入 XML 实际覆盖卷的官方 _NNN 基线；--juan 子集必备）+ `scope_box` tooltip 完整用法（与 `verify.py:1884` 对过）
+  - 测试：`test_notes_on_label_and_row` 按新布局重写（无独立表单行、同行含下拉+标签、末行断言）；全量 `test_gui` 298 OK；`GUI设计.md` 示意图同步

@@ -21,7 +21,7 @@ from PySide6.QtGui import QColor, QDesktopServices, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QCheckBox, QComboBox, QColorDialog, QDialog,
     QDialogButtonBox, QDoubleSpinBox,
-    QFileDialog, QFormLayout, QGridLayout, QGroupBox, QHBoxLayout, QInputDialog,
+    QFileDialog, QFormLayout, QFrame, QGridLayout, QGroupBox, QHBoxLayout, QInputDialog,
     QLabel, QLineEdit,
     QMessageBox, QPlainTextEdit, QPushButton, QRadioButton, QHeaderView, QScrollArea, QSpinBox,
     QTableWidget, QTableWidgetItem,
@@ -956,13 +956,6 @@ class XmlOptionsPanel(QWidget):
         form.addRow("", self.typo_info)
         self.grayscale_box = self._check("黑白输出")
         self.border_box = self._check("页面边框")
-        _grow = QHBoxLayout()
-        _grow.setContentsMargins(0, 0, 0, 0)
-        _grow.addWidget(self.grayscale_box)
-        _grow.addSpacing(24)
-        _grow.addWidget(self.border_box)
-        _grow.addStretch(1)
-        form.addRow("", _grow)
         # 边框规格：宽/色键都是内框；单线=内框；双线=古籍双框（外框=内框×3 全黑）
         self.border_style_box = QComboBox()
         self.border_style_box.addItem("单线", "single")
@@ -980,16 +973,20 @@ class XmlOptionsPanel(QWidget):
         self.border_color_btn = QPushButton("#333333")
         self.border_color_btn.setToolTip("内框颜色（单线即此色；双线外框恒黑）")
         self.border_color_btn.clicked.connect(self._pick_border_color)
-        brow = QHBoxLayout()
-        brow.setContentsMargins(0, 0, 0, 0)
-        brow.addWidget(QLabel("样式"))
-        brow.addWidget(self.border_style_box)
-        brow.addWidget(QLabel("内框宽度"))
-        brow.addWidget(self.border_width_spin)
-        brow.addWidget(QLabel("内框颜色"))
-        brow.addWidget(self.border_color_btn)
-        brow.addStretch(1)
-        form.addRow("", brow)
+        _grow = QHBoxLayout()
+        _grow.setContentsMargins(0, 0, 0, 0)
+        _grow.addWidget(self.grayscale_box)
+        _grow.addSpacing(24)
+        _grow.addWidget(self.border_box)
+        _grow.addSpacing(12)
+        _grow.addWidget(QLabel("样式"))
+        _grow.addWidget(self.border_style_box)
+        _grow.addWidget(QLabel("内框宽度"))
+        _grow.addWidget(self.border_width_spin)
+        _grow.addWidget(QLabel("内框颜色"))
+        _grow.addWidget(self.border_color_btn)
+        _grow.addStretch(1)
+        form.addRow("", _grow)
         self.border_box.toggled.connect(self._sync_border_enabled)
         self._sync_border_enabled(self.border_box.isChecked())
         # 佛典丛书名（title level="s"）：仅首页左上角一行（无「每页」选项）
@@ -1001,14 +998,13 @@ class XmlOptionsPanel(QWidget):
             "output.series_title.enabled：经藏名（title level=\"s\"）印在首页左上角；"
             "字体/字号走 CSS p.series-title")
         _srow.addWidget(self.series_on)
-        _srow.addStretch(1)
-        form.addRow("", _srow)
         _shint = self._gray_hint(
             "（经藏名 title level=\"s\" 仅印在首页左上角；字体/字号走 CSS p.series-title）")
-        # 与「纸张绑定」说明同款：不折行 + 固定单行高，左端对齐，避免大段留白
+        # 灰字说明跟在复选框后同行：不折行，免换行抖动
         _shint.setWordWrap(False)
-        _shint.setFixedHeight(self.fontMetrics().lineSpacing())
-        form.addRow("", _shint)
+        _srow.addWidget(_shint)
+        _srow.addStretch(1)
+        form.addRow("", _srow)
         return w
 
     def _preset_margins(self):
@@ -1727,6 +1723,11 @@ class XmlOptionsPanel(QWidget):
             "开启后偏离官方基线，校验必挂，阅读版专用")
         form.addRow("", self.siddham_text_box)
 
+        # 分隔线：正文夹注组（与总开关无关）与注释总开关视觉分开
+        _notes_sep = QFrame()
+        _notes_sep.setFrameShape(QFrame.Shape.HLine)
+        _notes_sep.setFrameShadow(QFrame.Shadow.Sunken)
+        form.addRow(_notes_sep)
         # 注释总开关及其从属项
         self.notes_on = self._check("显示注释", checked=True)
         form.addRow("注释总开关", self.notes_on)
@@ -1743,23 +1744,31 @@ class XmlOptionsPanel(QWidget):
             "注释方式：页底脚注（docx/pdf）/ 文末尾注 / 括号内联\n"
             "html/epub/md/txt 只区分“是否括号内联”；校验固定用脚注/尾注，不受此影响")
         self.notes_mode.setMaximumWidth(110)
-        form.addRow("注释方式", _wrap(self.notes_mode))
         self.note_brackets_box = self._combo(
             [("〔〕", "corner"), ("[]", "square"),
              ("全角（）", "fullwidth"), ("半角()", "halfwidth")], "fullwidth")
         self.note_brackets_box.setToolTip(
             "注释方式=“括号内联”时校注的括号（默认全角）\n"
             "〔〕/[] 用于与正文夹注（）区分")
-        form.addRow("校注内联括号", _wrap(self.note_brackets_box))
+        self.note_brackets_label = QLabel("校注内联括号")
+        _moderow = QHBoxLayout()
+        _moderow.setContentsMargins(0, 0, 0, 0)
+        _moderow.addWidget(self.notes_mode)
+        _moderow.addSpacing(12)
+        _moderow.addWidget(self.note_brackets_label)
+        _moderow.addWidget(self.note_brackets_box)
+        _moderow.addStretch(1)
+        form.addRow("注释方式", _moderow)
         self.notes_mode.currentIndexChanged.connect(
             lambda _i: self._sync_note_brackets_enabled())
         self._sync_note_brackets_enabled()
         return w
 
     def _sync_note_brackets_enabled(self):
-        """仅注释方式=括号内联时「校注内联括号」可编辑。"""
-        self.note_brackets_box.setEnabled(
-            self.notes_mode.currentData() == "inline")
+        """仅注释方式=括号内联时「校注内联括号」可编辑（下拉+标签同置灰）。"""
+        on = self.notes_mode.currentData() == "inline"
+        self.note_brackets_box.setEnabled(on)
+        self.note_brackets_label.setEnabled(on)
 
     def _sync_border_enabled(self, on=False):
         """仅勾选页面边框时样式/内框宽/内框色可编辑。"""
@@ -1881,15 +1890,28 @@ class XmlOptionsPanel(QWidget):
         self.difflines_spin.valueChanged.connect(lambda _v: self._changed())
         form.addRow("报告差异行数", self.difflines_spin)
         self.autofetch_box = self._check("官方文档缺失自动下载", checked=True)
-        self.scope_box = self._check("按卷限定官方文档", checked=True)
-        form.addRow("", self.autofetch_box)
         _af_hint = self._gray_hint("（首选基线缺失时自动下载官方文档）")
-        _af_hint.setContentsMargins(20, 0, 0, 0)
-        form.addRow("", _af_hint)
-        form.addRow("", self.scope_box)
-        _sj_hint = self._gray_hint("（只用 XML 实际覆盖卷的官方 _NNN 文件）")
-        _sj_hint.setContentsMargins(20, 0, 0, 0)
-        form.addRow("", _sj_hint)
+        _af_hint.setWordWrap(False)
+        _afrow = QHBoxLayout()
+        _afrow.setContentsMargins(0, 0, 0, 0)
+        _afrow.addWidget(self.autofetch_box)
+        _afrow.addWidget(_af_hint)
+        _afrow.addStretch(1)
+        form.addRow("", _afrow)
+        self.scope_box = self._check("按卷限定官方文档", checked=True)
+        self.scope_box.setToolTip(
+            "verify.scope_juan（默认开）：校验发现官方基线时，按输入 XML 实际覆盖的卷号"
+            "过滤，只用对应的 html/docx/txt_notes _NNN 分卷文件；整包无 _NNN 基线仍按原规则。"
+            "--juan 卷子集校验时靠它限定对照；不勾则不限定卷。")
+        _sj_hint = self._gray_hint(
+            "（勾选：只用输入 XML 实际覆盖卷的官方 _NNN 基线；--juan 子集必备）")
+        _sj_hint.setWordWrap(False)
+        _sjrow = QHBoxLayout()
+        _sjrow.setContentsMargins(0, 0, 0, 0)
+        _sjrow.addWidget(self.scope_box)
+        _sjrow.addWidget(_sj_hint)
+        _sjrow.addStretch(1)
+        form.addRow("", _sjrow)
         self.clean_verify_btn = QPushButton("清理校验产物…")
         self.clean_verify_btn.setToolTip(
             "删除输出目录下的校验中间产物（旧 *（验证）/ 新 验证/ 总目录："
