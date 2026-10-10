@@ -1,4 +1,4 @@
-# pycbeta — CBETA XML P5 多格式转换器
+# CBETA XML P5 多格式转换器（非官方项目）
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
