@@ -176,10 +176,9 @@
   },
 
   "source": {
-    // 本机路径放 presets/config.user.json（不入库）；出厂留空，空即报错提示去配。
+    // 本机路径放 presets/config.user.json（v0.5 起入库标准预设，路径留空，他机按需填）；出厂留空，空即报错提示去配。
     // CLI --xml-dir/--cbeta-ebook 可覆盖；GUI 数据源窗口可视编辑后存当前选中预设
     "catalog": "cbeta/data/sutra_mapping.txt",  // 仓库相对路径，钉死内置（fetch.resolve_catalog 按仓库根解析；禁止自定义）
-    "xml_dir": "",        // 本地 XML 候选源（只读，角色同远端 URL；不得与 cbeta_ebook 相同）
     "xml_dir": "",        // 本地 XML 候选源（只读，角色同远端 URL；不得与 cbeta_ebook 相同）
     "cbeta_ebook": "",    // 电子书输出目录（唯一可写）：平展一部一目录，XML+基线同目录
     "verify_root": "",    // 校验产物总目录（为空=跟随输出目录，即 {输出}/验证；CLI --verify-root 优先）

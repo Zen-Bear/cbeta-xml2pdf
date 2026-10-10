@@ -16,6 +16,7 @@ playwright install chromium   # PDF 默认引擎
 
 完整说明（PDF 各引擎安装、字体安装、GUI 使用、常见问题）见 `docs/安装说明.md`。
 图形界面：`python -m pycbeta.gui`（七选项卡 + 独立转换窗，PySide6）。
+免 Python 绿色版见 Releases（解压即用；用法见 `docs/安装说明.md` §8）。
 
 ## 快速上手
 
