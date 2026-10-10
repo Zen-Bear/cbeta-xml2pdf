@@ -1,7 +1,7 @@
 # CBETA XML P5 → 多格式转换工具 · 设计规格书
 
 > ⚠️ **历史文档**（2026-08-13 草案）：实现与本文已有演进，CLI/配置以当前 `python -m pycbeta --help`
-> 与 `docs/安装说明.md` 为准（如 `--theme` → `--pdf-docx-theme`/`--pdf-docx-user-theme`）。
+> 与根 `README.md` 为准（如 `--theme` → `--pdf-docx-theme`/`--pdf-docx-user-theme`）。
 
 | 项 | 内容 |
 |---|---|
@@ -396,7 +396,7 @@ Note 与 App 的**归属版本**（witness 解析后的【大】【宋】…）�
 python -m pycbeta -i <xml|目录> -f <format> [-o <输出>] [选项]
 
 共享参数（所有格式）: -i/--input  -o/--output  -f/--format{html,pdf,docx,md,epub,txt,all}
-                     --theme  --name-template  --juan 范围（或 -i ID:范围，见安装说明）
+                     --theme  --name-template  --juan 范围（或 -i ID:范围，见 README）
 注释（所有格式）   : --notes{footnote,endnote,inline}
 页面（pdf/docx）   : --page{a4,a5,信纸,手机,平板8寸,平板9寸,平板11寸,32开,16开}
 PDF 专属           : --vertical  --engine{chromium,docx2pdf,prince,weasyprint}

@@ -67,7 +67,7 @@
 
   "engines": {
     // 转换引擎配置（命令行 --engine / --pdf-engine 优先于此处）
-    // html2pdf：HTML -> PDF 管线
+    // 默认管线 docx2pdf（MS Word / WPS / LibreOffice 系优先）；html2pdf 是最后手段（Word 系全不可用才走）
     // chain = 引擎链（按序尝试，第一个成功者出 PDF）；--engine 强制指定单个时覆盖
     "html2pdf": {
       "chain": ["chromium", "cbetapdf"]
