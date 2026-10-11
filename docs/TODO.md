@@ -623,7 +623,8 @@
   - 单卷基线下载：新增 `fetch_baseline_juan(work_id, kind, juans, …)`，仅 `auto_fetch` 且子集模式、缺卷时补下；URL 形态（build 时实测 canon 层/位数）：txt 含注 `…/text-with-notes/{ID}_{NNN}.txt.zip`、html `…/html/{ID}_{NNN}.html`、docx `…/docx/{canon}/{ID}_{NNN}.docx`；素文本 `…/text/`（不含注）**不接线**（校验链无素文本 trial，全格式 `show_notes=True` 恒比注）；epub/odt 无单卷形态，整包 fallback
   - 测试：新 `test_juan.py`（spec 正误例、合成 Work 过滤、注/app 裁剪、前置内容、空交集报错、label/模板）；X1077 e2e（`--juan 2-3` 带后缀 + 全范围 no-op 字节一致）；GUI job 解析；单卷下载 mock；全量回归
   - 文档：README/安装说明（CLI 参数）、`GUI设计`（编号后缀：`ID:范围`、多段 `+`、`--juan`）、`校验说明书`（子集语义/整包基线必红/P3 不支持/单卷下载）、`主题与样式`+`兜底值清单`（`output.juan_suffix_template`）
-  - 非目标：品名选择（如“初序品”，另议）、XML 预过滤（先全量 parse，正确性优先）、按卷下载 XML（整包一次）
+   - 非目标：品名选择（如“初序品”，另议）、XML 预过滤（先全量 parse，正确性优先）、按卷下载 XML（整包一次）
+   - 追修（2026-10-11 用户报 T0220:479 卷定位不了）：根因非过滤逻辑（T07 的 479 本就能出），而是多文件分册经（T05/T06/T07）不含所选卷的文件被当**失败**计——CLI 退出码恒 1、GUI 行红字、`empty` 分支倾泻全卷列表（如 200 个卷号刷屏），产物被红字淹没。修法：`juan.scan_file_juans`（正则快扫，不全量解析；无数字 n/不可读→None 按命中）+ `partition_juan_xmls` 预分区（与 `filter_work_juan` 空/非空判定等价）；CLI 編號/目录分支预跳过（info 一行，>8 收敛总数；全不命中 `ap.error`；单文件分支保持严格）；GUI run 循环同口径预跳过（不起子进程、进度照累加，全不命中行红字保留）；`empty` 消息改紧凑区间。实测 `T0220:479` 只出 T07 卷479、EXIT 0；`:601` 大声报错 EXIT 2；单文件 strict 不变
 
 - [x] **已完成** 外部引擎改走上游下载（2026-10-01 用户立项；2026-10-06 用户决议**不上传附件**，安装文档给 URL）
   - 仓库已公开：https://github.com/Zen-Bear/cbeta-xml2pdf（Public、GPL-3.0、分支 `main`、tag `v0.1`）

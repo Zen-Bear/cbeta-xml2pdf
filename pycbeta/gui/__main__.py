@@ -315,6 +315,32 @@ class BatchWorker(QThread):
                     # 「缺 XML」自相矛盾）
                     self.row_source.emit(idx, "")
                     continue
+                _segs = None
+                if job.get("juan"):
+                    # 卷子集 + 多文件分册经：预分区，不含所选卷的文件直接跳过
+                    # （不起子进程、不计失败、不标红；全不命中则行红字保留）
+                    try:
+                        from pycbeta.juan import parse_juan_spec as _pjs
+                        _segs = job.get("juan_segments") or _pjs(job.get("juan"))
+                    except ValueError:
+                        _segs = None
+                if _segs:
+                    from pycbeta.juan import partition_juan_xmls as _pjx
+                    from pycbeta.juan import format_juan_label as _fjl
+                    from pycbeta.juan import format_juan_range as _fjr
+                    _hit, _miss = _pjx(xmls, _segs)
+                    for _mp, _mj in _miss:
+                        self.log.emit(f"跳过 {os.path.basename(_mp)}：无所选卷"
+                                      f"{_fjl(_segs)}（实际卷 {_fjr(_mj)}）")
+                    if not _hit:
+                        self.row_status.emit(idx, "卷范围与全部文件无交集")
+                        self.row_verify.emit(idx, "fail")
+                        total_units -= n_fmt * _factor
+                        self.total_progress.emit(done_units,
+                                                 max(total_units, 1))
+                        self.row_source.emit(idx, "")
+                        continue
+                    xmls = _hit
                 if len(xmls) != 1:
                     # 多册经一个 job 展开多个 XML（如 TX0001→TX01n0001/TX02n0001）：
                     # 按实际 XML 数补足预算，避免提前冲到 100% 后干等

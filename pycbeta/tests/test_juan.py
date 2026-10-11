@@ -210,5 +210,55 @@ class TestFilterWorkJuan(unittest.TestCase):
         self.assertEqual(texts, ["two"])
 
 
+class TestScanPartition(unittest.TestCase):
+    """文件预扫描 + 分区（多文件分册经 + 卷子集，免全量解析）。"""
+
+    def _tmp(self, body):
+        import os
+        import tempfile
+        d = tempfile.mkdtemp()
+        self.addCleanup(__import__("shutil").rmtree, d, True)
+        p = os.path.join(d, "w.xml")
+        with open(p, "w", encoding="utf-8") as f:
+            f.write(body)
+        return p
+
+    def test_scan_basic(self):
+        p = self._tmp('<a><milestone n="1" unit="juan"/><milestone n="2" unit="juan"/></a>')
+        self.assertEqual(J.scan_file_juans(p), {1, 2})
+
+    def test_scan_attr_order_and_quotes(self):
+        # 属性乱序 + 单引号兼容
+        p = self._tmp("<a><milestone unit='juan' n='7'/></a>")
+        self.assertEqual(J.scan_file_juans(p), {7})
+
+    def test_scan_missing_n_is_unknown(self):
+        # 无数字 n → 无法定位，返回 None（调用方按命中处理，不错杀）
+        p = self._tmp('<a><milestone unit="juan"/></a>')
+        self.assertIsNone(J.scan_file_juans(p))
+
+    def test_scan_no_milestone_or_missing_file(self):
+        p = self._tmp("<a><p>x</p></a>")
+        self.assertEqual(J.scan_file_juans(p), set())
+        self.assertIsNone(J.scan_file_juans(p + ".not-exist"))
+
+    def test_format_juan_range(self):
+        self.assertEqual(J.format_juan_range({1, 2, 3}), "1-3（共3卷）")
+        self.assertEqual(J.format_juan_range(set()), "（空）")
+
+    def test_partition(self):
+        a = self._tmp('<a><milestone n="1" unit="juan"/></a>')
+        b = self._tmp('<a><milestone n="2" unit="juan"/></a>')
+        c = self._tmp("<a><p>x</p></a>")  # 无 milestone → 命中（保留警告路径）
+        hit, miss = J.partition_juan_xmls([a, b, c], [(2, 2)])
+        self.assertEqual(hit, [b, c])
+        self.assertEqual([m for m, _ in miss], [a])
+        self.assertEqual(miss[0][1], {1})
+        # segs 为空 → 全命中零变化；全不命中由调用方判（此处只分区）
+        self.assertEqual(J.partition_juan_xmls([a, b], None), ([a, b], []))
+        hit2, _ = J.partition_juan_xmls([a, b], [(9, 9)])
+        self.assertEqual(hit2, [])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

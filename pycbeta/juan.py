@@ -12,6 +12,7 @@ milestone 保留（分页/分文件/书签机制照常）；`juan 0`（首 miles
 仅在所选含全书最小卷时保留；无 milestone → `no_milestone`（调用方警告忽略）；
 选择覆盖全部卷 → `full`（不动，字节一致、不加后缀）。
 """
+import os
 import re
 from dataclasses import replace
 from typing import List, Optional, Set, Tuple
@@ -20,7 +21,8 @@ from .model import App, E, NoteRef, Work
 
 __all__ = ["parse_juan_spec", "juan_set", "format_juan_label",
            "split_id_juan", "resolve_juan_suffix", "filter_work_juan",
-           "normalize_segments", "DEFAULT_SUFFIX_TEMPLATE"]
+           "normalize_segments", "DEFAULT_SUFFIX_TEMPLATE",
+           "scan_file_juans", "partition_juan_xmls", "format_juan_range"]
 
 #: 卷号上限（防 `1-99999999` 类输入炸内存）
 _MAX_JUAN = 9999
@@ -247,3 +249,67 @@ def filter_work_juan(work: Work, segs) -> dict:
     res["status"] = "filtered"
     res["kept"] = selected & all_juans
     return res
+
+
+def format_juan_range(nums) -> str:
+    """卷号集合 → 紧凑区间（`1-200（共200卷）`；空集 → `（空）`）。
+
+    给"无交集"类消息用：不倾泻全列表（如 T0220 般 200 个卷号刷屏）。
+    """
+    s = sorted(set(nums or []))
+    if not s:
+        return "（空）"
+    return f"{s[0]}-{s[-1]}（共{len(s)}卷）"
+
+
+def scan_file_juans(path) -> Optional[Set[int]]:
+    """XML 文件中 `<milestone unit="juan" n="…">` 卷号集合（正则快扫，不全量解析）。
+
+    属性乱序/单引号兼容；任一 milestone 缺数字 n，或文件不可读 →
+    返回 None（未知；调用方按"命中"处理，走现有警告+整渲原路径，宁可多转不错杀）。
+    无 milestone → 空集（同样按命中处理，保留 `no_milestone` 语义）。
+    """
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            text = f.read()
+    except OSError:
+        return None
+    tags = re.findall(r"<milestone\b[^>]*>", text)
+    if not tags:
+        return set()
+    out: Set[int] = set()
+    for t in tags:
+        m_unit = re.search(r"""unit\s*=\s*["']([^"']*)["']""", t)
+        if not m_unit or m_unit.group(1) != "juan":
+            continue
+        m_n = re.search(r"""n\s*=\s*["']([^"']*)["']""", t)
+        if m_n is None:
+            return None
+        try:
+            out.add(int(m_n.group(1)))
+        except (TypeError, ValueError):
+            return None
+    return out
+
+
+def partition_juan_xmls(xmls, segs) -> Tuple[list, list]:
+    """按卷范围把文件列表切分为 (命中, 跳过)（纯函数，可单测）。
+
+    - segs 为空 → (全部, [])，零行为变化；
+    - 扫不到卷号（None/空集）→ 算命中（宁可多转不错杀，保留既有警告路径）；
+    - 命中 = 卷号集合与所选有交集（与 `filter_work_juan` 空/非空判定等价：
+      命中的 milestone 节点必保留，body 必非空）。
+    返回 ([命中路径...], [(跳过路径, 该文件卷号集)...])。
+    """
+    xmls = list(xmls or [])
+    if not segs:
+        return xmls, []
+    want = juan_set(segs)
+    hit, miss = [], []
+    for x in xmls:
+        got = scan_file_juans(x)
+        if got is None or not got or (set(got) & want):
+            hit.append(x)
+        else:
+            miss.append((x, got))
+    return hit, miss

@@ -533,6 +533,30 @@ def _write_convert_reports(xml_fn, args, w, formats):
         return ""
 
 
+def _apply_juan_partition(xmls, args, ap):
+    """多文件 + 卷子集预分区（CLI 編號/目录分支共用；单文件分支不用，保持严格）。
+
+    不含所选卷的文件直接跳过（打 info，不计失败；>8 个收敛为总数一行）；
+    所选卷在全部文件中都不存在 → `ap.error` 大声失败（保 typo 检出）。
+    返回命中列表（verify 循环复用同一结果）。
+    """
+    from .juan import (partition_juan_xmls, format_juan_label,
+                       format_juan_range)
+    hit, miss = partition_juan_xmls(xmls, args.juan_segments)
+    if not hit:
+        ap.error(f"{args.input}: 卷范围{format_juan_label(args.juan_segments)}"
+                 f"与全部 {len(xmls)} 个文件无交集")
+    if len(miss) > 8:
+        print(f"跳过 {len(miss)} 个不含所选卷"
+              f"{format_juan_label(args.juan_segments)}的文件")
+    else:
+        for mp, mj in miss:
+            print(f"跳过 {os.path.basename(mp)}：无所选卷"
+                  f"{format_juan_label(args.juan_segments)}"
+                  f"（实际卷 {format_juan_range(mj)}）")
+    return hit
+
+
 def process_file(xml_fn, formats, args, theme, html_base=None, _used=None,
                  ebook_root=None):
     w = P5Parser().parse(xml_fn)
@@ -556,8 +580,12 @@ def process_file(xml_fn, formats, args, theme, html_base=None, _used=None,
                     report.add("卷范围",
                                f"仅输出卷 {_jr['label']}（共 {len(_jr['kept'])} 卷）")
             elif _jr["status"] == "empty":
+                # 安全网：正常流程已由分区预跳过；走到这里说明文件在分区后才变卦
+                # （如 milestone 在注释里致正则误判）——仍按严格失败计。
+                # 不再倾泻全卷列表（如 T0220 般 200 个卷号刷屏）。
+                from .juan import format_juan_range as _fjr2
                 print(f"{w.id}: 卷范围与全书无交集"
-                      f"（实际卷 {sorted(_jr['all'])}）", file=sys.stderr)
+                      f"（实际卷 {_fjr2(_jr['all'])}）", file=sys.stderr)
                 return 1
             elif _jr["status"] == "no_milestone":
                 print(f"{w.id}: 无卷 milestone，忽略卷范围", file=sys.stderr)
@@ -1030,6 +1058,8 @@ def main(argv=None):
         if not _dir_xmls:
             ap.error(f"no XML files under {args.input}")
         xmls = _dir_xmls
+        if getattr(args, "juan_segments", None):
+            xmls = _dir_xmls = _apply_juan_partition(_dir_xmls, args, ap)
         if not args.verify_only:
             # 只校验已有产物：跳过渲染，xmls 照常收集供校验段用
             for x in _dir_xmls:
@@ -1058,6 +1088,8 @@ def main(argv=None):
             ap.error(str(exc))
         if not xmls:
             ap.error(f"{args.input}: 本地候选源与官方均未取得 XML")
+        if getattr(args, "juan_segments", None):
+            xmls = _apply_juan_partition(xmls, args, ap)
         if not args.verify_only:
             for x in xmls:
                 render_failed += process_file(x, formats, args, theme, html_base=html_base,
@@ -1175,7 +1207,10 @@ def main(argv=None):
                 results.append((block_failed, name, block))
                 continue
             if _juan_status == "empty":
-                block.append("  卷范围与全书无交集")
+                # 安全网：同上，分区后正常走不到这里
+                from .juan import format_juan_range as _fjr3
+                block.append("  卷范围与全书无交集"
+                             f"（实际卷 {_fjr3(_jr['all'])}）")
                 grand_fail += 1; grand_total += 1
                 block_failed = True
                 results.append((block_failed, name, block))

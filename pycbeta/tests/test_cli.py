@@ -169,6 +169,73 @@ class TestProcessFileJuan(unittest.TestCase):
         R.assert_not_called()
 
 
+class TestApplyJuanPartition(unittest.TestCase):
+    """多文件 + 卷子集预分区：命中才转，跳过不计失败，全不命中大声报错。"""
+
+    def _tmp(self, name, body):
+        import os
+        import shutil
+        import tempfile
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        p = os.path.join(d, name)
+        with open(p, "w", encoding="utf-8") as f:
+            f.write(body)
+        return p
+
+    def _args(self, segs):
+        from types import SimpleNamespace
+        return SimpleNamespace(input="T0220:479", juan_segments=segs)
+
+    def test_hit_and_miss(self):
+        import argparse
+        import io
+        from contextlib import redirect_stdout
+        import pycbeta.cli as cli
+        a = self._tmp("a.xml", '<a><milestone n="1" unit="juan"/></a>')
+        b = self._tmp("b.xml", '<a><milestone n="479" unit="juan"/></a>')
+        ap = argparse.ArgumentParser(prog="t")
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            hit = cli._apply_juan_partition([a, b], self._args([(479, 479)]),
+                                            ap)
+        self.assertEqual(hit, [b])
+        out = buf.getvalue()
+        # 紧凑区间（1-1）而非全列表；含被跳过文件名
+        self.assertIn("跳过", out)
+        self.assertIn("a.xml", out)
+        self.assertIn("479", out)
+        self.assertIn("1-1", out)
+
+    def test_none_match_errors(self):
+        import argparse
+        import pycbeta.cli as cli
+        a = self._tmp("a.xml", '<a><milestone n="1" unit="juan"/></a>')
+        ap = argparse.ArgumentParser(prog="t")
+        with self.assertRaises(SystemExit):
+            cli._apply_juan_partition([a], self._args([(9, 9)]), ap)
+
+    def test_many_miss_summary(self):
+        import argparse
+        import io
+        from contextlib import redirect_stdout
+        import pycbeta.cli as cli
+        files = [self._tmp(f"f{i}.xml", '<a><milestone n="1" unit="juan"/></a>')
+                 for i in range(9)]
+        hit_file = self._tmp("hit.xml",
+                             '<a><milestone n="9" unit="juan"/></a>')
+        ap = argparse.ArgumentParser(prog="t")
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            hit = cli._apply_juan_partition(files + [hit_file],
+                                            self._args([(9, 9)]), ap)
+        self.assertEqual(hit, [hit_file])
+        out = buf.getvalue()
+        # >8 个收敛为总数一行，不逐个列
+        self.assertIn("跳过 9 个", out)
+        self.assertNotIn("f0.xml", out)
+
+
 class TestJuanNnnInput(unittest.TestCase):
     def test_nnn_input_splits_and_names(self):
         # `-i T0670_002` ≡ `-i T0670 --juan 2`：拆分 + 子集命名（渲染内容不断言）
