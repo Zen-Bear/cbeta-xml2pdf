@@ -523,6 +523,10 @@ def write_temp_presets(base, opts, path=None):
     data["output"]["t2s"] = bool(opts.t2s)
     data["output"]["vertical"] = bool(opts.vertical)
     data["output"]["font_scale"] = float(opts.font_scale or 1.0)
+    # 字库随快照携带（与 _presets_merged 同口径）：子进程 resolve 读 presets.font_lang，
+    # 此前快照不带键 → 回退 base（如 config.user.json font_lang=zh-Hans），
+    # 面板选"繁体"时正文走 html[lang="zh-Hans"] 栏（宋体）——2026-10-11 修复
+    data["font_lang"] = opts.font_lang or data.get("font_lang") or "zh-Hant"
     if path is None:
         fd, path = tempfile.mkstemp(prefix="xml2pdf-gui-", suffix=".json")
         os.close(fd)
@@ -2621,6 +2625,7 @@ class SourceDialog(QDialog):
         tio.addWidget(head_vroot)
         row_vroot = QHBoxLayout()
         vr_edit = self.path_edits["verify_root"]
+        vr_edit.setToolTip("自选校验根；为空时字段内灰字显示跟随输出路径")
         vr_browse = QPushButton("浏览…")
         vr_browse.clicked.connect(lambda _v, e=vr_edit: self._browse_dir(e))
         vr_clear = QPushButton("清空")
@@ -2631,17 +2636,18 @@ class SourceDialog(QDialog):
         row_vroot.addWidget(vr_clear)
         tio.addLayout(row_vroot)
         row_ver = QHBoxLayout()
-        ver_eff_lab = QLabel("生效值")
+        ver_eff_lab = QLabel("空间占用")
         ver_eff_lab.setStyleSheet("color: gray")
-        ver_eff_lab.setToolTip("按下式结算：自选 source.verify_root 优先，否则 {输出}/验证")
+        ver_eff_lab.setToolTip("生效校验根下校验中间产物的占用（可重生成）")
         row_ver.addWidget(ver_eff_lab)
         self.io_verify_edit = QLineEdit()
         self.io_verify_edit.setReadOnly(True)
-        self.io_verify_edit.setToolTip("生效校验根（自选或 {输出}/验证）")
+        self.io_verify_edit.setToolTip("生效校验根下校验中间产物的占用（可重生成）")
         ver_refresh = QPushButton("刷新")
         ver_refresh.setToolTip("重新统计校验目录占用")
         ver_refresh.clicked.connect(lambda _v: self._refresh_verify_info())
         ver_open = QPushButton("打开目录")
+        ver_open.setToolTip("打开生效校验根（自选或 {输出}/验证）")
         ver_open.clicked.connect(lambda _v: self._open_verify_dir())
         ver_clean = QPushButton("删除校验产物…")
         ver_clean.setToolTip("删除生效校验根下的校验中间产物（可重生成）")
@@ -2650,9 +2656,6 @@ class SourceDialog(QDialog):
         row_ver.addWidget(ver_refresh)
         row_ver.addWidget(ver_open)
         row_ver.addWidget(ver_clean)
-        self.io_verify_size = QLabel()
-        self.io_verify_size.setStyleSheet("color: gray")
-        row_ver.addWidget(self.io_verify_size)
         tio.addLayout(row_ver)
         self.io_out_edit.textChanged.connect(
             lambda _t: self._refresh_verify_info())
@@ -3034,14 +3037,16 @@ class SourceDialog(QDialog):
             return ""
 
     def _refresh_verify_info(self):
-        """校验目录行刷新：生效路径 + 占盘重统（静默失败保底）。"""
+        """校验目录行刷新：字段灰字=跟随路径 + 空间占用重统（静默失败保底）。"""
         try:
             vroot = self._effective_verify_root()
         except Exception:
             vroot = ""
         try:
-            self.io_verify_edit.setText(vroot)
-        except (AttributeError, RuntimeError):
+            # 生效值与校验目录合一：空/清空时字段内灰字显示跟随输出路径
+            self.path_edits["verify_root"].setPlaceholderText(
+                f"跟随输出：{vroot}" if vroot else "跟随输出")
+        except (AttributeError, RuntimeError, KeyError):
             return
         try:
             custom = self.path_edits["verify_root"].text().strip()
@@ -3051,18 +3056,19 @@ class SourceDialog(QDialog):
             total, count = 0, 0
         try:
             if count:
-                self.io_verify_size.setText(
-                    f"占用 {_human_size(total)}（{count} 个文件）")
+                self.io_verify_edit.setText(
+                    f"{_human_size(total)}（{count} 个文件）")
             else:
-                self.io_verify_size.setText("（尚无校验产物）")
+                self.io_verify_edit.setText("（尚无校验产物）")
         except (AttributeError, RuntimeError):
             pass
 
     def _open_verify_dir(self):
+        # 生效路径不再进只读框（那里显示空间占用），直接结算生效根
         try:
-            d = self.io_verify_edit.text().strip()
-        except (AttributeError, RuntimeError):
-            return
+            d = self._effective_verify_root()
+        except Exception:
+            d = ""
         if d and os.path.isdir(d):
             QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.abspath(d)))
 

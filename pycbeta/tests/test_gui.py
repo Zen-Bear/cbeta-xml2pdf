@@ -145,6 +145,36 @@ class TestTempPresets(unittest.TestCase):
         # base 未被污染
         self.assertTrue(base["output"]["show_notes"])
 
+    def test_temp_presets_carries_font_lang(self):
+        # 字库随快照携带（2026-10-11 修复）：此前不带键 → 子进程回退 base 的
+        # font_lang（如 config.user.json=zh-Hans），面板选繁体仍出宋体
+        from pycbeta.gui.panel import write_temp_presets, XmlOptions
+        from pycbeta.cli import resolve_engine_vertical_lang
+        from types import SimpleNamespace
+        base = {"output": {}}
+        opts = XmlOptions(page="a4", font_lang="zh-Hant")
+        path = write_temp_presets(base, opts)
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+        finally:
+            os.remove(path)
+        self.assertEqual(data["font_lang"], "zh-Hant")
+        # 子进程口径：无 --font-lang 时按快照解析 → 繁体（不再被 base 覆盖）
+        args = SimpleNamespace(font_lang=None, t2s=False, engine=None,
+                               vertical=False)
+        self.assertEqual(resolve_engine_vertical_lang(args, data)[2],
+                         "zh-Hant")
+        # base 简体 + opts 繁体 → opts 覆盖 base
+        path2 = write_temp_presets({"output": {}, "font_lang": "zh-Hans"},
+                                   opts)
+        try:
+            with open(path2, encoding="utf-8") as f:
+                data2 = json.load(f)
+        finally:
+            os.remove(path2)
+        self.assertEqual(data2["font_lang"], "zh-Hant")
+
     def test_temp_presets_t2s_without_margins(self):
         from pycbeta.gui.panel import write_temp_presets, XmlOptions
         base = {"output": {}}
@@ -2707,25 +2737,29 @@ class TestSourceDialog(unittest.TestCase):
         try:
             dlg = P.SourceDialog(out_dir=root)
             try:
-                dlg.path_edits["verify_root"].setText("")  # 自包含：忽略本机用户预设
+                vr = dlg.path_edits["verify_root"]
+                vr.setText("")  # 自包含：忽略本机用户预设
                 want = os.path.join(root, "验证")
-                self.assertEqual(dlg.io_verify_edit.text(), want)
+                # 生效值与校验目录合一：空/清空时字段内灰字显示跟随路径
+                self.assertEqual(vr.placeholderText(), f"跟随输出：{want}")
+                self.assertTrue(vr.isReadOnly())
+                # 「空间占用」只读框（原生效值框）：显示占用，不再显示路径
                 self.assertTrue(dlg.io_verify_edit.isReadOnly())
-                self.assertEqual(dlg.io_verify_size.text(), "（尚无校验产物）")
+                self.assertEqual(dlg.io_verify_edit.text(), "（尚无校验产物）")
                 os.makedirs(os.path.join(want, "T0349 書（验证）"))
                 with open(os.path.join(want, "T0349 書（验证）",
                                        "report.txt"),
                           "w", encoding="utf-8") as f:
                     f.write("12345")
                 dlg._refresh_verify_info()
-                self.assertIn("5 B", dlg.io_verify_size.text())
-                self.assertIn("1 个文件", dlg.io_verify_size.text())
+                self.assertIn("5 B", dlg.io_verify_edit.text())
+                self.assertIn("1 个文件", dlg.io_verify_edit.text())
                 other = tempfile.mkdtemp()
                 try:
                     dlg.io_out_edit.setText(other)  # 输出改 → 校验目录跟随
+                    self.assertEqual(vr.placeholderText(),
+                                     f"跟随输出：{os.path.join(other, '验证')}")
                     self.assertEqual(dlg.io_verify_edit.text(),
-                                     os.path.join(other, "验证"))
-                    self.assertEqual(dlg.io_verify_size.text(),
                                      "（尚无校验产物）")
                 finally:
                     shutil.rmtree(other, ignore_errors=True)
@@ -2735,12 +2769,12 @@ class TestSourceDialog(unittest.TestCase):
                     with open(os.path.join(custom, "T（验证）", "r.txt"),
                               "w", encoding="utf-8") as f:
                         f.write("1234567")
-                    dlg.path_edits["verify_root"].setText(custom)
-                    self.assertEqual(dlg.io_verify_edit.text(), custom)
-                    self.assertIn("7 B", dlg.io_verify_size.text())
-                    dlg.path_edits["verify_root"].setText("")  # 清空回默认
-                    self.assertEqual(dlg.io_verify_edit.text(),
-                                     os.path.join(other, "验证"))
+                    vr.setText(custom)
+                    self.assertEqual(vr.text(), custom)
+                    self.assertIn("7 B", dlg.io_verify_edit.text())
+                    vr.setText("")  # 清空回默认：placeholder 重现跟随路径
+                    self.assertEqual(vr.placeholderText(),
+                                     f"跟随输出：{os.path.join(other, '验证')}")
                 finally:
                     shutil.rmtree(custom, ignore_errors=True)
             finally:
@@ -2748,19 +2782,22 @@ class TestSourceDialog(unittest.TestCase):
         finally:
             shutil.rmtree(root, ignore_errors=True)
 
-    def test_verify_rows_labeled_config_vs_effective(self):
-        # 校验目录两行：配置值行 vs 生效值行（同名易混，标签区分）
+    def test_verify_rows_labels_and_follow_hint(self):
+        # 校验目录行：标签「空间占用」；空时灰字 placeholder 显示跟随路径
         import pycbeta.gui.panel as pm
         os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
         from PySide6.QtWidgets import QApplication, QLabel
         QApplication.instance() or QApplication([])
         dlg = pm.SourceDialog()
         try:
+            dlg.path_edits["verify_root"].setText("")
             tab0 = dlg.src_tabs.widget(0)
             texts = [w.text() for w in tab0.findChildren(QLabel)
                      if isinstance(w, QLabel)]
-            self.assertTrue(any("配置值" in t for t in texts))
-            self.assertTrue(any("生效值" in t for t in texts))
+            self.assertTrue(any("空间占用" in t for t in texts))
+            self.assertFalse(any("生效值" in t for t in texts))
+            self.assertIn("跟随输出",
+                          dlg.path_edits["verify_root"].placeholderText())
         finally:
             dlg.close()
 

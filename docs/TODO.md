@@ -709,3 +709,13 @@
   - 注释卡：校注内联括号并入注释方式下拉右边同行（下拉+标签同置灰 `_sync_note_brackets_enabled`）；注释总开关上方加横线（QFrame HLine/Sunken），与正文夹注组视觉分开
   - 校验卡：两条灰字说明并入复选框同行（不折行，卡高度省两行）；scope 说明重写为用法（只用输入 XML 实际覆盖卷的官方 _NNN 基线；--juan 子集必备）+ `scope_box` tooltip 完整用法（与 `verify.py:1884` 对过）
   - 测试：`test_notes_on_label_and_row` 按新布局重写（无独立表单行、同行含下拉+标签、末行断言）；全量 `test_gui` 298 OK；`GUI设计.md` 示意图同步
+
+- [x] **已完成** 设置窗口校验目录区收编 + 批量表状态提示（2026-10-11 用户点档）
+  - 校验目录：生效值与配置合一（字段空/清空时灰字 placeholder「跟随输出：<生效路径>」实时随输出刷新）；原"生效值"标签改「空间占用」、原行末占用灰字 label 删除（占用文本改入该只读框，格式 `5 B（1 个文件）`/`（尚无校验产物）`）；刷新/打开目录/删除校验产物按钮保留；`_open_verify_dir` 改读 `_effective_verify_root()`（原读只读框文本，占用入框后会坏）
+  - 批量表：状态格 tooltip 全文定宽折行+「Ctrl+C 可拷贝」（`_status_tip` 纯函数）；补批量表 Ctrl+C 快捷键（`SourceDialog._copy_table_selection` 复用；此前注释写了但未实现）
+  - 测试：`TestSourceDialog.test_io_verify_row_follows_out_dir`/`test_verify_rows_labels_and_follow_hint` 重写 + `TestMainWindowUx` 3 项；全量 `test_gui` 308 OK
+
+- [x] **已完成** GUI 字库选择（繁体）不生效修复（2026-10-11 用户报：宋体.css 繁体正文設細明體，字库选繁体仍出宋体）
+  - 根因：`build_render_cmd` 仅"简体且非 t2s"传 `--font-lang`；`write_temp_presets` 快照不带 `font_lang`（与 `_presets_merged` 不一致）→ 子进程 `resolve_engine_vertical_lang` 回退 base（config.user.json `font_lang=zh-Hans`）→ `Theme.from_css(zh-Hans)` 走 `html[lang="zh-Hans"]` 栏（`--font-p: 宋体`）
+  - 修法：快照携带 `font_lang`（`data["font_lang"] = opts.font_lang or base or "zh-Hant"`，与保存路径同口径；t2s 优先级不变）；只读模拟实证 zh-Hant→`細明體, MingLiU`、zh-Hans→`宋体, SimSun`
+  - 测试：`TestTempPresets.test_temp_presets_carries_font_lang`（含 `resolve_engine_vertical_lang` 串联）；`GUI设计.md` §4.2 步 4 注记
