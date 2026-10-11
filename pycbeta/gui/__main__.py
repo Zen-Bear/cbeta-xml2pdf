@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from pycbeta.gui.panel import (
-    XmlOptionsPanel, load_run_and_presets, write_temp_presets,
+    SourceDialog, XmlOptionsPanel, load_run_and_presets, write_temp_presets,
     write_temp_run,
 )
 
@@ -42,7 +42,8 @@ def _gui_date() -> str:
     return datetime.datetime.fromtimestamp(latest).strftime("%Y-%m-%d")
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtCore import QUrl
-from PySide6.QtGui import QColor, QCursor, QDesktopServices, QFont, QPalette
+from PySide6.QtGui import (QColor, QCursor, QDesktopServices, QFont,
+                           QKeySequence, QPalette, QShortcut)
 
 
 def parse_produced_paths(log):
@@ -171,6 +172,18 @@ def input_help_text():
         "`-`/`~`/`～` 三认一。无该卷 milestone 时忽略；"
         "非法范围在状态列报「非法卷范围」。"
     )
+
+
+def _status_tip(text, width=40):
+    """状态格 tooltip：全文定宽折行（CJK 可在字间断行）+ Ctrl+C 提示。
+
+    状态列窄，长报错（如未配置）在格内只见前半；tooltip 给全文。
+    空文本返回空（不清掉已有 tooltip 的调用方自定）。
+    """
+    if not text:
+        return ""
+    chunks = [text[i:i + width] for i in range(0, len(text), width)]
+    return "\n".join(chunks) + "\n（Ctrl+C 可拷贝）"
 
 
 def _pick_verify_root(override, presets):
@@ -972,6 +985,10 @@ class MainWindow(QMainWindow):
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table.setSelectionBehavior(QTableWidget.SelectItems)
         self.table.setSelectionMode(QTableWidget.ExtendedSelection)
+        copy_sc = QShortcut(QKeySequence.Copy, self.table)
+        copy_sc.setContext(Qt.WidgetShortcut)
+        copy_sc.activated.connect(
+            lambda: SourceDialog._copy_table_selection(self.table))
         self.table.cellClicked.connect(self._open_cell)
         self.table.setMinimumHeight(150)   # 保底高度：窗口变矮时不被压没
         layout.addWidget(self.table, 2)
@@ -1148,6 +1165,7 @@ class MainWindow(QMainWindow):
     def _on_status(self, i, text):
         if self.table.item(i, 3) is not None:
             self.table.item(i, 3).setText(text)
+            self.table.item(i, 3).setToolTip(_status_tip(text))
 
     def _on_verify_level(self, i, level):
         """状态列配色：通过绿 / 失败红 / 无基线灰。"""

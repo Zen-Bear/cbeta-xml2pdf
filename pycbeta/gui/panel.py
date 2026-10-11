@@ -2567,7 +2567,7 @@ class SourceDialog(QDialog):
         self._init_out_dir = out_dir or ""
         name = os.path.basename(self._preset_path) or USER_PRESET_NAME
         self.setWindowTitle(f"设置（{name}）")
-        self.resize(760, 560)
+        self.resize(760, 500)
         layout = QVBoxLayout(self)
         if self._preset_path and os.path.isfile(self._preset_path):
             try:
@@ -2616,7 +2616,9 @@ class SourceDialog(QDialog):
         out_lab = QLabel("source.out_dir（输出成品目录，存入配置）")
         out_lab.setStyleSheet("color: gray")
         tio.addWidget(out_lab)
-        tio.addWidget(QLabel("校验目录"))
+        head_vroot = QLabel("校验目录（配置值，为空=跟随输出）")
+        head_vroot.setToolTip("source.verify_root：自选校验根；清空则跟随输出目录")
+        tio.addWidget(head_vroot)
         row_vroot = QHBoxLayout()
         vr_edit = self.path_edits["verify_root"]
         vr_browse = QPushButton("浏览…")
@@ -2628,10 +2630,11 @@ class SourceDialog(QDialog):
         row_vroot.addWidget(vr_browse)
         row_vroot.addWidget(vr_clear)
         tio.addLayout(row_vroot)
-        vr_lab = QLabel("source.verify_root（为空=跟随输出目录，即 {输出}/验证）")
-        vr_lab.setStyleSheet("color: gray")
-        tio.addWidget(vr_lab)
         row_ver = QHBoxLayout()
+        ver_eff_lab = QLabel("生效值")
+        ver_eff_lab.setStyleSheet("color: gray")
+        ver_eff_lab.setToolTip("按下式结算：自选 source.verify_root 优先，否则 {输出}/验证")
+        row_ver.addWidget(ver_eff_lab)
         self.io_verify_edit = QLineEdit()
         self.io_verify_edit.setReadOnly(True)
         self.io_verify_edit.setToolTip("生效校验根（自选或 {输出}/验证）")
@@ -2647,10 +2650,10 @@ class SourceDialog(QDialog):
         row_ver.addWidget(ver_refresh)
         row_ver.addWidget(ver_open)
         row_ver.addWidget(ver_clean)
-        tio.addLayout(row_ver)
         self.io_verify_size = QLabel()
         self.io_verify_size.setStyleSheet("color: gray")
-        tio.addWidget(self.io_verify_size)
+        row_ver.addWidget(self.io_verify_size)
+        tio.addLayout(row_ver)
         self.io_out_edit.textChanged.connect(
             lambda _t: self._refresh_verify_info())
         vr_edit.textChanged.connect(
@@ -2757,7 +2760,17 @@ class SourceDialog(QDialog):
         t0.addStretch(1)
         tab_dl = QWidget()
         t1 = QVBoxLayout(tab_dl)
-        t1.addWidget(QLabel("官方下载 URL 模板（{canon}/{vol}/{file}/{id} 为占位符）："))
+        dl_head = QHBoxLayout()
+        dl_head.setContentsMargins(0, 0, 0, 0)
+        dl_head.addWidget(
+            QLabel("官方下载 URL 模板（{canon}/{vol}/{file}/{id} 为占位符）："))
+        dl_head.addStretch(1)
+        self.btn_reset_urls = QPushButton("重置 URL")
+        self.btn_reset_urls.setToolTip(
+            "URL 模板恢复出厂值（只填表，不保存；点确定才写入用户配置）")
+        self.btn_reset_urls.clicked.connect(self._on_reset_urls)
+        dl_head.addWidget(self.btn_reset_urls)
+        t1.addLayout(dl_head)
         self.dl_table = QTableWidget(0, 2)
         self.dl_table.setHorizontalHeaderLabels(["格式", "URL 模板"])
         self.dl_table.horizontalHeader().setStretchLastSection(True)
@@ -2906,10 +2919,6 @@ class SourceDialog(QDialog):
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
-        self.btn_reset_urls = QPushButton("重置 URL")
-        self.btn_reset_urls.setToolTip("URL 模板恢复出厂值（只填表，点确定才保存）")
-        self.btn_reset_urls.clicked.connect(self._on_reset_urls)
-        buttons.addButton(self.btn_reset_urls, QDialogButtonBox.ResetRole)
         layout.addWidget(buttons)
         self._buttons_box = buttons
         self._ebook_worker = None

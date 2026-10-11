@@ -2066,6 +2066,55 @@ class TestMainWindowUx(unittest.TestCase):
         finally:
             w.close()
 
+    def test_status_tip_wrap_and_hint(self):
+        from pycbeta.gui.__main__ import _status_tip
+        self.assertEqual(_status_tip(""), "")
+        short = "转换中…"
+        self.assertEqual(_status_tip(short), short + "\n（Ctrl+C 可拷贝）")
+        long_text = ("未配置：电子书输出目录未配置：在 "
+                     "presets/config.user.json 的 source.cbeta_ebook 填写"
+                     "（GUI 数据源窗口可视编辑），或 --cbeta-ebook 指定")
+        tip = _status_tip(long_text)
+        self.assertIn("Ctrl+C", tip)
+        self.assertEqual("".join(tip.split("\n")[:-1]), long_text)
+        for ln in tip.split("\n")[:-1]:
+            self.assertLessEqual(len(ln), 40)
+
+    def test_on_status_sets_full_tooltip(self):
+        from PySide6.QtWidgets import QTableWidgetItem
+        from pycbeta.gui.__main__ import MainWindow
+        w = MainWindow()
+        try:
+            w.table.setRowCount(1)
+            w.table.setItem(0, 3, QTableWidgetItem(""))
+            long_text = "未配置：电子书输出目录未配置：在X处填写" * 3
+            w._on_status(0, long_text)
+            item = w.table.item(0, 3)
+            self.assertEqual(item.text(), long_text)
+            self.assertIn("Ctrl+C", item.toolTip())
+            self.assertEqual(
+                "".join(item.toolTip().split("\n")[:-1]), long_text)
+        finally:
+            w.close()
+
+    def test_table_ctrl_c_shortcut_and_copy(self):
+        from PySide6.QtGui import QKeySequence, QShortcut
+        from PySide6.QtWidgets import QApplication, QTableWidgetItem
+        from pycbeta.gui.__main__ import MainWindow
+        from pycbeta.gui.panel import SourceDialog
+        w = MainWindow()
+        try:
+            scuts = [s for s in w.table.findChildren(QShortcut)
+                     if s.key() == QKeySequence(QKeySequence.Copy)]
+            self.assertEqual(len(scuts), 1)
+            w.table.setRowCount(1)
+            w.table.setItem(0, 3, QTableWidgetItem("状态全文ABC"))
+            w.table.item(0, 3).setSelected(True)
+            scuts[0].activated.emit()
+            self.assertIn("状态全文ABC", QApplication.clipboard().text())
+        finally:
+            w.close()
+
     def test_reset_table_view_returns_to_first_row(self):
         # 每轮转换前光标/视图回到第一行（上轮结束常停在末行）
         from PySide6.QtWidgets import QTableWidgetItem
@@ -2699,6 +2748,22 @@ class TestSourceDialog(unittest.TestCase):
         finally:
             shutil.rmtree(root, ignore_errors=True)
 
+    def test_verify_rows_labeled_config_vs_effective(self):
+        # 校验目录两行：配置值行 vs 生效值行（同名易混，标签区分）
+        import pycbeta.gui.panel as pm
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PySide6.QtWidgets import QApplication, QLabel
+        QApplication.instance() or QApplication([])
+        dlg = pm.SourceDialog()
+        try:
+            tab0 = dlg.src_tabs.widget(0)
+            texts = [w.text() for w in tab0.findChildren(QLabel)
+                     if isinstance(w, QLabel)]
+            self.assertTrue(any("配置值" in t for t in texts))
+            self.assertTrue(any("生效值" in t for t in texts))
+        finally:
+            dlg.close()
+
     def test_accept_clears_unsafe_xml_dir(self):
         saved = self._accept_with(r"X:\p5b", "clear")
         self.assertEqual(saved.get("source", {}).get("xml_dir"), "")
@@ -2949,9 +3014,13 @@ class TestSourceDialog(unittest.TestCase):
         dlg = pm.SourceDialog()
         try:
             self.assertEqual(dlg.btn_reset_urls.text(), "重置 URL")
-            # 重置按钮在对话框按钮组里（确定/取消旁边）
-            self.assertIn(dlg.btn_reset_urls,
-                          dlg._buttons_box.buttons())
+            # 重置按钮在“电子书下载模板”tab 内（只作用该表，不在按钮组里）
+            self.assertNotIn(dlg.btn_reset_urls,
+                             dlg._buttons_box.buttons())
+            idx = next(i for i in range(dlg.src_tabs.count())
+                       if dlg.src_tabs.tabText(i) == "电子书下载模板")
+            self.assertEqual(dlg.btn_reset_urls.parent(),
+                             dlg.src_tabs.widget(idx))
             dlg.dl_table.item(0, 1).setText("http://broken/invalid")
             with mock.patch.object(pm, "save_current") as m:
                 dlg._on_reset_urls()

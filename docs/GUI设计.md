@@ -182,10 +182,11 @@ class XmlOptions:
 
 ### 3.3 `SourceDialog` / `DataUpdateDialog`（数据源窗口）
 - `SourceDialog`：路径行 `xml_dir` + `cbeta_ebook`（均只读+浏览；后者清空确定时弹必填警告）；`catalog` 钉死内置（tab3 的佛典目录映射表行即其位置与更新状态）。
-- tab0「输入输出」：`cbeta_ebook`（官方下载保存平展目录）+ 输出目录（仅本次运行，不存预设）+ 校验根（自选优先否则 `{输出}/验证`，附带占用统计/打开/删除）+ `title_t2s`。
+- tab0「输入输出」：`cbeta_ebook`（官方下载保存平展目录）+ 输出目录（仅本次运行，不存预设）+ 校验根两行（配置值行 `source.verify_root`＋生效值行，标签区分）+ `title_t2s`。
+- 批量表状态列：长报错只显前半，tooltip 给全文（定宽折行）＋「Ctrl+C 可拷贝」提示；批量表 Ctrl+C 快捷键复制选中格全文（之前注释写了但未实现）。
 - tab1「校验基线」：各格式基线链展示（`md/docx/html/txt/epub` 行，值为 `verify.bases` 与出厂默认合并后的生效链）+ **可改比较顺序**（逗号分隔 kind：`html/txt_notes/docx/epub/odt`；未知忽略，空=该格式恢复默认；`pdf` 无官方基线不列）+ 「恢复默认」按钮（只填表）。确定时**只存与出厂默认不同的格式**到 `verify.bases`（全等默认则去掉该键；其它 `verify` 键不动）。获得基线方法见行下灰字（缺首选自动下载/`{fmt}/` 落盘/2026r2 首个非空根胜出/自产排除），详见校验说明书 §2。
 - tab2「本地官方电子书」：本地 XML 候选源置顶 + `source.baselines_root` 一键自动检测（子目录名→格式，只填能识别的）+ 五格式基线目录行（`txt/txt_notes/docx/epub/pdf`，清空=未配置回退旧行为）。
-- tab3「官方数据更新源」（`remote_sources.json` 全表只读：数据项/更新 URL/本地文件/上次更新）+ 更新/检查按钮行；tab4「电子书下载模板」（`downloads.*`，键列只读，值可改，确定存当前选中预设）。
+- tab3「官方数据更新源」（`remote_sources.json` 全表只读：数据项/更新 URL/本地文件/上次更新）+ 更新/检查按钮行；tab4「电子书下载模板」（`downloads.*`，键列只读，值可改，确定存当前选中预设；「重置 URL」按钮在该 tab 内，只填表不保存）。
 - 「更新官方数据」按钮开 `DataUpdateDialog`：更新源列表 + 「开始更新」（后台线程，`dry-run` 仅检查）+ 逐行状态；「更新XML」按钮逻辑不动。
 
 ## 4. 独立窗 `python -m pycbeta.gui`
