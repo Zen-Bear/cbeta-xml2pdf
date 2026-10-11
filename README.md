@@ -328,6 +328,22 @@ Word/WPS 走 COM 导出（需 pywin32），LibreOffice 走命令行。
   - **配置**：数据源窗口「本地官方电子书」tab 指定各格式目录（按目录名自动检测
     `text-with-notes`/`docx`/`epub` 等）；或手改 `source.baselines_root` 指向书库根（如 `E:\CBETA\2026r2`）。
 
+## 难字注音与待审字
+
+- 开关与词表：GUI 注音卡「难字注音 / 全文注音」（`annotations.enabled`）；词表文件
+  `annotations.file` 为空即用内置 `pycbeta/data/annotations.txt`（20 词，可直接编辑）。
+- 自动读音：分区（`rare_zones`）/ 补充字形（`rare_font`）覆盖的生僻字按字取音（pypinyin；
+  多音字取最常用读音，可能不准；**词表优先于自动读音**）。
+- **待审字自动收集**：难字注音模式下，pypinyin 无收录（unknown）或多音（polyphonic）的字
+  会记入内存；CLI 跑完 / GUI 批量完成后自动以空读音 stub 行（`字\t\t`）追加进词表文件，
+  并在控制台（CLI，超 20 字只列前 20）/ 状态栏（GUI）告知多音与无收录各是哪些字。
+  全文模式量大不登记。
+- 空 stub 行**不影响任何输出**（`load_table` 跳过空读音）；**在词表文件里把读音填在字后面，
+  下次运行即生效**。同字还会记入各部转换报告「注音待审」条（报告内去重）。
+- 注意：默认词表即仓库内 `pycbeta/data/annotations.txt`（入库文件）；自动追加的行会出现在
+  `git status`，未填写前请勿提交（可 `git checkout -- pycbeta/data/annotations.txt` 还原）。
+  绿色版写的是包内副本。
+
 ## 校验与测试
 
 ```bash
