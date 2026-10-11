@@ -348,7 +348,9 @@ class TestSourceBaselineTab(unittest.TestCase):
         from pycbeta.gui.panel import SourceDialog
         dlg = SourceDialog()
         try:
-            self.assertEqual(dlg.src_tabs.tabText(1), "本地官方电子书")
+            self.assertEqual(dlg.src_tabs.tabText(0), "输入输出")
+            self.assertEqual(dlg.src_tabs.tabText(1), "校验基线")
+            self.assertEqual(dlg.src_tabs.tabText(2), "本地官方电子书")
             self.assertEqual(list(dlg.base_edits.keys()),
                              ["xml_dir", "txt", "txt_notes", "docx", "epub",
                               "pdf"])
@@ -361,7 +363,7 @@ class TestSourceBaselineTab(unittest.TestCase):
         from pycbeta.gui.panel import SourceDialog
         dlg = SourceDialog()
         try:
-            lay = dlg.src_tabs.widget(1).layout()
+            lay = dlg.src_tabs.widget(2).layout()
 
             def pos(edit):
                 for i in range(lay.count()):
@@ -374,6 +376,93 @@ class TestSourceBaselineTab(unittest.TestCase):
             self.assertGreaterEqual(p_xml, 0)
             self.assertLess(p_xml, pos(dlg.base_root_edit))
             self.assertLess(p_xml, pos(dlg.base_edits["txt"]))
+        finally:
+            dlg.close()
+
+    def test_bases_tab_shows_effective_chains(self):
+        from pycbeta.gui.panel import SourceDialog
+        dlg = SourceDialog()
+        try:
+            self.assertEqual(list(dlg.base_chain_edits.keys()),
+                             ["md", "docx", "html", "txt", "epub"])
+            self.assertEqual(dlg.base_chain_edits["md"].text(),
+                             "txt_notes, html")
+            self.assertEqual(dlg.base_chain_edits["docx"].text(),
+                             "docx, html")
+            self.assertEqual(dlg.base_chain_edits["html"].text(), "html")
+            self.assertEqual(dlg.base_chain_edits["txt"].text(),
+                             "txt_notes")
+            self.assertEqual(dlg.base_chain_edits["epub"].text(),
+                             "txt_notes, epub, html")
+        finally:
+            dlg.close()
+
+    def test_bases_edit_roundtrip_diff_only(self):
+        import json
+        import tempfile
+        import shutil
+        import pycbeta.gui.panel as P
+        d = tempfile.mkdtemp()
+        try:
+            fn = os.path.join(d, "p.json")
+            with open(fn, "w", encoding="utf-8") as f:
+                json.dump({"source": {"cbeta_ebook": "OLD"}}, f)
+            dlg = P.SourceDialog(preset_path=fn)
+            try:
+                dlg.path_edits["cbeta_ebook"].setText("NEW")
+                dlg.path_edits["xml_dir"].setText("")
+                dlg.base_chain_edits["epub"].setText("epub")
+                dlg.accept()
+            finally:
+                dlg.close()
+            with open(fn, encoding="utf-8") as f:
+                back = json.load(f)
+            # 只存与默认不同的格式
+            self.assertEqual(back["verify"]["bases"], {"epub": ["epub"]})
+            self.assertEqual(back["source"]["cbeta_ebook"], "NEW")
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_bases_invalid_dropped_and_empty_removed(self):
+        import json
+        import tempfile
+        import shutil
+        import pycbeta.gui.panel as P
+        d = tempfile.mkdtemp()
+        try:
+            fn = os.path.join(d, "p.json")
+            with open(fn, "w", encoding="utf-8") as f:
+                json.dump({"source": {"cbeta_ebook": "B"},
+                           "verify": {"bases": {"md": ["html"]}}}, f)
+            dlg = P.SourceDialog(preset_path=fn)
+            try:
+                self.assertEqual(dlg.base_chain_edits["md"].text(), "html")
+                # 非法 kind 丢弃，去重保序
+                dlg.base_chain_edits["docx"].setText("docx, foo, docx")
+                # 全等默认 → 键去掉
+                dlg.base_chain_edits["md"].setText("txt_notes, html")
+                dlg.path_edits["xml_dir"].setText("")
+                dlg.accept()
+            finally:
+                dlg.close()
+            with open(fn, encoding="utf-8") as f:
+                back = json.load(f)
+            self.assertEqual(back["verify"]["bases"], {"docx": ["docx"]})
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_bases_reset_button(self):
+        from pycbeta.gui.panel import SourceDialog
+        dlg = SourceDialog()
+        try:
+            dlg.base_chain_edits["txt"].setText("html")
+            self.assertEqual(dlg.base_chain_edits["txt"].text(), "html")
+            dlg.btn_bases_reset.click()
+            self.assertEqual(dlg.base_chain_edits["txt"].text(),
+                             "txt_notes")
+            self.assertEqual(dlg.base_chain_edits["epub"].text(),
+                             "txt_notes, epub, html")
+            self.assertEqual(dlg._bases_diff(), {})
         finally:
             dlg.close()
 
@@ -464,12 +553,12 @@ class TestSourceBaselineTab(unittest.TestCase):
             # 主表无 xml_dir 可见行（edit 保留为隐藏数据载体）
             self.assertIsNone(dlg.path_edits["xml_dir"].parent())
             # 更新按钮行在“官方数据更新源”tab 内
-            tab_upd = dlg.src_tabs.widget(2)
+            tab_upd = dlg.src_tabs.widget(3)
             self.assertEqual(dlg.btn_update_data.parent(), tab_upd)
             self.assertEqual(dlg.btn_check_update.parent(), tab_upd)
             # 官方链接可点开
             from PySide6.QtWidgets import QLabel
-            links = dlg.src_tabs.widget(1).findChildren(QLabel)
+            links = dlg.src_tabs.widget(2).findChildren(QLabel)
             self.assertTrue(any(w.openExternalLinks() for w in links))
         finally:
             dlg.close()
@@ -2750,11 +2839,12 @@ class TestSourceDialog(unittest.TestCase):
         QApplication.instance() or QApplication([])
         dlg = pm.SourceDialog()
         try:
-            self.assertEqual(dlg.src_tabs.count(), 4)
+            self.assertEqual(dlg.src_tabs.count(), 5)
             self.assertEqual(dlg.src_tabs.tabText(0), "输入输出")
-            self.assertEqual(dlg.src_tabs.tabText(1), "本地官方电子书")
-            self.assertEqual(dlg.src_tabs.tabText(2), "官方数据更新源")
-            self.assertEqual(dlg.src_tabs.tabText(3), "电子书下载模板")
+            self.assertEqual(dlg.src_tabs.tabText(1), "校验基线")
+            self.assertEqual(dlg.src_tabs.tabText(2), "本地官方电子书")
+            self.assertEqual(dlg.src_tabs.tabText(3), "官方数据更新源")
+            self.assertEqual(dlg.src_tabs.tabText(4), "电子书下载模板")
             from pycbeta.update_data import load_sources
             self.assertEqual(dlg.upd_table.rowCount(), len(load_sources()))
             for i in range(dlg.upd_table.rowCount()):
@@ -3397,8 +3487,12 @@ class TestCssEditor(unittest.TestCase):
         groups = {"宋体": ["宋体"], "未分类": []}
         with mock.patch.object(ce, "font_group_model",
                                return_value=(groups, [], "")), \
-                mock.patch.object(ce, "qt_aliases",
-                                  return_value={"宋体": "SimSun"}):
+             mock.patch.object(ce, "qt_aliases",
+                               return_value={"宋体": "SimSun"}), \
+             mock.patch.object(ce, "current_theme_value",
+                               return_value="pdf_docx.css"):
+            # 出厂基线启动（不受本机 run.json 默认预设影响；用户预设若含
+            # h1.title font-weight，按钮初态/写出块都会变）
             dlg = ce.CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
         try:
             # 列标题行存在；磅数框收窄；粗细是三态按钮（默认=灰）
@@ -4577,8 +4671,13 @@ class TestCssEditor(unittest.TestCase):
             dlg.close()
 
     def test_control_to_block(self):
+        import unittest.mock as mock
         from pycbeta.gui.css_editor import CssEditorDialog
-        dlg = CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+        import pycbeta.gui.css_editor as ce
+        with mock.patch.object(ce, "current_theme_value",
+                               return_value="pdf_docx.css"):
+            # 出厂基线启动（同上；否则用户预设的 font-weight 会混入写出块）
+            dlg = CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
         try:
             dlg._rows["h1.title"]["size"].setText("34pt")
             self.assertIn("h1.title { font-size: 34pt; }",

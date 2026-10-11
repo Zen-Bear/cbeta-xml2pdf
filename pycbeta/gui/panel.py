@@ -2813,12 +2813,68 @@ class SourceDialog(QDialog):
         t2.addWidget(self.upd_table, 1)
         self.upd_table.itemDoubleClicked.connect(self._open_upd_url)
         upd_hint = QLabel("双击「更新 URL」列可用浏览器打开链接；"
-                          "单元格可选中后 Ctrl+C 拷贝。")
+                           "单元格可选中后 Ctrl+C 拷贝。")
         upd_hint.setStyleSheet("color: gray")
         upd_hint.setWordWrap(True)
         t2.addWidget(upd_hint)
-        # 输入输出排第一，本地官方电子书排第二，更新源第三，下载模板第四
-        self.src_tabs.insertTab(1, tab_base, "本地官方电子书")
+        # 校验基线 tab：各格式基线链展示 + 可改比较顺序 + 获得基线方法说明
+        tab_bases = QWidget()
+        t3 = QVBoxLayout(tab_bases)
+        try:
+            from pycbeta.verify import chain_for as _chain_for
+            from pycbeta.verify import DEFAULT_BASES as _DEF_BASES
+            from pycbeta.verify import _KNOWN_BASE_KINDS as _KNOWN_KINDS
+        except Exception:
+            _chain_for, _DEF_BASES, _KNOWN_KINDS = None, {}, frozenset()
+        _custom_bases = (data.get("verify") or {}).get("bases")
+        if not isinstance(_custom_bases, dict):
+            _custom_bases = {}
+        self._bases_known_kinds = set(_KNOWN_KINDS) or {
+            "html", "txt_notes", "docx", "epub", "odt"}
+        self._bases_defaults = {}
+        self.base_chain_edits = {}
+        crow = QHBoxLayout()
+        crow.setContentsMargins(0, 0, 0, 0)
+        crow.addWidget(QLabel("各格式逐个试比（首选→回退），逗号分隔改顺序："))
+        crow.addStretch(1)
+        self.btn_bases_reset = QPushButton("恢复默认")
+        self.btn_bases_reset.setToolTip(
+            "清空全部自定义链（回退内置默认；只填表，点确定才保存）")
+        self.btn_bases_reset.clicked.connect(self._on_bases_reset)
+        crow.addWidget(self.btn_bases_reset)
+        t3.addLayout(crow)
+        for _fmt in ("md", "docx", "html", "txt", "epub"):
+            if _chain_for is not None:
+                _eff = _chain_for(_fmt, _custom_bases)
+            else:
+                _eff = list((_DEF_BASES or {}).get(_fmt, ["html"]))
+            self._bases_defaults[_fmt] = list(_eff)
+            _row = QHBoxLayout()
+            _row.setContentsMargins(0, 0, 0, 0)
+            _flab = QLabel(_fmt)
+            _flab.setFixedWidth(44)
+            _row.addWidget(_flab)
+            _edit = QLineEdit(", ".join(_eff))
+            _edit.setToolTip(
+                "逗号分隔 kind（html/txt_notes/docx/epub/odt）；"
+                "未知忽略，空=该格式恢复默认")
+            _row.addWidget(_edit, 1)
+            t3.addLayout(_row)
+            self.base_chain_edits[_fmt] = _edit
+        _bases_note = QLabel(
+            "pdf 无官方基线（委托管线源格式，见校验说明书 §5）。"
+            "获得基线：缺首选自动下载（auto_fetch；docx 缺下 docx+html；"
+            "单卷仅 html/txt_notes 有 _NNN 端点）→ 落 work 目录 {fmt}/"
+            "（txt_notes 落 txt/）；2026r2 集中库配为 extra_root 时首个非空根胜出；"
+            "自产排除（验证目录/空格文件名/_html 目录）防自比对。"
+            "详见 docs/校验说明书.md §2。")
+        _bases_note.setStyleSheet("color: gray")
+        _bases_note.setWordWrap(True)
+        t3.addWidget(_bases_note)
+        t3.addStretch(1)
+        # 输入输出排第一，校验基线排第二，本地官方电子书排第三，更新源第四，下载模板第五
+        self.src_tabs.insertTab(1, tab_bases, "校验基线")
+        self.src_tabs.insertTab(2, tab_base, "本地官方电子书")
         self.src_tabs.addTab(tab_upd, "官方数据更新源")
         self.src_tabs.addTab(tab_dl, "电子书下载模板")
         layout.addWidget(self.src_tabs, 1)
@@ -3060,6 +3116,39 @@ class SourceDialog(QDialog):
                  for _, cols in sorted(rows.items())]
         QApplication.clipboard().setText("\n".join(lines))
 
+    def _on_bases_reset(self):
+        """校验基线链恢复默认（只填表，不保存；点确定才写入用户配置）。"""
+        for fmt, edit in self.base_chain_edits.items():
+            try:
+                edit.setText(", ".join(self._bases_defaults.get(fmt, [])))
+            except (AttributeError, RuntimeError):
+                pass
+
+    def _bases_diff(self):
+        """编辑值 vs 出厂默认的 diff：只返不同的 {fmt: [kinds]}。
+
+        空编辑/非法全丢 → 该格式回退默认（不存）；全等默认 → 空 dict。"""
+        try:
+            from pycbeta.verify import chain_for as _chain_for
+            _def = {f: _chain_for(f, None) for f in self.base_chain_edits}
+        except Exception:
+            _def = dict(getattr(self, "_bases_defaults", {}))
+        out = {}
+        for fmt, edit in self.base_chain_edits.items():
+            try:
+                raw = edit.text()
+            except (AttributeError, RuntimeError):
+                continue
+            seen, clean = set(), []
+            for k in (raw or "").split(","):
+                k = k.strip()
+                if k and k in self._bases_known_kinds and k not in seen:
+                    seen.add(k)
+                    clean.append(k)
+            if clean and clean != list(_def.get(fmt, [])):
+                out[fmt] = clean
+        return out
+
     def accept(self):
         if self._preset_path and os.path.isfile(self._preset_path):
             try:
@@ -3104,6 +3193,19 @@ class SourceDialog(QDialog):
                 if choice == "clear":
                     values["source"]["xml_dir"] = ""
         merged = apply_source_edits(data, values)
+        # 校验基线链：只存与出厂默认不同的格式；全等默认则去掉 bases 键
+        # （缺键即回退内置默认；apply_source_edits 只管 source/downloads）
+        try:
+            nb = self._bases_diff()
+        except (AttributeError, RuntimeError):
+            nb = None
+        if nb is not None:
+            if nb:
+                if not isinstance(merged.get("verify"), dict):
+                    merged["verify"] = {}
+                merged["verify"]["bases"] = nb
+            elif isinstance(merged.get("verify"), dict):
+                merged["verify"].pop("bases", None)
         if self._preset_path:
             try:
                 os.makedirs(os.path.dirname(
