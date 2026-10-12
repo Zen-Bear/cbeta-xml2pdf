@@ -7,6 +7,8 @@ from .parser import P5Parser
 # GUI 标题栏 + CLI --version 都从这里取，改一处即全局生效。
 # 0.1 = 首个公开发布（GPLv3）；0.5 = 出厂改名 + 边框三键 + 输入帮助；
 # 0.7 = 校验基线 tab + 设置窗口收编 + 卷子集预分区 + 字库选择修复。
-__version__ = "0.7"
+# 0.9 = 校验对齐修复（txt 科判注/星号位、epub 正文旁路；X0287 从数小时→秒级）
+#       + 校验阶段进度（状态列）+ html 产物进文件列。
+__version__ = "0.9"
 
 __all__ = ["P5Parser", "GaijiDb", "__version__"]

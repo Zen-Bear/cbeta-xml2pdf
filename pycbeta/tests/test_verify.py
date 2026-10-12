@@ -12,9 +12,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pycbeta.fetch as fetch_mod
 from pycbeta.fetch import _fetch_one
 from pycbeta.verify import _extract_txt_parts, find_official, _head_no_tokens, \
-    _strip_official_no
+    _strip_official_no, _NOTE_LINE_RE
 
-NOTE_RE = re.compile(r"(?m)^ {4}\[[^\]\[]{1,12}\]")
+NOTE_RE = _NOTE_LINE_RE
 
 
 class TestGenerateFormalConfig(unittest.TestCase):
@@ -921,6 +921,57 @@ class TestExtractTxtParts(unittest.TestCase):
         self.assertEqual(notes.strip(), "")
         self.assertEqual(body, s)
 
+    def test_data_label_note_moved(self):
+        """科判注（subtype=ke）行 `    [ data-label='科NN'] 内容` 同移文末、保持文件序。"""
+        s = ("正文一\n"
+             "\n"
+             "    [ data-label='科01'] 第一序分初證信序\n"
+             "\n"
+             "    [0001a01] 已【CB】，巳【卍續】\n"
+             "\n"
+             "正文二\n")
+        body, notes = _extract_txt_parts(s)
+        self.assertNotIn("第一序分初證信序", body)
+        self.assertIn("[ data-label='科01'] 第一序分初證信序", notes)
+        self.assertIn("[0001a01] 已【CB】，巳【卍續】", notes)
+        # 文件序（科判注在数字注之前）
+        self.assertLess(notes.find("第一序分初證信序"), notes.find("已【CB】"))
+        self.assertIn("正文二", body)
+
+    def test_star_dup_line_dropped(self):
+        """星号位复注：官方同一注在正文位多渲染一行（同文、4 空格缩进）→ 去重。"""
+        s = ("正文\n"
+             "    [1] 疑疑礙次同\n"
+             "    疑疑礙次同\n"
+             "    後文\n")
+        body, notes = _extract_txt_parts(s)
+        self.assertEqual(notes, "    [1] 疑疑礙次同")
+        self.assertNotIn("疑疑礙次同", body)
+        self.assertIn("後文", body)
+
+    def test_data_label_inline_marker_stays(self):
+        """正文内联科判锚点（非 4 空格注行）不得当注移走（由 normalize 剥标记）。"""
+        s = "正文[ data-label='科01']如是我聞：\n\n後文\n"
+        body, notes = _extract_txt_parts(s)
+        self.assertEqual(notes.strip(), "")
+        self.assertIn("如是我聞", body)
+
+    def test_end_to_end_txt_notes_align(self):
+        """官方侧（内联科判注 + 星号位重复行）与生成侧（文末注）归一后逐字一致。"""
+        from pycbeta.verify import normalize, _norm_official_txt
+        official = ("(一)如是我聞：\n"
+                    "\n"
+                    "    [ data-label='科01'] 第一序分初證信序\n"
+                    "    第一序分初證信序\n"
+                    "\n"
+                    "    [0001a01] 已【CB】，巳【卍續】\n")
+        ours = ("(一)如是我聞：\n"
+                "\n"
+                "[0524k01] 第一序分初證信序\n"
+                "[0001a01] 已【CB】，巳【卍續】\n")
+        self.assertEqual(normalize(ours),
+                         normalize(_norm_official_txt(official)))
+
     def test_real_file_anchor(self):
         from pycbeta.tests._data import DATA_ROOT
         p = os.path.join(DATA_ROOT, "T0349 彌勒菩薩所問本願經",
@@ -937,6 +988,27 @@ class TestExtractTxtParts(unittest.TestCase):
         self.assertFalse(NOTE_RE.search(body))
         self.assertEqual(len(body.split("\n")) + len(notes.split("\n")),
                          len(s.split("\n")))
+
+
+class TestNormalizeDataLabel(unittest.TestCase):
+    """官方 txt 科判注标记 `[ data-label='科NN']` 剥离（normalize）。"""
+
+    def test_strip_marker(self):
+        from pycbeta.verify import normalize
+        self.assertEqual(normalize("[ data-label='科01']如是我聞："),
+                         normalize("如是我聞："))
+        self.assertEqual(normalize("第一序分初證信序[ data-label='科02']"),
+                         normalize("第一序分初證信序"))
+        # 无空格变体（防上游格式微差）
+        self.assertEqual(normalize("x[data-label='科03']y"), normalize("xy"))
+
+    def test_other_long_brackets_kept(self):
+        from pycbeta.verify import normalize
+        # 缺字拆字式长括号（两侧同形，须保留参与比对；内部连字符由通规则剥除）
+        n = normalize("[泳-永+(瑤-王)]")
+        self.assertIn("泳", n)
+        self.assertIn("瑤", n)
+        self.assertIn("[", n)   # 括号未被 data-label 规则误剥
 
 
 class TestBodySidecar(unittest.TestCase):
@@ -1587,6 +1659,58 @@ class TestVerifyOnlyGenPaths(unittest.TestCase):
             G.assert_not_called()
             self.assertEqual(rec["gen"], [gen])
             self.assertIn(rec["status"], ("ok", "fail"))
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+
+class TestVerifyOnePhases(unittest.TestCase):
+    """阶段回调（progress）：四阶段按序上报、回调异常不外抛；
+    docx 路径回归：`for _p in gen_path` 循环不得遮蔽阶段回调名
+    （曾致 `'str' object is not callable`）。"""
+
+    def _work(self):
+        from pycbeta.model import Work
+        return Work(id="T", source_file="", metadata={}, body=[],
+                    notes_by_n={}, apps=[], simplified=False)
+
+    def _run(self, progress=None):
+        """最小 docx 端到端（无基线）：返回 (rec, phases, tmpdir)。"""
+        from unittest import mock
+        import pycbeta.verify as V
+        d = tempfile.mkdtemp(prefix="vphase-")
+        gen = os.path.join(d, "T.docx")
+        with zipfile.ZipFile(gen, "w") as z:
+            z.writestr("word/document.xml",
+                       '<?xml version="1.0"?><w:document xmlns:w="x">'
+                       '<w:body><w:p><w:r><w:t>正文甲</w:t></w:r></w:p>'
+                       '</w:body></w:document>')
+        phases = []
+        cb = progress if progress is not None else phases.append
+        with mock.patch.object(V, "P5Parser") as P, \
+                mock.patch.object(V, "generate_formal", return_value=[gen]), \
+                mock.patch.object(V, "load_effective_presets",
+                                  return_value={"verify": {"auto_fetch": False}}), \
+                mock.patch.object(V, "find_official", return_value=[]):
+            P.return_value.parse.return_value = self._work()
+            rec = V.verify_one("x.xml", "docx", d, os.path.join(d, "v"),
+                               progress=cb)
+        return rec, phases, d
+
+    def test_docx_path_reports_phases(self):
+        rec, phases, d = self._run()
+        try:
+            self.assertEqual(rec["status"], "no_baseline")
+            self.assertIn("生成比对档", phases)
+            self.assertIn("抽取归一", phases)
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_progress_exception_swallowed(self):
+        def boom(_ph):
+            raise RuntimeError("cb-fail")
+        rec, _phases, d = self._run(progress=boom)
+        try:
+            self.assertEqual(rec["status"], "no_baseline")
         finally:
             shutil.rmtree(d, ignore_errors=True)
 

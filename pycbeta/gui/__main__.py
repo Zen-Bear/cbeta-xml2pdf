@@ -8,9 +8,10 @@ import os
 import re
 import subprocess
 import sys
+import time
 from html import escape
 
-from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtCore import Qt, QThread, QTimer, Signal
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
     QFileDialog, QGridLayout, QHBoxLayout,
@@ -253,6 +254,7 @@ class BatchWorker(QThread):
     row_file = Signal(int, str)
     row_verify = Signal(int, str)      # 行校验等级 ok/fail/none（驱动状态列配色）
     verify_result = Signal(dict)       # 单次校验详情（汇总弹窗/打开报告用）
+    verify_phase = Signal(int, str, str)  # (行, 显示格式, 阶段)：校验阶段进度（状态列）
     total_progress = Signal(int, int)
     finished_all = Signal()
     log = Signal(str)
@@ -427,7 +429,7 @@ class BatchWorker(QThread):
                             vr = self._verify_one(xml, fmt, verify_dir or out_dir,
                                                   tmpcfg, verify_one, wid,
                                                   gen_name=gen_name,
-                                                  juan=job_segs)
+                                                  juan=job_segs, idx=idx)
                             row_ver.append(vr)
                             self.verify_result.emit(vr)
                             done_units += 1
@@ -759,7 +761,7 @@ class BatchWorker(QThread):
             self._proc = None
 
     def _verify_one(self, xml, fmt, out_dir, tmpcfg, verify_one, wid="",
-                    gen_name="", juan=None):
+                    gen_name="", juan=None, idx=-1):
         v = self.opts.verify
         rec = {"id": wid or os.path.basename(xml), "fmt": fmt, "xml": xml,
                "gen_name": gen_name}
@@ -781,7 +783,9 @@ class BatchWorker(QThread):
                            max_diff=int(v.get("maxDiff", 10) or 10),
                            diff_lines=int(v.get("diffLines", 5) or 5),
                            config_path=tmpcfg, t2s=self.opts.t2s,
-                           juan=juan)
+                           juan=juan,
+                           progress=lambda ph: self.verify_phase.emit(
+                               idx, disp, ph))
             if isinstance(r, dict):
                 rec.update(r)
             rec["id"] = wid or os.path.basename(xml)
@@ -1139,12 +1143,18 @@ class MainWindow(QMainWindow):
                                    flags)
         self._verify_results = []
         self._out_dir = out_dir
+        # 校验阶段进度（状态列实时：阶段 + 已用秒数；1s tick）
+        self._vrow, self._vfmt, self._vphase, self._vt0 = None, "", "", 0.0
+        self._vtimer = QTimer(self)
+        self._vtimer.setInterval(1000)
+        self._vtimer.timeout.connect(self._tick_verify)
         self.worker.row_status.connect(self._on_status)
         self.worker.row_source.connect(lambda i, v: self.table.item(i, 2).setText(v))
         self.worker.row_title.connect(lambda i, v: self.table.item(i, 1).setText(v))
         self.worker.row_file.connect(self._on_file)
         self.worker.row_verify.connect(self._on_verify_level)
         self.worker.verify_result.connect(self._verify_results.append)
+        self.worker.verify_phase.connect(self._on_verify_phase)
         self.worker.total_progress.connect(
             lambda d, t: (self.progress.setMaximum(t), self.progress.setValue(d)))
         self.worker.log.connect(lambda m: self.statusBar().showMessage(m[-160:]))
@@ -1166,6 +1176,37 @@ class MainWindow(QMainWindow):
         if self.table.item(i, 3) is not None:
             self.table.item(i, 3).setText(text)
             self.table.item(i, 3).setToolTip(_status_tip(text))
+        if getattr(self, "_vrow", None) == i and not text.startswith("校验中"):
+            self._stop_verify_timer()
+
+    def _on_verify_phase(self, i, fmt, phase):
+        """校验阶段上报：状态列显示「校验中（fmt）· 阶段 分:秒」，1s 刷新。"""
+        self._vrow, self._vfmt, self._vphase = i, fmt or "", phase or ""
+        self._vt0 = time.monotonic()
+        if getattr(self, "_vtimer", None) is None:
+            self._vtimer = QTimer(self)
+            self._vtimer.setInterval(1000)
+            self._vtimer.timeout.connect(self._tick_verify)
+        self._vtimer.start()
+        self._tick_verify()
+
+    def _tick_verify(self):
+        i = getattr(self, "_vrow", None)
+        item = self.table.item(i, 3) if i is not None else None
+        if item is None:
+            self._stop_verify_timer()
+            return
+        el = max(0, int(time.monotonic() - getattr(self, "_vt0", 0.0)))
+        txt = (f"校验中（{getattr(self, '_vfmt', '')}）· "
+               f"{getattr(self, '_vphase', '')} {el // 60}:{el % 60:02d}")
+        item.setText(txt)
+        item.setToolTip(_status_tip(txt))
+
+    def _stop_verify_timer(self):
+        self._vrow = None
+        t = getattr(self, "_vtimer", None)
+        if t is not None:
+            t.stop()
 
     def _on_verify_level(self, i, level):
         """状态列配色：通过绿 / 失败红 / 无基线灰。"""
@@ -1242,6 +1283,7 @@ class MainWindow(QMainWindow):
             self.worker.cancel()
 
     def _on_done(self):
+        self._stop_verify_timer()
         self.btn_start.setEnabled(True)
         self.btn_cancel.setEnabled(False)
         self.statusBar().showMessage("批量完成")

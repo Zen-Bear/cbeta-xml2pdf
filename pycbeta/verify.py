@@ -28,6 +28,9 @@ def normalize(text: str, ruby_brackets=None) -> str:
     text = re.sub(r"[\uE000-\uF8FF\U000F0000-\U000FFFFD\U00100000-\U0010FFFD]",
                   "□", text)
     text = re.sub(r"[A-Z]{1,2}\d{1,4}[A-Za-z]?n\d+[A-Za-z]?_p[0-9a-z]+", "", text)
+    # 官方 txt 科判注标记 `[ data-label='科01']`（16 字，下面 ≤8 字短括号规则剥不到）：
+    # 官方 txt 独有（正文内联锚点 + 注行前缀），生成侧从不含；须先剥净再比
+    text = re.sub(r"\[ ?data-label=[^\]]*\]", "", text)
     text = re.sub(r"\[[^\]\[]{1,8}\]", "", text)
     # 【】见证标记剥除（【CB】/【大】等，官方与生成侧同源）；含「圖」的不剥
     #（官方 txt 图注如 【圖：X59p0224_01.gif】，须保留参与比对）
@@ -601,6 +604,21 @@ def _reorder_epub_footnotes(raws) -> list:
     return out
 
 
+def _epub_ours_body(gen_paths) -> str:
+    """epub→txt 形**正文段**（与 `_join_epub_ours` 同预处理：先物化悉昙读音/图注，
+    再拆正文/注块，只取正文）。旁路「仅正文」比对用：官方 txt 正文含这些物化
+    读音/图注，未物化的 html/epub 形会逐处差一截（散差致 difflib 平方膨胀）。"""
+    parts = []
+    for raw in _epub_blobs(gen_paths):
+        raw = _materialize_figs_gaiji(_materialize_ranja(raw))
+        raw = _prep_html_blob(raw, body_only=True)
+        body_raw, _ev, _blocks = _epub_blob_parts(raw, 0)
+        parts.append(body_raw)
+    return "".join(
+        _TAG_RE.sub("", re.sub(r"</(p|div|h[1-6]|li|tr)[^>]*>", "\n", b,
+                               flags=re.I)) for b in parts)
+
+
 def _join_epub_ours(gen_paths) -> str:
     """epub 生成侧正文+注块重组（**全局**阅读序）。
 
@@ -998,7 +1016,19 @@ def work_juan_numbers(work) -> set:
     return out
 
 
-_NOTE_LINE_RE = re.compile(r"^ {4}\[[^\]\[]{1,12}\]")
+_NOTE_LINE_RE = re.compile(r"^ {4}\[(?:[^\]\[]{1,12}\]| data-label=[^\]]*\])")
+#: 星号位复注的重复行：官方对"正文锚点 + 星号锚点"双 target 的注在正文位再渲染
+#: 一遍（4 空格缩进、无括号号、文字与上一注行完全相同），生成侧只渲染一遍 → 去重丢弃
+_NOTE_DUP_RE = re.compile(r"^ {4}\S")
+
+
+def _note_line_text(ln: str) -> str:
+    """注行 → 注文（剥 4 空格缩进与行首括号号/科判标记；星号位重复行判定用）。"""
+    t = ln[4:] if ln.startswith("    ") else ln.lstrip()
+    m = re.match(r"\[(?:[^\]\[]{1,12}\]| data-label=[^\]]*\])", t)
+    if m:
+        t = t[m.end():]
+    return t.strip()
 
 
 def _extract_txt_parts(text: str):
@@ -1007,14 +1037,23 @@ def _extract_txt_parts(text: str):
 
     全库验证结论：4 格缩进非 `[` 行零出现；行首 `[n]`（标题/署名/偈锚）全是正文，
     必须靠缩进区分；注记括号形态为纯数字/`A\\d+`/`\\d+[a-z]`/`＊N-M`；注记恒单行。
+    科判注（`subtype="ke"`）在官方 txt 内联为 `    [ data-label='科NN'] 内容`
+    （括号内容 >12 字，旧规则剥不到）：同移文末、保持文件序（=锚点序），
+    与生成侧文末注同构；其正文内联锚点标记由 `normalize` 剥除。
+    星号位复注：官方双 target 注在正文位多渲染一行（文字与上一注行相同）→ 丢弃。
     我方 md/html/docx 生成侧注记都在文末，移位后两边同构（正文+注记）再比对。
     经 `_norm_official_txt` 繁简通用调用；无注记行为无操作。"""
     bodies, notes = [], []
+    last_note = None
     for ln in text.split("\n"):
         if _NOTE_LINE_RE.match(ln):
             notes.append(ln)
-        else:
-            bodies.append(ln)
+            last_note = _note_line_text(ln)
+            continue
+        if last_note and _NOTE_DUP_RE.match(ln) and ln.strip() == last_note:
+            continue
+        last_note = None
+        bodies.append(ln)
     return "\n".join(bodies), "\n".join(notes)
 
 
@@ -1055,16 +1094,19 @@ def _split_md_body(text: str):
     return text[:last.start()], text[last.start():]
 
 
-def _body_of(path: str, kind: str):
+def _body_of(path: str, kind: str, txt_form: bool = False):
     """文件 → 正文段（不含注释）；不支持的 kind 返回 None。
     kind：生成侧 = fmt（html/docx/epub/md/txt）；官方侧 = 基线类别
-    （html/docx/epub/txt_notes/odt，同 verify.bases）。"""
+    （html/docx/epub/txt_notes/odt，同 verify.bases）。
+    txt_form：epub 生成侧是否用 epub→txt 形（物化悉昙读音/图注；对 txt_notes 基线）。"""
     try:
         if kind == "html":
             return _extract_html_parts(path)[0]
         if kind == "docx":
             return _extract_docx_parts(path)[0]
         if kind == "epub":
+            if txt_form:
+                return _epub_ours_body([path])
             return _extract_epub_parts(path)[0]
         if kind == "txt_notes":
             with open(path, encoding="utf-8", errors="replace") as f:
@@ -1092,7 +1134,7 @@ def _body_sidecar(gen_paths, fmt, bpath, bkind, *, title="", docnumber="",
     paths = [bpath] if isinstance(bpath, str) else list(bpath or [])
     gb = []
     for p in gen_paths:
-        b = _body_of(p, fmt)
+        b = _body_of(p, fmt, txt_form=(fmt == "epub" and bkind == "txt_notes"))
         if b is None:
             return None, None, None
         gb.append(b)
@@ -1743,8 +1785,16 @@ def generate_formal(xml_fn: str, work, fmt: str, outdir: str, config_path: Optio
         return [os.path.join(outdir, TxtRenderer(theme=theme, notes="footnote", show_notes=True, inline_brackets=p("inline_brackets", "halfwidth"), annotations=_ann, strip_head_no=_shn, show_dharani_transliteration=bool(p("show_dharani_transliteration", False)), siddham_text=bool(p("siddham_text", False))).render_work(work, out_dir=outdir, filename=f"{stem}.txt"))]
     raise ValueError(f"unknown format {fmt}")
 
-def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int = 10, diff_lines: int = 5, config_path: Optional[str] = None, t2s: bool = False, baseline: str = "render", gen_paths: Optional[List[str]] = None, baseline_roots: Optional[dict] = None, juan: Optional[list] = None) -> Dict:
-    """…；`juan`（[(lo,hi)] 段列表）给定时按卷过滤（子集校验：基线自动限定所选卷）。"""
+def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int = 10, diff_lines: int = 5, config_path: Optional[str] = None, t2s: bool = False, baseline: str = "render", gen_paths: Optional[List[str]] = None, baseline_roots: Optional[dict] = None, juan: Optional[list] = None, progress=None) -> Dict:
+    """…；`juan`（[(lo,hi)] 段列表）给定时按卷过滤（子集校验：基线自动限定所选卷）。
+    `progress(phase)` 可选回调（GUI 状态列用；CLI 不传）：在
+    `生成比对档 / 抽取归一 / 比对 / 正文旁路比对` 阶段边界上报，异常不外抛。"""
+    def _phase(name):
+        if progress is not None:
+            try:
+                progress(name)
+            except Exception:
+                pass
     if fmt == "pdf":
         # 官方无 PDF 基线：PDF 由 docx（docx2pdf）或 html（html2pdf）派生，正文已由该格式校验覆盖
         return {"xml": xml_fn, "fmt": fmt, "status": "no_baseline", "gen": [],
@@ -1776,6 +1826,7 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
             return {"xml": xml_fn, "fmt": fmt, "status": "error",
                     "detail": "生成档缺失（--verify-only 未找到可比对文件）", "gen": []}
     else:
+        _phase("生成比对档")
         gen_path = generate_formal(xml_fn, work, fmt, outdir, config_path=config_path)
     # 结构护栏：docx（含 pdf→docx 委托产物）不得含段中段/表中段（否则 Word 丢内容）
     struct_issues = []
@@ -1785,6 +1836,7 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
             if len(struct_issues) >= 5:
                 break
         struct_issues = struct_issues[:5]
+    _phase("抽取归一")
     ours_raw = "".join(extract_text(p, strip_jiaozhu=(fmt not in ("html", "epub")))
                        for p in gen_path)
     try:
@@ -1872,6 +1924,7 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
                 f.write(ours_disp)
         except Exception:
             src_cmp = gen_cmp = ""
+        _phase("比对")
         m, mi, ex, ctx = diff_stats(ours, theirs, diff_lines)
         total = mi + ex
         status = "ok" if total <= max_diff else "fail"
@@ -2023,9 +2076,11 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
                 f.write(t_disp)
         except Exception:
             src_cmp = gen_cmp = ""
+        _phase("比对")
         m, mi, ex, ctx = diff_stats(t_ours, theirs, diff_lines)
         total = mi + ex
         # 旁路「仅正文」比对：差异是否全在注释（严格 0；分不出 → unknown）
+        _phase("正文旁路比对")
         _bm, _be, _notes_only = _body_sidecar(
             gen_path if isinstance(gen_path, list) else [gen_path],
             fmt, bpath, bkind, title=t_title, docnumber=t_docnumber,

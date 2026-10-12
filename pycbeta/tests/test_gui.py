@@ -1718,6 +1718,25 @@ class TestProducedPaths(unittest.TestCase):
         self.assertEqual(parse_produced_paths(""), [])
         self.assertEqual(parse_produced_paths(None), [])
 
+    def test_parse_html_per_file(self):
+        """cli.py html 逐文件打印（`-> 完整路径`）应全部进文件列；
+        旧摘要式 `-> N file(s) in <dir>` 仍不解析（对照）。"""
+        import tempfile
+        from pycbeta.gui.__main__ import parse_produced_paths
+        d = tempfile.mkdtemp()
+        try:
+            h1 = os.path.join(d, "T0672 長阿含經_001.html")
+            h2 = os.path.join(d, "T0672 長阿含經_002.html")
+            open(h1, "w").close()
+            open(h2, "w").close()
+            log = (f"T0672: html(endnote) -> {h1}\n"
+                   f"T0672: html(endnote) -> {h2}\n"
+                   f"T0672: html(endnote) -> 2 file(s) in {d}\n")
+            self.assertEqual(parse_produced_paths(log), [h1, h2])
+        finally:
+            import shutil
+            shutil.rmtree(d, ignore_errors=True)
+
 
 class TestParseWorkIdsFile(unittest.TestCase):
     def test_mini_test_like(self):
@@ -2027,6 +2046,27 @@ class TestMainWindowUx(unittest.TestCase):
                              r"^CBETA XML 格式转换 v"
                              + re.escape(__version__)
                              + r"（\d{4}-\d{2}-\d{2}）$")
+        finally:
+            w.close()
+
+    def test_verify_phase_status_column(self):
+        """校验阶段进度：状态列显示「校验中（fmt）· 阶段 分:秒」，行终态停表。"""
+        from PySide6.QtWidgets import QTableWidgetItem
+        from pycbeta.gui.__main__ import MainWindow
+        w = MainWindow()
+        try:
+            w.table.setRowCount(1)
+            for c in range(5):
+                w.table.setItem(0, c, QTableWidgetItem(""))
+            w.table.item(0, 3).setText("校验中（txt）…")
+            w._on_verify_phase(0, "txt", "比对")
+            txt = w.table.item(0, 3).text()
+            self.assertIn("校验中（txt）", txt)
+            self.assertIn("比对", txt)
+            self.assertIn("0:00", txt)
+            self.assertEqual(w._vrow, 0)
+            w._on_status(0, "完成｜校验 OK")
+            self.assertIsNone(w._vrow)          # 行终态停表
         finally:
             w.close()
 
@@ -5322,7 +5362,8 @@ class TestVerifyFeedback(unittest.TestCase):
                 f.write("<TEI/>")
 
             def fake_verify(x, fmt, source, out_root, max_diff=10,
-                            diff_lines=5, config_path=None, t2s=False, juan=None):
+                            diff_lines=5, config_path=None, t2s=False, juan=None,
+                            progress=None):
                 return {"status": "ok", "missing": 0, "extra": 0,
                         "official_kind": "docx", "gen_cmp": "g.txt",
                         "src_cmp": "s.txt"}
@@ -5355,7 +5396,7 @@ class TestVerifyFeedback(unittest.TestCase):
         w._title_of = lambda x, i, P: ("T0349", "T0349")
         w._out_name_for = lambda *a, **k: "T12n0349.txt"
         w._render_one = lambda x, fmt, o, cfg, out_name=None, juan=None: (True, [rendered])
-        w._verify_one = lambda x, fmt, o, cfg, vo, wid="", gen_name="", juan=None: {
+        w._verify_one = lambda x, fmt, o, cfg, vo, wid="", gen_name="", juan=None, idx=-1: {
             "id": wid, "fmt": fmt, "xml": x, "status": "fail", "missing": 0,
             "extra": 15, "gen_cmp": gcmp, "src_cmp": scmp}
         orig = (M.write_temp_presets, M.write_temp_run)

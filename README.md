@@ -9,7 +9,7 @@ DOCX/PDF 输出支持字体方案、打印模式、书签、黑白输出等出�
 
 ## 安装（绿色版，推荐）
 
-1. 到 [Releases](https://github.com/Zen-Bear/cbeta-xml2pdf/releases) 下载 `CBETA-XML2PDF-v0.7-win64.zip`（约 130MB，PySide6 所致）。
+1. 到 [Releases](https://github.com/Zen-Bear/cbeta-xml2pdf/releases) 下载 `CBETA-XML2PDF-v0.9-win64.zip`（约 130MB，PySide6 所致）。
 2. 解压到**可写目录**（如 `D:\CBETA-XML2PDF`）；`CBETA-XML2PDF.exe` 与 `_internal/` 需在一起，不可拆分。
 3. 双击 `CBETA-XML2PDF.exe` 即开图形界面（免装 Python）。
 

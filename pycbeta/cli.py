@@ -264,14 +264,19 @@ def render_one(w, fmt, out_dir, out_name, args, theme, html_base=None, figure_ba
                          figure_base=figure_base)
         files = r.render_work(w, out_dir)
         _report_missing_figures(w.id, fmt, r)
-        print(f"{w.id}: html({note_mode}) -> {len(files)} file(s) in {out_dir}")
+        # 逐文件打印完整路径（GUI 文件列靠行尾 `-> <路径>.<ext>` 抓取；摘要式
+        # `-> N file(s) in <dir>` 抓不到，会让 html 产物从文件列漏掉）
+        for _fn in files:
+            print(f"{w.id}: html({note_mode}) -> {os.path.join(out_dir, _fn)}")
 
     elif fmt == "docx":
         r = build_docx_renderer(args, theme, figure_base, note_mode)
         res = r.render_work(w, out_dir, filename=out_name)
         _report_missing_figures(w.id, fmt, r)
         if isinstance(res, list):
-            print(f"{w.id}: docx({note_mode}, split) -> {len(res)} file(s)")
+            # split 模式逐文件打印完整路径（同上：GUI 文件列抓 `-> <路径>`）
+            for _p in res:
+                print(f"{w.id}: docx({note_mode}, split) -> {_p}")
         else:
             print(f"{w.id}: docx({note_mode}) -> {res}")
 
