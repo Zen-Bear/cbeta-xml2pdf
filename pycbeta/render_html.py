@@ -803,6 +803,10 @@ class HtmlRenderer:
             return ""
         if app.atype == "star_removed":
             return ""
+        # 跨卷星号位（parser 置位）：官方只在注主锚同卷的星号位出注文；
+        # 不出空位标记 → `_join_epub_ours` 也不会在此按位复注块（避免跨卷重复）
+        if app.star_empty:
+            return ""
         corresp = (app.attrs or {}).get("corresp") or ""
         n = corresp.lstrip("#")
         if not n:

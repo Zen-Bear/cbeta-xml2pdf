@@ -1621,6 +1621,9 @@ class DocxRenderer:
         # 此处再渲会与正文注重复（官方仅在该注位置出注，本 app 仅贡献 cf）
         if app.atype == "star_removed":
             return ""
+        # 注：跨卷星号位（app.star_empty）在 docx **不抑制**——官方 docx 与 txt 口径
+        # 不同（docx 保留各卷星号位注文；T0262 实测 docx 多 234 字即官方所有）。
+        # txt/md/html 抑制以对齐各自官方基线（见 render_txt/_render_star_app 注释）。
         if app.attrs.get("corresp"):
             n = app.attrs["corresp"].lstrip("#")
             notes = (self._work.notes_by_n or {}).get(n) if self._work else None
@@ -1989,6 +1992,13 @@ class DocxRenderer:
             if not self.corr_cbeta:
                 return self._render_children(e)
             return self._render_tagged(e.children, "corr-cbeta")
+        if tag == "trailer":
+            # 文末题署（TEI trailer，如 T1499「菩薩戒羯磨文」/T01n0026 卷末题）：
+            # 官方 docx 作**普通段落**（pStyle default + 注码）。原先落泛型分支 →
+            # 段外"游离 run"（无 <w:p>）→ Word/WPS 整段丢弃，而文字抽取仍见＝假绿
+            # （2026-10-13 T1499 实锤；T09n0262/T01n0026 同）。
+            return self._para(
+                self._render_para_children(e, "p", self._rend_tag(a)), "p")
         return self._render_children(e)
 
     def _render_def_p(self, p):
@@ -2265,6 +2275,13 @@ class DocxRenderer:
         for c in e.children:
             if isinstance(c, E) and c.tag == "l":
                 idx = l_index.get(id(c), 0)
+                # 行前注锚（pending）先渲染：注号按文档序分配。若先渲染行内容再渲染
+                # pending，行内注先拿号、行前注后拿号（位置对但编号/注块序与文档位置
+                # 错位；T1436 范围注实锤）。输出仍拼到行首，位置不变。
+                pending_runs = ""
+                if pending:
+                    pending_runs = "".join(self._render_node(p) for p in pending)
+                    pending = []
                 children = list(c.children)
                 if self.strip_verse_quotes:
                     if idx == 0:
@@ -2283,10 +2300,8 @@ class DocxRenderer:
                     parts.append(self._render_tagged(buf, "verse", rend))
                 sep = self._run(self.verse_caesura, "verse")
                 ln = sep.join(parts)
-                if pending:
-                    pending_runs = "".join(self._render_node(p) for p in pending)
+                if pending_runs:
                     ln = pending_runs + ln
-                    pending = []
                 lines.append(ln)
             elif isinstance(c, (NoteRef, App)):
                 pending.append(c)

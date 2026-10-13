@@ -867,9 +867,16 @@ class VerifySummaryDialog(QDialog):
         miss, extra = r.get("missing"), r.get("extra")
         cnt = (f"  缺{miss}/多{extra}" if miss is not None else
                ("  " + str(r.get("detail", "")) if r.get("detail") else ""))
+        # 差异范围结论（如「【仅仅注释差异】」）与报告同口径（2026-10-13 用户反馈）
+        try:
+            from pycbeta.verify import diff_scope_tag as _dst
+            scope = _dst(r.get("diff_scope"), r.get("body_missing"),
+                         r.get("body_extra"), (miss or 0) + (extra or 0))
+        except Exception:
+            scope = ""
         # 名称优先用生成的目标文件名（gen_name），回退「编号 格式」
         name = r.get("gen_name") or f"{r.get('id','')} {r.get('fmt','')}".strip()
-        body = escape(f"[{tag}] {name}{cnt}")
+        body = escape(f"[{tag}] {name}{cnt}{scope}")
         return f"<span style='color:{color}'>{body}</span>"
 
     def _open_report(self):

@@ -1303,9 +1303,13 @@ def main(argv=None):
                     from .verify import work_juan_numbers
                     _juan = work_juan_numbers(w)
                 official = {}
+                _strict_j = (_juan_status == "filtered")
                 for kind in ("html","txt_notes","docx","epub","odt"):
-                    found = v_find(src, stem, kind, juan=_juan if kind in ("html", "docx", "txt_notes") else None,
-                                   extra_roots=_bl_roots(kind))
+                    found = v_find(src, stem, kind,
+                                   juan=_juan if kind in ("html", "docx", "txt_notes",
+                                                          "epub", "odt") else None,
+                                   extra_roots=_bl_roots(kind),
+                                   strict_juan=_strict_j)
                     if found: official[kind] = found
                 from .verify import chain_for as _v_chain, resolve_bases as _v_bases, need_for_base as _v_need
                 _chains = (_vp or {}).get("bases")
@@ -1324,11 +1328,14 @@ def main(argv=None):
                     _ebook_af = resolve_verify_ebook(args, _presets_af, src)
                     ensure_baselines(
                         w.id, need, _presets_af, _ebook_af,
-                        juan=_juan if getattr(args, "juan_segments", None) else None)
+                        juan=_juan if _strict_j else None)
                     official = {}
                     for kind in ("html","txt_notes","docx","epub","odt"):
-                        found = v_find(src, stem, kind, juan=_juan if kind in ("html", "docx", "txt_notes") else None,
-                                       extra_roots=_bl_roots(kind))
+                        found = v_find(src, stem, kind,
+                                       juan=_juan if kind in ("html", "docx", "txt_notes",
+                                                              "epub", "odt") else None,
+                                       extra_roots=_bl_roots(kind),
+                                       strict_juan=_strict_j)
                         if found: official[kind] = found
                     bases = _cli_bases(official)
                 if not bases:
@@ -1365,17 +1372,46 @@ def main(argv=None):
                         _t_raw = _si(_t_raw)
                     _t_nsrc = _t_raw
                     ours_t = v_norm(_t_raw, _rb)
+                    # epub trial 专用形：只比**正文段**（官方 epub 导出无尾注/校勘块，
+                    # 注记一律 note-inline 内联；全量比对会把我们的尾注记为"多"，
+                    # T1499 实锤）→ 与 verify_one 同口径
+                    from .verify import _extract_epub_parts as _eep
+                    _e_raw = "".join(_eep(p)[0] for p in gen_paths)
+                    if not v_compare_infos:
+                        from .verify import strip_infos as _si2
+                        _e_raw = _si2(_e_raw)
+                    ours_e = v_norm(_e_raw, _rb)
                 else:
                     _t_nsrc = None
                     ours_t = ours
+                    ours_e = ours
                 ok_any = False; best = None
                 detail_lines = []
                 _gen_index = _gen_locate_index(fmt, gen_paths)
                 for bkind, bpath in bases:
-                    # epub→txt trial 用重组形，其余沿用原形（见上）
-                    t_ours = ours_t if (fmt_raw == "epub"
-                                        and bkind == "txt_notes") else ours
-                    if isinstance(bpath, list):
+                    # epub→txt trial 用重组形；epub→epub trial 用正文段形；
+                    # 其余沿用原形（见上）
+                    if fmt_raw == "epub" and bkind == "txt_notes":
+                        t_ours = ours_t
+                    elif fmt_raw == "epub" and bkind == "epub":
+                        t_ours = ours_e
+                    else:
+                        t_ours = ours
+                    if bkind == "epub":
+                        # 官方 epub 无尾注/校勘块（note-inline 内联）→ 只比正文段
+                        # （与 verify_one 同口径；T1499 实锤）
+                        from .verify import _extract_epub_parts as _eep2
+                        _ps = [bpath] if isinstance(bpath, str) else list(bpath or [])
+                        _parts = []
+                        for _p in _ps:
+                            _t = _eep2(_p)[0]
+                            if not v_compare_infos:
+                                _t = v_strip_infos(_t)
+                            _parts.append(_t)
+                        theirs_n = _theirs_norm("".join(_parts), bkind)
+                        bpath_disp = (_ps[0] if len(_ps) == 1
+                                      else f"{_ps[0]} (+{len(_ps)-1})")
+                    elif isinstance(bpath, list):
                         if bkind == "docx" and len(bpath) > 1:
                             # 多卷官方 docx：与 verify_one 同口径，先 merge_docx 合并
                             # （脚注统一在文末）再抽取；逐文件抽取后拼接会把各卷注
@@ -1484,8 +1520,10 @@ def main(argv=None):
                     if total <= args.verify_max_diff:
                         ok_any = True
                         from .verify import trial_pass_line as _pass_line
+                        # 附本 trial 的官方基线路径（非最佳 trial 也可见"用了哪个官方文件"）
                         detail = _pass_line(bkind, mi, ex, total,
-                                            args.verify_max_diff)
+                                            args.verify_max_diff) \
+                            + f"（基线 {bpath_disp}）"
                         if total>0 and ctx:
                             for idx,(tag,i1,i2,j1,j2) in enumerate(ctx[:args.verify_diff_lines],1):
                                 loc = locs[idx - 1] if idx - 1 < len(locs) else {}
@@ -1494,7 +1532,7 @@ def main(argv=None):
                                     loc, o_rawln, t_rawln,
                                     *_frag_locs(loc, o_rawln, t_rawln,
                                                 _off_texts, _gen_index, _o_nsrc)))
-                        detail_lines = [detail]
+                        detail_lines.append(detail)   # 保留先前失败 trial 的详情
                         break
                     else:
                         lines=[]
@@ -1506,7 +1544,7 @@ def main(argv=None):
                                 *_frag_locs(loc, o_rawln, t_rawln,
                                             _off_texts, _gen_index, _o_nsrc)))
                         snippet = "\n".join(lines) if lines else ""
-                        detail = f"      → {bkind} 失败: 缺{mi}字(生成档缺失) / 多{ex}字(生成档多出) 合计{total} >阈值{args.verify_max_diff}"
+                        detail = f"      → {bkind} 失败: 缺{mi}字(生成档缺失) / 多{ex}字(生成档多出) 合计{total} >阈值{args.verify_max_diff}（基线 {bpath_disp}）"
                         if snippet: detail += f"\n{snippet}"
                         detail_lines.append(detail)
                 if best is None: continue
@@ -1519,7 +1557,7 @@ def main(argv=None):
                 mark = "[OK]" if ok_any else "[FAIL]"
                 op = "≤" if ok_any else ">"
                 block.append(f"  {mark} (缺{best_mi}/多{best_ex} {op}阈值{args.verify_max_diff})")
-                block.append(f"  {disp} 【源】{bpath}")
+                block.append(f"  {disp}→{bkind} 【源】{bpath}")
                 block.append(f"  {disp} 【新】{gen_path}")
                 if best_src:
                     block.append(f"  {disp} 【源比较】{best_src}")
@@ -1528,7 +1566,7 @@ def main(argv=None):
                 block.extend(detail_lines)
                 if _struct_issues:
                     block.append(
-                        f"  [FAIL] 结构非法（段中段/表中段 {len(_struct_issues)} 处，"
+                        f"  [FAIL] 结构非法（段中段/表中段/游离文字 {len(_struct_issues)} 处，"
                         "Word/WPS 会丢弃；文字抽取假绿）:")
                     for _s in _struct_issues[:5]:
                         block.append(f"         {_s}")

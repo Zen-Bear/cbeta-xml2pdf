@@ -1102,8 +1102,24 @@ class TestBodySidecar(unittest.TestCase):
                            "body_missing": 0, "body_extra": 0,
                            "diff_scope": "notes_only"}]}
         txt = "\n".join(_format_verify_record(rec, 5, 10))
-        self.assertIn("正文差异 0（差异全部在注释）", txt)
-        self.assertNotIn("  [OK] 正文", txt)
+        # 并入 [OK]/[FAIL] 行末、`【】` 包裹（2026-10-13）；
+        # 文案简化为「【仅仅注释差异】」（2026-10-13 用户反馈）
+        self.assertIn("【仅仅注释差异】", txt)
+        self.assertNotIn("正文差异 0（差异全部在注释）", txt)
+        self.assertNotIn("\n      正文差异", txt)
+
+    def test_report_line_scope_zero_no_suffix(self):
+        """缺0/多0：不显示「正文差异 0」（2026-10-13 用户反馈）。"""
+        from pycbeta.verify import _format_verify_record
+        rec = {"xml": "x.xml", "fmt": "html", "status": "ok",
+               "missing": 0, "extra": 0,
+               "trials": [{"kind": "html", "official": "o.html",
+                           "missing": 0, "extra": 0, "total": 0, "ok": True,
+                           "ctx": [], "ctx_loc": [], "diff_scope": "notes_only"}]}
+        txt = "\n".join(_format_verify_record(rec, 5, 10))
+        self.assertIn("  [OK] (html→html 缺0/多0 ≤阈值10)", txt)
+        self.assertNotIn("正文差异", txt)
+        self.assertNotIn("仅仅注释差异", txt)
 
     def test_report_line_scope_unknown(self):
         from pycbeta.verify import _format_verify_record
@@ -1141,6 +1157,42 @@ class TestTxtNotesDiscovery(unittest.TestCase):
         hits = find_official(self.root, "T99n9999", "txt_notes", juan={1})
         self.assertEqual(len(hits), 1)
         self.assertTrue(hits[0].endswith("T9999_001.txt"))
+
+    def test_strict_juan_no_wrong_volume_fallback(self):
+        """真子集：无对应卷文件 → 该种基线缺席（错卷文件不得充数，T0220:523 实锤）。"""
+        self.assertEqual(
+            find_official(self.root, "T99n9999", "txt_notes",
+                          juan={3}, strict_juan=True), [])
+
+    def test_nonstrict_juan_keeps_fallback(self):
+        """整本/全覆盖任务（非 strict）：旧回退行为保留（按冊命名对不上时可用）。"""
+        hits = find_official(self.root, "T99n9999", "txt_notes", juan={3})
+        self.assertEqual(len(hits), 2)
+
+    def test_strict_juan_keeps_matching(self):
+        hits = find_official(self.root, "T99n9999", "txt_notes",
+                             juan={1}, strict_juan=True)
+        self.assertEqual([os.path.basename(f) for f in hits], ["T9999_001.txt"])
+
+    def test_epub_scope_strict(self):
+        """epub 纳入卷限定：整部单文件（无 _NNN）不得充子集基线；按卷 epub 可命中。"""
+        d = os.path.join(self.root, "T9999 Book", "epub")
+        os.makedirs(d, exist_ok=True)
+        whole = os.path.join(d, "T9999.epub")
+        with open(whole, "w", encoding="utf-8") as f:
+            f.write("whole")
+        self.assertEqual(
+            find_official(self.root, "T99n9999", "epub",
+                          juan={1}, strict_juan=True), [])
+        self.assertEqual(
+            find_official(self.root, "T99n9999", "epub", juan={1}), [whole])
+        vol = os.path.join(d, "T9999_002.epub")
+        with open(vol, "w", encoding="utf-8") as f:
+            f.write("vol2")
+        hits = find_official(self.root, "T99n9999", "epub",
+                             juan={2}, strict_juan=True)
+        self.assertEqual([os.path.basename(f) for f in hits],
+                         ["T9999_002.epub"])
 
 
 class TestVerifyDirExcluded(unittest.TestCase):
@@ -1335,6 +1387,37 @@ class TestNormalizeEntities(unittest.TestCase):
         self.assertEqual(normalize('甲乙丙'), '甲乙丙')
 
 
+class TestReportBaselineLabel(unittest.TestCase):
+    """报告 `【源】` 行带基线类别（`{fmt}→{kind}`）：避免「epub 【源】…txt」误读
+    （T1499 反馈）；下游取 `【源】` 前 disp 的 `→` 左侧为产物格式，兼容。"""
+
+    def test_source_line_carries_baseline_kind(self):
+        from pycbeta.verify import format_verify_report
+        recs = [{
+            "xml": "T24n1499.xml", "fmt": "epub", "status": "fail",
+            "gen": "T24n1499.epub", "official_kind": "txt_notes",
+            "official": r"E:\x\txt\T1499_001.txt",
+            "missing": 0, "extra": 18, "total": 18,
+            "norm_gen": "甲", "norm_official": "甲",
+            "trials": [
+                {"kind": "txt_notes", "official": r"E:\x\txt\T1499_001.txt",
+                 "missing": 0, "extra": 18, "total": 18, "ok": False, "ctx": []},
+                {"kind": "epub", "official": r"E:\x\epub\T1499.epub",
+                 "missing": 1, "extra": 138, "total": 139, "ok": False, "ctx": []},
+            ],
+        }]
+        s = "\n".join(format_verify_report(recs))
+        # 每个 trial 的 【源】 行都带自己的基线类别
+        self.assertIn("epub→txt_notes 【源】", s)
+        self.assertIn("epub→epub 【源】", s)
+        # 下游解析：`【源】` 前 disp 取 `→` 左侧 = 产物格式
+        src_lines = [ln for ln in s.splitlines() if "【源】" in ln]
+        self.assertEqual(len(src_lines), 2)
+        for ln in src_lines:
+            self.assertEqual(
+                ln.split("【源】")[0].strip().split("→")[0].strip(), "epub")
+
+
 class TestReportCtxLocation(unittest.TestCase):
     def test_report_marks_span_and_line(self):
         from pycbeta.verify import format_verify_report
@@ -1456,6 +1539,37 @@ class TestDocxStructureGuard(unittest.TestCase):
         finally:
             shutil.rmtree(d, ignore_errors=True)
 
+    def test_loose_text_run_detected(self):
+        """游离 run（`<w:p>` 外的非空文字 run）判非法（Word 丢弃＝假绿）。"""
+        from pycbeta.verify import _loose_run_hits
+        self.assertEqual(len(_loose_run_hits(
+            "<w:body><w:p><w:r><w:t>正文</w:t></w:r></w:p>"
+            "<w:r><w:t>游离</w:t></w:r></w:body>")), 1)
+        # 段内 run 正常；空文字游离 run（标题页占位）不报
+        self.assertEqual(_loose_run_hits(
+            "<w:body><w:p><w:r><w:t>正文</w:t></w:r></w:p></w:body>"), [])
+        self.assertEqual(_loose_run_hits(
+            "<w:body><w:r><w:t></w:t></w:r></w:body>"), [])
+        # 表格单元格内段落里的 run 正常
+        self.assertEqual(_loose_run_hits(
+            "<w:body><w:tbl><w:tr><w:tc><w:p>"
+            "<w:r><w:t>格</w:t></w:r></w:p></w:tc></w:tr></w:tbl></w:body>"), [])
+
+    def test_docx_loose_run_violations_zip(self):
+        import zipfile
+        from pycbeta.verify import docx_nested_block_violations
+        d = tempfile.mkdtemp()
+        try:
+            p = os.path.join(d, "loose.docx")
+            with zipfile.ZipFile(p, "w") as z:
+                z.writestr("word/document.xml",
+                           "<w:body><w:r><w:t>游离</w:t></w:r></w:body>")
+            hits = docx_nested_block_violations(p)
+            self.assertTrue(hits)
+            self.assertIn("游离文字", hits[0])
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
     def test_report_prints_struct_issue(self):
         from pycbeta.verify import format_verify_report
         recs = [{"xml": "X.xml", "fmt": "docx", "status": "fail",
@@ -1463,7 +1577,7 @@ class TestDocxStructureGuard(unittest.TestCase):
                  "ctx": [], "struct_issues": ["word/document.xml: <w:p><w:p>x"]}]
         s = "\n".join(format_verify_report(recs))
         self.assertIn("结构非法", s)
-        self.assertIn("段中段/表中段 1 处", s)
+        self.assertIn("段中段/表中段/游离文字 1 处", s)
 
 
 class TestExtractDocxLineBreaks(unittest.TestCase):
@@ -1713,6 +1827,62 @@ class TestVerifyOnePhases(unittest.TestCase):
             self.assertEqual(rec["status"], "no_baseline")
         finally:
             shutil.rmtree(d, ignore_errors=True)
+
+
+class TestEpubTrialBodyOnly(unittest.TestCase):
+    """epub 基线试算只比**正文段**：官方 epub 导出无尾注/校勘块（note-inline 内联；
+    全库官方 epub footnote 块=0），全量比对会把我们的尾注整块记为"多"
+    （2026-10-13 T1499 实锤：多 137 字）。注释由 txt_notes 试算覆盖。"""
+
+    @staticmethod
+    def _mk_epub(path, body, foot=None):
+        import zipfile
+        html = ("<html><body><p>" + body + "</p>"
+                + (f"<div class='footnote' id='n1'>"
+                   f"<a href='#note_anchor_1' id='a1'>[1]</a> {foot}</div>"
+                   if foot else "")
+                + "</body></html>")
+        with zipfile.ZipFile(path, "w") as z:
+            z.writestr("OEBPS/ch1.xhtml", html)
+
+    def test_epub_trial_excludes_our_notes(self):
+        import tempfile
+        from unittest import mock
+        from pycbeta.model import Work
+        import pycbeta.verify as V
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        gen = os.path.join(d, "X.epub")
+        off = os.path.join(d, "off.epub")
+        txt = os.path.join(d, "X_001.txt")
+        self._mk_epub(gen, "正文甲", "校勘注乙")   # 我们：有尾注
+        self._mk_epub(off, "正文甲")               # 官方：无尾注
+        with open(txt, "w", encoding="utf-8") as f:
+            f.write("正文甲\n")                    # 官方 txt 无注 → txt 试算失败
+        work = Work(id="X", source_file="", metadata={}, body=[],
+                    notes_by_n={}, apps=[], simplified=False)
+
+        def _find(source, stem, kind, juan=None, extra_roots=(),
+                  strict_juan=False):
+            return {"txt_notes": [txt], "epub": [off]}.get(kind, [])
+
+        with mock.patch.object(V, "P5Parser") as P, \
+                mock.patch.object(V, "generate_formal", return_value=[gen]), \
+                mock.patch.object(V, "load_effective_presets",
+                                  return_value={"verify": {"auto_fetch": False}}), \
+                mock.patch.object(V, "find_official", side_effect=_find):
+            P.return_value.parse.return_value = work
+            rec = V.verify_one("x.xml", "epub", d, os.path.join(d, "v"),
+                               max_diff=0)
+        trials = {t["kind"]: t for t in rec.get("trials", [])}
+        self.assertIn("txt_notes", trials)
+        self.assertIn("epub", trials)
+        # txt 试算：epub→txt 形含注块 → 官方 txt 无注 → 多（注释照计）
+        self.assertGreater(trials["txt_notes"]["extra"], 0)
+        # epub 试算：只比正文段 → 0/0（尾注不计）
+        self.assertEqual((trials["epub"]["missing"], trials["epub"]["extra"]),
+                         (0, 0))
+        self.assertEqual(rec["status"], "ok")
 
 
 if __name__ == "__main__":

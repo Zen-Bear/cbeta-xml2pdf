@@ -237,5 +237,74 @@ class TestCorrCbetaParse(unittest.TestCase):
         self.assertIn("佛", body_text)
 
 
+class TestStarCrossVolume(unittest.TestCase):
+    """星号位跨卷标记（T0262 实锤）：`type="star"` 锚上的 app，若其 corresp 注的
+    主锚（`nkr_note_*`）不在当前卷 → `star_empty`（官方 txt/md/html 该位不出注文；
+    docx 官方不抑制，渲染器忽略此标记）。"""
+
+    XML = (
+        "<TEI xmlns='http://www.tei-c.org/ns/1.0'>"
+        "<text><body>"
+        "<milestone n='1' unit='juan'/>"
+        "<p><anchor xml:id='nkr_note_orig_0001007' n='0001007'/>"
+        "<anchor xml:id='nkr_note_mod_0001007' n='0001007'/>"
+        "<anchor xml:id='beg0001007' n='0001007'/>第"
+        "<anchor xml:id='end0001007'/>一</p>"
+        "<milestone n='2' unit='juan'/>"
+        "<p>卷<anchor xml:id='beg_e' type='star'/>第<anchor xml:id='end_e'/>二</p>"
+        "<p><anchor xml:id='nkr_note_orig_0002007' n='0002007'/>"
+        "<anchor xml:id='nkr_note_mod_0002007' n='0002007'/>"
+        "<anchor xml:id='beg0002007' n='0002007'/>第"
+        "<anchor xml:id='end0002007'/>三"
+        "<anchor xml:id='beg_10' type='star'/>四<anchor xml:id='end_10'/></p>"
+        "</body>"
+        "<back>"
+        "<div type='apparatus'><p>"
+        "<app from='#beg0001007' to='#end0001007'>"
+        "<lem wit='#wit.orig'>第</lem><rdg wit='#wit1'>之</rdg></app>"
+        "<app from='#beg_e' to='#end_e' corresp='#0001007'>"
+        "<lem wit='#wit.orig'>第</lem><rdg wit='#wit1'>之</rdg></app>"
+        "<app from='#beg0002007' to='#end0002007'>"
+        "<lem wit='#wit.orig'>第</lem><rdg wit='#wit1'>之</rdg></app>"
+        "<app from='#beg_10' to='#end_10' corresp='#0002007'>"
+        "<lem wit='#wit.orig'>第</lem><rdg wit='#wit1'>之</rdg></app>"
+        "</p></div>"
+        "<div type='cbeta-notes'><p>"
+        "<note n='0001007' type='mod' target='#nkr_note_mod_0001007'>甲注</note>"
+        "<note n='0002007' type='mod' target='#nkr_note_mod_0002007'>乙注</note>"
+        "</p></div>"
+        "</back></text></TEI>"
+    )
+
+    def _tmpfile(self):
+        import tempfile
+        with tempfile.NamedTemporaryFile("w", suffix=".xml", delete=False,
+                                         encoding="utf-8") as f:
+            f.write(self.XML)
+            return f.name
+
+    def test_cross_volume_star_flagged(self):
+        fn = self._tmpfile()
+        try:
+            w = P5Parser().parse(fn)
+        finally:
+            os.remove(fn)
+        apps = {a.key: a for a in all_of(w, App)}
+        self.assertTrue(apps["beg_e"].star_empty)    # 卷2 星号 / 注主锚在卷1
+        self.assertFalse(apps["beg_10"].star_empty)  # 卷2 星号 / 注主锚也在卷2
+
+    def test_scan_primary_vols(self):
+        fn = self._tmpfile()
+        try:
+            vols = P5Parser._scan_primary_vols(fn)
+        finally:
+            os.remove(fn)
+        self.assertEqual(vols.get("0001007"), {1})
+        self.assertEqual(vols.get("0002007"), {2})
+
+    def test_scan_failure_returns_empty(self):
+        self.assertEqual(P5Parser._scan_primary_vols("no-such-file.xml"), {})
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -2310,5 +2310,67 @@ class TestFrameHeaderXml(unittest.TestCase):
         self.assertEqual(r._frame_header_xml(100, 100), "")
 
 
+class TestTrailerDocx(unittest.TestCase):
+    """`<trailer>`（文末题署，如 T1499「菩薩戒羯磨文」）须作**普通段落**渲染：
+    原先落泛型分支 → 段外"游离 run"（无 `<w:p>`）→ Word/WPS 整段丢弃，
+    而文字抽取仍见＝假绿（2026-10-13 T1499 实锤）。"""
+
+    def _body_xml(self):
+        from pycbeta.model import Note, NoteRef
+        note = Note(tag="note", attrs={}, n="1", ntype="mod",
+                    children=[Text(text="注文")])
+        body = [E(tag="trailer", attrs={}, children=[
+            Text(text="菩薩戒"), NoteRef(n="1", notes=[note]),
+            Text(text="羯磨文")])]
+        w = Work(id="T", source_file="", metadata={"title": "t", "author": ""},
+                 body=body, notes_by_n={"1": [note]}, apps=[], simplified=False)
+        r = DocxRenderer(theme=None, notes="footnote", show_notes=True)
+        r._reset_state(w)
+        return r._render_body(w.body)
+
+    def test_trailer_is_paragraph_no_loose_run(self):
+        from pycbeta.verify import _loose_run_hits
+        out = self._body_xml()
+        self.assertTrue(out.startswith("<w:p>") or out.startswith("<w:p "),
+                        out[:40])
+        self.assertIn("菩薩戒", out)
+        self.assertIn("羯磨文", out)
+        self.assertEqual(_loose_run_hits(out), [])   # 无游离文字 run
+
+
+class TestVerseNoteOrderDocx(unittest.TestCase):
+    """docx：`<lg>` 行前注锚的脚注号必须按文档序（回归 T1436：编号与位置错位）。"""
+
+    def _work(self):
+        from pycbeta.model import Note, NoteRef
+        n1 = Note(tag="note", attrs={}, n="1", ntype="mod",
+                  children=[Text(text="行前注")])
+        n2 = Note(tag="note", attrs={}, n="2", ntype="mod",
+                  children=[Text(text="行内注")])
+        body = [E(tag="lg", attrs={}, children=[
+            NoteRef(n="1", notes=[n1]),
+            E(tag="l", attrs={}, children=[
+                Text(text="甲"), NoteRef(n="2", notes=[n2]), Text(text="乙")])])]
+        return Work(id="T", source_file="", metadata={"title": "t", "author": ""},
+                    body=body, notes_by_n={"1": [n1], "2": [n2]}, apps=[],
+                    simplified=False)
+
+    def test_footnote_ids_follow_document_order(self):
+        r = DocxRenderer(theme=None, notes="footnote", show_notes=True)
+        w = self._work()
+        r._reset_state(w)
+        body = r._render_body(w.body)
+        refs = [int(m.group(1)) for m in
+                re.finditer(r'<w:footnoteReference w:id="(\d+)"', body)]
+        self.assertEqual(refs, [1, 2])          # 文档序分配
+        # 行前注的标记落在行首（正文「甲」之前）
+        self.assertLess(body.index('w:id="1"'), body.index("甲"))
+        # 脚注内容按 id 序落盘（与官方 docx 同序）
+        ids = [int(m.group(1)) for m in
+               re.finditer(r'<w:footnote w:id="(\d+)"', "".join(r._fns))]
+        self.assertEqual(ids, [1, 2])
+        self.assertEqual(r._fn_seq, 2)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

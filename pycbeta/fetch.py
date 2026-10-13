@@ -626,8 +626,11 @@ def ensure_baselines(work_id: str, kinds: List[str], presets: Optional[Dict],
     for kind in kinds:
         if kind in ("xml", "odt"):
             continue
+        # 子集（_jn 非空）：存在性检查同走严格语义——错卷文件不得挡自愈下载
+        # （如 T0220:523 本地只有 479 时，须按卷补下 523，2026-10-13 实锤）
         existing = find_official(wdir, work_id, kind,
-                                 juan=_jn if kind in ("html", "txt_notes") else None) \
+                                 juan=_jn if kind in ("html", "txt_notes") else None,
+                                 strict_juan=bool(_jn)) \
             if wdir else []
         if existing:
             continue

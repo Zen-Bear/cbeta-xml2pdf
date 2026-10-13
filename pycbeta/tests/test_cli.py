@@ -886,6 +886,91 @@ class TestEpubTxtNeed(unittest.TestCase):
             shutil.rmtree(d, ignore_errors=True)
 
 
+class TestVerifyReportBaselineLabel(unittest.TestCase):
+    """CLI 报告：`【源】` 行带基线类别；每个 trial 详情行附基线路径（T1499 反馈）。"""
+
+    def test_cli_report_labels_baseline(self):
+        import io
+        import json
+        import shutil
+        from contextlib import redirect_stdout
+        from types import SimpleNamespace
+        from unittest import mock
+        from pycbeta.cli import main
+        from pycbeta.filename import default_output_name
+        d = tempfile.mkdtemp()
+        try:
+            xml = os.path.join(d, "T01n0001.xml")
+            with open(xml, "w", encoding="utf-8") as f:
+                f.write("<TEI/>")
+            name = default_output_name("T0001", None, True)
+            gen = os.path.join(d, name + ".epub")       # --verify-only 定位
+            import zipfile
+            with zipfile.ZipFile(gen, "w") as z:        # 真 epub（epub→txt 重组形可用）
+                z.writestr("OEBPS/ch1.xhtml",
+                           "<html><body><p>甲乙丙</p></body></html>")
+            txt_base = os.path.join(d, "base", "txt", "T0001_001.txt")
+            epub_base = os.path.join(d, "base", "epub", "T0001.epub")
+            os.makedirs(os.path.dirname(txt_base), exist_ok=True)
+            with open(txt_base, "w", encoding="utf-8") as f:
+                f.write("y")
+            os.makedirs(os.path.dirname(epub_base), exist_ok=True)
+            with zipfile.ZipFile(epub_base, "w") as z:   # 真 epub（epub 试算取正文段）
+                z.writestr("OEBPS/ch1.xhtml",
+                           "<html><body><p>甲乙</p></body></html>")
+            cfgp = os.path.join(d, "cfg.json")
+            with open(cfgp, "w", encoding="utf-8") as f:
+                json.dump({"verify": {"auto_fetch": False}}, f)
+            work = SimpleNamespace(id="T0001", metadata={})
+
+            def _find(source, stem, kind, juan=None, extra_roots=(),
+                      strict_juan=False):
+                return {"txt_notes": [txt_base],
+                        "epub": [epub_base]}.get(kind, [])
+
+            def _extract(p, strip_jiaozhu=True):
+                ap = os.path.abspath(p)
+                if ap == os.path.abspath(epub_base):
+                    return "甲乙"      # epub 基线缺 1 字
+                if ap == os.path.abspath(txt_base):
+                    return "甲乙丁"    # txt 基线也差 1 字（令两 trial 都跑、都失败）
+                return "甲乙丙"        # 生成档
+
+            with mock.patch("pycbeta.parser.P5Parser") as P, \
+                    mock.patch("pycbeta.verify.work_juan_numbers",
+                               return_value=[]), \
+                    mock.patch("pycbeta.cli.process_file") as PF, \
+                    mock.patch("pycbeta.verify.find_official",
+                               side_effect=_find), \
+                    mock.patch("pycbeta.verify.extract_text",
+                               side_effect=_extract):
+                P.return_value.parse.return_value = work
+                with redirect_stdout(io.StringIO()):
+                    main(["--config", cfgp, "-i", xml, "-f", "epub",
+                          "--verify-only", "--verify-max-diff", "0"])
+            PF.assert_not_called()
+            rep = os.path.join(d, "验证", name + "（验证）",
+                               "T0001_校验报告.txt")
+            with open(rep, encoding="utf-8") as f:
+                s = f.read()
+            # 最佳 trial 的 【源】 行带基线类别（`{fmt}→{kind}`）
+            import re as _re
+            self.assertRegex(s, r"epub→(txt_notes|epub) 【源】")
+            # 每个 trial 的详情行都附自己的基线路径
+            self.assertIn(f"（基线 {txt_base}）", s)
+            self.assertIn(f"（基线 {epub_base}）", s)
+            self.assertIn("→ txt_notes 失败:", s)
+            self.assertIn("→ epub 失败:", s)
+            # 下游解析：`【源】` 前 disp 取 `→` 左侧 = 产物格式
+            for ln in s.splitlines():
+                if "【源】" in ln and "〖" not in ln:
+                    self.assertEqual(
+                        ln.split("【源】")[0].strip().split("→")[0].strip(),
+                        "epub")
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+
 class TestVersion(unittest.TestCase):
     def test_version_flag_matches_package(self):
         import io

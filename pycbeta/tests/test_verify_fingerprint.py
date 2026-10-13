@@ -155,6 +155,9 @@ class TestPresetsParam(FingerprintFixture):
                   requested_formats=["html"])
         j1 = V.build_report_json("T0001", [rec], **kw)
         j2 = V.build_report_json("T0001", [rec], presets=eff, **kw)
+        # created_at 为生成时刻（跨秒会不同），非本次断言对象：剔除后再比
+        j1.pop("created_at", None)
+        j2.pop("created_at", None)
         self.assertEqual(j1, j2)
         self.assertTrue(j1["fmts"]["html"]["fingerprint"].startswith(
             "verify-fp-1:sha256:"))
@@ -162,7 +165,11 @@ class TestPresetsParam(FingerprintFixture):
 
 class TestJuanParam(FingerprintFixture):
     """`verify_fingerprint(juan=)`（P11）：None 逐字回归；归一等价/互异；
-    非法 → None；基线卷限定。"""
+    非法 → None；基线卷限定（**真子集严格语义**：无对应卷文件 → 不能证明）。"""
+
+    def _add_vol_baselines(self):
+        for n in ("001", "002", "003", "004"):
+            _write(os.path.join(self.d, f"T0001_{n}.html"), "<html/>")
 
     def test_none_matches_legacy(self):
         self.assertEqual(self.fp(), self.fp(juan=None))
@@ -171,17 +178,23 @@ class TestJuanParam(FingerprintFixture):
         self.assertEqual(self.fp(), self.fp(juan=[]))
 
     def test_normalization_equivalent(self):
-        a = self.fp(juan=[(40, 40), (34, 36)])
-        b = self.fp(juan=[(34, 36), (40, 40)])
+        self._add_vol_baselines()
+        a = self.fp(juan=[(2, 2), (1, 1)])
+        b = self.fp(juan=[(1, 1), (2, 2)])
         self.assertIsNotNone(a)
         self.assertEqual(a, b)
 
     def test_none_vs_subset_and_subsets_differ(self):
+        self._add_vol_baselines()
         whole = self.fp()
         s1 = self.fp(juan=[(1, 2)])
         s2 = self.fp(juan=[(3, 4)])
         self.assertNotEqual(whole, s1)
         self.assertNotEqual(s1, s2)
+
+    def test_subset_without_volume_baseline_is_none(self):
+        """真子集无对应卷基线 → 不能证明（None），整部单文件不充数。"""
+        self.assertIsNone(self.fp(juan=[(1, 2)]))
 
     def test_invalid_returns_none(self):
         for bad in ([(0, 1)], [(2, 1)], [("a", 1)], "2-3", [(1,)]):
@@ -200,6 +213,14 @@ class TestJuanParam(FingerprintFixture):
         self.assertEqual(
             sorted(os.path.basename(p) for p in whole.get("html", [])),
             ["T0001_001.html", "T0001_002.html"])
+
+    def test_baseline_scoped_strict_absence(self):
+        """真子集无对应卷 → 该种缺席（不回落全量；与 verify_one 严格语义一致）。"""
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        _write(os.path.join(d, "T0001_001.html"), "<html/>")
+        scoped = V._official_superset(d, "T0001", {}, juan=[(2, 2)])
+        self.assertEqual(scoped.get("html", []), [])
 
 
 class TestNoneCases(FingerprintFixture):

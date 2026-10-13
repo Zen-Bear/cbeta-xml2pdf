@@ -848,10 +848,53 @@ def _nested_ctx(xml: str, i: int, before: int = 60, after: int = 90) -> str:
     return re.sub(r"\s+", " ", xml[max(0, i - before):i + after]).strip()
 
 
+# 游离 run：`<w:r>` 必须挂在 `<w:p>` 下；段外（游离）run 的文字仍在 raw XML
+# （文本抽取假绿），但 Word/WPS 解析时整段丢弃（2026-10-13 T1499 trailer 实锤）。
+_WP_RUN_RE = re.compile(
+    r"<w:p\b[^>]*?(/?)>|</w:p>|<w:r\b[^>]*?(/?)>|</w:r>|<w:t\b[^>]*>(.*?)</w:t>",
+    re.S)
+
+
+def _loose_run_hits(xml: str, limit: int = 5) -> list:
+    """`<w:p>` 之外的**非空文字** run（游离 run）→ 上下文片段（最多 limit 条）。
+
+    空文字 run（标题页占位）不报；表格单元格内 `<w:p>` 里的 run 正常（depth>0）。"""
+    out = []
+    depth = 0
+    in_loose = False
+    buf: list = []
+    for m in _WP_RUN_RE.finditer(xml):
+        tok = m.group(0)
+        if tok.startswith("</w:p"):
+            depth = max(0, depth - 1)
+        elif tok.startswith("<w:p"):
+            if not tok.endswith("/>"):
+                depth += 1
+        elif tok.startswith("</w:r"):
+            if in_loose and "".join(buf).strip():
+                out.append(_nested_ctx(xml, m.start()))
+                if len(out) >= limit:
+                    return out
+            in_loose = False
+            buf = []
+        elif tok.startswith("<w:r"):
+            in_loose = depth == 0 and not tok.endswith("/>")
+            buf = []
+        elif m.group(3) is not None:   # <w:t>…</w:t>
+            if in_loose:
+                buf.append(m.group(3))
+    return out
+
+
 def docx_nested_block_violations(path: str, limit: int = 5) -> list:
-    """docx 非法嵌套块（段中段/表中段）→ 定位片段列表。
-    扫描 word/document.xml + word/footnotes.xml；表格单元格内的 <w:p> 合法
-    （tbl 在 p 外），不误报。文件缺失/损坏 → []。"""
+    """docx 结构护栏（非法嵌套块 + 游离 run）→ 定位片段列表。
+
+    - 段中段/表中段（`<w:p>` 内再开 `<w:p>`/`<w:tbl>`）：Word/WPS 丢弃嵌套块；
+    - **游离 run**（`<w:p>` 之外的 `<w:r>` 且 `<w:t>` 有非空文字）：Word/WPS 整段
+      丢弃（2026-10-13 T1499 trailer 实锤：文字抽取仍见＝假绿）。
+    两类都使"文字在 raw XML 里但成品丢内容"，故同判非法。
+    扫描 word/document.xml + word/footnotes.xml；表格单元格内的 `<w:p>` 合法
+    （tbl 在 p 外），不误报；空文字 run（标题页占位）不报。文件缺失/损坏 → []。"""
     out = []
     try:
         with zipfile.ZipFile(path) as z:
@@ -862,6 +905,9 @@ def docx_nested_block_violations(path: str, limit: int = 5) -> list:
                     continue
                 hits = _nested_block_hits(xml, limit - len(out))
                 out.extend(f"{name}: {h}" for h in hits)
+                if len(out) < limit:
+                    hits = _loose_run_hits(xml, limit - len(out))
+                    out.extend(f"{name}: 游离文字 {h}" for h in hits)
                 if len(out) >= limit:
                     break
     except (OSError, zipfile.BadZipFile):
@@ -1596,26 +1642,33 @@ def _extract_xml_parts(path: str, inline_brackets: str = "fullwidth",
 
 
 def find_official(source: str, stem: str, kind: str, juan: Optional[set] = None,
-                  extra_roots=()) -> List[str]:
+                  extra_roots=(), strict_juan: bool = False) -> List[str]:
     """官方基线发现：短名回退/`_NNN` 优先/卷范围限定；统一根目录下平展优先、仓库次之。
 
     多根：`extra_roots`（配置的各格式基线目录，如 2026r2）在前、`source`（输入
     相邻目录，旧行为）在后，逐根独立跑发现流程，**首个非空根胜出**（跨根不合并，
     避免同内容重复文件导致注块翻倍假挂；缺键/空串=未配置，直走旧行为）。
 
+    `strict_juan`（真子集任务，如 `T0220:523`）：卷限定筛空时该种基线**缺席**
+    （不回落全量）——错卷文件（479 当 523）与整部单文件（T0220.epub 整 600 卷）
+    不得充子集基线（前者错比对，后者致 17MB vs 30KB 平方膨胀卡死，2026-10-13 实锤）。
+    整本/全覆盖任务保持默认 False（旧回退行为，按冊命名对不上时仍可用）。
+
     说明：不按目录名排除任何路径（曾排除 `out/`，但工作根本身就可能叫 out，
     误杀整库且用户无从得知；现彻底去掉该隐藏限制）。
     唯一例外：`*（验证）*/`（校验产物目录，正式比对档与基线同 stem，
     不排除会自比对假绿）。"""
     for root in ([r for r in (extra_roots or []) if r] + [source]):
-        found = _find_official_in(root, stem, kind, juan)
+        found = _find_official_in(root, stem, kind, juan,
+                                  strict_juan=strict_juan)
         if found:
             return found
     return []
 
 
 def _find_official_in(source: str, stem: str, kind: str,
-                      juan: Optional[set] = None) -> List[str]:
+                      juan: Optional[set] = None,
+                      strict_juan: bool = False) -> List[str]:
     """单根发现（原 find_official 本体；多根时逐根调用）。"""
     short = ""
     m = re.match(r"^([A-Z]+)\d+n(.+)$", stem)
@@ -1676,8 +1729,9 @@ def _find_official_in(source: str, stem: str, kind: str,
         out = suffixed
     # 卷范围限定：XML 实际覆盖的卷号 → 官方 _NNN 文件（如 TX07n0006 卷1-6 → TX0006_001..006.html，
     # 而非整编 49 文件）。txt_notes 文件同为 {id}_NNN.txt 命名，一并过滤。过滤后为空
-    # （官方按冊分卷等命名不对应）则回退不过滤。
-    if juan and kind in ("html", "docx", "txt_notes"):
+    # （官方按冊分卷等命名不对应）则回退不过滤；**真子集任务**（strict_juan）下
+    # 筛空＝该种基线缺席（错卷文件不得充数，见 find_official 说明）。
+    if juan and kind in ("html", "docx", "txt_notes", "epub", "odt"):
         scoped = []
         for f in out:
             m = re.search(r"_(\d+)\.\w+$", os.path.basename(f))
@@ -1685,6 +1739,8 @@ def _find_official_in(source: str, stem: str, kind: str,
                 scoped.append(f)
         if scoped:
             out = scoped
+        elif strict_juan:
+            out = []
     return out
 
 def _epub_mulu_levels(pg):
@@ -1810,9 +1866,11 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
     if t2s:
         from .simplify import simplify_work
         simplify_work(work)
+    _juan_status = None
     if juan:
         from .juan import filter_work_juan
         _jr = filter_work_juan(work, juan)
+        _juan_status = _jr["status"]
         if _jr["status"] == "empty":
             return {"xml": xml_fn, "fmt": fmt, "status": "error", "gen": [],
                     "detail": f"卷范围与全书无交集（实际卷 {sorted(_jr['all'])}）"}
@@ -1869,8 +1927,19 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
         ours_txt_disp = _display_text(_txt_raw)
         ours_txt, ours_txt_line, _ = normalize_with_lines(ours_txt_disp,
                                                           ruby_brackets)
+        # epub trial 专用形：只比**正文段**。官方 epub 导出**无尾注/校勘块**
+        # （注记一律 note-inline 内联；全库官方 epub 实测 footnote 块=0），
+        # 全量比对必把我们的尾注整块记为"多"（T1499 实锤 137 字）；
+        # 注释内容由 txt_notes 试算覆盖，此处只验正文与内联注。
+        _body_raw = "".join(_extract_epub_parts(p)[0] for p in gen_path)
+        if not compare_infos:
+            _body_raw = strip_infos(_body_raw)
+        ours_epub_disp = _display_text(_body_raw)
+        ours_epub, ours_epub_line, _ = normalize_with_lines(ours_epub_disp,
+                                                            ruby_brackets)
     else:
         ours_txt, ours_txt_line, ours_txt_disp = ours, ours_line, ours_disp
+        ours_epub, ours_epub_line, ours_epub_disp = ours, ours_line, ours_disp
     # strip_head_no 联动：生成侧已剥 head/jhead 行首 No. 令牌；官方侧求同一令牌表对等剥离
     _strip_no = _strip_no_from(config_path)
     strip_tokens = _head_no_tokens(work) if _strip_no else []
@@ -1936,6 +2005,9 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
                 "norm_gen": ours, "norm_official": theirs}
     scope_juan = bool((cfg or {}).get("scope_juan", True))
     _juan = work_juan_numbers(work) if scope_juan else None
+    # 真子集（卷范围命中且真裁剪）：基线卷限定筛空＝该种缺席、不回落全量
+    # （错卷/整部单文件不得充子集基线；_juan 为过滤后实际覆盖卷号）
+    _strict_juan = bool(_juan) and _juan_status == "filtered"
 
     def _discover():
         out = {}
@@ -1953,8 +2025,10 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
         for k in ("html", "txt_notes", "docx", "epub", "odt"):
             _extra = [(_bl.get(k) or "").strip()] if (_bl.get(k) or "").strip() else []
             found = find_official(source, stem, k,
-                                  juan=_juan if k in ("html", "docx", "txt_notes") else None,
-                                  extra_roots=_extra)
+                                  juan=_juan if k in ("html", "docx", "txt_notes",
+                                                      "epub", "odt") else None,
+                                  extra_roots=_extra,
+                                  strict_juan=_strict_juan)
             if found:
                 out[k] = found
         return out
@@ -1976,7 +2050,7 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
         ebook = ((presets.get("source") or {}).get("cbeta_ebook") or "").strip() \
             or source
         ensure_baselines(work.id, need, presets, ebook,
-                         juan=_juan if juan else None)
+                         juan=_juan if _strict_juan else None)
         official = _discover()
     bases = _bases(official)
     if not bases:
@@ -1984,7 +2058,20 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
     best = None
     trials = []
     for bkind, bpath in bases:
-        if isinstance(bpath, list) and bkind == "docx" and len(bpath) > 1:
+        if bkind == "epub":
+            # 官方 epub 导出无尾注/校勘块（note-inline 内联）→ 只比**正文段**
+            # （注释由 txt_notes 试算覆盖；T1499 实锤）
+            _paths = [bpath] if isinstance(bpath, str) else list(bpath or [])
+            _parts = []
+            for _p in _paths:
+                _t = _extract_epub_parts(_p)[0]
+                if not compare_infos:
+                    _t = strip_infos(_t)
+                _parts.append(_t)
+            theirs_raw = "".join(_parts)
+            bpath_disp = (_paths[0] if len(_paths) == 1
+                          else f"{_paths[0]} (+{len(_paths)-1})")
+        elif isinstance(bpath, list) and bkind == "docx" and len(bpath) > 1:
             title = t_title
             if bkind == "docx":
                 # 多卷官方 docx 先合并为单个 docx，再抽取 TXT：脚注统一在文末
@@ -2060,10 +2147,13 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
             theirs_raw = t2s_baseline(theirs_raw)
         theirs_disp = _display_text(theirs_raw)
         theirs, theirs_line, _theirs_lines = normalize_with_lines(theirs_disp, ruby_brackets)
-        if bkind == "txt_notes" and fmt == "epub":
+        if fmt == "epub" and bkind == "txt_notes":
             # epub→txt trial：生成侧用重组形（正文全接+注块全接）；
             # 其余 trial 沿用原交错形（官方同形）
             t_ours, t_line, t_disp = ours_txt, ours_txt_line, ours_txt_disp
+        elif fmt == "epub" and bkind == "epub":
+            # epub→epub trial：生成侧同取**正文段**（官方 epub 无尾注，见上）
+            t_ours, t_line, t_disp = ours_epub, ours_epub_line, ours_epub_disp
         else:
             t_ours, t_line, t_disp = ours, ours_line, ours_disp
         try:
@@ -2140,6 +2230,28 @@ def format_verify_report(records, diff_lines: int = 5, max_diff: int = 10):
     return lines
 
 
+def diff_scope_tag(scope, body_missing=None, body_extra=None, total=None):
+    """差异范围结论标记（报告 `[OK]/[FAIL]` 行末与 GUI 汇总弹窗共用）。
+
+    - `scope`：`notes_only`（差异全在注释）→ `【仅仅注释差异】` /
+      `body`（含正文差异）→ `【正文差异 缺X/多Y（含正文差异）】` /
+      `unknown`（该格式未支持分段）→ `【正文无法判定（该格式未支持分段）】`；
+    - `total`（缺+多）为 0（或缺0/多0 无差异）时返回空串——不显示
+      （2026-10-13 用户反馈）；
+    - `scope` 为 None（未做旁路）返回空串。
+    """
+    if not scope or (total is not None and total <= 0):
+        return ""
+    if scope == "notes_only":
+        return "【仅仅注释差异】"
+    if scope == "body":
+        return (f"【正文差异 缺{body_missing}/"
+                f"多{body_extra}（含正文差异）】")
+    if scope == "unknown":
+        return "【正文无法判定（该格式未支持分段）】"
+    return ""
+
+
 def _format_verify_record(r, diff_lines: int = 5, max_diff: int = 10):
     """单条记录 → 报告行（原 format_verify_report 循环体）。"""
     lines = []
@@ -2149,7 +2261,7 @@ def _format_verify_record(r, diff_lines: int = 5, max_diff: int = 10):
     lines.append(f"=== {name}")
     _struct = r.get("struct_issues") or []
     if _struct:
-        lines.append(f"  [FAIL] {fmt} 结构非法（段中段/表中段 {len(_struct)} 处，"
+        lines.append(f"  [FAIL] {fmt} 结构非法（段中段/表中段/游离文字 {len(_struct)} 处，"
                      "Word/WPS 会丢弃；文字抽取假绿）：")
         for s in _struct[:5]:
             lines.append(f"         {s}")
@@ -2181,21 +2293,17 @@ def _format_verify_record(r, diff_lines: int = 5, max_diff: int = 10):
         ok = bool(t.get("ok"))
         mark = "[OK]" if ok else "[FAIL]"
         op = "≤" if ok else ">"
+        # 旁路结论（差异是否全在注释）并入本行行末、`【】` 包裹；
+        # 缺0/多0（无差异）时不显示（2026-10-13 用户反馈）
+        _scope = diff_scope_tag(t.get("diff_scope"), t.get("body_missing"),
+                                t.get("body_extra"),
+                                (t.get("missing") or 0) + (t.get("extra") or 0))
         lines.append(f"  {mark} ({fmt}→{t.get('kind')} 缺{t.get('missing')}/"
-                     f"多{t.get('extra')} {op}阈值{max_diff})")
-        # 旁路结论：差异是否全在注释（正文段严格 0；行首不用 [OK]/[FAIL]/[--]，
-        # 避免下游按块标记解析时误读）
-        _ds = t.get("diff_scope")
-        if _ds == "notes_only":
-            _has = (t.get("missing") or 0) + (t.get("extra") or 0) > 0
-            lines.append("      正文差异 0" + ("（差异全部在注释）" if _has else ""))
-        elif _ds == "body":
-            lines.append(f"      正文差异 缺{t.get('body_missing')}/"
-                         f"多{t.get('body_extra')}（含正文差异）")
-        elif _ds == "unknown":
-            lines.append("      正文无法判定（该格式未支持分段）")
+                     f"多{t.get('extra')} {op}阈值{max_diff}){_scope}")
         if t.get("official"):
-            lines.append(f"  {fmt} 【源】{t['official']}")
+            # 带基线类别（`{fmt}→{kind}`）：避免「epub 【源】…txt」被误读为基线出错
+            # （T1499 反馈）；下游按 `【源】` 前 disp 取 `→` 左侧为产物格式，兼容
+            lines.append(f"  {fmt}→{t.get('kind') or '?'} 【源】{t['official']}")
             if t.get("src_cmp"):
                 lines.append("       【源比较】行号对齐 " + t["src_cmp"])
         if gen:
@@ -2539,8 +2647,11 @@ def _fp_roots_cfg(presets, baseline_roots):
 
 def _official_superset(source, stem, roots_cfg, juan=None):
     """基线发现 → {kind: [paths]}。`juan`（[(lo,hi)]）给定时按卷限定
-    html/docx/txt_notes（与 `verify_one` 实际比对口径一致；epub/odt 无卷形态
-    不过滤）；`None`＝不过滤（整本，旧行为）。
+    html/docx/txt_notes/epub/odt（与 `verify_one` 实际比对口径一致），并按
+    **真子集严格语义**（筛空＝该种缺席、不回落全量）；调用方按约定只在真子集时
+    传 juan（CLI 仅 `_juan_status=="filtered"`、GUI `job_segs` 非子集为 None）。
+    极端情形（传了覆盖全卷的段）只会让指纹偏保守（不能证明→强制重验），方向安全。
+    `None`＝不过滤（整本，旧行为）。
     只读；单种失败跳过。build_report_json 与 verify_fingerprint 共用（扫一次复用）。"""
     _jn = None
     if juan:
@@ -2556,8 +2667,10 @@ def _official_superset(source, stem, roots_cfg, juan=None):
         try:
             found = find_official(
                 source, stem, kind,
-                juan=_jn if kind in ("html", "docx", "txt_notes") else None,
-                extra_roots=extra)
+                juan=_jn if kind in ("html", "docx", "txt_notes",
+                                     "epub", "odt") else None,
+                extra_roots=extra,
+                strict_juan=bool(_jn))
         except Exception:
             found = []
         if found:

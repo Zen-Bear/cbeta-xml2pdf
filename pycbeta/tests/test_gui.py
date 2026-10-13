@@ -5297,6 +5297,9 @@ class TestVerifyFeedback(unittest.TestCase):
                 "missing": 0, "extra": 0},
                {"id": "T4", "fmt": "docx", "status": "ok",
                 "missing": 0, "extra": 2},
+               {"id": "T6", "fmt": "txt", "status": "ok",
+                "missing": 0, "extra": 3, "diff_scope": "notes_only",
+                "body_missing": 0, "body_extra": 0},
                {"id": "T2", "fmt": "docx", "status": "fail",
                 "missing": 3, "extra": 1},
                {"id": "T3", "fmt": "docx", "status": "no_baseline"},
@@ -5310,6 +5313,8 @@ class TestVerifyFeedback(unittest.TestCase):
             txt = d.text.toPlainText()
             self.assertIn("[通过] T1 docx", txt)
             self.assertIn("[通过(有差)] T4 docx", txt)
+            # 差异范围结论随报告同口径进弹窗（2026-10-13 用户反馈；HTML 渲染会并空格）
+            self.assertIn("[通过(有差)] T6 txt 缺0/多3【仅仅注释差异】", txt)
             self.assertIn("[失败] T2 docx", txt)
             self.assertIn("缺3/多1", txt)
             self.assertIn("[无对照] T3 docx", txt)

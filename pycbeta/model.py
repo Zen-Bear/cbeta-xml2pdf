@@ -69,6 +69,11 @@ class App(E):
     atype: Optional[str] = None
     lem: Optional["AppRead"] = None
     rdgs: List["AppRead"] = field(default_factory=list)
+    #: 星号位跨卷标记（parser 置位）：官方 **txt/md/html** 只在「注主锚同卷」的星号位
+    #: 出注文内容，跨卷星号位为空（T0262 卷首「第/之」「後秦/姚秦」跨 6 卷实锤）；
+    #: **docx 官方不抑制**（各卷星号位都出注文），故 docx 渲染器忽略此标记。
+    #: 仅该次出现置位（同一 app 对象在别处不受影响）。
+    star_empty: bool = False
 
 
 @dataclass

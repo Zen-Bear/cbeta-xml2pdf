@@ -247,6 +247,9 @@ class MdRenderer:
         # star_removed（去校勘星）：读法已由 corresp 指向的注在其位置渲染，避免重复
         if app.atype == "star_removed":
             return ""
+        # 跨卷星号位（parser 置位）：官方只在注主锚同卷的星号位出注文，此处不出
+        if app.star_empty:
+            return ""
         if app.attrs.get("corresp"):
             n = app.attrs["corresp"].lstrip("#")
             notes = (self._work.notes_by_n or {}).get(n) if self._work else None
@@ -371,6 +374,11 @@ class MdRenderer:
         pending: list = []
         for c in e.children:
             if isinstance(c, E) and c.tag == "l":
+                # 行前注锚先渲染（注号/注块序按文档序分配）；输出仍拼到行首
+                pending_runs = ""
+                if pending:
+                    pending_runs = "".join(self._render_node(p) for p in pending)
+                    pending = []
                 parts = []
                 buf = []
                 for cc in c.children:
@@ -382,9 +390,8 @@ class MdRenderer:
                 if buf or not parts:
                     parts.append("".join(self._render_node(x) for x in buf))
                 ln = "　　".join(parts)
-                if pending:
-                    ln = "".join(self._render_node(p) for p in pending) + ln
-                    pending = []
+                if pending_runs:
+                    ln = pending_runs + ln
                 lines.append(ln)
             elif isinstance(c, (NoteRef, App)):
                 pending.append(c)

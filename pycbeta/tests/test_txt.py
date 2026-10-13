@@ -710,5 +710,99 @@ class TestCorrCbetaTxtPlain(unittest.TestCase):
             shutil.rmtree(d, ignore_errors=True)
 
 
+class TestVerseNoteOrder(unittest.TestCase):
+    """`<lg>` 行前注锚（NoteRef 在 <l> 之前）必须按**文档序**出注。
+
+    回归 T1436：范围注（锚在 `<lg>` 级、`<l>` 之前）曾被排到行内注之后——
+    标记位置对，但注号/注块序错位（比对官方 docx 缺11/多11）。"""
+
+    def _work(self):
+        n1 = Note(tag="note", attrs={}, n="1", ntype="mod",
+                  children=[Text(text="行前注")])
+        n2 = Note(tag="note", attrs={}, n="2", ntype="mod",
+                  children=[Text(text="行内注")])
+        body = [E(tag="lg", attrs={}, children=[
+            NoteRef(n="1", notes=[n1]),
+            E(tag="l", attrs={}, children=[
+                Text(text="甲"), NoteRef(n="2", notes=[n2]), Text(text="乙")])])]
+        return Work(id="T", source_file="", metadata={"title": "t", "author": ""},
+                    body=body, notes_by_n={"1": [n1], "2": [n2]}, apps=[],
+                    simplified=False)
+
+    def _tmp(self):
+        d = tempfile.mkdtemp()
+        self.addCleanup(__import__("shutil").rmtree, d, True)
+        return d
+
+    def test_txt_note_order_document_order(self):
+        out = TxtRenderer().render_work(self._work(), self._tmp(), "t.txt")
+        with open(out, encoding="utf-8") as f:
+            t = f.read()
+        # 注块顺序：行前注在前；正文标记 [1] 也在 [2] 之前
+        self.assertLess(t.index("行前注"), t.index("行内注"))
+        self.assertLess(t.index("[1]"), t.index("[2]"))
+
+    def test_md_note_order_document_order(self):
+        from pycbeta.render_md import MdRenderer
+        out = MdRenderer().render_work(self._work(), self._tmp(), "t.md")
+        with open(out, encoding="utf-8") as f:
+            t = f.read()
+        self.assertLess(t.index("行前注"), t.index("行内注"))
+
+
+class TestStarCrossVolumeRender(unittest.TestCase):
+    """跨卷星号位抑制（T0262 实锤）：官方 **txt/md/html** 只在注主锚同卷的星号位
+    出注文；同卷星号位照常出（主锚 + 星号位各一次）；**docx 官方不抑制**。"""
+
+    def _work(self):
+        from pycbeta.model import App
+        n1 = Note(tag="note", attrs={}, n="1", ntype="mod",
+                  children=[Text(text="跨卷注")])
+        n2 = Note(tag="note", attrs={}, n="2", ntype="mod",
+                  children=[Text(text="同卷注")])
+        a1 = App(tag="app", attrs={"corresp": "#1"}, key="beg_e", star_empty=True)
+        a2 = App(tag="app", attrs={"corresp": "#2"}, key="beg_10", star_empty=False)
+        body = [NoteRef(n="1", notes=[n1]), a1, NoteRef(n="2", notes=[n2]), a2]
+        return Work(id="T", source_file="", metadata={"title": "t", "author": ""},
+                    body=body, notes_by_n={"1": [n1], "2": [n2]}, apps=[a1, a2],
+                    simplified=False)
+
+    def _tmp(self):
+        d = tempfile.mkdtemp()
+        self.addCleanup(__import__("shutil").rmtree, d, True)
+        return d
+
+    def test_txt_cross_volume_suppressed(self):
+        out = TxtRenderer().render_work(self._work(), self._tmp(), "t.txt")
+        with open(out, encoding="utf-8") as f:
+            t = f.read()
+        self.assertEqual(t.count("跨卷注"), 1)   # 只主锚一次
+        self.assertEqual(t.count("同卷注"), 2)   # 主锚 + 星号位
+
+    def test_md_cross_volume_suppressed(self):
+        from pycbeta.render_md import MdRenderer
+        out = MdRenderer().render_work(self._work(), self._tmp(), "t.md")
+        with open(out, encoding="utf-8") as f:
+            t = f.read()
+        self.assertEqual(t.count("跨卷注"), 1)
+        self.assertEqual(t.count("同卷注"), 2)
+
+    def test_html_star_marker_suppressed(self):
+        from pycbeta.render_html import HtmlRenderer
+        r = HtmlRenderer(theme=None, show_notes=True)
+        w = self._work()
+        r._work = w
+        self.assertEqual(r._render_star_app(w.body[1]), "")
+        self.assertNotEqual(r._render_star_app(w.body[3]), "")
+
+    def test_docx_keeps_cross_volume(self):
+        """docx 官方不抑制（各卷星号位都出注文），故渲染器忽略 star_empty。"""
+        from pycbeta.render_docx import DocxRenderer
+        r = DocxRenderer(theme=None, notes="footnote", show_notes=True)
+        w = self._work()
+        r._reset_state(w)
+        self.assertNotEqual(r._render_app(w.body[1]), "")
+
+
 if __name__ == "__main__":
     unittest.main()

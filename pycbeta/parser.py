@@ -1,7 +1,7 @@
 """CBETA XML P5 parser: XML -> IR (Work)."""
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Dict, List, Optional
 
 from lxml import etree
@@ -23,6 +23,13 @@ NS_XML = "http://www.w3.org/XML/1998/namespace"
 
 WIT_RE = re.compile(r"^#(.*)$")
 NEWLINE_RE = re.compile(r"[\n\r]")
+
+#: 卷 milestone 快扫（容忍属性乱序/单引号；与 juan.scan_file_juans 同口径）
+_MILESTONE_RE = re.compile(r"<milestone\b[^>]*>")
+_MS_UNIT_RE = re.compile(r"""unit\s*=\s*["']juan["']""")
+_MS_N_RE = re.compile(r"""n\s*=\s*["']([^"']*)["']""")
+#: 注主锚（nkr_note_orig/mod/foreign_N）位置快扫（跨卷星号位抑制用）
+_NKR_ID_RE = re.compile(r"""xml:id\s*=\s*["']nkr_note_[a-z]+_([^"']+)["']""")
 
 
 def _localname(tag) -> str:
@@ -63,8 +70,11 @@ class P5Parser:
         self._apps: List[App] = []
         self._apps_by_key: Dict[str, App] = {}
         self._current_lb: Optional[str] = None
+        self._cur_juan: int = 0
         self._seen_ref_n = set()
         self._corr_open = set()   # 正在开的 CBETA 校改区间 n（beg 起、end 闭）
+        # 注主锚所在卷集合（跨卷星号位抑制用；轻量预扫，失败回退 {}）
+        self._note_vols: Dict[str, set] = self._scan_primary_vols(xml_fn)
 
         header = root.find("teiHeader")
         self.metadata = self._parse_header(header) if header is not None else {}
@@ -81,6 +91,42 @@ class P5Parser:
         work_id = get_work_id_from_basename(xml_id or self._basename(xml_fn))
         return Work(id=work_id, source_file=xml_fn, metadata=self.metadata,
                     body=self.body, notes_by_n=self._notes, apps=self._apps)
+
+    @staticmethod
+    def _scan_primary_vols(xml_fn: str) -> Dict[str, set]:
+        """预扫：注 n → 其主锚（`nkr_note_*_n`）所在卷号集合（跨卷星号位抑制用）。
+
+        轻量正则快扫（与 `juan.scan_file_juans` 同口径：容忍属性乱序/单引号）；
+        任一 milestone 缺数字 n、或读文件失败 → 返回 {}（不抑制，零行为变化）。
+        卷号 = 该位置之前最后一个 `<milestone unit="juan">` 的 n（0 = 首个之前）。"""
+        try:
+            with open(xml_fn, encoding="utf-8", errors="replace") as f:
+                text = f.read()
+        except OSError:
+            return {}
+        bounds = []  # [(pos, vol)]
+        for m in _MILESTONE_RE.finditer(text):
+            tag = m.group(0)
+            if not _MS_UNIT_RE.search(tag):
+                continue
+            mn = _MS_N_RE.search(tag)
+            if mn is None:
+                return {}
+            try:
+                vol = int(mn.group(1))
+            except (TypeError, ValueError):
+                return {}
+            bounds.append((m.start(), vol))
+        out: Dict[str, set] = {}
+        for m in _NKR_ID_RE.finditer(text):
+            vol = 0
+            for bpos, bvol in bounds:
+                if bpos < m.start():
+                    vol = bvol
+                else:
+                    break
+            out.setdefault(m.group(1), set()).add(vol)
+        return out
 
     @staticmethod
     def _find_docnumber(nodes) -> Optional[str]:
@@ -414,6 +460,14 @@ class P5Parser:
                 if data:
                     char = data.get("uni_char") or data.get("composition")
             out.append(Gaiji(code=code, char=char, sourceline=self._src(el)))
+        elif tag == "milestone":
+            if el.get("unit") == "juan":
+                try:
+                    self._cur_juan = int(el.get("n"))
+                except (TypeError, ValueError):
+                    self._cur_juan += 1
+            out.append(E(tag=tag, attrs=self._attrs(el),
+                         sourceline=self._src(el)))
         elif tag == "anchor":
             aid = self._get(el, "xml:id", "id")
             if aid and aid.startswith("nkr_note_"):
@@ -424,6 +478,8 @@ class P5Parser:
             elif aid and aid.startswith("beg"):
                 app = self._apps_by_key.get(aid)
                 if app is not None:
+                    if el.get("type") == "star":
+                        app = self._star_app_for_vol(app)
                     out.append(app)
                     if self._is_cbeta_reading(app):
                         n = el.get("n") or aid[3:]
@@ -448,6 +504,16 @@ class P5Parser:
             out.append(Text(tail, line=self._current_lb,
                             sourceline=self._src(el)))
         return out
+
+    def _star_app_for_vol(self, app: App) -> App:
+        """星号位跨卷抑制：`type="star"` 锚上的 app，若其 `corresp` 注的**主锚不在当前卷**
+        → 官方只在主锚处出注文、星号位为空（T0262 卷首「第/之」「後秦/姚秦」跨 6 卷实锤）。
+        返回带 `star_empty` 标记的浅拷贝；同卷 / 无主锚（纯星号注）/ 扫描失败 → 原对象。"""
+        n = (app.attrs.get("corresp") or "").lstrip("#")
+        vols = self._note_vols.get(n) if n else None
+        if vols and self._cur_juan not in vols:
+            return replace(app, star_empty=True)
+        return app
 
     def _backfill(self):
         for node in self._iter_nodes(self.body):
