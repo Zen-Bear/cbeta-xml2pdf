@@ -648,6 +648,69 @@ def ensure_baselines(work_id: str, kinds: List[str], presets: Optional[Dict],
     return fetched
 
 
+_BASELINE_VOL_RE = re.compile(r"_(\d{1,4})\.[A-Za-z0-9]+$")
+
+
+def baseline_volumes(paths) -> set:
+    """基线文件名 → 卷号集合（取文件名末尾 `…_{NNN}.ext`；解析不出则忽略）。"""
+    vols = set()
+    for p in paths or []:
+        m = _BASELINE_VOL_RE.search(os.path.basename(str(p)) or "")
+        if m:
+            try:
+                vols.add(int(m.group(1)))
+            except ValueError:
+                pass
+    return vols
+
+
+def complete_baselines(work_id: str, kinds: List[str], presets: Optional[Dict],
+                       cbeta_ebook: str, expected_juan) -> Dict[str, Dict]:
+    """全量校验用：按卷核对官方基线，缺哪卷补哪卷（best-effort），返回覆盖度。
+
+    与 `ensure_baselines` 的区别：后者只在"该种基线一份都没有"时下载；
+    部分缺失（历史按卷校验留下的残卷）会被当成"已有"⇒ 残卷当全量比
+    （T1579 txt 仅 2/100 卷被当全量比，2026-10-14 实锤）。
+
+    覆盖度 `{kind: {"have": n, "expect": m, "missing": [卷号…]}}`。
+    下载规则沿用 `fetch_baseline_juan`：html/txt_notes 走单卷端点，
+    docx 等整包重下（用户确认 (a) 整部重下）。单文件格式（epub/odt）与
+    无按卷命名的作品不适用 ⇒ 不产生覆盖度条目。失败静默（best-effort）。
+    """
+    from .verify import find_official
+    try:
+        exp = {int(n) for n in (expected_juan or []) if int(n) > 0}
+    except (TypeError, ValueError):
+        exp = set()
+    out: Dict[str, Dict] = {}
+    if not exp:
+        return out
+    work_id = canonical_work_id(work_id, presets)
+    canon, no = parse_work_id(work_id)
+    title = _catalog_title(presets or {}, canon, no)
+    wdir = work_dir(cbeta_ebook, work_id, title, presets, create=False)
+    if not wdir:
+        return out
+    for kind in kinds:
+        if kind in ("xml", "odt", "epub"):
+            continue
+        found = find_official(wdir, work_id, kind, juan=exp)
+        vols = baseline_volumes(found)
+        if not vols:
+            continue     # 没有按卷命名的基线（整体缺失或单文件命名）⇒ 不适用
+        missing = sorted(exp - vols)
+        if missing:
+            fetch_baseline_juan(work_id, kind, missing, presets, cbeta_ebook)
+            found = find_official(wdir, work_id, kind, juan=exp)
+            vols = baseline_volumes(found)
+            missing = sorted(exp - vols)
+            if not missing:
+                print(f"  {work_id}: 官方基线按卷补全 {kind}"
+                      f"（{len(vols)}/{len(exp)} 卷）")
+        out[kind] = {"have": len(vols), "expect": len(exp), "missing": missing}
+    return out
+
+
 def _ensure_work_figures(work_id: str, presets, cbeta_ebook, wdir=None) -> None:
     """work 内 XML 含 <graphic> 时预取缺失图片（失败只打印，不中断）。"""
     try:

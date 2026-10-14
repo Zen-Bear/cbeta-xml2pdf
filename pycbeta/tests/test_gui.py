@@ -5301,7 +5301,11 @@ class TestVerifyFeedback(unittest.TestCase):
                 "missing": 0, "extra": 3, "diff_scope": "notes_only",
                 "body_missing": 0, "body_extra": 0},
                {"id": "T2", "fmt": "docx", "status": "fail",
-                "missing": 3, "extra": 1},
+                "missing": 3, "extra": 1,
+                "render_sec": 3.24, "verify_sec": 65.0,
+                "baseline_coverage": {"txt_notes": {"have": 2, "expect": 100,
+                                                    "missing": [1, 2, 3, 5]}},
+                "report": os.path.join(tempfile.gettempdir(), "T2_校验报告.txt")},
                {"id": "T3", "fmt": "docx", "status": "no_baseline"},
                {"id": "T5", "fmt": "pdf", "status": "covered",
                 "detail": "已由 docx 校验覆盖（未重复）"},
@@ -5326,6 +5330,18 @@ class TestVerifyFeedback(unittest.TestCase):
             self.assertIn("#2e7d32", html)
             self.assertIn("#1565c0", html)
             self.assertIn("#c62828", html)
+            # 非「通过且缺0/多0」的行行末给报告链接（2026-10-14 用户反馈）
+            self.assertIn("打开报告", txt)
+            self.assertNotIn("打开报告", VerifySummaryDialog._line(res[0]))
+            self.assertIn("file:", html)   # file:// URL 供系统默认程序打开
+            # 链接点击不由控件内导航，交给系统默认程序（2026-10-14 用户反馈）
+            self.assertFalse(d.text.openLinks())
+            # 耗时（简单版：生成/校验，2026-10-14 用户反馈）
+            self.assertIn("生成 3.2s", txt)
+            self.assertIn("校验 1 分 05 秒", txt)
+            self.assertNotIn("生成", VerifySummaryDialog._line(res[0]))
+            # 基线覆盖（按卷核对，缺卷时显示；2026-10-14）
+            self.assertIn("基线 txt_notes 2/100 卷（缺 1-3,5）", txt)
         finally:
             d.close()
 
@@ -5408,7 +5424,9 @@ class TestVerifyFeedback(unittest.TestCase):
         M.write_temp_presets = lambda presets, opts: os.path.join(tmp, "p.json")
         M.write_temp_run = lambda run, snap: os.path.join(tmp, "r.json")
         captured = {}
+        recs = []
         w.row_file.connect(lambda i, p: captured.__setitem__(i, p))
+        w.verify_result.connect(lambda r: recs.append(r))
         try:
             w.run()
         finally:
@@ -5429,6 +5447,12 @@ class TestVerifyFeedback(unittest.TestCase):
         self.assertIn("=== T12n0349.xml", body)
         self.assertIn("[FAIL]", body)
         self.assertIn("缺0/多15", body)
+        # 记录带报告路径与耗时；报告段首行带耗时（2026-10-14 用户反馈）
+        self.assertEqual(recs[0].get("report"), report)
+        self.assertIsNotNone(recs[0].get("render_sec"))
+        self.assertIsNotNone(recs[0].get("verify_sec"))
+        self.assertIn("生成 ", body)
+        self.assertIn("校验 ", body)
         jrep = os.path.join(vdir, "report.json")
         self.assertTrue(os.path.isfile(jrep))       # 机读结论固定名 report.json
         j = json.load(open(jrep, encoding="utf-8"))

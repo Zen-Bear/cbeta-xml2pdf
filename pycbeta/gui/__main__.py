@@ -17,7 +17,8 @@ from PySide6.QtWidgets import (
     QFileDialog, QGridLayout, QHBoxLayout,
     QLabel, QLineEdit, QMainWindow, QMenu, QMessageBox, QPlainTextEdit,
     QProgressBar, QPushButton,
-    QRadioButton, QTableWidget, QTableWidgetItem, QTextEdit, QToolButton,
+    QRadioButton, QTableWidget, QTableWidgetItem, QTextBrowser, QTextEdit,
+    QToolButton,
     QVBoxLayout, QWidget,
 )
 
@@ -372,6 +373,7 @@ class BatchWorker(QThread):
                 row_wid = None
                 row_title = ""
                 verify_dir = None
+                row_report_path = None  # 本行校验报告文件（记录 report 键/弹窗链接用）
                 row_report_files = []   # 本行 per-fmt 转换报告（合并用）
                 row_report_dir = None
                 row_report_name = None
@@ -394,6 +396,14 @@ class BatchWorker(QThread):
                         verify_dir = self._verify_dir(out_dir, wid, title,
                                                       self._verify_custom,
                                                       sfx=job_sfx)
+                    if verify_on and row_report_path is None and row_wid:
+                        # 报告路径提前算好并写进每条记录：弹窗「打开报告」不再依赖
+                        # 写完报告后的事后补键（2026-10-14）
+                        from pycbeta.filename import verify_report_name as _vrn0
+                        _rb0 = _vrn0(row_wid, row_title,
+                                     getattr(self, "_title_t2s", True))
+                        row_report_path = os.path.join(
+                            verify_dir or out_dir, _rb0 + ".txt")
                     if want_report and row_report_dir is None and row_wid:
                         # 报告目录与校验报告同处（不依赖校验开关）
                         row_report_dir = self._verify_dir(
@@ -409,9 +419,11 @@ class BatchWorker(QThread):
                             used_names, out_dir, wid, title,
                             os.path.splitext(os.path.basename(xml))[0], fmt,
                             sfx=job_sfx)
+                        _rt0 = time.monotonic()
                         ok, paths = self._render_one(
                             xml, fmt, out_dir, tmpcfg, out_name=out_name,
                             juan=(job.get("juan") or None))
+                        render_sec = time.monotonic() - _rt0
                         if want_report:
                             # per-fmt 报告不进文件列（行末合并为一份）
                             paths = [p for p in paths
@@ -426,10 +438,16 @@ class BatchWorker(QThread):
                         self.total_progress.emit(done_units, max(total_units, 1))
                         if ok and verify_on:
                             self.row_status.emit(idx, f"校验中（{fmt}）…")
+                            _vt0 = time.monotonic()
                             vr = self._verify_one(xml, fmt, verify_dir or out_dir,
                                                   tmpcfg, verify_one, wid,
                                                   gen_name=gen_name,
                                                   juan=job_segs, idx=idx)
+                            # 耗时（简单版）与报告路径（2026-10-14 用户反馈）
+                            vr["render_sec"] = render_sec
+                            vr["verify_sec"] = time.monotonic() - _vt0
+                            if row_report_path:
+                                vr["report"] = row_report_path
                             row_ver.append(vr)
                             self.verify_result.emit(vr)
                             done_units += 1
@@ -465,15 +483,18 @@ class BatchWorker(QThread):
                 # 验证总报告：每行一份 `{id}_{书名}_校验报告.txt`，放该行
                 # （验证）子目录，排文件列最后（JSON 同名配对，不进文件列）
                 if verify_on and row_ver and row_stem:
-                    from pycbeta.filename import verify_report_name as _vrn
-                    if row_wid:
-                        _rep_base = _vrn(
-                            row_wid, row_title,
-                            getattr(self, "_title_t2s", True))
+                    if row_report_path:
+                        report = row_report_path
                     else:
-                        _rep_base = _vrn(row_stem, "", True)
-                    report = os.path.join(verify_dir or out_dir,
-                                          _rep_base + ".txt")
+                        from pycbeta.filename import verify_report_name as _vrn
+                        if row_wid:
+                            _rep_base = _vrn(
+                                row_wid, row_title,
+                                getattr(self, "_title_t2s", True))
+                        else:
+                            _rep_base = _vrn(row_stem, "", True)
+                        report = os.path.join(verify_dir or out_dir,
+                                              _rep_base + ".txt")
                     try:
                         vv = self.opts.verify
                         lines = format_verify_report(
@@ -482,6 +503,11 @@ class BatchWorker(QThread):
                             max_diff=int(vv.get("maxDiff", 10) or 10))
                         with open(report, "w", encoding="utf-8") as f:
                             f.write("\n".join(lines) + "\n")
+                        # 报告链接：把该行报告的路径记进每条记录，
+                        # 供校验汇总弹窗行末「打开报告」使用（2026-10-14 用户反馈）
+                        for _r in row_ver:
+                            if isinstance(_r, dict):
+                                _r["report"] = report
                         if report not in row_produced:
                             row_produced.append(report)
                     except Exception as e:
@@ -830,7 +856,12 @@ class VerifySummaryDialog(QDialog):
                       f"<font color='gray'>已覆盖 {counts['covered']}</font>")
         head.setTextFormat(Qt.RichText)
         layout.addWidget(head)
-        self.text = QTextEdit()
+        self.text = QTextBrowser()
+        # 行末「打开报告」链接：自行接管点击，交给系统默认程序打开该 txt
+        # （2026-10-14 用户反馈：`setOpenExternalLinks(True)` 对本地 file: 链接
+        #  仍会在控件内导航，看起来像"在弹窗里打开了报告"）
+        self.text.setOpenLinks(False)
+        self.text.anchorClicked.connect(self._open_anchor)
         self.text.setReadOnly(True)
         self.text.setHtml("<br>".join(self._line(r) for r in results))
         layout.addWidget(self.text, 1)
@@ -877,7 +908,51 @@ class VerifySummaryDialog(QDialog):
         # 名称优先用生成的目标文件名（gen_name），回退「编号 格式」
         name = r.get("gen_name") or f"{r.get('id','')} {r.get('fmt','')}".strip()
         body = escape(f"[{tag}] {name}{cnt}{scope}")
-        return f"<span style='color:{color}'>{body}</span>"
+        # 耗时（简单版：生成/校验，2026-10-14 用户反馈）
+        try:
+            from pycbeta.verify import format_duration as _fd
+            _durs = []
+            if r.get("render_sec") is not None:
+                _durs.append("生成 " + _fd(r.get("render_sec")))
+            if r.get("verify_sec") is not None:
+                _durs.append("校验 " + _fd(r.get("verify_sec")))
+            dur = ("　" + "　".join(d for d in _durs if d.strip())) if _durs else ""
+        except Exception:
+            dur = ""
+        # 基线覆盖（全量任务按卷核对，缺卷时显示；2026-10-14 用户反馈）
+        covtxt = ""
+        try:
+            from pycbeta.verify import format_juan_ranges as _fjr
+            _cov = r.get("baseline_coverage") or {}
+            if isinstance(_cov, dict):
+                for _k in sorted(_cov):
+                    _c = _cov.get(_k) or {}
+                    _h, _e2 = _c.get("have"), _c.get("expect")
+                    if _h is None or not _e2 or _h >= _e2:
+                        continue
+                    _miss = _c.get("missing") or []
+                    covtxt += (f"　基线 {_k} {_h}/{_e2} 卷"
+                               + (f"（缺 {_fjr(_miss)}）" if _miss else ""))
+        except Exception:
+            covtxt = ""
+        # 非「通过且缺0/多0」的行，行末给报告链接（2026-10-14 用户反馈：
+        # 校验出错或不是 0/0 通过时，可一键打开该行报告）
+        link = ""
+        rp = r.get("report")
+        if kind != "ok0" and rp:
+            try:
+                url = QUrl.fromLocalFile(os.path.abspath(rp)).toString()
+                link = f"　<a href='{escape(url)}'>打开报告</a>"
+            except Exception:
+                link = ""
+        return f"<span style='color:{color}'>{body}{dur}{covtxt}</span>{link}"
+
+    def _open_anchor(self, url):
+        """弹窗内链接点击 → 交给系统默认程序（打开报告 txt；2026-10-14 用户反馈）。"""
+        try:
+            QDesktopServices.openUrl(url)
+        except Exception:
+            pass
 
     def _open_report(self):
         d = self._report_dir

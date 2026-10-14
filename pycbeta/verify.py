@@ -89,14 +89,20 @@ def _mark_span(text: str, a: int, b: int, before: int = 18, after: int = 18,
                pad: int = 0) -> str:
     """归一文本差异段标记：前文…〖差异〗…后文（差异为空时显示空括号）。
     pad>0 且 span 为空时填 `〓`×pad（对端 span 长度），使源/新两行位置对齐；
-    pad=0 保持旧行为。"""
+    pad=0 保持旧行为。
+    上限（2026-10-14 用户确认：差异段最多 50 字、补位 `〓` 最多 10 个，超出以 `…`
+    结尾，不加提示语）——治报告写入巨量原文：差异段极长时（长度悬殊、大块替换）
+    原先整段照抄，T1579 报告实测 5.8MB、单行 54 万字符。"""
     a = max(0, min(a, len(text)))
     b = max(a, min(b, len(text)))
     pre = text[max(0, a - before):a]
     mid = text[a:b]
     post = text[b:b + after]
     if not mid and pad > 0:
-        return f"{pre}〖{'〓' * pad}〗{post}"
+        marks = "〓" * min(pad, 10) + ("…" if pad > 10 else "")
+        return f"{pre}〖{marks}〗{post}"
+    if len(mid) > 50:
+        mid = mid[:50] + "…"
     return f"{pre}〖{mid}〗{post}"
 
 
@@ -1205,6 +1211,8 @@ def _body_sidecar(gen_paths, fmt, bpath, bkind, *, title="", docnumber="",
     if not compare_infos:
         off_body = strip_infos(off_body)
     if strip_tokens:
+        # 行首令牌恒剥、两侧同剥（2026-10-14 用户确认；见 verify_one 同注）
+        gen_body = _strip_official_no(gen_body, strip_tokens)
         off_body = _strip_official_no(off_body, strip_tokens)
     if t2s:
         off_body = t2s_baseline(off_body)
@@ -1909,12 +1917,19 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
     compare_infos = bool((cfg or {}).get("compareInfos", False))
     docnumber = (work.metadata.get("docNumber") or "").strip()
     series = (work.metadata.get("series") or "").strip()
+    # 行首 head/No. 令牌：校验**恒剥、两侧同剥**（2026-10-14 用户确认）——
+    # 与 output.strip_head_no 开关解耦（开关只决定产物里显不显示该行）；
+    # 官方侧 `No. 1579 [cf. …]` 头不再卡住公共前缀（html 10 秒 vs 约 1 小时
+    # 的脆弱点即来自此，实测）；代价：该元数据行不参与比对。
+    strip_tokens = _head_no_tokens(work)
     if fmt == "docx":
         title = (work.metadata.get("title") or "").strip()
         ours_raw = strip_docx_head(ours_raw, title, docnumber, series)
     if fmt == "md":
         # md 标记官方侧没有：`## 校注` 块头 + `[^n]: ` 定义标记（引用由 normalize 通规则剥）
         ours_raw = _strip_md_marks(ours_raw)
+    if strip_tokens:
+        ours_raw = _strip_official_no(ours_raw, strip_tokens)
     if not compare_infos:
         ours_raw = strip_infos(ours_raw)
     ours_disp = _display_text(ours_raw)
@@ -1922,6 +1937,8 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
     if fmt == "epub":
         # txt trial 专用形（官方 txt“正文+注块”同构）；其余 trial 沿用原交错形
         _txt_raw = _join_epub_ours(gen_path)
+        if strip_tokens:
+            _txt_raw = _strip_official_no(_txt_raw, strip_tokens)
         if not compare_infos:
             _txt_raw = strip_infos(_txt_raw)
         ours_txt_disp = _display_text(_txt_raw)
@@ -1932,6 +1949,8 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
         # 全量比对必把我们的尾注整块记为"多"（T1499 实锤 137 字）；
         # 注释内容由 txt_notes 试算覆盖，此处只验正文与内联注。
         _body_raw = "".join(_extract_epub_parts(p)[0] for p in gen_path)
+        if strip_tokens:
+            _body_raw = _strip_official_no(_body_raw, strip_tokens)
         if not compare_infos:
             _body_raw = strip_infos(_body_raw)
         ours_epub_disp = _display_text(_body_raw)
@@ -1940,9 +1959,6 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
     else:
         ours_txt, ours_txt_line, ours_txt_disp = ours, ours_line, ours_disp
         ours_epub, ours_epub_line, ours_epub_disp = ours, ours_line, ours_disp
-    # strip_head_no 联动：生成侧已剥 head/jhead 行首 No. 令牌；官方侧求同一令牌表对等剥离
-    _strip_no = _strip_no_from(config_path)
-    strip_tokens = _head_no_tokens(work) if _strip_no else []
     name = os.path.basename(xml_fn)
     stem = os.path.splitext(name)[0]
     if baseline == "xml":
@@ -2041,20 +2057,29 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
         return resolve_bases(fmt, official, _chains)
 
     official = _discover()
-    if base_kind not in official and bool((cfg or {}).get("auto_fetch", True)):
-        # 首选基线缺失：按需下载（docx/odt 非 T/X 等 404 静默跳过）
-        from .fetch import ensure_baselines
+    _coverage = {}
+    if bool((cfg or {}).get("auto_fetch", True)):
+        from .fetch import complete_baselines, ensure_baselines
         presets = load_effective_presets(config_path)
         need = need_for_base(base_kind)
         # 材料化模型：基线落 cbeta_ebook work 目录（缺省回退 source）
         ebook = ((presets.get("source") or {}).get("cbeta_ebook") or "").strip() \
             or source
-        ensure_baselines(work.id, need, presets, ebook,
-                         juan=_juan if _strict_juan else None)
-        official = _discover()
+        if base_kind not in official:
+            # 首选基线缺失：按需下载（docx/odt 非 T/X 等 404 静默跳过）
+            ensure_baselines(work.id, need, presets, ebook,
+                             juan=_juan if _strict_juan else None)
+            official = _discover()
+        if _juan and not _strict_juan:
+            # 全量任务：按卷核对，残卷（历史按卷校验留下）补缺后再比
+            # （T1579 txt 仅 2/100 卷被当全量比，2026-10-14 实锤）
+            _coverage = complete_baselines(work.id, need, presets, ebook, _juan)
+            official = _discover()
     bases = _bases(official)
     if not bases:
-        return {"xml": xml_fn, "fmt": fmt, "status": "no_baseline", "gen": gen_path, "official": None}
+        return {"xml": xml_fn, "fmt": fmt, "status": "no_baseline",
+                "gen": gen_path, "official": None,
+                "baseline_coverage": _coverage or None}
     best = None
     trials = []
     for bkind, bpath in bases:
@@ -2195,10 +2220,10 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
             best = cur
         if total <= max_diff:
             st = "fail" if struct_issues else "ok"
-            return {"xml": xml_fn, "fmt": fmt, "status": st, "gen": gen_path, "official": bpath_disp, "official_kind": bkind, "matched": m, "missing": mi, "extra": ex, "total": total, "ctx": ctx, "src_cmp": src_cmp, "gen_cmp": gen_cmp, "norm_gen": t_ours, "norm_official": theirs, "trials": trials, "struct_issues": struct_issues, "body_missing": _bm, "body_extra": _be, "diff_scope": _scope}
+            return {"xml": xml_fn, "fmt": fmt, "status": st, "gen": gen_path, "official": bpath_disp, "official_kind": bkind, "matched": m, "missing": mi, "extra": ex, "total": total, "ctx": ctx, "src_cmp": src_cmp, "gen_cmp": gen_cmp, "norm_gen": t_ours, "norm_official": theirs, "trials": trials, "struct_issues": struct_issues, "body_missing": _bm, "body_extra": _be, "diff_scope": _scope, "baseline_coverage": _coverage or None}
     (bkind, bpath, m, mi, ex, ctx, total, src_cmp, gen_cmp, best_theirs,
      best_loc, best_ours, best_bm, best_be, best_scope) = best
-    return {"xml": xml_fn, "fmt": fmt, "status": "fail", "gen": gen_path, "official": bpath, "official_kind": bkind, "matched": m, "missing": mi, "extra": ex, "total": total, "ctx": ctx, "ctx_loc": best_loc, "src_cmp": src_cmp, "gen_cmp": gen_cmp, "norm_gen": best_ours, "norm_official": best_theirs, "trials": trials, "struct_issues": struct_issues, "body_missing": best_bm, "body_extra": best_be, "diff_scope": best_scope}
+    return {"xml": xml_fn, "fmt": fmt, "status": "fail", "gen": gen_path, "official": bpath, "official_kind": bkind, "matched": m, "missing": mi, "extra": ex, "total": total, "ctx": ctx, "ctx_loc": best_loc, "src_cmp": src_cmp, "gen_cmp": gen_cmp, "norm_gen": best_ours, "norm_official": best_theirs, "trials": trials, "struct_issues": struct_issues, "body_missing": best_bm, "body_extra": best_be, "diff_scope": best_scope, "baseline_coverage": _coverage or None}
 
 
 def format_verify_report(records, diff_lines: int = 5, max_diff: int = 10):
@@ -2252,13 +2277,73 @@ def diff_scope_tag(scope, body_missing=None, body_extra=None, total=None):
     return ""
 
 
+def format_duration(sec) -> str:
+    """耗时 → 报告/弹窗短文本：`<60s` 用 `12.3s`；`<1h` 用 `1 分 05 秒`；否则 `1 小时 05 分`。
+    非法/负值 ⇒ `""`（调用方据此不显示）。"""
+    try:
+        s = float(sec)
+    except (TypeError, ValueError):
+        return ""
+    if s < 0:
+        return ""
+    r = int(round(s))
+    if r < 60:
+        return f"{s:.1f}s"
+    m, s2 = divmod(r, 60)
+    if m < 60:
+        return f"{m} 分 {s2:02d} 秒"
+    h, m2 = divmod(m, 60)
+    return f"{h} 小时 {m2:02d} 分"
+
+
+def format_juan_ranges(nums) -> str:
+    """卷号集合 → 紧凑区间文本（`1-34,36-92,94-100`；空 → `""`）。"""
+    try:
+        xs = sorted({int(x) for x in (nums or [])})
+    except (TypeError, ValueError):
+        return ""
+    if not xs:
+        return ""
+    out = []
+    start = prev = xs[0]
+    for n in xs[1:]:
+        if n == prev + 1:
+            prev = n
+            continue
+        out.append(f"{start}" if start == prev else f"{start}-{prev}")
+        start = prev = n
+    out.append(f"{start}" if start == prev else f"{start}-{prev}")
+    return ",".join(out)
+
+
 def _format_verify_record(r, diff_lines: int = 5, max_diff: int = 10):
     """单条记录 → 报告行（原 format_verify_report 循环体）。"""
     lines = []
     name = os.path.basename(r.get("xml") or r.get("id") or "")
     fmt = r.get("fmt", "")
     st = r.get("status")
-    lines.append(f"=== {name}")
+    # 耗时（GUI 写入 `render_sec`/`verify_sec`，2026-10-14 用户反馈）：并入段首行
+    _durs = []
+    if r.get("render_sec") is not None:
+        _durs.append("生成 " + format_duration(r.get("render_sec")))
+    if r.get("verify_sec") is not None:
+        _durs.append("校验 " + format_duration(r.get("verify_sec")))
+    _durtxt = ("　" + "　".join(d for d in _durs if d.strip())) if _durs else ""
+    lines.append(f"=== {name}{_durtxt}")
+    # 基线覆盖（全量任务按卷核对，缺卷时如实显示；2026-10-14 用户反馈）
+    _cov = r.get("baseline_coverage") or {}
+    if isinstance(_cov, dict):
+        for _k in sorted(_cov):
+            _c = _cov.get(_k)
+            if not isinstance(_c, dict):
+                continue
+            _have, _exp = _c.get("have"), _c.get("expect")
+            if _have is None or not _exp or _have >= _exp:
+                continue
+            _miss = _c.get("missing") or []
+            lines.append(f"  基线覆盖：{_k} {_have}/{_exp} 卷"
+                         + (f"（缺 {format_juan_ranges(_miss)}）"
+                            if _miss else ""))
     _struct = r.get("struct_issues") or []
     if _struct:
         lines.append(f"  [FAIL] {fmt} 结构非法（段中段/表中段/游离文字 {len(_struct)} 处，"
@@ -3011,6 +3096,29 @@ def _build_report_json_inner(work_id, records, xml_files, config_path,
             _scope = "notes_only"
         else:
             _scope = None
+        # 基线覆盖（按卷核对，2026-10-14）：多记录聚合——have 取最小、expect 取最大、
+        # missing 取并集（最保守），无记录则 None
+        _covs = [r.get("baseline_coverage") for r in grp
+                 if isinstance(r.get("baseline_coverage"), dict)]
+        _cov = None
+        if _covs:
+            _cov = {}
+            for _k in {k for c in _covs for k in c}:
+                _have, _exp, _miss = None, 0, set()
+                for c in _covs:
+                    e = c.get(_k)
+                    if not isinstance(e, dict):
+                        continue
+                    _h = e.get("have")
+                    if isinstance(_h, int) and (_have is None or _h < _have):
+                        _have = _h
+                    _e2 = e.get("expect")
+                    if isinstance(_e2, int):
+                        _exp = max(_exp, _e2)
+                    _miss.update(int(x) for x in (e.get("missing") or [])
+                                 if str(x).lstrip("-").isdigit())
+                _cov[_k] = {"have": _have, "expect": _exp,
+                            "missing": sorted(_miss)}
         fmts[fmt] = {
             "verdict": best,
             "fingerprint": fp,
@@ -3020,6 +3128,7 @@ def _build_report_json_inner(work_id, records, xml_files, config_path,
             "formal_outputs": sorted(gens),
             "report": report_name,
             "diff_scope": _scope,
+            "baseline_coverage": _cov,
         }
     try:
         from datetime import datetime as _dt

@@ -1502,6 +1502,37 @@ class TestReportCtxLocation(unittest.TestCase):
         self.assertEqual(_mark_span("甲乙", 1, 1, pad=3), "甲〖〓〓〓〗乙")
         self.assertEqual(_mark_span("甲X乙", 1, 2, pad=5), "甲〖X〗乙")
 
+    def test_mark_span_caps(self):
+        """差异段/补位上限（2026-10-14 用户确认：50 字 / 10 个〓）——
+        治报告写入巨量原文（T1579 报告 5.8MB、单行 54 万字符实锤）。"""
+        from pycbeta.verify import _mark_span
+        # 差异段 >50 字：截断 + `…`
+        out = _mark_span("前" + "甲" * 500 + "后", 1, 501)
+        self.assertEqual(out, "前〖" + "甲" * 50 + "…〗后")
+        # 恰好 50 字：不截断
+        out2 = _mark_span("前" + "甲" * 50 + "后", 1, 51)
+        self.assertEqual(out2, "前〖" + "甲" * 50 + "〗后")
+        # 补位 >10 个：封顶 10 个 + `…`
+        self.assertEqual(_mark_span("甲乙", 1, 1, pad=999999),
+                         "甲〖" + "〓" * 10 + "…〗乙")
+        # 恰好 10 个：不截
+        self.assertEqual(_mark_span("甲乙", 1, 1, pad=10),
+                         "甲〖" + "〓" * 10 + "〗乙")
+
+    def test_report_line_length_bounded(self):
+        """报告行长度有界：巨长差异段不得再写入报告（真值回归）。"""
+        from pycbeta.verify import _format_verify_record
+        rec = {"xml": "x.xml", "fmt": "txt", "status": "fail",
+               "missing": 99999, "extra": 0,
+               "trials": [{"kind": "txt_notes", "official": "o.txt",
+                           "missing": 99999, "extra": 0, "total": 99999,
+                           "ok": False, "ctx": [("replace", 0, 99999, 0, 99999)],
+                           "ctx_loc": [], "norm_official": "乙" * 100000,
+                           "norm_gen": "甲" * 100000}]}
+        lines = _format_verify_record(rec, 5, 10)
+        longest = max(len(L) for L in lines)
+        self.assertLess(longest, 400, f"报告行最长 {longest} 字符，应远小于原文长度")
+
 
 class TestDocxStructureGuard(unittest.TestCase):
     """结构护栏：docx 段中段/表中段 → 判结构非法（防文字抽取假绿）。"""
@@ -1883,6 +1914,127 @@ class TestEpubTrialBodyOnly(unittest.TestCase):
         self.assertEqual((trials["epub"]["missing"], trials["epub"]["extra"]),
                          (0, 0))
         self.assertEqual(rec["status"], "ok")
+
+
+class TestFormatDuration(unittest.TestCase):
+    """耗时格式化 + 报告段首行带耗时（2026-10-14 用户反馈：弹窗与报告都写）。"""
+
+    def test_format_duration(self):
+        from pycbeta.verify import format_duration as fd
+        self.assertEqual(fd(0), "0.0s")
+        self.assertEqual(fd(12.34), "12.3s")
+        self.assertEqual(fd(59.99), "1 分 00 秒")     # 四舍五入到分
+        self.assertEqual(fd(65), "1 分 05 秒")
+        self.assertEqual(fd(3661), "1 小时 01 分")
+        self.assertEqual(fd(None), "")
+        self.assertEqual(fd("x"), "")
+        self.assertEqual(fd(-1), "")
+
+    def test_report_header_has_durations(self):
+        from pycbeta.verify import _format_verify_record
+        rec = {"xml": "T.xml", "fmt": "txt", "status": "ok", "missing": 0,
+               "extra": 0, "render_sec": 3.24, "verify_sec": 65.0,
+               "trials": [{"kind": "txt_notes", "official": "o.txt",
+                           "missing": 0, "extra": 0, "total": 0, "ok": True,
+                           "ctx": [], "ctx_loc": []}]}
+        first = _format_verify_record(rec, 5, 10)[0]
+        self.assertEqual(first, "=== T.xml　生成 3.2s　校验 1 分 05 秒")
+
+    def test_report_header_without_durations_unchanged(self):
+        from pycbeta.verify import _format_verify_record
+        rec = {"xml": "T.xml", "fmt": "txt", "status": "ok", "missing": 0,
+               "extra": 0,
+               "trials": [{"kind": "txt_notes", "official": "o.txt",
+                           "missing": 0, "extra": 0, "total": 0, "ok": True,
+                           "ctx": [], "ctx_loc": []}]}
+        self.assertEqual(_format_verify_record(rec, 5, 10)[0], "=== T.xml")
+
+
+class TestBaselineCoverage(unittest.TestCase):
+    """基线覆盖：卷号区间格式化 + 报告行（2026-10-14 用户反馈）。"""
+
+    def test_format_juan_ranges(self):
+        from pycbeta.verify import format_juan_ranges as fj
+        self.assertEqual(fj([]), "")
+        self.assertEqual(fj(None), "")
+        self.assertEqual(fj([3]), "3")
+        self.assertEqual(fj([1, 2, 3, 5, 7, 8]), "1-3,5,7-8")
+        self.assertEqual(fj([2, 1]), "1-2")
+
+    def _rec(self, cov, ok=True):
+        return {"xml": "T.xml", "fmt": "txt",
+                "status": "ok" if ok else "fail",
+                "missing": 0 if ok else 5, "extra": 0,
+                "baseline_coverage": cov,
+                "trials": [{"kind": "txt_notes", "official": "o.txt",
+                            "missing": 0 if ok else 5, "extra": 0,
+                            "total": 0 if ok else 5, "ok": ok,
+                            "ctx": [], "ctx_loc": []}]}
+
+    def test_report_line_when_incomplete(self):
+        from pycbeta.verify import _format_verify_record
+        s = "\n".join(_format_verify_record(self._rec(
+            {"txt_notes": {"have": 2, "expect": 100,
+                           "missing": [1, 2, 3, 5]}}, ok=False), 5, 10))
+        self.assertIn("基线覆盖：txt_notes 2/100 卷（缺 1-3,5）", s)
+
+    def test_no_line_when_complete(self):
+        from pycbeta.verify import _format_verify_record
+        s = "\n".join(_format_verify_record(self._rec(
+            {"txt_notes": {"have": 100, "expect": 100, "missing": []}}),
+            5, 10))
+        self.assertNotIn("基线覆盖", s)
+
+
+class TestHeadNoTokenAlwaysStripped(unittest.TestCase):
+    """行首 head/No. 令牌：校验恒剥、两侧同剥（2026-10-14 用户确认）——
+    与 output.strip_head_no 开关解耦；官方侧 No. 头不再卡住公共前缀
+    （T1579 html 10 秒 vs 约 1 小时 的脆弱点即来自此）。"""
+
+    def _work(self):
+        from pycbeta.model import Work
+        return Work(id="T", source_file="",
+                    metadata={"docNumber": "No. 1579"}, body=[],
+                    notes_by_n={}, apps=[], simplified=False)
+
+    def _rec(self, switch_on, ours_text, off_text):
+        import json as _json
+        from unittest import mock
+        import pycbeta.verify as V
+        d = tempfile.mkdtemp()
+        try:
+            gen = os.path.join(d, "T.txt")
+            with open(gen, "w", encoding="utf-8") as f:
+                f.write(ours_text)
+            off = os.path.join(d, "off.txt")
+            with open(off, "w", encoding="utf-8") as f:
+                f.write(off_text)
+            cfgp = os.path.join(d, "cfg.json")
+            with open(cfgp, "w", encoding="utf-8") as f:
+                _json.dump({"output": {"strip_head_no": switch_on}}, f)
+            with mock.patch.object(V, "P5Parser") as P, \
+                    mock.patch.object(
+                        V, "find_official",
+                        side_effect=lambda s, st, k, juan=None, **kw:
+                        [off] if k == "txt_notes" else []):
+                P.return_value.parse.return_value = self._work()
+                return V.verify_one("x.xml", "txt", d, os.path.join(d, "v"),
+                                    config_path=cfgp, max_diff=10,
+                                    gen_paths=[gen])
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_official_token_stripped_when_switch_off(self):
+        """开关关、我方产物无令牌、官方有令牌 ⇒ 官方令牌仍被剥 ⇒ 0/0。"""
+        rec = self._rec(False, "瑜伽師地論卷第一\n正文甲\n",
+                        "No. 1579 瑜伽師地論卷第一\n正文甲\n")
+        self.assertEqual((rec.get("missing"), rec.get("extra")), (0, 0))
+
+    def test_both_sides_stripped_when_switch_off(self):
+        """开关关、两侧都有令牌 ⇒ 两侧同剥（不会把我方令牌算成"多"）。"""
+        rec = self._rec(False, "No. 1579 瑜伽師地論卷第一\n正文甲\n",
+                        "No. 1579 瑜伽師地論卷第一\n正文甲\n")
+        self.assertEqual((rec.get("missing"), rec.get("extra")), (0, 0))
 
 
 if __name__ == "__main__":

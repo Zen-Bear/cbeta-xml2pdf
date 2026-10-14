@@ -1154,7 +1154,7 @@ def main(argv=None):
 
         def _theirs_prep(raw, bkind=None):
             if getattr(_theirs_norm, "toks", ""):
-                # strip_head_no 联动：官方侧按行首精确令牌对等剥离（生成档已剥）
+                # 行首令牌恒剥、两侧同剥（2026-10-14 用户确认）
                 raw = _v_tstrip(raw, _theirs_norm.toks)
             if bkind == "txt_notes":
                 # text 族官方侧对齐（繁简通用）：版头剥离 + 注记块识别挪文末
@@ -1203,8 +1203,9 @@ def main(argv=None):
                         w.juan_suffix = getattr(args, "juan_suffix", "")
                     elif _juan_status == "no_milestone":
                         print(f"{w.id}: 无卷 milestone，忽略卷范围", file=sys.stderr)
-                # strip_head_no 联动：本文件 head/jhead 行首令牌表（生成档已剥则官方侧对等剥离）
-                _theirs_norm.toks = _v_htoks(w) if getattr(args, "strip_head_no", False) else []
+                # 行首 head/jhead 令牌表：校验恒剥、两侧同剥（2026-10-14 用户确认）——
+                # 与 output.strip_head_no 开关解耦（开关只决定产物里显不显示该行）
+                _theirs_norm.toks = _v_htoks(w)
             except Exception as e:
                 block.append(f"  PARSE FAIL: {e}")
                 grand_fail += 1; grand_total += 1
@@ -1320,6 +1321,7 @@ def main(argv=None):
                     return _v_bases(fmt, official, _chains)
 
                 bases = _cli_bases(official)
+                v_coverage = {}
                 if base_kind not in official and v_auto_fetch:
                     # 首选基线缺失：按需调用 fetch 下载（docx/odt 非 T/X 等 404 静默跳过）
                     from .fetch import ensure_baselines
@@ -1338,6 +1340,13 @@ def main(argv=None):
                                        strict_juan=_strict_j)
                         if found: official[kind] = found
                     bases = _cli_bases(official)
+                if v_auto_fetch and _juan and not _strict_j:
+                    # 全量任务：按卷核对，残卷补缺后再比（2026-10-14）
+                    from .fetch import complete_baselines
+                    _presets_af2 = load_effective_presets(args.config)
+                    _ebook_af2 = resolve_verify_ebook(args, _presets_af2, src)
+                    v_coverage = complete_baselines(
+                        w.id, _v_need(base_kind), _presets_af2, _ebook_af2, _juan)
                 if not bases:
                     block.append(f"  [--]  {disp} no baseline")
                     summ.append((fmt_raw, "no_baseline", None, None))
@@ -1356,6 +1365,9 @@ def main(argv=None):
                 if fmt == "md":
                     from .verify import _strip_md_marks as _smm
                     ours_raw_all = _smm(ours_raw_all)
+                if _theirs_norm.toks:
+                    # 行首令牌恒剥、两侧同剥（2026-10-14 用户确认；官方侧见 _theirs_prep）
+                    ours_raw_all = _v_tstrip(ours_raw_all, _theirs_norm.toks)
                 ours = v_norm(ours_raw_all, _rb)
                 _ours_nsrc = ours_raw_all  # 进归一的原文（compare 文件+行表用）
                 if not v_compare_infos:
@@ -1367,6 +1379,8 @@ def main(argv=None):
                     # 后 fmt 已改，只认原始 fmt
                     from .verify import _join_epub_ours as _jeo
                     _t_raw = _jeo(gen_paths)
+                    if _theirs_norm.toks:
+                        _t_raw = _v_tstrip(_t_raw, _theirs_norm.toks)
                     if not v_compare_infos:
                         from .verify import strip_infos as _si
                         _t_raw = _si(_t_raw)
@@ -1377,6 +1391,8 @@ def main(argv=None):
                     # T1499 实锤）→ 与 verify_one 同口径
                     from .verify import _extract_epub_parts as _eep
                     _e_raw = "".join(_eep(p)[0] for p in gen_paths)
+                    if _theirs_norm.toks:
+                        _e_raw = _v_tstrip(_e_raw, _theirs_norm.toks)
                     if not v_compare_infos:
                         from .verify import strip_infos as _si2
                         _e_raw = _si2(_e_raw)
@@ -1557,6 +1573,16 @@ def main(argv=None):
                 mark = "[OK]" if ok_any else "[FAIL]"
                 op = "≤" if ok_any else ">"
                 block.append(f"  {mark} (缺{best_mi}/多{best_ex} {op}阈值{args.verify_max_diff})")
+                _cov = v_coverage or {}
+                for _k in sorted(_cov):
+                    _c = _cov.get(_k) or {}
+                    _h, _e2 = _c.get("have"), _c.get("expect")
+                    if _h is None or not _e2 or _h >= _e2:
+                        continue
+                    from .verify import format_juan_ranges as _fjr
+                    _miss = _c.get("missing") or []
+                    block.append(f"  基线覆盖：{_k} {_h}/{_e2} 卷"
+                                 + (f"（缺 {_fjr(_miss)}）" if _miss else ""))
                 block.append(f"  {disp}→{bkind} 【源】{bpath}")
                 block.append(f"  {disp} 【新】{gen_path}")
                 if best_src:
@@ -1577,6 +1603,7 @@ def main(argv=None):
                                   "official": bpath,
                                   "official_kind": bkind,
                                   "missing": best_mi, "extra": best_ex,
+                                  "baseline_coverage": v_coverage or None,
                                   "struct_issues": list(_struct_issues)})
             if summ:
                 from .verify import format_work_summary as _v_summ

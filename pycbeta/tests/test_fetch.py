@@ -11,7 +11,8 @@ from pycbeta.fetch import (resolve_source, fetch_work, catalog_lookup,
                            work_dir, materialize_work, title_t2s,
                            check_ebook_updates, canonical_work_id,
                            parse_work_id, DEFAULT_DOWNLOADS, find_local_xml,
-                           fetch_baseline_juan)
+                           fetch_baseline_juan, baseline_volumes,
+                           complete_baselines)
 
 
 def _presets(xml_dir="", cbeta_ebook="", **extra):
@@ -271,6 +272,66 @@ class TestFetchBaselineJuan(unittest.TestCase):
                                       _presets(cbeta_ebook=e))
         self.assertEqual(got, ["x.docx"])
         F.assert_called_once()
+
+
+class TestCompleteBaselines(unittest.TestCase):
+    """全量任务按卷核对基线并补缺（2026-10-14）：治"残卷当全量"。"""
+
+    def test_baseline_volumes_parsing(self):
+        self.assertEqual(
+            baseline_volumes(["a/T0001_001.html", "a/T0001_012.txt"]), {1, 12})
+        self.assertEqual(baseline_volumes(["a/T0001.html", "a/foo.docx"]),
+                         set())
+
+    def test_completes_missing_volumes(self):
+        e = tempfile.mkdtemp()
+        calls = []
+
+        def fake_dl(url, dest, **k):
+            calls.append(url)
+            with open(dest, "w", encoding="utf-8") as f:
+                f.write("x")
+            return True
+
+        with mock.patch("pycbeta.fetch._http_download", side_effect=fake_dl):
+            fetch_baseline_juan("T0001", "html", [1, 3],
+                                _presets(cbeta_ebook=e))
+            cov = complete_baselines("T0001", ["html"],
+                                     _presets(cbeta_ebook=e), e, {1, 2, 3})
+        self.assertEqual(cov["html"], {"have": 3, "expect": 3, "missing": []})
+        self.assertEqual(len(calls), 3)          # 只补缺的卷 2
+
+    def test_missing_volumes_reported_when_download_fails(self):
+        e = tempfile.mkdtemp()
+
+        def fake_dl(url, dest, **k):
+            if url.endswith("_002.html"):
+                return False                     # 卷 2 下载失败
+            with open(dest, "w", encoding="utf-8") as f:
+                f.write("x")
+            return True
+
+        with mock.patch("pycbeta.fetch._http_download", side_effect=fake_dl):
+            fetch_baseline_juan("T0001", "html", [1], _presets(cbeta_ebook=e))
+            cov = complete_baselines("T0001", ["html"],
+                                     _presets(cbeta_ebook=e), e, {1, 2})
+        self.assertEqual(cov["html"]["have"], 1)
+        self.assertEqual(cov["html"]["expect"], 2)
+        self.assertEqual(cov["html"]["missing"], [2])
+
+    def test_no_volume_named_baseline_gives_no_entry(self):
+        """整体缺失（或单文件命名）⇒ 不产生覆盖度条目（缺整种由 no_baseline 表达）。"""
+        e = tempfile.mkdtemp()
+        cov = complete_baselines("T0001", ["html"], _presets(cbeta_ebook=e),
+                                 e, {1, 2})
+        self.assertEqual(cov, {})
+
+    def test_epub_skipped(self):
+        """单文件格式不适用卷核对。"""
+        e = tempfile.mkdtemp()
+        cov = complete_baselines("T0001", ["epub"], _presets(cbeta_ebook=e),
+                                 e, {1, 2})
+        self.assertEqual(cov, {})
 
 
 class TestWorkDir(unittest.TestCase):

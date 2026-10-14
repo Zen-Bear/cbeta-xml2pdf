@@ -148,8 +148,22 @@ class TestBuildReportJson(JsonFixture):
         j = self.build([self.rec()])
         self.assertEqual(
             sorted(j["fmts"]["html"]),
-            ["diff_scope", "extra", "fingerprint", "formal_outputs", "missing",
-             "reason", "report", "verdict"])
+            ["baseline_coverage", "diff_scope", "extra", "fingerprint",
+             "formal_outputs", "missing", "reason", "report", "verdict"])
+
+    def test_baseline_coverage_aggregate(self):
+        """基线覆盖：多记录聚合——have 取最小、expect 取最大、missing 取并集。"""
+        def rec(have, expect, missing):
+            r = self.rec()
+            r["baseline_coverage"] = {"txt_notes": {
+                "have": have, "expect": expect, "missing": missing}}
+            return r
+        j = self.build([rec(2, 100, [1, 2]), rec(3, 100, [2, 3])])
+        cov = j["fmts"]["html"]["baseline_coverage"]["txt_notes"]
+        self.assertEqual(cov["have"], 2)
+        self.assertEqual(cov["expect"], 100)
+        self.assertEqual(cov["missing"], [1, 2, 3])
+        self.assertIsNone(self.build([self.rec()])["fmts"]["html"]["baseline_coverage"])
 
     def test_diff_scope_aggregate(self):
         # 旁路正文比对结论：body > unknown > notes_only；无记录 → None

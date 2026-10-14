@@ -12,7 +12,7 @@ except Exception:
 from pycbeta.verify import (generate_formal, extract_text, normalize, diff_stats,
                             find_official, strip_infos, strip_docx_head, merge_docx,
                             _extract_html_parts, _norm_official_txt, _strip_md_marks,
-                            _head_no_tokens, _strip_official_no, _strip_no_from,
+                            _head_no_tokens, _strip_official_no,
                             t2s_baseline, _ann_brackets_from, trial_pass_line)
 from pycbeta.simplify import simplify_work
 from pycbeta.parser import P5Parser
@@ -177,9 +177,9 @@ def main(argv=None):
             continue
         official = {}
         scope_juan = bool(_verify_cfg.get("scope_juan", True))
-        # strip_head_no 联动：生成侧（generate_formal 同源开关）已剥则官方侧对等剥离
-        _strip_no = _strip_no_from(args.config)
-        strip_tokens = _head_no_tokens(work) if _strip_no else []
+        # 行首 head/jhead 令牌：校验恒剥、两侧同剥（2026-10-14 用户确认；
+        # 与 output.strip_head_no 开关解耦）
+        strip_tokens = _head_no_tokens(work)
         _juan = None
         if scope_juan:
             from pycbeta.verify import work_juan_numbers
@@ -205,6 +205,8 @@ def main(argv=None):
                 ours_raw = strip_docx_head(ours_raw, title, docnumber, series)
             if fmt == "md":
                 ours_raw = _strip_md_marks(ours_raw)
+            if strip_tokens:
+                ours_raw = _strip_official_no(ours_raw, strip_tokens)
             if not compare_infos:
                 ours_raw = strip_infos(ours_raw)
             ours = normalize(ours_raw, _ruby_brackets)

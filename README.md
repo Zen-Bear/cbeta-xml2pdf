@@ -202,7 +202,8 @@ GUI 里输出格式卡的"单引擎"下拉会自动探测本机已装项（未�
 --notes            footnote/endnote/inline（缺省取 config output.notes，出厂 footnote；footnote=页底脚注（docx/pdf），endnote=文末尾注，inline=括号内联；html/epub/md/txt 仅区分 inline 与否）
 --strip-head-no    去 head/jhead 行首 No. 令牌（如 No. 1116-B 序→序），并省略 docNumber 编号行
                    （如 T0349 顶部 `No. 349 [No. 310(42)]`）；默认关，可配 output.strip_head_no；
-                   docx 恒不显 docNumber，html/epub/md/txt 默认保留（同官方电子书），开此开关才省略
+                   docx 恒不显 docNumber，html/epub/md/txt 默认保留（同官方电子书），开此开关才省略；
+                   注意：校验比对与开关无关——行首令牌恒剥、两侧同剥（2026-10-14 起），该行不参与比对
 --show-notes / --no-show-notes  显示/关闭校勘注、脚注、尾注（显式 > config output.show_notes；默认显示；
                    仅关校勘/脚注/尾注，不关正文夹注；不影响 --verify——校验恒比注）
 --engine 管线[:单体]  PDF 路径，见「PDF 引擎安装」；--vertical 竖排走 HTML 管线
