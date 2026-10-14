@@ -500,9 +500,12 @@ class TestSourceBaselineTab(unittest.TestCase):
         from pycbeta.gui.panel import SourceDialog
         dlg = SourceDialog()
         try:
+            # 五项都显式设置：不依赖本机 config.user.json 的既有值（如 pdf 基线根）
+            dlg.base_edits["txt"].setText("")
             dlg.base_edits["txt_notes"].setText("R:/txt")
             dlg.base_edits["docx"].setText("R:/docx")
             dlg.base_edits["epub"].setText("")
+            dlg.base_edits["pdf"].setText("")
             p = dlg._dialog_presets()
             self.assertEqual(p["source"]["baselines"],
                              {"txt": "", "txt_notes": "R:/txt",

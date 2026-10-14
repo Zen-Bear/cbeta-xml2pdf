@@ -119,7 +119,7 @@ class TestBuildReportJson(JsonFixture):
                         "inputs", "juan", "requested_formats", "schema",
                         "thresholds", "tool", "verify_impl", "work"])
         self.assertEqual(j["schema"], 1)
-        self.assertEqual(j["fingerprint_version"], "verify-fp-1")
+        self.assertEqual(j["fingerprint_version"], V._FP_VERSION)
         self.assertEqual(j["work"], "T0001")
         self.assertEqual(j["requested_formats"], ["html"])
         self.assertEqual(j["thresholds"], {"max_diff": 10, "diff_lines": 5})

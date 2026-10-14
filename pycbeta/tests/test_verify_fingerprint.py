@@ -4,6 +4,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -45,7 +46,19 @@ class TestDeterminism(FingerprintFixture):
         b = self.fp()
         self.assertIsNotNone(a)
         self.assertEqual(a, b)
-        self.assertTrue(a.startswith("verify-fp-1:sha256:"))
+        self.assertTrue(a.startswith(V._FP_VERSION + ":sha256:"))
+
+    def test_mtime_change_does_not_invalidate(self):
+        """同字节重写（仅 mtime 变）不改指纹：载荷不含 mtime_ns（2026-10-14 修正）。"""
+        a = self.fp()
+        st = os.stat(self.base)
+        os.utime(self.base, ns=(st.st_atime_ns, st.st_mtime_ns + 10 ** 9))
+        self.assertNotEqual(os.stat(self.base).st_mtime_ns, st.st_mtime_ns)
+        self.assertEqual(a, self.fp())
+
+    def test_fp_identity_excludes_mtime(self):
+        self.assertEqual(sorted(V._fp_file_identity(self.base)),
+                         ["name", "sha256", "size"])
 
     def test_xml_change_invalidates(self):
         a = self.fp()
@@ -92,6 +105,47 @@ class TestDeterminism(FingerprintFixture):
         # （夹具仅 html；docx 首选 docx 缺席）
         self.assertIsNone(V.verify_fingerprint(
             "T0001", "docx", xml_files=[self.xml], config_path=self.cfg))
+
+
+class TestDirectLookup(unittest.TestCase):
+    """集中库布局直接定位（2026-10-14 提速）：与通配符同集合、同顺序；非该布局回退通配符。"""
+
+    def setUp(self):
+        self.d = tempfile.mkdtemp(prefix="vdir-")
+        # 集中库布局：{root}/{canon}/{work_id}/{work_id}_{NNN}.{ext}；单文件 {root}/{canon}/{id}.{ext}
+        for n in (1, 2, 3):
+            _write(os.path.join(self.d, "T", "T0001", f"T0001_{n:03d}.html"), "x")
+        _write(os.path.join(self.d, "T", "T0001", "T0001_001.docx"), "x")
+        _write(os.path.join(self.d, "T", "T0001.epub"), "x")
+
+    def tearDown(self):
+        shutil.rmtree(self.d, ignore_errors=True)
+
+    def _both(self, kind, **kw):
+        a = V._find_official_in(self.d, "T01n0001", kind, **kw)
+        with mock.patch.object(V, "_direct_official", return_value=[]):
+            b = V._find_official_in(self.d, "T01n0001", kind, **kw)
+        return a, b
+
+    def test_library_layout_equivalent(self):
+        for kind in ("html", "docx", "epub"):
+            a, b = self._both(kind)
+            self.assertTrue(a, kind)              # 直接定位命中
+            self.assertEqual(a, b, kind)          # 与通配符同集合、同顺序
+
+    def test_juan_filter_equivalent(self):
+        a, b = self._both("html", juan={2})
+        self.assertEqual([os.path.basename(x) for x in a], ["T0001_002.html"])
+        self.assertEqual(a, b)
+
+    def test_unknown_layout_falls_back(self):
+        flat = tempfile.mkdtemp(prefix="vflat-")
+        try:
+            _write(os.path.join(flat, "T01n0001.html"), "x")
+            a = V._find_official_in(flat, "T01n0001", "html")
+            self.assertEqual([os.path.basename(x) for x in a], ["T01n0001.html"])
+        finally:
+            shutil.rmtree(flat, ignore_errors=True)
 
 
 class TestPresetsParam(FingerprintFixture):
@@ -160,7 +214,7 @@ class TestPresetsParam(FingerprintFixture):
         j2.pop("created_at", None)
         self.assertEqual(j1, j2)
         self.assertTrue(j1["fmts"]["html"]["fingerprint"].startswith(
-            "verify-fp-1:sha256:"))
+            V._FP_VERSION + ":sha256:"))
 
 
 class TestJuanParam(FingerprintFixture):

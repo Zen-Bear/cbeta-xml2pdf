@@ -1674,6 +1674,62 @@ def find_official(source: str, stem: str, kind: str, juan: Optional[set] = None,
     return []
 
 
+_DIRECT_VOL_KINDS = ("html", "txt_notes", "docx")
+_DIRECT_EXT = {"html": "html", "txt_notes": "txt", "docx": "docx",
+               "epub": "epub", "odt": "odt"}
+
+
+def _direct_official(root: str, stems, kind: str) -> List[str]:
+    """集中库布局直接定位（2026-10-14 提速）：避免对整个库根做递归通配符扫描。
+
+    布局（`source.baselines` 指向的库根；下游实测三库根 13,485 条目与顶层 canon
+    目录 100% 一致、无杂散文件、无更深嵌套）：
+    - 多卷（html / txt_notes / docx）：`{root}/{canon}/{work_id}/{work_id}_{NNN}.{ext}`；
+    - 单文件（epub / odt）：`{root}/{canon}/{work_id}.{ext}`。
+    命中即返回候选（未排除、未排序、未卷过滤），由 `_find_official_in` 套同一套
+    后处理与排序；布局不符（工作目录型根、旧平铺、`{id}.txt_notes/` 等）返回 []
+    ⇒ 调用方回退原有通配符（结果集合与顺序须与通配符一致，见单测）。
+    """
+    if kind not in _DIRECT_EXT:
+        return []
+    try:
+        from .fetch import parse_work_id
+    except Exception:
+        return []
+    canon = ""
+    for s in stems:
+        try:
+            canon = parse_work_id(s)[0] or ""
+        except Exception:
+            canon = ""
+        if canon:
+            break
+    if not canon:
+        return []
+    out: List[str] = []
+    for s in stems:
+        base = os.path.join(root, canon, s)
+        if kind in _DIRECT_VOL_KINDS:
+            if not os.path.isdir(base):
+                continue
+            rx = re.compile(r"^" + re.escape(s) + r"_\d+\."
+                            + _DIRECT_EXT[kind] + r"$")
+            try:
+                names = sorted(os.listdir(base))
+            except OSError:
+                continue
+            for n in names:
+                if rx.match(n):
+                    fp = os.path.join(base, n)
+                    if os.path.isfile(fp):
+                        out.append(fp)
+        else:
+            fp = base + "." + _DIRECT_EXT[kind]
+            if os.path.isfile(fp):
+                out.append(fp)
+    return out
+
+
 def _find_official_in(source: str, stem: str, kind: str,
                       juan: Optional[set] = None,
                       strict_juan: bool = False) -> List[str]:
@@ -1704,21 +1760,29 @@ def _find_official_in(source: str, stem: str, kind: str,
     # 2) 文件名含空格 —— 我方渲染产物 `{id 书名}.ext` 恒带空格，官方文件名恒无空格；
     # 3) `{stem}_html/`、`{short}_html/` 目录 —— HtmlRenderer 默认输出目录。
     html_dirs = {f"{s}_html" for s in (stems or []) if s}
-    for pat in pats:
-        for f in sorted(glob.glob(pat, recursive=True)):
-            af = os.path.abspath(f)
-            if "（验证）" in af or "（驗證）" in af:
-                # 校验产物目录（CLI/GUI 的 `{id 书名}（验证）/`）不得当基线：
-                # 正式比对档与基线同 stem，自比对会假绿
-                continue
-            if " " in os.path.basename(af):
-                continue
-            parts = af.split(os.sep)
-            if any(p in html_dirs for p in parts):
-                continue
-            if af not in seen and os.path.isfile(af) and os.path.getsize(af) > 0:
-                seen.add(af)
-                out.append(af)
+    # 集中库布局先直接定位（毫秒级）；命中即不再做递归通配符扫描（大库根下每次
+    # 扫 2 万+ 文件 ×5 组 ≈ 1.4 秒，2026-10-14 下游实测根因）；为空才回退通配符。
+    direct = _direct_official(source, stems, kind)
+    if direct:
+        cand = [os.path.abspath(f) for f in direct]
+    else:
+        cand = []
+        for pat in pats:
+            for f in sorted(glob.glob(pat, recursive=True)):
+                cand.append(os.path.abspath(f))
+    for af in cand:
+        if "（验证）" in af or "（驗證）" in af:
+            # 校验产物目录（CLI/GUI 的 `{id 书名}（验证）/`）不得当基线：
+            # 正式比对档与基线同 stem，自比对会假绿
+            continue
+        if " " in os.path.basename(af):
+            continue
+        parts = af.split(os.sep)
+        if any(p in html_dirs for p in parts):
+            continue
+        if af not in seen and os.path.isfile(af) and os.path.getsize(af) > 0:
+            seen.add(af)
+            out.append(af)
     # 两档排序（统一根目录下）：平展优先——顶层条目名以 work id（短名，如 YP0021）
     # 或 stem 开头的命中排前面，如 `YP0021 異部宗輪論語體釋\\YP0021.html`；
     # 仓库布局（如 `T\\T0349\\html\\T0349_001.html`，下载落盘即此布局）次之。
@@ -2455,7 +2519,7 @@ def _format_verify_record(r, diff_lines: int = 5, max_diff: int = 10):
 # 以跳过重复校验。只读（stat/读文件/读配置/glob），禁 parse/渲染/下载/
 # 写文件/控制台输出；任一无法证明的情形返回 None（调用方一律重验）。
 # 本机有效：mtime、本机路径解析参与定位，不保证跨机器可比。
-_FP_VERSION = "verify-fp-1"
+_FP_VERSION = "verify-fp-2"
 _FP_FORMATS = ("html", "docx", "epub", "md", "txt", "pdf")
 # 影响比对文本的源码模块：任一变化必须使旧指纹失效；改此表本身须 bump 版本。
 # 刻意排除：fonts/gaiji/figures（只影响字形与图片，不影响抽取文本）、
@@ -2483,7 +2547,8 @@ def _sha256_file(path: str):
 
 def _file_identity(path: str):
     """文件身份 {name, size, mtime_ns, sha256}；缺失/不可读/非文件 → None。
-    mtime_ns 仅记录不哈希（合册临时文件每次 mtime 都新；同字节重写不应失效）。"""
+    mtime_ns 供 `report.json` 的公开 inputs 记录（提案 §4.2 口径）；
+    **指纹载荷不含 mtime_ns**（见 `_fp_file_identity`）：同字节重写不应失效。"""
     try:
         st = os.stat(path)
     except (OSError, ValueError):
@@ -2495,6 +2560,20 @@ def _file_identity(path: str):
         return None
     return {"name": os.path.basename(path), "size": st.st_size,
             "mtime_ns": st.st_mtime_ns, "sha256": digest}
+
+
+def _fp_file_identity(path: str):
+    """指纹载荷用文件身份 `{name, size, sha256}`——**不含 mtime_ns**（2026-10-14）。
+
+    原因：同字节重写（或基线重下后 mtime 变化）不应让指纹失效——此前 mtime_ns 随
+    `_file_identity` 进了载荷，导致"内容没变也重验"（下游实测 + 本仓修正）。
+    不可读/非文件 → None（调用方据此判定"不能证明"）。
+    """
+    ident = _file_identity(path)
+    if ident is None:
+        return None
+    return {"name": ident["name"], "size": ident["size"],
+            "sha256": ident["sha256"]}
 
 
 def _impl_digest(modules=None, pkg_dir=None) -> str:
@@ -2806,7 +2885,7 @@ def _verify_fingerprint_inner(work_id, fmt, xml_files, config_path,
         return None
     xmlrecs = []
     for f in xml_files:
-        ident = _file_identity(f)
+        ident = _fp_file_identity(f)
         if ident is None:
             return None
         xmlrecs.append(ident)
@@ -2836,7 +2915,7 @@ def _verify_fingerprint_inner(work_id, fmt, xml_files, config_path,
     for kind, paths in bases:
         ids = []
         for p in paths:
-            ident = _file_identity(p)
+            ident = _fp_file_identity(p)
             if ident is None:
                 return None
             ids.append(ident)
@@ -2861,7 +2940,7 @@ def _verify_fingerprint_inner(work_id, fmt, xml_files, config_path,
     if juan is not None:
         # 仅卷子集才入载荷：`None`（整本）保持旧 payload 逐字一致 → 旧记录继续有效
         payload["juan"] = [[lo, hi] for lo, hi in juan]
-    return "verify-fp-1:sha256:" + _sha256_bytes(json.dumps(
+    return _FP_VERSION + ":sha256:" + _sha256_bytes(json.dumps(
         payload, sort_keys=True, ensure_ascii=True).encode("utf-8"))
 
 

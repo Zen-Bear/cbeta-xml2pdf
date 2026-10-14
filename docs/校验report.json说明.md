@@ -45,7 +45,7 @@ out/验证/X1077 准提净业（验证）/X1077_准提净业_校验报告.txt
 ```json
 {
   "schema": 1,
-  "fingerprint_version": "verify-fp-1",
+  "fingerprint_version": "verify-fp-2",
   "tool": {"name": "pycbeta", "version": "0.1"},
   "verify_impl": {"module": "pycbeta.verify", "digest": "sha256:…",
                    "algorithm": "verify-1"},
@@ -63,7 +63,7 @@ out/验证/X1077 准提净业（验证）/X1077_准提净业_校验报告.txt
   "fmts": {
     "docx": {
       "verdict": "pass",
-      "fingerprint": "verify-fp-1:sha256:…",
+      "fingerprint": "verify-fp-2:sha256:…",
       "missing": 0,
       "extra": 0,
       "reason": null,
@@ -76,7 +76,9 @@ out/验证/X1077 准提净业（验证）/X1077_准提净业_校验报告.txt
 }
 ```
 
-- `xml_files` / `baselines` 只有 `name/size/mtime_ns`（无 sha；sha 只进指纹）。
+- `xml_files` / `baselines` 只有 `name/size/mtime_ns`（无 sha；sha 只进指纹）
+  ——这是**公开记录**口径；指纹载荷里的文件身份是 `{name,size,sha256}`（**不含
+  mtime_ns**，见 §4）。
 - `coverage` 只在请求了 `pdf` 时出现（`pdf` 无官方基线，结论随其管线源格式）。
 - `juan`（2026-10-08 新增，可空）：卷子集自描述——`{"segments": [[lo,hi],…],
   "label": "34-36、40"}`（`label` 与输出目录后缀同源）；整本为 `null`。
@@ -102,6 +104,11 @@ out/验证/X1077 准提净业（验证）/X1077_准提净业_校验报告.txt
   `load_effective_presets`，与 `config_path=<run.json>` 同口径逐字一致；
   `presets=None` 保持现状。`build_report_json` 同样透传 `presets=`。
   注音词表用相对路径时请绝对化后再传（见 `上游-指纹presets入参提案.md` §5）。
+  **`_ctx`（可选，内部复用通道；2026-10-14 起对外说明）**：传
+  `{"presets":…, "canon":…, "official":…, "impl":…}` 可跳过重复的配置解算与
+  基线发现——同一部书多格式连续调用时，用第一次算出的四件复用即可（下游
+  publish 按「部 × 格式」逐次调用、不传 `_ctx`，同一部书的基线目录被重复扫描
+  3 遍；装了 `source.baselines` 库根后单次发现约 1.8 秒，复用可省约 2/3）。
   `juan=[(lo,hi),…]`（2026-10-08 新增）：卷子集——归一（排序合并；`40,34-36`
   ≡ `34-36,40`）后进 payload，并按卷限定 html/docx/txt_notes 基线发现；
   `None`/空列表＝整本，payload **与旧版逐字一致**（旧记录继续有效）；非法输入
@@ -111,6 +118,14 @@ out/验证/X1077 准提净业（验证）/X1077_准提净业_校验报告.txt
 - 指纹按 `(work, fmt)` 粒度，纳入：XML 内容标识、生效配置摘要、校验实现摘要
   （`pycbeta.__version__` + 相关模块源码哈希，改实现即失效）、实际基线、
   阈值与覆盖关系。本机有效，不保证跨机器可比。
+- **指纹载荷的文件身份不含 `mtime_ns`**（2026-10-14，`verify-fp-2`）：载荷里
+  `xml` / `baselines` 用 `{name, size, sha256}`——同字节重写（或基线重下后
+  mtime 变化）不再让指纹失效；`report.json` 的公开 `inputs` / `baselines` 字段
+  仍按提案 §4.2 记录 `name/size/mtime_ns`（不含 sha），两者口径不同但互补。
+- **基线发现提速**（2026-10-14）：`source.baselines` 指向大库根时，先按
+  `{根}/{canon}/{work_id}/…`（多卷）或 `{根}/{canon}/{work_id}.{ext}`（单文件）
+  直接定位，未命中才回退递归通配符——实测单次发现 1.74 秒 → 约 0.01 秒，
+  结果集合与顺序不变（见 `find_official` 与单测 `TestDirectLookup`）。
 - 建议的跳过条件（全部成立才跳过）：库中有该 `(work, fmt)` 的 `pass` 记录、
   且 `verify_fingerprint` 现算值与记录一致、`verify_impl.digest` 一致、
   产物存在、复用开关开。
