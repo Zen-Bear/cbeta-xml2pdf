@@ -456,7 +456,7 @@ pycbeta/
 
 **已实现的关键规则**（均为逐字节 diff 校准）：
 - 分卷：`<milestone unit="juan">`，支持 **div 跨卷**（闭开 div）；文件名 `{id}_{卷号:03d}.html`
-- 元素渲染：p（class/style/lineInfo）、head（data-head-level）、byline、juan、pre（保留换行/全角空格）、lg（lg-row/lg-cell + caesura 分格 + text-indent 移到首格）、list/li、table（bip-table div）、dharani、form、docNumber、doube-line-note
+- 元素渲染：p（class/style/lineInfo）、head（data-head-level）、p@cb:type=headN（标题，等同 head：html class="head"+data-head-level、docx 命名样式 head+outlineLvl N-1、md #×N）、byline、juan、pre（保留换行/全角空格）、lg（lg-row/lg-cell + caesura 分格 + text-indent 移到首格）、list/li、table（bip-table div）、dharani、form、docNumber、doube-line-note
 - 注释：**add→cb_note 新格式**（`[A序]` + `#back` div），**orig/mod→旧格式**（`note_anchor`+`#n`）；back 顺序=旧格式在前、cb_note 在后；A 序号**分卷重新编号**；add 注内容追加 lem 的 cf 引用（`(cf. ...)`，有 `cb:provider` 时不包 linehead span）
 - 缺字：span 判定 `ord(char)>=0x2A700`；显示字形按 `charDecl > 外部 DB（unicode→norm_unicode→big5→composition→pua）> 原文`
 - 行号：仅取主版本 lb（`ed==canon`，忽略 R 副版）；Text 保留全角空格、非 pre 去换行

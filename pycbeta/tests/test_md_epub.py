@@ -37,6 +37,15 @@ class TestMd(unittest.TestCase):
         t2 = MdRenderer()._render_node(head)
         self.assertIn("No.1116-B", t2)  # md 归一化无空格；默认保留令牌
 
+    def test_md_head_cb_type(self):
+        from pycbeta.model import E, Text
+        p = E(tag="p", attrs={"cb:type": "head2"},
+              children=[Text(text="一　以偈讚佛")])
+        self.assertEqual(MdRenderer()._render_node(p), "## 一　以偈讚佛\n\n")
+        # 非 headN 的 cb:type 不加标题标记
+        p2 = E(tag="p", attrs={"cb:type": "dharani"}, children=[Text(text="咒")])
+        self.assertEqual(MdRenderer()._render_node(p2), "咒\n\n")
+
     def test_md_docnumber_own_line(self):
         from pycbeta.model import E, Text
         body = [E(tag="docNumber", attrs={}, children=[Text(text="No. 349")]),

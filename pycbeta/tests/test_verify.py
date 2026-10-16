@@ -696,7 +696,7 @@ class TestJoinEpubOurs(unittest.TestCase):
 
 
 class TestEpubTxtBaseline(unittest.TestCase):
-    """epub→txt_notes 首选：命中顺序 txt/epub/html；epub 现货仍比。"""
+    """epub→html 首选：命中顺序 html/txt_notes/epub；epub 现货仍比。"""
 
     def _work(self):
         from pycbeta.model import Work
@@ -740,7 +740,7 @@ class TestEpubTxtBaseline(unittest.TestCase):
         finally:
             shutil.rmtree(d, ignore_errors=True)
 
-    def test_trial_order_txt_epub_html(self):
+    def test_trial_order_html_txt_epub(self):
         # 三 trial 全失败才走完循环：内容各不相同，保证 trials 有 3 条
         import shutil
         d = tempfile.mkdtemp()
@@ -761,7 +761,7 @@ class TestEpubTxtBaseline(unittest.TestCase):
                                    gen_paths=[gen])
             self.assertEqual(rec["status"], "fail")
             self.assertEqual([t["kind"] for t in rec["trials"]],
-                             ["txt_notes", "epub", "html"])
+                             ["html", "txt_notes", "epub"])
         finally:
             shutil.rmtree(d, ignore_errors=True)
 
@@ -782,7 +782,7 @@ class TestVerifyBases(unittest.TestCase):
     def test_chain_defaults(self):
         import pycbeta.verify as V
         self.assertEqual(V.chain_for("epub", None),
-                         ["txt_notes", "epub", "html"])
+                         ["html", "txt_notes", "epub"])
         self.assertEqual(V.chain_for("docx", {}), ["docx", "html"])
         self.assertEqual(V.chain_for("txt", None), ["txt_notes"])
 
@@ -793,7 +793,7 @@ class TestVerifyBases(unittest.TestCase):
             V.chain_for("epub", {"epub": ["zzz", "txt_notes", "txt_notes"]}),
             ["txt_notes"])
         self.assertEqual(V.chain_for("epub", {"epub": []}),
-                         ["txt_notes", "epub", "html"])
+                         ["html", "txt_notes", "epub"])
 
     def test_need_follows_chain_head(self):
         import pycbeta.verify as V
@@ -806,11 +806,11 @@ class TestVerifyBases(unittest.TestCase):
         off = {"txt_notes": ["t"], "epub": ["e"], "html": ["h"]}
         self.assertEqual(
             V.resolve_bases("epub", off, None),
-            [("txt_notes", ["t"]), ("epub", ["e"]), ("html", ["h"])])
-        # 同路径去重
+            [("html", ["h"]), ("txt_notes", ["t"]), ("epub", ["e"])])
+        # 同路径去重（链序在前者胜）
         self.assertEqual(
             V.resolve_bases("epub", {"txt_notes": ["x"], "html": ["x"]}, None),
-            [("txt_notes", ["x"])])
+            [("html", ["x"])])
         # 缺现货跳过
         self.assertEqual(V.resolve_bases("epub", {"html": ["h"]}, None),
                          [("html", ["h"])])

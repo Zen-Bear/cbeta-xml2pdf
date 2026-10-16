@@ -557,9 +557,10 @@ class DocxRenderer:
         self._ann_seen = set()  # repeat first/page 已注词集合（_reset_state 起始终置零）
         self._suppress_note_ref = False             # 标题渲染时的临时压制开关
         self._in_note = False                     # 脚注/尾注内容渲染中（悉昙开关只作用正文）
-        self._pending_mulu = None                 # 待附到下一 head/jhead 的 mulu 书签 {level,text}
+        self._pending_mulus = []                  # 待落地的 mulu 队列 [{level,text,line}]（落到下一 head/jhead/headN 段）
         self.split = split                        # 按卷输出多个文档
         self._body_para_count = 0                 # 正文已渲染段落数（决定 juan 是否换页）
+        self._cell_depth = 0                      # 单元格渲染深度（>0 时段落左对齐、无首行缩进）
         cfg = resolve_page(page, page_presets)
         w_mm, h_mm = cfg["size"]
         self.page_w = int(w_mm * 56.6929)   # 1mm = 56.6929 twips
@@ -1016,6 +1017,7 @@ class DocxRenderer:
             if para == "footnote":
                 ppr += self.theme.docx_para("footnote")
             ppr += div_extra
+            ppr = self._cell_para_fix(ppr, para)
             ppr = self._with_vertical_jc(ppr, para)
             p = f"<w:p><w:pPr>{ppr}</w:pPr>{runs}</w:p>"
             return self._with_bookmark(p)
@@ -1025,6 +1027,7 @@ class DocxRenderer:
         # 无此问题）；故在此显式覆盖，避免全角空格/点线被两端对齐拉伸错位。
         if align:
             ppr = re.sub(r"<w:jc[^>]*/>", "", ppr) + f'<w:jc w:val="{align}"/>'
+        ppr = self._cell_para_fix(ppr, para)
         ppr = self._with_vertical_jc(ppr, para)
         # 内联路径也挂命名样式（直接属性照旧覆盖样式，视觉不变；
         # Word 样式窗格/预览标签可识别，如 def>p 的“释义”）
@@ -1035,6 +1038,19 @@ class DocxRenderer:
         ppr = f"<w:pPr>{inner}</w:pPr>" if inner else ""
         p = f"<w:p>{ppr}{runs}</w:p>"
         return self._with_bookmark(p)
+
+    def _cell_para_fix(self, ppr: str, para: str) -> str:
+        """单元格内 `<p>` 段落：左对齐、无首行缩进（内联覆写主题/命名样式）。
+
+        命名样式 p 与主题 docx_para 自带 text-indent（首行缩进）与两端对齐，
+        表格里文字会缩进两格且被拉伸；表格内一律覆盖为 `ind firstLine=0` +
+        `jc left`（pPr schema 顺序 spacing→ind→jc）。只对直接/间接处于
+        `<cell>` 内的 p 段落生效（_cell_depth>0），其余段落不受影响。"""
+        if para != "p" or not self._cell_depth:
+            return ppr
+        ppr = re.sub(r"<w:ind[^>]*/>", "", ppr)
+        ppr = re.sub(r"<w:jc[^>]*/>", "", ppr)
+        return ppr + '<w:ind w:firstLine="0"/><w:jc w:val="left"/>'
 
     def _with_vertical_jc(self, ppr: str, para: str) -> str:
         """竖排取消居中：title/head/juan/pin 内联 left 覆盖命名样式的居中
@@ -1063,6 +1079,54 @@ class DocxRenderer:
         else:
             para_xml = f"{start}{para_xml}{end}"
         return para_xml
+
+    def _attach_mulu(self, p: str) -> str:
+        """把待落地的 mulu 队列（`<cb:mulu>`）落成段内隐形书签 + 大纲级别；无则不动作。
+
+        - 书签置于段内（`</w:pPr>` 之后、`</w:p>` 之前，避免 pageBreakBefore 空白书签页）；
+        - 队列里**每条各挂一个书签**（名字＝各自 mulu 文字）：`<cb:mulu level="1">卷名</cb:mulu>`
+          后紧跟 `<cb:mulu level="2">節名</cb:mulu>` 这类"中间无落点"的数据，两条一起落到同一段，
+          不再被覆盖丢弃（2026-10-16 修；此前后一条直接覆盖前一条，前一条的书签/大纲凭空消失）；
+        - `outlineLvl` 取**更高级别**（`min(level)-1`），按 pPr schema 顺序追加在末尾（jc 之后）；
+        - 承接段为 `<head>`/`<jhead>` 与 `<p cb:type="headN">`；**图片段不作落点**
+          （卷首标题图因此仍归上一个条目，2026-10-16 用户确认接受）。
+        """
+        if not (p and self.bookmarks and self._pending_mulus):
+            return p
+        for m in self._pending_mulus:
+            bid = self._bm_id
+            self._bm_id += 1
+            start = f'<w:bookmarkStart w:id="{bid}" w:name="{m["text"]}"/>'
+            end = f'<w:bookmarkEnd w:id="{bid}"/>'
+            if "</w:pPr>" in p:
+                p = p.replace("</w:pPr>", f"</w:pPr>{start}", 1)
+                p = p.replace("</w:p>", f"{end}</w:p>", 1)
+            elif "<w:p>" in p:
+                p = p.replace("<w:p>", f"<w:p>{start}", 1)
+                p = p.replace("</w:p>", f"{end}</w:p>", 1)
+            else:
+                p = f"{start}{p}{end}"
+        p = self._with_outline(p, min(m["level"] for m in self._pending_mulus) - 1)
+        self._pending_mulus = []
+        return p
+
+    def _flush_pending_mulus(self) -> None:
+        """文档结束/落点被丢弃时仍待落地的 mulu：记报告（不产出书签，但不静默丢）。"""
+        for m in self._pending_mulus:
+            report.add("mulu 未落地",
+                       f"目录标记「{m['text']}」后无 head 落点，书签未产出",
+                       line=m.get("line"), key=("mulu", m.get("line"), m["text"]))
+        self._pending_mulus = []
+
+    def _with_outline(self, p: str, lvl: int) -> str:
+        """段落大纲级别（`w:outlineLvl`，0 基，夹到 0–8）：追加在 pPr 末尾。
+
+        CT_PPr 顺序中 outlineLvl 在 jc 之后，故不能插在 `<w:pPr>` 开头（pStyle 之前）。
+        """
+        outline = f'<w:outlineLvl w:val="{max(0, min(8, lvl))}"/>'
+        if "</w:pPr>" in p:
+            return p.replace("</w:pPr>", f"{outline}</w:pPr>", 1)
+        return p.replace("<w:p>", f"<w:p><w:pPr>{outline}</w:pPr>", 1)
 
     def _frame_header_xml(self, pw_tw: int, ph_tw: int) -> str:
         """双线内框 header（混合式）：DrawingML 锚定矩形，衬底，每页重复。
@@ -1149,6 +1213,7 @@ class DocxRenderer:
             body = sections
         else:
             body = self._render_body(work.body)
+        self._flush_pending_mulus()   # 文档结束仍无落点的 mulu：报告（不静默丢书签）
         title = work.metadata.get("title") or work.id
         author = work.metadata.get("author") or ""
         doc = self._build_docx(title, author, body)
@@ -1170,10 +1235,12 @@ class DocxRenderer:
         self._div_stack = []
         self._body_para_count = 0
         self._pending_juan = None     # 待加书签的卷号（milestone 之后的下一个段落）
+        self._pending_mulus = []      # 待落地的 mulu 队列（跨 work 不残留）
         self._cur_line = None         # 转换报告行号上下文
         self._cur_text = ""
         self._bm_id = 0               # 书签递增 id
         self._in_para = 0             # 段落上下文深度（>0 时 figure 只出 run，避免 <w:p> 嵌套）
+        self._cell_depth = 0          # 表格单元格渲染深度（>0 时 p 段落左对齐、无首行缩进）
         self._media = []              # 内嵌图片 [{path, ext, rid, name}]（_build_docx 落盘）
         self._media_seq = 0
         self._drawing_seq = 0         # drawing 递增 id（docPr/cNvPr 全包唯一；媒体复用不涨 _media_seq）
@@ -1215,6 +1282,7 @@ class DocxRenderer:
         for juan_no, ops in split_juans(work.body):
             self._reset_state(work)
             body = self._render_ops(ops)
+            self._flush_pending_mulus()   # 本卷结束仍无落点的 mulu：报告
             doc = self._build_docx(title, author, body)
             if filename:
                 stem = os.path.splitext(filename)[0]
@@ -1790,6 +1858,17 @@ class DocxRenderer:
                 return self._para(runs, "p", "pre", no_first_line=True, align="left")
             # p/@type 映射到主题标签（dharani 等），对齐 HTML 的 class="dharani"
             ptag = ptype if ptype in self.theme.tags else None
+            hm = re.fullmatch(r"head([1-6])", (ptype or "").strip().lower())
+            if hm:
+                # 标题（`<p cb:type="headN">`，官方 docx 用 Word heading N）：与 `<head>`
+                # 同口径渲染（命名样式 head、不注音）；默认大纲级别 N-1（Word 导航窗格），
+                # 若紧邻 `<cb:mulu>` 则以 mulu 级别/书签为准
+                with self._no_ann():
+                    runs = self._render_tagged_clean(e.children, "head", self._rend_tag(a))
+                p = self._para(runs, "head")
+                if self.bookmarks and self._pending_mulus:
+                    return self._attach_mulu(p)
+                return self._with_outline(p, int(hm.group(1)) - 1)
             style = a.get("style") or ""
             indent = 0
             if self.ignore_xml_style:
@@ -1817,7 +1896,8 @@ class DocxRenderer:
             self._in_pre = prev
             return self._para(runs, "p", "pre", no_first_line=True, align="left")
         if tag == "head":
-            # 仅 jhead 去重，head 保留书名；若有 pending mulu（紧随的 cb:mulu），则以 mulu 的 level/text 作隐形书签（段内避免空白页）
+            # 仅 jhead 去重，head 保留书名；若有待落地的 mulu 队列（紧随的 cb:mulu），
+            # 各条落成本段隐形书签（级别取更高者），段内避免空白页
             nodes = e.children
             if self.strip_head_no:
                 nodes, _tok = strip_head_no(nodes)
@@ -1830,28 +1910,7 @@ class DocxRenderer:
             with self._no_ann():
                 runs = self._render_tagged_clean(nodes, para_tag, self._rend_tag(a))
             p = self._para(runs, para_tag)
-            if self.bookmarks and self._pending_mulu is not None:
-                lvl = self._pending_mulu["level"]
-                name = self._pending_mulu["text"]
-                bid = self._bm_id; self._bm_id += 1
-                start = f'<w:bookmarkStart w:id="{bid}" w:name="{name}"/>'
-                end = f'<w:bookmarkEnd w:id="{bid}"/>'
-                if "</w:pPr>" in p:
-                    p = p.replace("</w:pPr>", f"</w:pPr>{start}", 1)
-                    p = p.replace("</w:p>", f"{end}</w:p>", 1)
-                elif "<w:p>" in p:
-                    p = p.replace("<w:p>", f"<w:p>{start}", 1)
-                    p = p.replace("</w:p>", f"{end}</w:p>", 1)
-                else:
-                    p = f"{start}{p}{end}"
-                # 大纲级别按 mulu level
-                outline = f'<w:outlineLvl w:val="{lvl-1}"/>'
-                if "<w:pPr>" in p:
-                    p = p.replace("<w:pPr>", f"<w:pPr>{outline}", 1)
-                else:
-                    p = p.replace("<w:p>", f"<w:p><w:pPr>{outline}</w:pPr>", 1)
-                self._pending_mulu = None
-            return p
+            return self._attach_mulu(p)
         if tag == "byline":
             # 作者/译者独立样式：byline cb:type="author" -> author，cb:type="Translator" -> translator
             # （大小写不敏感：X59 用小写 translator，T0349 用大写 Translator）
@@ -1888,26 +1947,8 @@ class DocxRenderer:
                 p = self._para(runs, "pin")
             else:
                 p = self._render_juan_title(e)
-            if p and self.bookmarks and self._pending_mulu is not None:
-                lvl = self._pending_mulu["level"]
-                name = self._pending_mulu["text"]
-                bid = self._bm_id; self._bm_id += 1
-                start = f'<w:bookmarkStart w:id="{bid}" w:name="{name}"/>'
-                end = f'<w:bookmarkEnd w:id="{bid}"/>'
-                if "</w:pPr>" in p:
-                    p = p.replace("</w:pPr>", f"</w:pPr>{start}", 1)
-                    p = p.replace("</w:p>", f"{end}</w:p>", 1)
-                elif "<w:p>" in p:
-                    p = p.replace("<w:p>", f"<w:p>{start}", 1)
-                    p = p.replace("</w:p>", f"{end}</w:p>", 1)
-                else:
-                    p = f"{start}{p}{end}"
-                outline = f'<w:outlineLvl w:val="{lvl-1}"/>'
-                if "<w:pPr>" in p:
-                    p = p.replace("<w:pPr>", f"<w:pPr>{outline}", 1)
-                else:
-                    p = p.replace("<w:p>", f"<w:p><w:pPr>{outline}</w:pPr>", 1)
-                self._pending_mulu = None
+            if p:
+                p = self._attach_mulu(p)
             return p
         if tag == "mulu":
             txt = self._render_text(e).strip()
@@ -1918,8 +1959,10 @@ class DocxRenderer:
             except ValueError:
                 lvl = 1
             lvl = max(1, min(9, lvl))
-            # 隐形书签：不落可见段，仅暂存待附到紧随的 head/jhead（跨 lb/pb 保留）
-            self._pending_mulu = {"level": lvl, "text": txt}
+            # 隐形书签：不落可见段，入队待附到紧随的 head/jhead/headN（跨 lb/pb 保留）；
+            # 队列中每条都会落地（不再互相覆盖），级别取更高者
+            self._pending_mulus.append({"level": lvl, "text": txt,
+                                        "line": e.sourceline})
             return ""
         if tag == "title":
             if a.get("level") == "m":
@@ -2147,7 +2190,7 @@ class DocxRenderer:
             # 避免孤立书签（书签必须附着在真实段落上）
             report.add("卷名去重", f"卷名与书名相同，整段去重：{txt}",
                        line=e.sourceline, key=("juandup", e.sourceline))
-            self._pending_mulu = None
+            self._flush_pending_mulus()
             self._pending_juan = None
             return ""
         nodes = self._children_no_dup_title(e) if self.suppress_jhead_dup else e.children
@@ -2327,13 +2370,278 @@ class DocxRenderer:
         runs = "".join(f"{ln}<w:r><w:br/></w:r>" for ln in lines[:-1]) + lines[-1]
         return self._para(runs, "verse", hang=hang)
 
+    #: 单元格段落 pPr：pStyle p 保主题行距等布局，内联覆写左对齐+无首行缩进
+    #: （schema 顺序 pStyle→ind→jc；样式 p 自带的 firstLine/justify 被覆盖）
+    _CELL_PPR = ('<w:pPr><w:pStyle w:val="p"/><w:ind w:firstLine="0"/>'
+                 '<w:jc w:val="left"/></w:pPr>')
+
+    @staticmethod
+    def _int_attr(value, default: int) -> int:
+        """表格 cols/rows 属性取正整数（非法/缺省回默认值）。"""
+        try:
+            n = int(str(value or "").strip())
+        except ValueError:
+            return default
+        return n if n > 0 else default
+
+    def _render_docx_table(self, e: E) -> str:
+        """`<table>` → 真 `<w:tbl>`（官方口径 + docx 专属调整）。
+
+        - 框线：读 CSS `table { border: … }`（全网格；`none`/0 → 六边 `none`；
+          认不出/无规则 → 内置默认 `single sz=6`）；`rend` 含 no-border 的表仍强制六边 `none`。
+        - `tblLayout fixed`：让 Word 严格按 tblGrid 列宽布局（不加则自动调整会改列宽）。
+        - tblCellMar 15dxa（官方值，近似零边距）；tblW auto；tblLook 04A0。
+        - 表格整体对齐读 CSS `table { text-align: … }`（center/left/right，缺省 center）。
+        - 列宽：单跨格按内容估"单行需求"（多段取最大、注音读音不计宽），
+          `_fit_col_widths` 分配——内容放得下按内容（收窄）；超版心取最小的
+          "每列最多 T 行"目标（表最矮、折行最少）并用满版心；gridSpan 格不参与
+          估算，空列保底 4 字。
+        - cols/rows 属性 → gridSpan/vMerge；续行补 `<w:vMerge/>` 空占位格，
+          与官方 X0448 同形（占位格保留同跨度 gridSpan）。
+        """
+        rows = [r for r in e.children if isinstance(r, E) and r.tag == "row"]
+        ncols = self._int_attr(e.attrs.get("cols"), 0)
+        if ncols <= 0:
+            ncols = max((sum(self._int_attr(c.attrs.get("cols"), 1)
+                             for c in r.children
+                             if isinstance(c, E) and c.tag == "cell")
+                         for r in rows), default=0)
+        ncols = max(ncols, 1)
+        pt = self._resolve_tag_pt(("p",))
+        avail = self.page_w - self.page_margins["left"] - self.page_margins["right"]
+        vrem = [0] * ncols       # 各列待补的续行数（竖向合并，来自前面的 restart）
+        vspan = [0] * ncols      # 各列所在合并格的跨度（续行占位复制同跨度）
+        row_events = []          # 每行事件：("cell",cell,起列,跨度,续行数,runs) | ("cont",None,起列,跨度,0,"")
+        for r in rows:
+            cells = [c for c in r.children
+                     if isinstance(c, E) and c.tag == "cell"]
+            events = []
+            it = iter(cells)
+            cell = next(it, None)
+            c = 0
+            while c < ncols:
+                if vrem[c] > 0:
+                    w = max(1, vspan[c])
+                    events.append(("cont", None, c, w, 0, ""))
+                    c += w
+                elif cell is not None:
+                    span = self._int_attr(cell.attrs.get("cols"), 1)
+                    rspan = self._int_attr(cell.attrs.get("rows"), 1)
+                    runs = self._render_cell_body(cell)   # 每次渲染：脚注编号按文档序
+                    events.append(("cell", cell, c, span, rspan, runs))
+                    c += span
+                    cell = next(it, None)
+                else:
+                    c += 1           # 行尾/行中空洞（正常数据不会出现）
+            while cell is not None:
+                # 脏数据兜底：attr 偏小、本行格放不下时仍逐个渲染（绝不丢字）
+                span = self._int_attr(cell.attrs.get("cols"), 1)
+                rspan = self._int_attr(cell.attrs.get("rows"), 1)
+                runs = self._render_cell_body(cell)
+                events.append(("cell", cell, c, span, rspan, runs))
+                c += span
+                cell = next(it, None)
+            for k in range(ncols):
+                if vrem[k] > 0:
+                    vrem[k] -= 1     # 本行消费一次续行
+            for kind, cl, st, w, rs, _runs in events:
+                if kind == "cell" and rs > 1:
+                    for k in range(st, min(st + w, ncols)):
+                        vrem[k] = rs - 1
+                        vspan[k] = w
+            row_events.append(events)
+        # 列宽：单跨格按段落取"单行需求"（多段折行互不影响，不整格求和）；
+        # 多跨格不参与（防被长文推宽单列）
+        need = [0] * ncols
+        for events in row_events:
+            for kind, _cl, st, w, _rs, runs in events:
+                if kind == "cell" and w == 1 and st < ncols:
+                    need[st] = max(need[st], self._est_cell_tw(runs, pt))
+        colw = self._fit_col_widths(need, pt, avail)
+        grid = "".join(f'<w:gridCol w:w="{w}"/>' for w in colw)
+        borderless = "no-border" in (e.attrs.get("rend") or "")
+        edges = ("top", "left", "bottom", "right", "insideH", "insideV")
+        if borderless:
+            borders = "".join(f'<w:{s} w:val="none" w:sz="0" w:space="0" '
+                              'w:color="auto"/>' for s in edges)
+        else:
+            # 框线来自 CSS `table { border: … }`（none → 六边 none）；
+            # 无规则/认不出 → 内置默认（single sz=6 全网格）
+            borders = self.theme.docx_table_borders() or "".join(
+                f'<w:{s} w:val="single" w:sz="6" w:space="0" w:color="auto"/>'
+                for s in edges)
+        cellmar = "".join(f'<w:{s} w:w="15" w:type="dxa"/>'
+                          for s in ("top", "left", "bottom", "right"))
+        # tblPr 顺序照 CT_TblPrBase：tblW→jc→tblBorders→tblLayout→tblCellMar→tblLook
+        tblpr = ('<w:tblW w:w="0" w:type="auto"/>'
+                 f'<w:jc w:val="{self.theme.docx_table_jc()}"/>'
+                 f'<w:tblBorders>{borders}</w:tblBorders>'
+                 '<w:tblLayout w:type="fixed"/>'
+                 f'<w:tblCellMar>{cellmar}</w:tblCellMar>'
+                 '<w:tblLook w:val="04A0" w:firstRow="1" w:lastRow="0" '
+                 'w:firstColumn="1" w:lastColumn="0" w:noHBand="0" w:noVBand="1"/>')
+        out = [f"<w:tbl><w:tblPr>{tblpr}</w:tblPr><w:tblGrid>{grid}</w:tblGrid>"]
+        for events in row_events:
+            out.append("<w:tr>")
+            for kind, cell, st, w, rs, runs in events:
+                if kind == "cont":
+                    out.append(self._docx_cell("", w, cont=True))
+                else:
+                    out.append(self._docx_cell(runs, w, restart=rs > 1))
+            out.append("</w:tr>")
+        out.append("</w:tbl>")
+        return "".join(out)
+
+    def _docx_cell(self, content: str, span: int, restart: bool = False,
+                   cont: bool = False) -> str:
+        """单个 `<w:tc>`：tcPr 顺序 tcW→gridSpan→vMerge→vAlign→hideMark（官方同形）。"""
+        tcpr = '<w:tcW w:w="0" w:type="auto"/>'
+        if span > 1:
+            tcpr += f'<w:gridSpan w:val="{span}"/>'
+        if cont:
+            tcpr += "<w:vMerge/>"
+        elif restart:
+            tcpr += '<w:vMerge w:val="restart"/>'
+        tcpr += '<w:vAlign w:val="center"/><w:hideMark/>'
+        if not content:
+            content = f"<w:p>{self._CELL_PPR}</w:p>"
+        return f"<w:tc><w:tcPr>{tcpr}</w:tcPr>{content}</w:tc>"
+
+    def _render_cell_body(self, cell: E) -> str:
+        """单元格内容 → 兄弟段落串（照 `<item>` 模式，绝无段中段）。
+
+        内联子收进本格 `<w:p>`；块级子（cell 内 `<p>` 等）作为兄弟段落接续，
+        不生成 `<w:p>` 套 `<w:p>`（Word/WPS 会丢弃嵌套段落 → 文字凭空消失）。
+        单元格段落一律左对齐、无首行缩进（内联段 _CELL_PPR；块级子经
+        _cell_depth 让 _para 套用同一覆写）。至少产出一个（空）段落。"""
+        self._body_para_count += 1   # 与旧实现一致：每源格计一段（决定 juan 换页）
+        self._cell_depth += 1
+        try:
+            out = []
+            buf = []
+
+            def flush():
+                if not buf:
+                    return
+                runs = self._render_tagged(buf, "p")
+                buf.clear()
+                if self._runs_blank(runs):
+                    return       # 只含空白（元素间换行残留）的缓冲不产空段
+                out.append(f"<w:p>{self._CELL_PPR}{runs}</w:p>")
+
+            for c in cell.children:
+                if isinstance(c, E) and c.tag in _ITEM_BLOCK_TAGS:
+                    flush()
+                    out.append(self._render_node(c))
+                else:
+                    buf.append(c)
+            flush()
+        finally:
+            self._cell_depth -= 1
+        if not out:
+            out.append(f"<w:p>{self._CELL_PPR}</w:p>")
+        return "".join(out)
+
+    @staticmethod
+    def _runs_blank(runs: str) -> bool:
+        """runs 是否无可见内容（只有空白文本；图形/脚注引用不算空）。"""
+        if "<w:drawing" in runs or "footnoteReference" in runs:
+            return False
+        return not re.sub(r"<[^>]+>", "", runs).strip()
+
+    def _est_cell_tw(self, runs: str, pt: float) -> int:
+        """单元格文本单行宽度估算（twips）：全角 1em、半角 0.5em × 字号。
+
+        多段（cell 内 `<p>` 兄弟段落）按**段取最大**——各段独立折行，整格求和
+        会把列宽需求算虚高。只量**显示文字**：注音的 EQ 域代码（`w:instrText`）
+        与 ruby 读音（`w:rt`）不占行宽，须剔除（否则 書名 这类带注音的格会被
+        算成 70+ 字）。从渲染结果取字（夹注已展开、虚缺符等显示字符计宽），
+        去掉标签与空白节点；实体按字符解回（转义仅 &amp;/&lt;/&gt; 等命名实体）。"""
+        from xml.sax.saxutils import unescape as _ux
+        best = 0.0
+        for seg in runs.split("</w:p>"):
+            seg = re.sub(r"<w:instrText[^>]*>.*?</w:instrText>", "", seg, flags=re.S)
+            seg = re.sub(r"<w:rt>.*?</w:rt>", "", seg, flags=re.S)
+            width = 0.0
+            for ch in _ux(re.sub(r"<[^>]+>", "", seg)):
+                if ch in "\n\r\t":
+                    continue
+                width += 1.0 if unicodedata.east_asian_width(ch) in ("W", "F") else 0.5
+            best = max(best, width)
+        return int(best * pt * 20)
+
+    def _fit_col_widths(self, need, pt: float, avail: int) -> list:
+        """列宽分配（twips）：内容放得下按内容；超版心则"表最矮"（折行最少）。
+
+        - 每列最小 4 个汉字宽 + 格边距 30dxa（空列/全合并列保底；2026-10-16 由 2 字改 4 字）。
+        - 超版心时取**最小的"每列最多 T 行"目标**（T 由 1 起，二分找第一个
+          总宽 ≤ 版心的 T）：每列给"刚好放下 T 行"的宽度 → 整表最高的格也只有
+          T 行，表高最小；T 最小 ⇒ 宽度用满版心。（旧实现按内容比例缩，短列也会
+          被无谓压缩；此处统一按 T 行目标，T=1 时各列都不折行。）
+        - 富余回填：T 确定后若还有宽度，按"减一行代价最小"继续减行（部分列更少行）。
+        - 列数太多（4 字保底×列数 > 版心）时把保底降到"均分"再走同一算法；
+          极端仍放不下则按内容比例缩（保底 1）。
+        """
+        mar = 30                       # 左右格边距合计（tblCellMar 15×2）
+        n = len(need)
+        floor = int(4 * pt * 20) + mar
+
+        def solve(minw: int):
+            def widths(t: int) -> list:
+                return [max(minw, mar + -(-need[i] // t)) for i in range(n)]
+
+            want = widths(1)           # 单行需求（内容放得下的判据）
+            if avail <= 0 or sum(want) <= avail:
+                return want            # 内容放得下：按内容收窄
+            hi = 2
+            while sum(widths(hi)) > avail and hi <= 4096:
+                hi *= 2                # 上界：放大到能放下
+            if sum(widths(hi)) > avail:
+                return None            # 该保底下放不下
+            lo = 2
+            while lo < hi:             # 二分最小 T（表最矮）
+                mid = (lo + hi) // 2
+                if sum(widths(mid)) <= avail:
+                    hi = mid
+                else:
+                    lo = mid + 1
+            w = widths(lo)
+            total = sum(w)
+            lines = [max(1, -(-need[i] // (w[i] - mar))) for i in range(n)]
+            while True:                # 富余回填：能减一行且放得下就减
+                pick, cost = -1, 0
+                for i in range(n):
+                    if lines[i] <= 1:
+                        continue
+                    nw = max(minw, mar + -(-need[i] // (lines[i] - 1)))
+                    c = nw - w[i]
+                    if total + c <= avail and (pick < 0 or c < cost):
+                        pick, cost = i, c
+                if pick < 0:
+                    break
+                lines[pick] -= 1
+                w[pick] += cost
+                total += cost
+            return w
+
+        w = solve(floor)
+        if w is None:                  # 4 字保底×列数 > 版心：保底降到"均分"
+            w = solve(max(1, avail // n - mar))
+        if w is None:                  # 极端（列数极大）：按内容比例缩
+            base = [max(1, mar + need[i]) for i in range(n)]
+            s = sum(base)
+            w = [max(1, int(x * avail / s)) for x in base]
+        return w
+
     def _render_table(self, e: E) -> str:
         if e.tag == "table":
-            return f"<w:tbl>{self._render_nodes(e.children)}</w:tbl>"
+            return self._render_docx_table(e)
         if e.tag == "row":
             return f"<w:tr>{self._render_nodes(e.children)}</w:tr>"
-        # 单元格段落走主题（避免回退 Normal 1.5 倍行距）
-        return f"<w:tc>{self._para(self._render_para_children(e, 'p'), 'p')}</w:tc>"
+        # 裸 <cell>（表外，正常数据不可达）：按单格结构渲染
+        return self._docx_cell(self._render_cell_body(e),
+                               self._int_attr(e.attrs.get("cols"), 1),
+                               restart=self._int_attr(e.attrs.get("rows"), 1) > 1)
 
     def _footnote_separator_para(self) -> str:
         """脚注分隔线 pPr：底边框线（粗细/长短/与首行脚注间距，来自

@@ -1258,7 +1258,7 @@ DEFAULT_BASES = {
     "docx": ["docx", "html"],
     "html": ["html"],
     "txt": ["txt_notes"],
-    "epub": ["txt_notes", "epub", "html"],
+    "epub": ["html", "txt_notes", "epub"],
 }
 #: 首选基线缺失时按需下载的格式（跟链首走）
 NEED_BY_KIND = {

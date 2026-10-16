@@ -287,6 +287,14 @@ class MdRenderer:
             return self._render_children(lem) if lem is not None else ""
         tag = e.tag
         if tag == "p":
+            m = re.fullmatch(r"head([1-6])",
+                             (e.attrs.get("cb:type") or "").strip().lower())
+            if m:
+                # 标题（`<p cb:type="headN">`）：与 `<head>` 同口径出 markdown 标题
+                # （校验 normalize 会剥 `#`，不影响文本比对）
+                with self._no_ann():
+                    inner = self._render_children(e).strip()
+                return f"{'#' * int(m.group(1))} {inner}\n\n"
             return self._render_children(e).strip() + "\n\n"
         if tag == "tt":
             # 逐字咒文表（无 place="inline"）内转写默认不显示

@@ -423,7 +423,7 @@ class TestSourceBaselineTab(unittest.TestCase):
             self.assertEqual(dlg.base_chain_edits["txt"].text(),
                              "txt_notes")
             self.assertEqual(dlg.base_chain_edits["epub"].text(),
-                             "txt_notes, epub, html")
+                             "html, txt_notes, epub")
         finally:
             dlg.close()
 
@@ -491,7 +491,7 @@ class TestSourceBaselineTab(unittest.TestCase):
             self.assertEqual(dlg.base_chain_edits["txt"].text(),
                              "txt_notes")
             self.assertEqual(dlg.base_chain_edits["epub"].text(),
-                             "txt_notes, epub, html")
+                             "html, txt_notes, epub")
             self.assertEqual(dlg._bases_diff(), {})
         finally:
             dlg.close()

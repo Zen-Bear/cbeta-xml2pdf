@@ -133,6 +133,35 @@ class TestHtmlSingleNoSuffix(unittest.TestCase):
         self.assertEqual(files, ["T0349 彌勒菩薩所問本願經.html"])
 
 
+class TestHeadLevelFromCbType(unittest.TestCase):
+    """`<p cb:type="headN">` → 标题：html 官方同形（class="head" + data-head-level）。"""
+
+    def _html(self, attrs, text="佛學書目表"):
+        from pycbeta.model import E, Text, Work
+        w = Work(id="T", source_file="", metadata={"title": "t"},
+                 body=[E(tag="p", attrs=attrs, children=[Text(text=text)])],
+                 notes_by_n={}, apps=[], simplified=False)
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        fn = HtmlRenderer().render_work(w, d)[0]
+        with open(os.path.join(d, fn), encoding="utf-8") as f:
+            return f.read()
+
+    def test_head3(self):
+        self.assertIn('<p data-head-level="3" class="head">佛學書目表</p>',
+                      self._html({"cb:type": "head3"}))
+
+    def test_head1(self):
+        self.assertIn('<p data-head-level="1" class="head">',
+                      self._html({"cb:type": "head1"}))
+
+    def test_other_ptype_keeps_class(self):
+        # 非 headN 的 cb:type 仍按 class 渲染（dharani 等），不误判为标题
+        html = self._html({"cb:type": "dharani"}, text="咒")
+        self.assertIn('class="dharani"', html)
+        self.assertNotIn("data-head-level", html)
+
+
 @requires_data
 class TestStripHeadNoX1116(unittest.TestCase):
     """X60n1116 真例：head 行首 `No. 1116-B` 开剥离、余部去空格（默认保留）。"""

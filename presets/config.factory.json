@@ -212,7 +212,7 @@
       "docx": ["docx", "html"],
       "html": ["html"],
       "txt": ["txt_notes"],
-      "epub": ["txt_notes", "epub", "html"]
+      "epub": ["html", "txt_notes", "epub"]
     }
   },
 

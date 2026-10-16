@@ -15,6 +15,11 @@ from .parser import P5Parser
 # 0.92 = 校验指纹提速与语义修正：基线发现改为"集中库布局直接定位优先、未命中回退通配符"
 #        （单次 1738ms→45.9ms，结果与指纹逐字一致）；指纹载荷文件身份不含 mtime_ns
 #        （同字节重写不再误触发重验）；指纹版本 verify-fp-1→verify-fp-2（并修掉返回串硬编码）。
-__version__ = "0.92"
+# 0.93 = 表格与标题口径 + 校验基线链调整：docx 表格框线/整体对齐改由 CSS `table { border; text-align }`
+#        控制（粗细/线型/颜色/不画线可调）、列宽智能分配（每列最多 T 行、保底 4 字）+ tblLayout fixed；
+#        `<p cb:type="headN">` 当标题渲染（html class="head"+data-head-level、docx 命名样式 head+
+#        outlineLvl N-1、md #×N）；`<cb:mulu>` 书签队列化（连续多条合并落地，不再覆盖丢弃）；
+#        epub 校验基线链顺序改为 html → txt_notes → epub（缺基线自动下载跟链首）。
+__version__ = "0.93"
 
 __all__ = ["P5Parser", "GaijiDb", "__version__"]

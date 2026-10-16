@@ -651,6 +651,14 @@ class HtmlRenderer:
             inner = self._render_nodes(e.children)
             self._in_pre = prev
             return f'<pre class=""{s}>{self._line_info(e)}{inner}</pre>'
+        m = re.fullmatch(r"head([1-6])", (ptype or "").strip().lower())
+        if m:
+            # 标题（`<p cb:type="headN">`）：官方 html 同形（class="head" + data-head-level），
+            # 供 `.head`（html/epub）与 `p.head[data-head-level="N"]`（pdf）规则生效；
+            # 不注音、不挂行号锚（与 `<head>` 分支同口径）
+            with self._no_ann():
+                inner = self._render_nodes(e.children)
+            return f'<p data-head-level="{m.group(1)}" class="head">{inner}</p>'
         if ptype:
             cls = f" class=\"{_esc(ptype)}\""
         else:

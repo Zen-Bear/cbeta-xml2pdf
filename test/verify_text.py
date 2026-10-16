@@ -210,23 +210,15 @@ def main(argv=None):
             if not compare_infos:
                 ours_raw = strip_infos(ours_raw)
             ours = normalize(ours_raw, _ruby_brackets)
-            base_kind = {"md":"txt_notes","docx":"docx","html":"html","epub":"epub","txt":"txt_notes"}.get(fmt,"html")
-
-            def _bases(official):
-                b = []
-                if base_kind in official:
-                    b.append((base_kind, official[base_kind]))
-                if fmt != "txt":
-                    fb = official.get("html")
-                    if fb and all(p != fb for _, p in b): b.append(("html", fb))
-                return b
-
-            bases = _bases(official)
-            if base_kind not in official and bool(_verify_cfg.get("auto_fetch", True)):
+            # 基线链与 CLI 同源（`verify.bases` 可配；缺键回退内置）——
+            # 链序即 trial 序，链首决定缺基线时自动下载哪一类
+            from pycbeta.verify import chain_for, resolve_bases, need_for_base
+            _chains = _verify_cfg.get("bases")
+            bases = resolve_bases(fmt, official, _chains)
+            if chain_for(fmt, _chains)[0] not in official and bool(_verify_cfg.get("auto_fetch", True)):
                 # 首选基线缺失：按需调用 fetch 下载（docx/odt 非 T/X 等 404 静默跳过）
                 from pycbeta.fetch import ensure_baselines
-                need = {"md": ["txt_notes"], "docx": ["docx", "html"], "txt": ["txt_notes"],
-                        "html": ["html"], "epub": ["epub"]}.get(fmt, ["html"])
+                need = need_for_base(chain_for(fmt, _chains)[0])
                 _presets_af = load_presets(args.config) if args.config else load_presets()
                 _ebook_af = ((_presets_af.get("source") or {}).get("cbeta_ebook")
                              or "").strip() or src
@@ -236,7 +228,7 @@ def main(argv=None):
                     found = find_official(src, os.path.splitext(name)[0], kind,
                                           juan=_juan if kind in ("html", "docx", "txt_notes") else None)
                     if found: official[kind] = found
-                bases = _bases(official)
+                bases = resolve_bases(fmt, official, _chains)
             if not bases:
                 block.append(f"  [--]  {fmt:5} no baseline")
                 grand_total += 1; grand_nobase += 1

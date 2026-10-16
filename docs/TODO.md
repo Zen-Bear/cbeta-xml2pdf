@@ -822,3 +822,59 @@
 - [ ] **搁置** `hi`/`seg` 的 `rend="bold"`（1993 处，YP 7 部）与 `hi rend="kaiti"`（6 处）的 html/epub 类映射（2026-10-15 扫描发现）
   - 官方 html/epub 分别出 `<span class="bold">`／`<span class="kaiti">`（基底已有 `.bold{font-weight:bold}`；`.kaiti` 官方值 `DFKai-SB, BiauKai` 基底缺）；我方现为纯文字
   - 暂不做：与本次方框同一机制，但影响面更大（YP 多部 html 输出会变），等有实际需求再一并做
+- [x] **已完成** docx `<table>` 完整支持（2026-10-16 用户立项；B28n0157 实报「没能支持 `<table cols="5"><row><cell>…`」）
+  - 修前：`_render_table` 只出 `<w:tbl>/<w:tr>/<w:tc>` 裸骨架——无 `tblPr`/`tblGrid`，`cols`/`rows` 合并丢失；`cell` 全部子节点塞进一个 `_para`，`cell` 内 `<p>` 造成段中段（Word/WPS 丢弃嵌套段落）。B0157 实测 37 处、TX0016 15 处
+  - 修法（`render_docx.py`）：`_render_table` 重写为 `_render_docx_table`（tblPr/tblGrid/网格模拟/列宽）+ `_docx_cell`/`_render_cell_body`/`_est_text_tw`/`_cell_para_fix`；`cell` 内块级子照 `_render_item` 模式拆兄弟段落（至少保一空段）；`cols`/`rows` → `gridSpan`/`vMerge`，续行补 `<w:vMerge/>` 空占位格（保留同跨度 `gridSpan`，与官方 X0448 同形）；`_cell_depth` 标记让格内 `p` 段落内联覆写 `ind firstLine=0` + `jc left`
+  - 官方口径（X0448/X0560/X0575 共 199 表实查）：框线外围四边 `outset sz=6 space=0 color=auto`（无内部格线）、`tblW 0 auto`、`tblCellMar 15dxa×4`、`tblLook 04A0`、不写 `tblInd`；`tcPr` 顺序 `tcW→gridSpan→vMerge→vAlign(center)→hideMark`；`rend` 含 `no-border` → 四边显式 `none`（官方用 `tblStyle=no-bordertable`，视觉等同、免动 styles.xml）
+  - docx 专属（自定风格，明确偏离官方；用户已确认）：表格 `jc=center` 居中；列宽按内容估算写 `gridCol`（全角 1em/半角 0.5em × 段字号 + 格边距；gridSpan 格不参与；空列保底 2 字；总宽封顶版心、超则按比例缩）。html/epub/pdf 仍左对齐（官方口径）不动
+  - 实测：B0157/TX0016 段中段 37/15 → **0**，新旧产物归一化后文字逐字一致（249,539/154,449 字）；X0448 160 表全出 `tblPr`+`tblGrid`，结构护栏 0，1872 个非空格按文档序命中，首表合并序列与官方 docx 完全相同
+  - 测试：`test_docx.TestTableDocx` 8 项（结构/框线开关/gridSpan+vMerge 占位/格内块级子不段中段/空格至少一空段/列宽封顶/表外段落不受 `_cell_depth` 影响/脏数据超出 `cols` 不丢字）；全量 1320 OK
+  - 影响：`render_docx` 在 `_FP_IMPL_MODULES` ⇒ 已存校验指纹整体失效（下轮全库重验，同 v0.91/v0.92 例）
+- [ ] **待做** docx `table/@style="margin-left:Nem"` 映射（2026-10-16 表格立项时确认不映射，先记 TODO）
+  - 现状：`table/@style` 忽略；官方 docx 亦无缩进（199 表里 `tblInd` 0 处），html/epub 左对齐
+  - 语料：199 表中 36 表带 `style`（`margin-left:2em/3em/4em`）；若做，映射为 `tblPr/tblInd`（`w:w` = N × 字号 × 20 twips）
+- [x] **已完成** docx 表格：全网格单线框线 + `tblLayout fixed` + 智能列宽（2026-10-16 用户四项确认：只改 docx／智能少行+按需铺满+fixed／最小列宽 4 字／不进左栏 CSS；线粗 sz=6）
+  - 框线：外围 `outset` → **全网格细单线** `single sz=6`（四边 + `insideH/insideV`，0.75pt ≈ 官方 epub 的 1px 全格线）；`rend` 含 no-border → 六边显式 `none`。加 `tblLayout w:type="fixed"`（不加则 Word 自动调整会改列宽，实测窄表被 Word 又缩）
+  - 列宽：`_fit_col_widths` 重写——内容放得下按内容收窄；超版心取**最小的"每列最多 T 行"目标**（二分 T，表最矮、折行最少）并用满版心，每列保底 **4 字**（2026-10-16 用户由 2 字改 4 字）；列数多到 4 字×列数 > 版心（X0448 有 25 张 8–12 列表）时，保底降到"均分"再走同一算法（内容感知，不再一律等宽）；富余按"减一行代价最小"回填。（先试过"短列保整行"，实测反而更高——长文本列（識語 60 字）决定行高，保短列只会挤长列，故改"最小 T"）
+  - 估算修正：`_est_text_tw` → `_est_cell_tw`：① 多段按**最长段**（原整格求和虚高）；② **注音读音不计宽**（`w:instrText` EQ 域代码、`w:rt` ruby 读音剔除）。修前带注音时 B0157 書名格被算成 74 字（实际约 7 字）
+  - 实测（CLI 配置含注音）：B0157 两表 gridSum 7650/8924、TX0016 8940、X0448 160 表 5160–9015（均 ≤ 版心 9027）；163 表全部全网格单线 + `fixed`；4 字保底仅 25 张宽表（8–12 列）几何上放不下，走"均分保底"分支
+  - 视觉（Word→PDF 目检）：B0157 書名表（p245）列分隔清楚、`卷數` 表头与 `八十卷` 均单行（4 字保底后）；九品差別圖（p134）成 3 列真网格（原无内线、列挤在一起）
+  - 回归：B0157/TX0016 段中段 37/15→0、文字与旧产物逐字一致（249,539/154,449 字）；X0448 护栏 0、1872 格文字全命中；全量 1323 OK
+  - 测试：`TestTableDocx` 11 项（`test_structure_official_borders_center` → `test_structure_borders_center_fixed`；新增 4 字保底+铺满、多段取最长段、注音读音不计宽）
+  - 影响：`render_docx` 在 `_FP_IMPL_MODULES` ⇒ 已存校验指纹整体失效（下轮全库重验）
+- [x] **已完成** docx 表格框线与整体对齐改由 CSS 控制（2026-10-16 用户定：`table { border: 1px solid; }`、`border: none` 支持、居中也走 CSS、左栏不加行）
+  - 机制：`theme.TAG_SELECTOR` 加 `"table": "table"`、`REQUIRED_THEME_TAGS["table"]=("border","text-align")`；`_border_ooxml` 拆出共用解析 `_border_spec`（返回 (线型, sz, 色)），新增六边版 `_tbl_borders_ooxml`；`Theme` 加 `docx_table_borders()` / `docx_table_jc()`；`render_docx._render_docx_table` 框线与 `jc` 改为读主题
+  - CSS：`pdf_docx.css` 加 `table { border: 1px solid; text-align: center; }`（**仅 DOCX 读**——html2pdf 管线标记是 `div.bip-table`、没有 `table` 元素 → 对 HTML/PDF 空转）
+  - 映射：`1px solid` → 六边 `single sz=6 color=auto`（＝现状）；`none`/`0` → 六边 `none`（整表不画线）；`text-align: center/left/right`（start/end 归一）→ `w:jc`；认不出/无规则 → 回落内置默认 `single sz=6` + center（`FALLBACKS["table_jc"]`，已登记 `兜底值清单.md`）
+  - `rend="no-border"` 的表仍强制六边 `none`（按表覆盖）；单元格段落仍强制左对齐（表格 `text-align` 不漏进格内）；列宽 / `tblCellMar` / `tblLook` 仍硬编码
+  - 左栏**未加"表格"行**（表格 2026-09-14 就在左栏外）；调框线/对齐在 CSS 编辑器源码页改那一条
+  - 实测：B0157/TX0016/X0448 重渲染结果与改前一致（163 表全网格单线 + fixed；护栏 0；文字逐字一致 249,539/154,449；X0448 1872 格全命中）
+  - 测试：`test_theme.TestTableTag` 5 项 + `test_docx` 3 项（CSS 改粗细/线型/颜色/对齐、`none`、无规则回落）；全量 1331 OK
+  - 影响：`theme` / `render_docx` 在 `_FP_IMPL_MODULES` ⇒ 已存校验指纹再次整体失效（下轮全库重验）
+- [x] **已完成** epub 校验基线链顺序改为 `html → txt_notes → epub`（2026-10-16 用户指示）
+  - 定义处：`verify.DEFAULT_BASES["epub"]`（`pycbeta/verify.py:1261`）+ `presets/config.factory.json` 的 `verify.bases.epub` 同步改（`test_verify.test_factory_bases_match_defaults` 守护两者一致）
+  - 机制不变：`chain_for`（链序即 trial 序）/`resolve_bases`（∩ 本地现货、按链序去重）/`need_for_base`（缺基线自动下载**跟链首**）→ 现在 epub 链首是 `html`，`-f epub` 缺基线时自动下载改为官方 html（per-vol `{id}_{NNN}.html`）
+  - 效果：epub 校验先比官方 html（快），不中再比 text-with-notes，最后才拆官方 epub（含导航/捐款 boilerplate）
+  - 手工脚本 `test/verify_text.py` 的私有链（原硬编码 `epub→epub` + html 兜底）改为调用 `verify.chain_for/resolve_bases/need_for_base`，与 CLI 同源
+  - 测试：`test_verify`（trial 序 `html/txt_notes/epub`、链默认/空值回退、resolve 序与去重）、`test_cli`（`-f epub` 缺基线拉 `html`）、`test_gui`（基线链行显示 `html, txt_notes, epub`）；全量 1331 OK
+  - 文档：`校验说明书.md`（§1 说明、§2 链表、§3 bases 默认、§5 epub 试算改"第三试算"）、`第三方调用说明.md`
+  - 注意：首次对某作品做 epub 校验时，若本地没有官方 html，会按 `auto_fetch` 自动下载（落 `cbeta_ebook`）
+- [x] **已完成** `<p cb:type="headN">` 当标题渲染（2026-10-16 用户报 B0157「head3 渲染成正文」）
+  - 根因：`p cb:type="head3"` 是「带 cb:type 的 p」而非 `<head>`；三渲染器只接了 `pre`/`dharani`/`figure` 等，**没接 headN** → html 出 `<p class="head3">`（CSS 无 `.head3` 规则）、docx 出普通 `p`、md 普通段落 ⇒ 都按正文渲染。官方口径（实测）：官方 html `<p data-head-level="3" class="head">`；官方 docx `<w:pStyle w:val="3"/>`＝Word 内置 heading 3（styles.xml styleId `3`，outlineLvl 2；X0448_001 里 pStyle 1/2/3 各 3/2/15 处）
+  - 修法：`render_html._render_p` headN → `<p data-head-level="N" class="head">`（官方同形；`.head` 与 `p.head[data-head-level=N]` 规则生效）；`render_docx` p 分支 headN → 命名样式 `head` + 段落 `outlineLvl="N-1"`；`render_md` headN → `#`×N；txt 不变
+  - 连带修复：`<cb:mulu>` 书签/大纲机制此前只认 `head`/`jhead`，headN 段不接 ⇒ 书签越过它挂到后面的 head 或丢失。抽出 `_attach_mulu`/`_with_outline` 复用（顺带修正 `outlineLvl` 插入位置：原插在 `<w:pPr>` 开头即 pStyle 之前，不合 CT_PPr 顺序；改追加在 pPr 末尾＝jc 之后）
+  - 实测：B0157 html `<p data-head-level="3" class="head">佛學書目表</p>`、docx `<w:pStyle w:val="head"/><w:outlineLvl w:val="2"/>`、md `### 佛學書目表`（head4 ×2 → `####`）；Word→PDF 目检 p245「佛學書目表」成标题（加粗蓝字居中 20pt）；文字零回归（B0157/TX0016 逐字一致 249,539/154,449；X0448 护栏 0、1872 格全命中）；md 的 `#` 由 `normalize` 剥净不影响校验
+  - 测试：`test_render.TestHeadLevelFromCbType` 3 项、`test_docx.TestHeadCbTypeDocx` 4 项、`test_md_epub.TestMd.test_md_head_cb_type`；全量 1339 OK
+  - 文档：`主题与样式.md`（标题分级节）、`CBETA-P5-设计规格.md`（元素渲染行）
+  - 影响：`render_html`/`render_docx`/`render_md` 均在 `_FP_IMPL_MODULES` ⇒ 已存校验指纹整体失效（下轮全库重验）
+- [x] **已完成** `<cb:mulu>` 书签**队列化**（合并落地，不再覆盖丢弃）（2026-10-16 用户报 B0157「道德經發隱」书签丢失）
+  - 根因：`<cb:mulu level="1">道德經發隱</cb:mulu>` 后面是**卷首标题图**（纯图片段，不作落点）→ pending 悬空；紧接着 `<cb:mulu level="2">敘</cb:mulu>` 把 pending **覆盖**（原实现无条件覆盖）→ 书签/大纲凭空消失。连带：卷13 jhead「道德經發隱」又被「本文」mulu 降成 L1 → 该卷在 Word 导航里整卷条目挂到上一卷（陰符經發隱）下
+  - 修法（`render_docx.py`）：`_pending_mulu`（单条 dict）→ `_pending_mulus` **队列**；落地时队列里**每条各挂一个隐形书签**（名字＝各自 mulu 文字），`outlineLvl` 取**更高级别**（`min(level)-1`）；落地点不变（head/jhead/headN，图片段仍不作落点）；新增 `_flush_pending_mulus`（文档结束/分卷结束/jhead 去重丢段时记「mulu 未落地」报告，不静默丢）；`_reset_state` 同时清队列（跨 work 不残留）
+  - 实测 B0157：书签 390 → **403**（403 = 24 卷书签 + 379 条 mulu 书签；XML 侧 374 条纯文本 mulu + 5 条含内联标记的全部落地，此前 13 条被静默丢）；导航修正——`L0 道德經發隱敘`（卷13：两个书签合并、级别取 L0）→ `L1 道德經發隱（本文）`，卷14 同理，不再挂到陰符經發隱 下
+  - 已知取舍（用户 2026-10-16 确认接受）：落点在「…敘」`head`（图片页之后）⇒ **卷首标题图仍归上一个条目**
+  - 回归：B0157/TX0016 文字逐字一致（249,539/154,449 字）；X0448 护栏 0、1872 格全命中；全量 1341 OK
+  - 测试：`test_docx.TestHeadCbTypeDocx` +2（两条 mulu 合并落地/级别取高者；mulu 未落地记报告）
+  - 文档：`主题与样式.md`（标题分级节补 mulu 队列口径）
+- [ ] **搁置** docx 卷首标题图（纯图片段）要不要成为导航条目（2026-10-16 讨论）
+  - 现状：mulu 落点不含图片段 ⇒ 卷首图归上一个条目；若把图片段作落点，会得到**空标签 L0**（Word 导航显示段落文字，图片段无文字），层级会修正（后续条目挂它下）但多一条空行，且卷10/11/12 等会多出空 L0
+  - 待办：先做小测试档在 Word/WPS 目检"空标签 L0"的实际显示，再决定

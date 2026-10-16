@@ -314,6 +314,14 @@ p.byline {
 div.bip-table { margin-left: 1em; }
 div.bip-table-row { display: table-row; }
 div.bip-table-cell { padding: 0 0.5em; }
+/* 表格（<table>）：框线 + 整体对齐。**仅 DOCX 读**——html2pdf 管线标记是
+   div.bip-table、没有 table 元素，该规则对 HTML/PDF 空转。
+   border：全网格单线（1px = 0.75pt，缺色 = auto 黑）；none / 0 = 不画线。
+   text-align：表格整体对齐（center 居中 / left / right）。 */
+table {
+  border: 1px solid;
+  text-align: center;
+}
 /* 列表：左缩进 1em；默认无标记（list-style-type 默认 none，DOCX 无编号；
    PDF 想显示项目符号改 disc；勿删整条规则，由完整性测试守护）。 */
 ul, ol { margin-left: 1em; list-style-type: none; }   /* 列表（DOCX 按 list-style-type 映射编号）。

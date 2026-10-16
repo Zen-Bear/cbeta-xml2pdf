@@ -843,7 +843,7 @@ class TestCliMultiDocxMerge(unittest.TestCase):
 
 
 class TestEpubTxtNeed(unittest.TestCase):
-    """-f epub 缺基线时只拉 txt_notes（首选），epub/html 用现货。"""
+    """-f epub 缺基线时只拉 html（链首），txt_notes/epub 用现货。"""
 
     def test_fetch_need_is_txt_notes(self):
         import io
@@ -881,7 +881,7 @@ class TestEpubTxtNeed(unittest.TestCase):
                 with redirect_stdout(io.StringIO()):
                     main(["--config", cfgp, "-i", xml, "-f", "epub",
                           "--verify"])
-            self.assertEqual(seen.get("need"), ["txt_notes"])
+            self.assertEqual(seen.get("need"), ["html"])
         finally:
             shutil.rmtree(d, ignore_errors=True)
 

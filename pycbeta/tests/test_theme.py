@@ -1313,5 +1313,47 @@ class TestBorderTag(unittest.TestCase):
                       'w:color="000000"/>', rpr)
 
 
+class TestTableTag(unittest.TestCase):
+    """表格（`<table>`）：CSS `table { border: …; text-align: … }` → DOCX 框线/整体对齐。"""
+
+    def test_selector_and_required(self):
+        from pycbeta.theme import TAG_SELECTOR, REQUIRED_THEME_TAGS
+        self.assertEqual(TAG_SELECTOR.get("table"), "table")
+        self.assertEqual(REQUIRED_THEME_TAGS.get("table"), ("border", "text-align"))
+
+    def test_default_css_rule(self):
+        t = Theme()
+        props = t.tags.get("table") or {}
+        self.assertEqual(props.get("border"), "1px solid")
+        self.assertEqual(props.get("text-align"), "center")
+
+    def test_tbl_borders_ooxml(self):
+        from pycbeta.theme import _tbl_borders_ooxml
+        out = _tbl_borders_ooxml("1px solid")
+        for e in ("top", "left", "bottom", "right", "insideH", "insideV"):
+            self.assertIn(f'<w:{e} w:val="single" w:sz="6" w:space="0" '
+                          'w:color="auto"/>', out)
+        for v in ("none", "0", "0px"):        # 不画线 → 六边 none
+            self.assertEqual(_tbl_borders_ooxml(v).count('w:val="none"'), 6)
+        for bad in ("nonsense", "", None):    # 认不出 → ""（渲染器回落内置默认）
+            self.assertEqual(_tbl_borders_ooxml(bad), "")
+
+    def test_accessors(self):
+        t = Theme.from_css("table { border: 2px double red; text-align: left; }\n"
+                           "p { text-indent: 2em; }\n")
+        self.assertIn('<w:top w:val="double" w:sz="12" w:space="0" '
+                      'w:color="FF0000"/>', t.docx_table_borders())
+        self.assertEqual(t.docx_table_jc(), "left")
+        t2 = Theme.from_css("p { text-indent: 2em; }\n")   # 无 table 规则
+        self.assertEqual(t2.docx_table_borders(), "")       # 渲染器回落内置默认
+        self.assertEqual(t2.docx_table_jc(), "center")      # 兜底 center
+
+    def test_jc_start_end_normalized(self):
+        self.assertEqual(
+            Theme.from_css("table { text-align: start; }\n").docx_table_jc(), "left")
+        self.assertEqual(
+            Theme.from_css("table { text-align: end; }\n").docx_table_jc(), "right")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -66,6 +66,9 @@ TAG_SELECTOR = {
     # 方框字（seg/hi @rend=border，科判/标题外框）：html/epub span.border；
     # DOCX 经 border 标签译 run 边框 w:bdr（官方 epub cbeta.css 同款 1px 黑实线）
     "border": "span.border",
+    # 表格（`<table>`）：框线与整体对齐由 CSS `table { border: …; text-align: … }` 控制。
+    # 仅 DOCX 读（html2pdf 管线标记是 div.bip-table，没有 table 元素 → 该规则空转）
+    "table": "table",
     # 经文资讯尾页（【經文資訊】等行）：仿宋、行距 1
     "info": "p.info",
 }
@@ -155,6 +158,7 @@ REQUIRED_THEME_TAGS: Dict[str, tuple] = {
     "div-orig": ("font-weight",),
     "corr-cbeta": ("color",),
     "border": ("border",),
+    "table": ("border", "text-align"),
     "info": ("font-family", "line-height"),
 }
 
@@ -187,6 +191,7 @@ FALLBACKS = {
     "verse_hang_em": 2.0,       # 偈颂 div.lg 无 margin-left 时首句悬挂缩进
     "body_font": "微軟正黑體",    # body 无字体时 docDefaults eastAsia
     "border_pt": 0.75,          # span.border 的 CSS border 没写宽度时的边框线宽
+    "table_jc": "center",       # 表格整体对齐（table 规则没写 text-align 时）
 }
 
 # 出厂配置：随包默认值（2026-10-08 由 pycbeta/config.json 改名入 presets/，
@@ -387,36 +392,75 @@ _NAMED_COLORS = {
 }
 
 
-def _border_ooxml(value: object) -> str:
-    """CSS `border` 简写 → OOXML run 字符边框（`<w:bdr .../>`）；认不出返回 ""。
+def _border_spec(value: object):
+    """CSS `border` 简写 → `(线型, w:sz, 颜色)`；认不出返回 None。
 
-    只支持「宽度(px/pt) + 线型(solid/double/dashed/dotted) + 颜色(hex/具名)」，
-    与主题 `span.border { border: 1px black solid; }` 同形。1px == 0.75pt，
-    `w:sz` 以 1/8 pt 计（1px → 6）；缺色按 CSS 语义取当前文字色 → `w:color="auto"`。
+    支持「宽度(px/pt) + 线型(solid/double/dashed/dotted) + 颜色(hex/具名)」。
+    1px == 0.75pt，`w:sz` 以 1/8 pt 计（1px → 6）；只写宽度/颜色而无线型 → `single`；
+    缺色按 CSS 语义取当前文字色 → `"auto"`。`none`/`hidden`/零宽 → `("none", 0, …)`，
+    由调用方决定怎么落（run 边框视同不画；表格六边落 `none`）。
     """
     if not isinstance(value, str) or not value.strip():
-        return ""
+        return None
     style, width_pt, color = None, None, None
+    zero = False
     for tok in value.split():
         low = tok.strip().lower()
+        if low in ("none", "hidden"):
+            style = "none"
+            continue
         if low in _BORDER_STYLES:
             style = _BORDER_STYLES[low]
             continue
         m = re.match(r"^([\d.]+)(px|pt)$", low)
         if m:
             v = float(m.group(1))
+            if v == 0:
+                zero = True
+                continue
             width_pt = v * 0.75 if m.group(2) == "px" else v
+            continue
+        if low in ("0", "0px", "0pt"):
+            zero = True
             continue
         hx = _hex6(tok.strip()) or _NAMED_COLORS.get(low)
         if hx:
             color = hx
+    if style == "none" or (zero and width_pt is None):
+        return ("none", 0, color or "auto")
     if style is None and width_pt is None and color is None:
-        return ""                     # 三个分量全认不出 → 不画
+        return None                   # 三个分量全认不出 → 不画（调用方回落）
     style = style or "single"
     pt = width_pt if width_pt is not None else FALLBACKS["border_pt"]
     sz = max(1, round(pt * 8))
+    return (style, sz, color or "auto")
+
+
+def _border_ooxml(value: object) -> str:
+    """CSS `border` 简写 → OOXML run 字符边框（`<w:bdr .../>`）；认不出/不画返回 ""。
+
+    与主题 `span.border { border: 1px black solid; }` 同形；`border: none` 视同不画。
+    """
+    spec = _border_spec(value)
+    if not spec or spec[0] == "none":
+        return ""
+    style, sz, color = spec
     return (f'<w:bdr w:val="{style}" w:sz="{sz}" w:space="0" '
-            f'w:color="{color or "auto"}"/>')
+            f'w:color="{color}"/>')
+
+
+def _tbl_borders_ooxml(value: object) -> str:
+    """CSS `border` 简写 → 表格六边框线（top/left/bottom/right/insideH/insideV）。
+
+    认不出返回 ""（调用方回落内置默认）；`border: none` / 零宽 → 六边 `none`。
+    """
+    spec = _border_spec(value)
+    if spec is None:
+        return ""
+    style, sz, color = spec
+    edges = ("top", "left", "bottom", "right", "insideH", "insideV")
+    return "".join(f'<w:{e} w:val="{style}" w:sz="{sz}" w:space="0" '
+                   f'w:color="{color}"/>' for e in edges)
 
 
 def _abs_pt(value: object, base_pt: float):
@@ -1407,6 +1451,24 @@ class Theme:
         if bdr:
             out.append(bdr)
         return "".join(out)
+
+    def docx_table_borders(self) -> str:
+        """表格六边框线（CSS `table { border: … }`）→ 六边 `<w:…/>` 串。
+
+        认不出/无规则返回 ""（渲染器回落内置默认：`single sz=6` 全网格）；
+        `border: none` / 零宽 → 六边 `none`。
+        """
+        return _tbl_borders_ooxml(self._props("table").get("border"))
+
+    def docx_table_jc(self) -> str:
+        """表格整体对齐（CSS `table { text-align: … }`）→ `w:jc` 值。
+
+        认 left/center/right（start/end 归一为 left/right）；缺省回落
+        `FALLBACKS["table_jc"]`（center，保命值）。
+        """
+        align = (self._props("table").get("text-align") or "").strip().lower()
+        align = {"start": "left", "end": "right"}.get(align, align)
+        return align if align in ("left", "center", "right") else FALLBACKS["table_jc"]
 
     def _em_to_twips(self, em: float, font_pt: float) -> int:
         # 1em == font-size; 1pt == 20 twips

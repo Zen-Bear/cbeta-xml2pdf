@@ -2141,6 +2141,342 @@ class TestListNestingDocx(unittest.TestCase):
         self.assertIn('w:left="960"', doc)
 
 
+class TestTableDocx(unittest.TestCase):
+    """docx 表格：cols/rows 合并（gridSpan/vMerge）、全网格细单线框线（single sz=6）、
+    单元格段落左对齐无缩进、块级子不段中段、docx 居中、tblLayout fixed、智能列宽。"""
+
+    def _render(self, body, theme=None):
+        from pycbeta.model import Work
+        w = Work(id="T", source_file="", metadata={"title": "t", "author": ""},
+                 body=body, notes_by_n={}, apps=[], simplified=False)
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(__import__("shutil").rmtree, tmp, True)
+        fn = DocxRenderer(theme=theme).render_work(w, tmp, "tb.docx")
+        with zipfile.ZipFile(fn) as z:
+            return z.read("word/document.xml").decode("utf-8")
+
+    @staticmethod
+    def _row(cells):
+        return E(tag="row", attrs={}, children=cells)
+
+    def _simple_table(self, rend=""):
+        return E(tag="table", attrs={"cols": "3", "rend": rend}, children=[
+            self._row([
+                E(tag="cell", attrs={"rows": "2"}, children=[Text("書名")]),
+                E(tag="cell", attrs={}, children=[Text("甲")]),
+                E(tag="cell", attrs={}, children=[Text("乙")]),
+            ]),
+            self._row([
+                E(tag="cell", attrs={}, children=[Text("丙")]),
+                E(tag="cell", attrs={}, children=[Text("丁")]),
+            ]),
+            self._row([
+                E(tag="cell", attrs={"cols": "3"}, children=[Text("戊己")]),
+            ]),
+        ])
+
+    def _max_p_depth(self, xml):
+        d = mx = 0
+        for m in re.finditer(r"<w:p[ >]|</w:p>", xml):
+            if m.group(0).startswith("</"):
+                d -= 1
+            else:
+                d += 1
+            mx = max(mx, d)
+        return mx
+
+    def test_structure_borders_center_fixed(self):
+        doc = self._render([self._simple_table()])
+        # tblPr 口径：tblW auto → jc center → tblBorders → tblLayout → tblCellMar
+        self.assertIn('<w:tblW w:w="0" w:type="auto"/><w:jc w:val="center"/>',
+                      doc)
+        for s in ("top", "left", "bottom", "right", "insideH", "insideV"):
+            self.assertIn(f'<w:{s} w:val="single" w:sz="6" w:space="0" '
+                          'w:color="auto"/>', doc)
+        self.assertIn('<w:tblLayout w:type="fixed"/>', doc)
+        for s in ("top", "left", "bottom", "right"):
+            self.assertIn(f'<w:{s} w:w="15" w:type="dxa"/>', doc)
+        self.assertIn('<w:tblLook w:val="04A0"', doc)
+        self.assertNotIn("w:tblStyle", doc)     # 不引无统计的命名表样式
+        # tblPr schema 顺序：borders → layout → cellMar
+        self.assertLess(doc.index("<w:tblBorders>"), doc.index("<w:tblLayout"))
+        self.assertLess(doc.index("<w:tblLayout"), doc.index("<w:tblCellMar>"))
+        # tblGrid：列数 = table/@cols；列宽为正
+        grid = re.search(r"<w:tblGrid>(.*?)</w:tblGrid>", doc, re.S).group(1)
+        self.assertEqual(grid.count("<w:gridCol"), 3)
+        self.assertTrue(all(int(m.group(1)) > 0
+                            for m in re.finditer(r'w:w="(\d+)"', grid)))
+        # 合并：rows=2 的格 vMerge restart + 续行占位；cols=3 的格 gridSpan
+        self.assertIn('<w:tcW w:w="0" w:type="auto"/>'
+                      '<w:vMerge w:val="restart"/>'
+                      '<w:vAlign w:val="center"/><w:hideMark/></w:tcPr>', doc)
+        self.assertIn('<w:tcW w:w="0" w:type="auto"/><w:vMerge/>'
+                      '<w:vAlign w:val="center"/><w:hideMark/></w:tcPr>', doc)
+        self.assertIn('<w:tcW w:w="0" w:type="auto"/>'
+                      '<w:gridSpan w:val="3"/>'
+                      '<w:vAlign w:val="center"/><w:hideMark/></w:tcPr>', doc)
+        # 单元格段落：pStyle p + 左对齐 + 无首行缩进（命名样式覆写）
+        self.assertIn('<w:pPr><w:pStyle w:val="p"/><w:ind w:firstLine="0"/>'
+                      '<w:jc w:val="left"/></w:pPr>', doc)
+        for t in ("書名", "甲", "乙", "丙", "丁", "戊己"):
+            self.assertIn(t, doc)
+
+    def test_vmerge_continuation_keeps_gridspan(self):
+        """cols=2 rows=2 的格：续行占位保留同跨度 gridSpan（官方 X0448 同形）。"""
+        tbl = E(tag="table", attrs={"cols": "2"}, children=[
+            self._row([E(tag="cell", attrs={"cols": "2", "rows": "2"},
+                          children=[Text("廣")])]),
+            self._row([]),
+        ])
+        doc = self._render([tbl])
+        self.assertIn('<w:gridSpan w:val="2"/>'
+                      '<w:vMerge w:val="restart"/>', doc)
+        self.assertIn('<w:gridSpan w:val="2"/><w:vMerge/>', doc)
+        self.assertIn("廣", doc)
+
+    def test_no_border_rend(self):
+        doc = self._render([self._simple_table(rend="no-border")])
+        tb = re.search(r"<w:tblBorders>.*?</w:tblBorders>", doc, re.S).group(0)
+        for s in ("top", "left", "bottom", "right", "insideH", "insideV"):
+            self.assertIn(f'<w:{s} w:val="none" w:sz="0" w:space="0" '
+                          'w:color="auto"/>', tb)
+        self.assertNotIn("single", tb)          # 六边全 none，无单线
+
+    def test_cell_block_children_sibling_paragraphs(self):
+        """cell 内 <p>：兄弟段落而非段中段（Word 丢弃嵌套段落）。"""
+        tbl = E(tag="table", attrs={"cols": "1"}, children=[
+            self._row([E(tag="cell", attrs={}, children=[
+                Text("首"),
+                E(tag="p", attrs={}, children=[Text("段一")]),
+                E(tag="p", attrs={}, children=[Text("段二")]),
+            ])]),
+        ])
+        doc = self._render([tbl])
+        self.assertEqual(self._max_p_depth(doc), 1)   # 无段中段
+        inside = doc[doc.index("<w:tbl>"):doc.index("</w:tbl>")]
+        self.assertEqual(inside.count("<w:p><w:pPr>"), 3)
+        for t in ("首", "段一", "段二"):
+            self.assertIn(t, doc)
+        # 顺序保持
+        self.assertLess(doc.index("首"), doc.index("段一"))
+        self.assertLess(doc.index("段一"), doc.index("段二"))
+
+    def test_empty_cell_paragraph(self):
+        tbl = E(tag="table", attrs={"cols": "2"}, children=[
+            self._row([E(tag="cell", attrs={}, children=[]),
+                       E(tag="cell", attrs={}, children=[Text("乙")])]),
+        ])
+        doc = self._render([tbl])
+        self.assertIn('<w:tc><w:tcPr><w:tcW w:w="0" w:type="auto"/>'
+                      '<w:vAlign w:val="center"/><w:hideMark/></w:tcPr>'
+                      '<w:p><w:pPr><w:pStyle w:val="p"/>'
+                      '<w:ind w:firstLine="0"/><w:jc w:val="left"/>'
+                      '</w:pPr></w:p></w:tc>', doc)
+        self.assertIn("乙", doc)
+
+    def test_overflow_cells_not_dropped(self):
+        """脏数据兜底：本行 cell 数超过 cols 时剩余格仍渲染（绝不丢字）。"""
+        tbl = E(tag="table", attrs={"cols": "1"}, children=[
+            self._row([E(tag="cell", attrs={}, children=[Text("甲")]),
+                       E(tag="cell", attrs={}, children=[Text("乙")])]),
+        ])
+        doc = self._render([tbl])
+        self.assertIn("甲", doc)
+        self.assertIn("乙", doc)
+
+    def test_width_capped_to_text_area(self):
+        r = DocxRenderer()
+        avail = (r.page_w - r.page_margins["left"] - r.page_margins["right"])
+        tbl = E(tag="table", attrs={"cols": "1"}, children=[
+            self._row([E(tag="cell", attrs={}, children=[Text("全寬" * 200)])]),
+        ])
+        doc = self._render([tbl])
+        grid = re.search(r"<w:tblGrid>(.*?)</w:tblGrid>", doc, re.S).group(1)
+        total = sum(int(m.group(1)) for m in re.finditer(r'w:w="(\d+)"', grid))
+        self.assertLessEqual(total, avail)
+
+    def test_min_column_width_floor(self):
+        """超版心：每列不小于 4 个汉字宽（+格边距），总宽不超版心、用满大部分。"""
+        r = DocxRenderer()
+        pt = r._resolve_tag_pt(("p",))
+        avail = r.page_w - r.page_margins["left"] - r.page_margins["right"]
+        tbl = E(tag="table", attrs={"cols": "2"}, children=[
+            self._row([E(tag="cell", attrs={}, children=[Text("卷數")]),
+                       E(tag="cell", attrs={}, children=[Text("長" * 200)])]),
+        ])
+        doc = self._render([tbl])
+        cols = [int(m.group(1)) for m in re.finditer(
+            r'w:w="(\d+)"',
+            re.search(r"<w:tblGrid>(.*?)</w:tblGrid>", doc, re.S).group(1))]
+        self.assertEqual(cols[0], int(4 * pt * 20) + 30)   # 最小宽=4 字+边距
+        self.assertLessEqual(sum(cols), avail)             # 不超版心
+        self.assertGreater(sum(cols), avail * 0.8)         # 用满大部分版心
+        self.assertGreater(cols[1], cols[0])               # 长列拿大头
+
+    def test_multi_paragraph_cell_uses_max_paragraph(self):
+        """cell 内多段按最长段估算列宽，不整格求和（各段独立折行）。"""
+        def grid_of(children):
+            tbl = E(tag="table", attrs={"cols": "1"}, children=[
+                self._row([E(tag="cell", attrs={}, children=children)])])
+            doc = self._render([tbl])
+            return [int(m.group(1)) for m in re.finditer(
+                r'w:w="(\d+)"',
+                re.search(r"<w:tblGrid>(.*?)</w:tblGrid>", doc, re.S).group(1))]
+
+        one = grid_of([Text("甲" * 6)])
+        two = grid_of([Text("甲" * 6),
+                       E(tag="p", attrs={}, children=[Text("乙" * 6)])])
+        self.assertEqual(one, two)      # 两段各 6 字 == 一段 6 字（非 12 字）
+
+    def test_annotation_reading_not_counted(self):
+        """注音读音不计列宽：EQ 域代码（w:instrText）与 ruby 读音（w:rt）都剔除。"""
+        r = DocxRenderer()
+        pt = r._resolve_tag_pt(("p",))
+        plain = r._est_cell_tw("<w:p><w:r><w:t>三</w:t></w:r></w:p>", pt)
+        field = r._est_cell_tw(
+            '<w:p><w:r><w:fldChar w:fldCharType="begin"/></w:r>'
+            '<w:r><w:instrText xml:space="preserve"> EQ \\o\\ad(\\s\\up 14(sān),三)'
+            '</w:instrText></w:r>'
+            '<w:r><w:fldChar w:fldCharType="separate"/></w:r>'
+            '<w:r><w:t>三</w:t></w:r></w:p>', pt)
+        ruby = r._est_cell_tw(
+            '<w:p><w:ruby><w:rubyPr><w:hps w:val="14"/></w:rubyPr>'
+            '<w:rt><w:r><w:t>sān</w:t></w:r></w:rt>'
+            '<w:rubyBase><w:r><w:t>三</w:t></w:r></w:rubyBase></w:ruby></w:p>', pt)
+        self.assertEqual(field, plain)
+        self.assertEqual(ruby, plain)
+
+    def test_table_style_from_css(self):
+        """框线与整体对齐读 CSS `table { border: …; text-align: … }`。"""
+        from pycbeta.theme import Theme
+        th = Theme.from_css("table { border: 2px double red; text-align: left; }\n"
+                            "p { text-indent: 2em; }\n")
+        doc = self._render([self._simple_table()], theme=th)
+        for s in ("top", "left", "bottom", "right", "insideH", "insideV"):
+            self.assertIn(f'<w:{s} w:val="double" w:sz="12" w:space="0" '
+                          'w:color="FF0000"/>', doc)
+        self.assertIn('<w:jc w:val="left"/>', doc)
+
+    def test_table_border_none_from_css(self):
+        """CSS `border: none` → 六边 none（整表不画线）。"""
+        from pycbeta.theme import Theme
+        th = Theme.from_css("table { border: none; text-align: center; }\n"
+                            "p { text-indent: 2em; }\n")
+        doc = self._render([self._simple_table()], theme=th)
+        tb = re.search(r"<w:tblBorders>.*?</w:tblBorders>", doc, re.S).group(0)
+        self.assertEqual(tb.count('w:val="none"'), 6)
+
+    def test_table_border_fallback(self):
+        """主题没有 table 规则 → 内置默认（single sz=6 全网格 + center）。"""
+        from pycbeta.theme import Theme
+        th = Theme.from_css("p { text-indent: 2em; }\n")
+        doc = self._render([self._simple_table()], theme=th)
+        for s in ("top", "left", "bottom", "right", "insideH", "insideV"):
+            self.assertIn(f'<w:{s} w:val="single" w:sz="6" w:space="0" '
+                          'w:color="auto"/>', doc)
+        self.assertIn('<w:jc w:val="center"/>', doc)
+
+    def test_outside_paragraphs_unaffected(self):
+        """_cell_depth 不漏出：表外段落仍走命名样式（无 firstLine=0 覆写）。"""
+        body = [
+            E(tag="p", attrs={}, children=[Text("正文甲")]),
+            self._simple_table(),
+            E(tag="p", attrs={}, children=[Text("正文乙")]),
+        ]
+        doc = self._render(body)
+        self.assertIn("正文甲", doc)
+        self.assertIn("正文乙", doc)
+        # 覆写只出现在单元格段落：表外（含标题/经文信息页）无 firstLine=0
+        head, rest = doc.split("<w:tbl>", 1)
+        inside, tail = rest.split("</w:tbl>", 1)
+        self.assertNotIn('<w:ind w:firstLine="0"/>', head + tail)
+        self.assertIn('<w:ind w:firstLine="0"/>', inside)
+        for t in ("正文甲", "正文乙"):
+            m = re.search(r"<w:p><w:pPr>(?:(?!</w:p>).)*?" + t, doc, re.S)
+            self.assertIsNotNone(m)
+            self.assertNotIn("firstLine", m.group(0))
+
+
+class TestHeadCbTypeDocx(unittest.TestCase):
+    """`<p cb:type="headN">`：命名样式 head + 大纲级别 N-1；承接 `<cb:mulu>` 书签。"""
+
+    def _render(self, body, **kw):
+        from pycbeta.model import Work
+        w = Work(id="T", source_file="", metadata={"title": "t", "author": ""},
+                 body=body, notes_by_n={}, apps=[], simplified=False)
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(__import__("shutil").rmtree, tmp, True)
+        fn = DocxRenderer(**kw).render_work(w, tmp, "h.docx")
+        return zipfile.ZipFile(fn).read("word/document.xml").decode("utf-8")
+
+    @staticmethod
+    def _head_p(text, lvl=3):
+        return E(tag="p", attrs={"cb:type": f"head{lvl}"}, children=[Text(text)])
+
+    @staticmethod
+    def _para_with(doc, text):
+        """含 text 的段落 → (pPr 内容, pPr 之后的部分)；无则 (None, None)。"""
+        for m in re.finditer(r"<w:p><w:pPr>(.*?)</w:pPr>(.*?)</w:p>", doc, re.S):
+            if text in m.group(2):
+                return m.group(1), m.group(2)
+        return None, None
+
+    def test_style_and_outline(self):
+        doc = self._render([self._head_p("佛學書目表")])
+        ppr, rest = self._para_with(doc, "佛學書目表")
+        self.assertIn('<w:pStyle w:val="head"/>', ppr)
+        self.assertIn('<w:outlineLvl w:val="2"/>', ppr)   # head3 → N-1
+        self.assertIsNotNone(rest)
+
+    def test_outline_independent_of_bookmarks(self):
+        doc = self._render([self._head_p("佛學書目表")], bookmarks=False)
+        self.assertIn('<w:outlineLvl w:val="2"/>', doc)
+
+    def test_mulu_attaches_to_head_p(self):
+        """`<cb:mulu>` 书签落在紧随的 headN 段（此前会越过它挂到后面的 head）。"""
+        body = [E(tag="mulu", attrs={"level": "2"}, children=[Text("佛學書目表")]),
+                self._head_p("佛學書目表")]
+        doc = self._render(body)
+        ppr, rest = self._para_with(doc, "佛學書目表")
+        self.assertIn('w:name="佛學書目表"', rest)
+        self.assertIn('<w:outlineLvl w:val="1"/>', ppr)   # mulu level 2 → 1
+
+    def test_two_mulus_merge_on_one_para(self):
+        """中间无落点的两条 mulu：各挂一个书签、级别取更高者（不再覆盖丢弃）。"""
+        from pycbeta import report as R
+        body = [E(tag="mulu", attrs={"level": "1"}, children=[Text("道德經發隱")]),
+                E(tag="mulu", attrs={"level": "2"}, children=[Text("敘")]),
+                E(tag="head", attrs={}, children=[Text("道德經發隱敘")])]
+        R.report.begin("T")
+        try:
+            doc = self._render(body)
+            cats = [e["cat"] for e in R.report.entries()]
+        finally:
+            R.report.end()
+        ppr, rest = self._para_with(doc, "道德經發隱敘")
+        self.assertIn('w:name="道德經發隱"', rest)      # 卷级 mulu 书签落地
+        self.assertIn('w:name="敘"', rest)             # 節级 mulu 书签同时落地
+        self.assertIn('<w:outlineLvl w:val="0"/>', ppr)  # 取更高者（level 1 → 0）
+        self.assertNotIn("mulu 未落地", cats)
+
+    def test_unlanded_mulu_reported(self):
+        """mulu 后无 head 落点（文档结束）：记报告，不静默丢。"""
+        from pycbeta import report as R
+        R.report.begin("T")
+        try:
+            self._render([E(tag="mulu", attrs={"level": "1"},
+                            children=[Text("道德經發隱")])])
+            cats = [e["cat"] for e in R.report.entries()]
+        finally:
+            R.report.end()
+        self.assertIn("mulu 未落地", cats)
+
+    def test_non_head_ptype_stays_p(self):
+        doc = self._render([E(tag="p", attrs={"cb:type": "dharani"},
+                              children=[Text("咒")])])
+        self.assertNotIn('<w:pStyle w:val="head"/>', doc)
+
+
 class TestLatinFont(unittest.TestCase):
     """西文字体（--font-latin）落到 run 的 w:ascii/hAnsi；eastAsia 仍中文名。
 
