@@ -789,6 +789,10 @@
 - [x] **已完成** 补全残缺官方基线（2026-10-14 落地为"按卷核对与补缺"，见上「已完成 基线按卷核对与补缺」）
   - 适用范围（首次跑会自动补缺卷，下载时间计入弹窗"校验"耗时；补完第二次即为秒级）：T1579 `txt/` 仅 2/100 卷；另有 T0220 3/600、T0279 2/80、T0310 2/120、T0374 2/40、T0397 1/60、T1542 1/18
   - 实测（T1579 txt）：首次 校验 1 分 36 秒（其中主要是补下 98 卷）→ 第二次 **`缺0/多0`、校验 5.4 秒** ✓；也彻底证实此前"缺0/多96万"只是残卷造成的假差异
+- [ ] **搁置（2026-10-14 用户指示）** 指纹回退口径对齐（下游《上游审核-指纹首选缺失与回退》审核后定稿，暂不动工）
+  - 问题：非 T/X 藏经（如 K 部的 K0016、K1482）的 docx/pdf 上，首选 docx 缺失且官方连 T/X 都不提供 ⇒ 真校验下载 404 后回退 html 给出结论 ✓，但指纹侧硬性要求首选在场、直接缺席返回未定义 ⇒ 每轮都重验、复用永远不中 ✗
+  - 方案（定稿）：`fetch.py` 新增规则单一来源（如"官方仅 T、X 提供"的种与藏经判定；未知种恒为可提供），指纹侧仅放宽"规则判定必然不可下载"的情形（按 `resolve_bases` 的回退结果证明，与真跑同口径）；载荷带规则版本常量，将来规则修订时旧记录一次性失效重验；临时 404 等仍返回未定义（将来可能成功，本次不能证明）
+  - **暂不做的原因**：改动约 80 行，中等偏小，但收获几乎为零——不提速（省的不过约一次基线发现，修后提速只有约 46 毫秒）、不让结论更对；唯一的收获是非 T/X 藏经的两格式在二轮重制时跳过几次校验，而**指纹载荷一改就会让全部现存记录一次性失效**（下一次全库跑会整体重验，成本高）⇒ 等真在《藏要》第二辑这种大批次上被"未复用"反复拖慢时再做
 - [x] **已完成** 校验指纹提速与语义修正（2026-10-14 下游《上游审核-指纹慢根因》审核后落地）
   - 根因（下游实测 + 本仓审核确认）：`source.baselines` 指向大库根后，`_find_official_in` 的 5 组递归通配符每次调用都扫全库（txt_notes 27,049 文件 ≈ 1.4 秒；docx ≈ 0.33 秒）⇒ 单次 `verify_fingerprint` ≈ 1.8 秒 × 87 次 ≈ 177 秒
   - 修法一（发现提速）：新增 `_direct_official`——按集中库布局 `{根}/{canon}/{work_id}/{work_id}_{NNN}.{ext}`（多卷：html/txt_notes/docx）或 `{根}/{canon}/{work_id}.{ext}`（单文件：epub/odt）直接定位，未命中回退通配符；实测单次发现 **1738 ms → 45.9 ms**（T1579 + 三个库根，含基线哈希），**结果集合与顺序完全一致（指纹逐字相同）**；工作目录型根不受影响（T1579 自带基线：新旧均 3~5 ms、结果一致）
@@ -796,3 +800,25 @@
   - 文档：`校验report.json说明.md` §4（新增 `_ctx` 复用说明、载荷不含 mtime、发现提速说明）、`上游-P2校验结论跨边复用提案.md`（mtime 措辞修订）
   - 测试：`TestDirectLookup` 3 项（库布局与通配符同集合同顺序、卷过滤一致、非库布局回退）、`TestDeterminism` 新增 2 项（仅 mtime 变不改指纹、载荷身份不含 mtime）
   - 未做（下游侧，已在文档注明）：publish 按「部 × 格式」逐次调用时复用 `_ctx`（可再省约 2/3 重复扫描）
+- [x] **已完成** 校验阈值 0 被改成 10（2026-10-15 用户反馈）
+  - 根因：取值处写 `int(v.get("maxDiff", 10) or 10)`——0 是假值，被 `or` 吞掉换成 10。输入框允许 0（范围 0–1000）、保存路径保留 0，只有"读出来用"的 4 处篡改：调 `verify_one` 的实际阈值（最致命）、写报告阈值、`build_report_json` 阈值、设置对话框回显（回显 10 且此时点保存会把 0 写回成 10）
+  - 修法：新增 `verify.cfg_int(value, default)`（只有缺失才回缺省，0 与空串分别保留与回缺省），替换上述 4 处共 8 个 `or 缺省`；`verify_one`／指纹／CLI／`test/verify_text.py` 本来就对 0 正确，不动
+  - 测试：`cfg_int` 取值、`max_diff=0` 下缺3判 FAIL、输入框 0 往返（保存与回显都是 0）
+  - 说明：修完后配 `maxDiff: 0` 会看到更多 fail（以前被放过的 1–10 字差异现在报出）——这是修 bug，不是变严
+- [x] **已完成** 方框字（`seg`/`hi` 的 `rend="border"`）渲染（2026-10-15 用户点档：TX12n0007 发现新 tag）
+  - 现象：`<seg rend="border">釋</seg>`（科判字）/ `<hi rend="border">題前概說</hi>`（标题字）——原书里的「方框字」。语料：`seg[border]` 350 处／8 部（全 TX）；`hi[border]` 44 处／22 部（全 YP，多在 `<head>`）；`seg`/`hi` 的 rend 另有 `bold`（1993 处）与 `kaiti`（6 处），本次不做（见下）
+  - 官方口径：官方 epub `cbeta.css` 即 `span.border { border: 1px black solid }`、正文出 `<span class="border">`；官方 html 也出该 class（规则在网站样式、文件里没有）。官方 docx 无 TX/YP（无从对照）
+  - 修法：`render_html._render_misc`（seg/hi 且 rend 含 border → `span.border`；html/epub/pdf-html2pdf 同一管线）＋ `render_docx._render_e`（同判定 → run 打 `border` 标签）；`theme.TRANSLATABLE` 加 `border`、新增 `_border_ooxml`（CSS 简写 → `w:bdr`，1px=0.75pt、solid→single、缺色 auto）、`TAG_SELECTOR["border"]="span.border"`、`REQUIRED_THEME_TAGS["border"]=("border",)`；`pdf_docx.css`／`html_epub_official.css` 各加 `span.border { border: 1px black solid; }`，`epub_print.css` 按派生约定同步
+  - 死命令三件套：`TAG_SELECTOR` ＋ 左栏行 `("span.border","方框字")`（`css_editor.EDITABLE_ROWS`，`ROW_TIPS` 注明边框线只在源码页调）＋ CSS 规则
+  - 附带（用户点档）：`div.div-commentary` 补进 `html_epub_official.css`（`font-weight: normal`，外观零变化，与 `pdf_docx.css:220` 同口径）；`pdf_docx.css` 原已有该条、不动
+  - 测试：`test_theme.TestBorderTag` 4 项、`test_docx.TestBorderRender` 3 项、`test_md_epub.TestBorderRender` 3 项、`test_gui.test_border_editable_row`；`test_render._body` 的归一化已剥 border span，不用动
+  - 文档：`主题与样式.md` 新增「方框字」节、`兜底值清单.md` 登记 `border_pt`（0.75）
+  - 影响：`render_html`/`render_docx`/`theme` 都在 `_FP_IMPL_MODULES` ⇒ **全部已存校验指纹一次性失效**（下轮全库重验；与 v0.91/v0.92 同例）
+  - 已知小差异：官方 epub 不框 YP 的 `<head>` 方框（官方 html 框），我方 html/epub 同管线会框；docx2pdf 引擎对方框的显示待实测（html2pdf 不受影响）
+- [ ] **待做** 左栏 UI 加 `div.div-orig`（原文）与 `div.div-commentary`（注释）两行（2026-10-15 用户指示）
+  - 现状：两者在 `pdf_docx.css`（`:219`/`:220`）与 `html_epub_official.css` 均有规则（orig 加粗、commentary 常规），但都不在 `EDITABLE_ROWS`（2026-09-10 扫描决议「不加行，只记录」）；本次 commentary 只补规则、外观不变，故仍未加行
+  - 要做：`css_editor.EDITABLE_ROWS` 加 `("div.div-orig","原文")`／`("div.div-commentary","注释")`（`TAG_SELECTOR` 已有 `div-orig`/`div-commentary`，由 `theme.py` 的 `_DIV_TYPES` 自动登记）＋ `ROW_TIPS` 说明；`test_gui` 补行存在断言
+  - 注意：左栏只面向 pdf_docx 主题，html 基底规则不在其可编辑范围（`docs/TODO.md:394`）
+- [ ] **搁置** `hi`/`seg` 的 `rend="bold"`（1993 处，YP 7 部）与 `hi rend="kaiti"`（6 处）的 html/epub 类映射（2026-10-15 扫描发现）
+  - 官方 html/epub 分别出 `<span class="bold">`／`<span class="kaiti">`（基底已有 `.bold{font-weight:bold}`；`.kaiti` 官方值 `DFKai-SB, BiauKai` 基底缺）；我方现为纯文字
+  - 暂不做：与本次方框同一机制，但影响面更大（YP 多部 html 输出会变），等有实际需求再一并做

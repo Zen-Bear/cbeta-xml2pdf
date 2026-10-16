@@ -1092,6 +1092,28 @@ class TestBodySidecar(unittest.TestCase):
         self.assertIsNone(bm)
         self.assertIsNone(be)
 
+    def test_cfg_int_keeps_zero(self):
+        """配置整数取值：只有缺失才回缺省，0 原样保留（2026-10-15 用户反馈：
+        maxDiff 0 被 `or 10` 改成 10）。"""
+        from pycbeta.verify import cfg_int
+        self.assertEqual(cfg_int(None, 10), 10)
+        self.assertEqual(cfg_int("", 10), 10)
+        self.assertEqual(cfg_int(0, 10), 0)
+        self.assertEqual(cfg_int(5, 10), 5)
+        self.assertEqual(cfg_int("3", 10), 3)
+
+    def test_report_max_diff_zero(self):
+        """阈值 0 必须生效：缺3/多0 在 max_diff=0 下判 FAIL。"""
+        from pycbeta.verify import _format_verify_record
+        rec = {"xml": "x.xml", "fmt": "txt", "status": "fail",
+               "missing": 3, "extra": 0,
+               "trials": [{"kind": "txt_notes", "official": "o.txt",
+                           "missing": 3, "extra": 0, "total": 3, "ok": False,
+                           "ctx": [], "ctx_loc": []}]}
+        txt = "\n".join(_format_verify_record(rec, 5, 0))
+        self.assertIn("[FAIL]", txt)
+        self.assertIn(">阈值0)", txt)
+
     def test_report_line_scope(self):
         from pycbeta.verify import _format_verify_record
         rec = {"xml": "x.xml", "fmt": "html", "status": "fail",

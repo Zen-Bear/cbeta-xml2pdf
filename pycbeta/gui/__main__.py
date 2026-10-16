@@ -282,7 +282,7 @@ class BatchWorker(QThread):
     def run(self):
         from pycbeta import fetch
         from pycbeta.parser import P5Parser
-        from pycbeta.verify import verify_one, format_verify_report
+        from pycbeta.verify import verify_one, format_verify_report, cfg_int
         presets, out_dir = self.paths["presets"], self.paths["out"]
         self._title_t2s = fetch.title_t2s(presets)
         run, snapshot, tmpcfg = self.paths.get("run") or {}, None, None
@@ -499,8 +499,8 @@ class BatchWorker(QThread):
                         vv = self.opts.verify
                         lines = format_verify_report(
                             row_ver,
-                            diff_lines=int(vv.get("diffLines", 5) or 5),
-                            max_diff=int(vv.get("maxDiff", 10) or 10))
+                            diff_lines=cfg_int(vv.get("diffLines", 5), 5),
+                            max_diff=cfg_int(vv.get("maxDiff", 10), 10))
                         with open(report, "w", encoding="utf-8") as f:
                             f.write("\n".join(lines) + "\n")
                         # 报告链接：把该行报告的路径记进每条记录，
@@ -528,8 +528,8 @@ class BatchWorker(QThread):
                         _j = _v_json(
                             row_wid or row_stem, _recs, config_path=tmpcfg,
                             requested_formats=list(self.opts.formats),
-                            max_diff=int(vv.get("maxDiff", 10) or 10),
-                            diff_lines=int(vv.get("diffLines", 5) or 5),
+                            max_diff=cfg_int(vv.get("maxDiff", 10), 10),
+                            diff_lines=cfg_int(vv.get("diffLines", 5), 5),
                             t2s=True if getattr(self.opts, "t2s",
                                                 False) else None,
                             engine=getattr(self.opts, "engine", None),
@@ -804,10 +804,11 @@ class BatchWorker(QThread):
                     self.log.emit(f"verify {rec['id']} pdf: covered by {src}")
                     return rec
                 eff, disp = src, f"pdf→{src}"
+            from pycbeta.verify import cfg_int as _cfg_int
             r = verify_one(xml, eff, os.path.dirname(os.path.abspath(xml)),
                            out_dir,
-                           max_diff=int(v.get("maxDiff", 10) or 10),
-                           diff_lines=int(v.get("diffLines", 5) or 5),
+                           max_diff=_cfg_int(v.get("maxDiff", 10), 10),
+                           diff_lines=_cfg_int(v.get("diffLines", 5), 5),
                            config_path=tmpcfg, t2s=self.opts.t2s,
                            juan=juan,
                            progress=lambda ph: self.verify_phase.emit(

@@ -913,6 +913,10 @@ class HtmlRenderer:
             return f'<span class="corr">{inner}</span>'
         if tag == "reg":
             return self._render_nodes(e.children)
+        if tag in ("seg", "hi") and "border" in (e.attrs.get("rend") or "").split():
+            # 方框字（科判/标题外框）：官方 epub 同款 span.border；
+            # 规则在基底 html_epub_official.css（1px black solid）
+            return f'<span class="border">{self._render_nodes(e.children)}</span>'
         return self._render_nodes(e.children)
 
     def _render_graphic(self, e: E) -> str:

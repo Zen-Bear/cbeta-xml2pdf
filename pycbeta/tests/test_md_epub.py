@@ -229,6 +229,50 @@ class TestCorrCbetaRender(unittest.TestCase):
         self.assertNotIn("corr", text)
 
 
+class TestBorderRender(unittest.TestCase):
+    """方框字（seg/hi @rend=border）：html/epub 出 span.border；md 透明（纯视觉）。"""
+
+    def _work(self, tag="seg"):
+        from pycbeta.model import E, Text, Work
+        return Work(id="T", source_file="",
+                    metadata={"title": "t", "author": ""},
+                    body=[E(tag="p", attrs={}, children=[
+                        Text(text="前"),
+                        E(tag=tag, attrs={"rend": "border"},
+                          children=[Text(text="釋")]),
+                        Text(text="後")])],
+                    notes_by_n={}, apps=[], simplified=False)
+
+    def test_html_span_and_rule(self):
+        from pycbeta.render_html import HtmlRenderer
+        d = tempfile.mkdtemp()
+        self.addCleanup(__import__("shutil").rmtree, d, True)
+        HtmlRenderer(theme=None, notes="endnote").render_work(self._work(), d)
+        blob = "".join(open(os.path.join(d, f), encoding="utf-8").read()
+                       for f in os.listdir(d) if f.endswith(".html"))
+        self.assertIn('<span class="border">釋</span>', blob)
+        # 基底 CSS 带官方同款规则（有 class 无规则＝看不见框）
+        self.assertIn("span.border { border: 1px black solid; }", blob)
+
+    def test_hi_border_span(self):
+        from pycbeta.render_html import HtmlRenderer
+        d = tempfile.mkdtemp()
+        self.addCleanup(__import__("shutil").rmtree, d, True)
+        HtmlRenderer(theme=None, notes="endnote").render_work(
+            self._work(tag="hi"), d)
+        blob = "".join(open(os.path.join(d, f), encoding="utf-8").read()
+                       for f in os.listdir(d) if f.endswith(".html"))
+        self.assertIn('<span class="border">釋</span>', blob)
+
+    def test_md_plain(self):
+        d = tempfile.mkdtemp()
+        self.addCleanup(__import__("shutil").rmtree, d, True)
+        fn = MdRenderer(notes="endnote").render_work(self._work(), d)
+        text = open(fn, encoding="utf-8").read()
+        self.assertIn("釋", text)
+        self.assertNotIn("border", text)
+
+
 @requires_data
 class TestEpubSongCss(unittest.TestCase):
     """epub 字体落实：派生基底 epub_print.css 含繁简正文实规则；成品注入生效。"""

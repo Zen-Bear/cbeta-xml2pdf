@@ -29,6 +29,7 @@ TRANSLATABLE = {
     "font-size", "font-weight", "color", "font-family",
     "text-align", "text-indent", "line-height", "margin", "margin-left",
     "margin-top", "margin-bottom", "list-style-type",
+    "border",   # 方框字（span.border）：DOCX 译 run 边框 w:bdr，见 _border_ooxml
 }
 
 TAG_SELECTOR = {
@@ -62,6 +63,9 @@ TAG_SELECTOR = {
     "def": "cb:def",
     # CBETA 校改字（app.lem 原始 wit 含 #wit.cbeta）：html/epub span.corr 红字
     "corr-cbeta": "span.corr",
+    # 方框字（seg/hi @rend=border，科判/标题外框）：html/epub span.border；
+    # DOCX 经 border 标签译 run 边框 w:bdr（官方 epub cbeta.css 同款 1px 黑实线）
+    "border": "span.border",
     # 经文资讯尾页（【經文資訊】等行）：仿宋、行距 1
     "info": "p.info",
 }
@@ -150,6 +154,7 @@ REQUIRED_THEME_TAGS: Dict[str, tuple] = {
     "mingti": ("font-family",),
     "div-orig": ("font-weight",),
     "corr-cbeta": ("color",),
+    "border": ("border",),
     "info": ("font-family", "line-height"),
 }
 
@@ -181,6 +186,7 @@ FALLBACKS = {
     "line_height": 1.5,         # Normal 样式行距（body、p 均无行距）
     "verse_hang_em": 2.0,       # 偈颂 div.lg 无 margin-left 时首句悬挂缩进
     "body_font": "微軟正黑體",    # body 无字体时 docDefaults eastAsia
+    "border_pt": 0.75,          # span.border 的 CSS border 没写宽度时的边框线宽
 }
 
 # 出厂配置：随包默认值（2026-10-08 由 pycbeta/config.json 改名入 presets/，
@@ -367,6 +373,50 @@ def _hex6(color: object):
     if re.match(r"^[0-9a-fA-F]{6}$", s):
         return s
     return None
+
+
+# CSS border 简写里可能出现的线型 / 具名色（够用即可；其余色走 _hex6）
+_BORDER_STYLES = {"solid": "single", "double": "double",
+                  "dashed": "dashed", "dotted": "dotted"}
+_NAMED_COLORS = {
+    "black": "000000", "white": "FFFFFF", "red": "FF0000",
+    "blue": "0000FF", "green": "008000", "gray": "808080",
+    "grey": "808080", "silver": "C0C0C0", "navy": "000080",
+    "maroon": "800000", "purple": "800080", "orange": "FFA500",
+    "teal": "008080", "olive": "808000", "yellow": "FFFF00",
+}
+
+
+def _border_ooxml(value: object) -> str:
+    """CSS `border` 简写 → OOXML run 字符边框（`<w:bdr .../>`）；认不出返回 ""。
+
+    只支持「宽度(px/pt) + 线型(solid/double/dashed/dotted) + 颜色(hex/具名)」，
+    与主题 `span.border { border: 1px black solid; }` 同形。1px == 0.75pt，
+    `w:sz` 以 1/8 pt 计（1px → 6）；缺色按 CSS 语义取当前文字色 → `w:color="auto"`。
+    """
+    if not isinstance(value, str) or not value.strip():
+        return ""
+    style, width_pt, color = None, None, None
+    for tok in value.split():
+        low = tok.strip().lower()
+        if low in _BORDER_STYLES:
+            style = _BORDER_STYLES[low]
+            continue
+        m = re.match(r"^([\d.]+)(px|pt)$", low)
+        if m:
+            v = float(m.group(1))
+            width_pt = v * 0.75 if m.group(2) == "px" else v
+            continue
+        hx = _hex6(tok.strip()) or _NAMED_COLORS.get(low)
+        if hx:
+            color = hx
+    if style is None and width_pt is None and color is None:
+        return ""                     # 三个分量全认不出 → 不画
+    style = style or "single"
+    pt = width_pt if width_pt is not None else FALLBACKS["border_pt"]
+    sz = max(1, round(pt * 8))
+    return (f'<w:bdr w:val="{style}" w:sz="{sz}" w:space="0" '
+            f'w:color="{color or "auto"}"/>')
 
 
 def _abs_pt(value: object, base_pt: float):
@@ -1353,6 +1403,9 @@ class Theme:
                 east = preferred_family(names[0])
                 out.append(f'<w:rFonts w:ascii="{latin_name}" w:eastAsia="{east}" '
                            f'w:hAnsi="{latin_name}"/>')
+        bdr = _border_ooxml(props.get("border"))
+        if bdr:
+            out.append(bdr)
         return "".join(out)
 
     def _em_to_twips(self, em: float, font_pt: float) -> int:

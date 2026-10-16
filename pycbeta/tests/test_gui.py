@@ -1163,6 +1163,34 @@ class TestConfigBar(unittest.TestCase):
         finally:
             panel.close()
 
+    def test_maxdiff_zero_roundtrip(self):
+        """阈值 0 往返：保存保留 0，回显仍是 0（2026-10-15 用户反馈：
+        maxDiff 0 被读值处的 `or 10` 改成 10）。"""
+        import unittest.mock as mock
+        import pycbeta.gui.panel as pm
+        panel = pm.XmlOptionsPanel({"output": {}})
+        try:
+            panel.maxdiff_spin.setValue(0)
+            panel.difflines_spin.setValue(0)
+            saved = {}
+            with mock.patch.object(pm, "load_config_preset",
+                                   return_value={"output": {}}), \
+                 mock.patch.object(pm, "save_config_preset",
+                                   side_effect=lambda n, d, root=None: saved.update(
+                                       data=d)), \
+                 mock.patch.object(pm.XmlOptionsPanel, "_selected_preset",
+                                   return_value=r"C:\x\p.json"):
+                panel._on_save()
+            v = saved["data"]["verify"]
+            self.assertEqual(v["maxDiff"], 0)
+            self.assertEqual(v["diffLines"], 0)
+            o = pm.options_from_presets(saved["data"])
+            panel.set_options(o)
+            self.assertEqual(panel.maxdiff_spin.value(), 0)
+            self.assertEqual(panel.difflines_spin.value(), 0)
+        finally:
+            panel.close()
+
     def test_reset_requires_confirm(self):
         import unittest.mock as mock
         import pycbeta.gui.panel as pm
@@ -1417,6 +1445,10 @@ class TestConfigBar(unittest.TestCase):
         finally:
             panel.close() if hasattr(panel, "close") else None
 
+    def test_border_editable_row(self):
+        from pycbeta.gui.css_editor import EDITABLE_ROWS, ROW_TIPS
+        self.assertIn(("span.border", "方框字"), EDITABLE_ROWS)
+        self.assertIn("span.border", ROW_TIPS)
 
     def test_pagination_hints_gray(self):
         # 分页各选项的括号说明：存在、灰色、纯文本（含 <pb> 不被当 HTML）

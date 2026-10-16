@@ -261,6 +261,11 @@ span.transliteration {
 span.corr {
   color: #FF0000;
 }
+/* 方框字（seg/hi @rend=border，科判/标题外框）：官方 epub cbeta.css 同款；
+   DOCX 经 border 标签译 run 字符边框 w:bdr（1px → 0.75pt） */
+span.border {
+  border: 1px black solid;
+}
 /* 经文资讯尾页（【經文資訊】/【版本記錄】/【編輯說明】/【原始資料】）：仿宋、行距 1 行 */
 p.info {
   font-family: 仿宋, FangSong;

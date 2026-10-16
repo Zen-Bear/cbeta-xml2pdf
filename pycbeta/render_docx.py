@@ -1999,6 +1999,9 @@ class DocxRenderer:
             # （2026-10-13 T1499 实锤；T09n0262/T01n0026 同）。
             return self._para(
                 self._render_para_children(e, "p", self._rend_tag(a)), "p")
+        if tag in ("seg", "hi") and "border" in (e.attrs.get("rend") or "").split():
+            # 方框字（科判/标题外框）：run 打 border 标签 → 主题译 w:bdr
+            return self._render_children(e, "border")
         return self._render_children(e)
 
     def _render_def_p(self, p):

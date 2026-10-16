@@ -2481,9 +2481,10 @@ class XmlOptionsPanel(QWidget):
                     break
             self.ann_file.setText(str(an.get("file") or ANN_DEFAULT_TABLE))
             vf = opts.verify or {}
+            from pycbeta.verify import cfg_int as _cfg_int
             self.verify_on.setChecked(bool(vf.get("enabled", True)))
-            self.maxdiff_spin.setValue(int(vf.get("maxDiff", 10) or 10))
-            self.difflines_spin.setValue(int(vf.get("diffLines", 5) or 5))
+            self.maxdiff_spin.setValue(_cfg_int(vf.get("maxDiff", 10), 10))
+            self.difflines_spin.setValue(_cfg_int(vf.get("diffLines", 5), 5))
             self.autofetch_box.setChecked(bool(vf.get("auto_fetch", True)))
             self.scope_box.setChecked(bool(vf.get("scope_juan", True)))
             self.convert_report_box.setChecked(

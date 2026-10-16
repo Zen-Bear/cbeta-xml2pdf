@@ -33,6 +33,9 @@
     /* CBETA 校改字（IR corr-cbeta，默认关）：官方 epub cbeta.css 同款 red；
        官方 html 不标红——本条属"超出官方 html"，仅供 html/epub 用 */
     .corr { color: red; }
+    /* 方框字（seg/hi @rend=border，科判/标题外框）：官方 epub cbeta.css 同款
+       （官方 html 文件只出 class、规则在网站样式，本条属"超出官方 html"） */
+    span.border { border: 1px black solid; }
     /* 经文资讯尾页（#cbeta-copyright 内几行）：仿宋、行距 1 行 */
     #cbeta-copyright p {
       font-family: 仿宋, FangSong;
@@ -84,6 +87,8 @@
     }
 
     div.div-orig { font-weight: bold;}
+    /* 解釋（注释 div）：与官方 golden 一致——无特殊样式（原文 div-orig 加粗） */
+    div.div-commentary { font-weight: normal; }
     li > p { text-indent: 0; }
     p { text-indent: 2em; }
     p.form { 
@@ -353,6 +358,11 @@ span.transliteration {
    DOCX 经 corr-cbeta 标签并入 run；html/epub 走 golden .corr（red） */
 span.corr {
   color: #FF0000;
+}
+/* 方框字（seg/hi @rend=border，科判/标题外框）：官方 epub cbeta.css 同款；
+   DOCX 经 border 标签译 run 字符边框 w:bdr（1px → 0.75pt） */
+span.border {
+  border: 1px black solid;
 }
 /* 经文资讯尾页（【經文資訊】/【版本記錄】/【編輯說明】/【原始資料】）：仿宋、行距 1 行 */
 p.info {

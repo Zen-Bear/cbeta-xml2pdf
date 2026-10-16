@@ -62,6 +62,7 @@ EDITABLE_ROWS = (
     ("span.interlinear-note", "正文夹注·单行"),
     ("span.transliteration", "转写"),
     ("span.corr", "CBETA校改"),
+    ("span.border", "方框字"),
     ("span.note-inline", "校注内联"),
     ("sup.note-ref", "注释序号"),
     (".footnote", "脚注文字"),
@@ -81,6 +82,7 @@ ROW_TIPS = {
     "p.series-title": "首页左上角一行；config 仅留开关",
     "p.head": "标题1–6级在源码页调（仅HTML/PDF，DOCX忽略）",
     "div.lg": "注记类偈行颜色在源码页（div.lg.note1/2）",
+    "span.border": "科判/标题方框（seg/hi @rend=border）；边框线只在源码页调",
 }
 
 

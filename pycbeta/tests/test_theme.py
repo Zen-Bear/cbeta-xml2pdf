@@ -1273,5 +1273,45 @@ class TestPageBorderSpec(unittest.TestCase):
         self.assertEqual(out["page_border_style"], "single")
 
 
+class TestBorderTag(unittest.TestCase):
+    """方框字（seg/hi @rend=border）：主题 border 属性 → DOCX run 字符边框。"""
+
+    def test_translatable_and_selector(self):
+        from pycbeta.theme import TAG_SELECTOR, TRANSLATABLE
+        self.assertIn("border", TRANSLATABLE)
+        self.assertEqual(TAG_SELECTOR.get("border"), "span.border")
+
+    def test_default_css_rule(self):
+        # 出厂 pdf_docx.css 的 span.border（官方 epub 同款），REQUIRED 由
+        # TestRequiredThemeTags 守护（本行确保值本身）
+        t = Theme()
+        self.assertEqual((t.tags.get("border") or {}).get("border"),
+                         "1px black solid")
+
+    def test_border_ooxml(self):
+        from pycbeta.theme import _border_ooxml
+        # 1px = 0.75pt = 6/8pt；solid→single
+        self.assertEqual(
+            _border_ooxml("1px black solid"),
+            '<w:bdr w:val="single" w:sz="6" w:space="0" w:color="000000"/>')
+        # pt 直取；具名色/hex 都认
+        self.assertEqual(
+            _border_ooxml("2pt #FF0000 dashed"),
+            '<w:bdr w:val="dashed" w:sz="16" w:space="0" w:color="FF0000"/>')
+        # 缺色 → auto（CSS 语义：取当前文字色）
+        self.assertEqual(
+            _border_ooxml("1px solid"),
+            '<w:bdr w:val="single" w:sz="6" w:space="0" w:color="auto"/>')
+        # 全认不出 / 空 / 非字符串 → 不画
+        for bad in ("nonsense", "", None, 3):
+            self.assertEqual(_border_ooxml(bad), "")
+
+    def test_docx_run_has_bdr(self):
+        t = Theme()
+        rpr = t.docx_run("border")
+        self.assertIn('<w:bdr w:val="single" w:sz="6" w:space="0" '
+                      'w:color="000000"/>', rpr)
+
+
 if __name__ == "__main__":
     unittest.main()

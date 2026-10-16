@@ -2319,6 +2319,17 @@ def format_verify_report(records, diff_lines: int = 5, max_diff: int = 10):
     return lines
 
 
+def cfg_int(value, default):
+    """配置整数取值：只有"缺失"才回缺省，0 原样保留。
+
+    禁止写 `int(d.get(k, default) or default)`——0 是假值会被吞掉
+    （maxDiff 0→10 事故，2026-10-15 用户反馈）。空串亦视为缺失。
+    """
+    if value is None or value == "":
+        return default
+    return int(value)
+
+
 def diff_scope_tag(scope, body_missing=None, body_extra=None, total=None):
     """差异范围结论标记（报告 `[OK]/[FAIL]` 行末与 GUI 汇总弹窗共用）。
 

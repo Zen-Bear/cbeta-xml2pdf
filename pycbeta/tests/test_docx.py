@@ -2246,6 +2246,44 @@ class TestCorrCbetaRender(unittest.TestCase):
         self.assertIn("弗", doc)
 
 
+class TestBorderRender(unittest.TestCase):
+    """方框字（seg/hi @rend=border）：docx run 出字符边框 w:bdr；其它 rend 不动。"""
+
+    def _work(self, tag="seg", rend="border"):
+        from pycbeta.model import Work
+        return Work(id="T", source_file="",
+                    metadata={"title": "t", "author": ""},
+                    body=[E(tag="p", attrs={}, children=[
+                        Text(text="前"),
+                        E(tag=tag, attrs={"rend": rend},
+                          children=[Text(text="釋")]),
+                        Text(text="後")])],
+                    notes_by_n={}, apps=[], simplified=False)
+
+    def _doc(self, **kw):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(__import__("shutil").rmtree, tmp, True)
+        fn = DocxRenderer(notes="footnote").render_work(
+            self._work(**kw), tmp, "b.docx")
+        z = zipfile.ZipFile(fn)
+        try:
+            return z.read("word/document.xml").decode("utf-8")
+        finally:
+            z.close()
+
+    def test_seg_border_run(self):
+        doc = self._doc()
+        self.assertIn('<w:bdr w:val="single" w:sz="6" w:space="0" '
+                      'w:color="000000"/>', doc)
+        self.assertIn("釋", doc)
+
+    def test_hi_border_run(self):
+        self.assertIn('w:bdr', self._doc(tag="hi"))
+
+    def test_other_rend_no_border(self):
+        self.assertNotIn("w:bdr", self._doc(rend="kaiti"))
+
+
 class TestNoteAnnDedup(unittest.TestCase):
     """repeat=page 下，正文用字先占 seen，脚注不再重复注（注内容延迟到页末渲染）。"""
 
