@@ -20,6 +20,9 @@ from .parser import P5Parser
 #        `<p cb:type="headN">` 当标题渲染（html class="head"+data-head-level、docx 命名样式 head+
 #        outlineLvl N-1、md #×N）；`<cb:mulu>` 书签队列化（连续多条合并落地，不再覆盖丢弃）；
 #        epub 校验基线链顺序改为 html → txt_notes → epub（缺基线自动下载跟链首）。
-__version__ = "0.93"
+# 0.94 = 书签与校验修正（T31n1585 成唯识论案例）：docx 书签名 XML 转义（书签名含 `>`/`&` 等
+#        不再产出非法 document.xml）；校验剥标签改引号感知（属性里的 `>` 不再被截成 `"/>` 伪差异）；
+#        空「卷」标记以卷级提示入队（不落书签），卷题回到 Word 导航第一层。
+__version__ = "0.94"
 
 __all__ = ["P5Parser", "GaijiDb", "__version__"]
