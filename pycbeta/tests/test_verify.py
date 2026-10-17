@@ -1674,6 +1674,33 @@ class TestExtractDocxLineBreaks(unittest.TestCase):
             shutil.rmtree(d, ignore_errors=True)
 
 
+class TestDocxStripQuotedGt(unittest.TestCase):
+    """剥标签识引号：属性值里的 `>` 不得提前截断标签、留下 `"/>` 残渣
+    （2026-10-16：T1585 目录文字自带 `>`，书签名 w:name="㊀問起>" 致校验假差异）。"""
+
+    def test_tag_with_gt_in_quoted_attr(self):
+        from pycbeta.verify import _TAG_RE
+        xml = '<w:bookmarkStart w:id="1" w:name="㊀問起>"/><w:t>甲</w:t>'
+        self.assertEqual(_TAG_RE.sub("", xml), "甲")
+
+    def test_extract_docx_bookmark_gt_name(self):
+        from pycbeta.verify import extract_text
+        d = tempfile.mkdtemp()
+        try:
+            p = os.path.join(d, "t.docx")
+            with zipfile.ZipFile(p, "w") as z:
+                z.writestr("word/document.xml",
+                           "<w:document><w:body><w:p>"
+                           "<w:r><w:t>成唯識論卷第十</w:t></w:r>"
+                           '<w:bookmarkStart w:id="1" w:name="㊀問起>"/>'
+                           '<w:bookmarkEnd w:id="1"/></w:p></w:body></w:document>')
+            text = extract_text(p)
+            self.assertIn("成唯識論卷第十", text)
+            self.assertNotIn('"/>', text)
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+
 class TestWorkSummary(unittest.TestCase):
     """总结行 `[id] N format: 1[docx=OK], …`：下游速读。"""
 

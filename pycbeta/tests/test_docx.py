@@ -366,6 +366,32 @@ class TestMuluLevels(unittest.TestCase):
             len(split_sections(body, {"juan": False, "mulu_levels": [1, 2]})), 2)
 
 
+class TestBookmarkNameEscaping(unittest.TestCase):
+    """书签名属性转义（2026-10-16：T1585 目录文字自带 `>`，裸写 w:name 致校验假差异；
+    裸 `&`/`<`/`"` 更会产出非法 document.xml）。"""
+
+    def test_attr_helper(self):
+        from pycbeta.render_docx import _attr
+        self.assertEqual(_attr('a&b<c>d"e'), "a&amp;b&lt;c&gt;d&quot;e")
+
+    def test_mulu_name_escaped_in_docx(self):
+        import shutil
+        import xml.etree.ElementTree as ET
+
+        w = Work(id="T", source_file="", metadata={"title": "t", "author": ""},
+                 body=[E(tag="mulu", attrs={"level": "2"},
+                         children=[Text('㊀問起> & <x> "y"')]),
+                       E(tag="head", attrs={}, children=[Text("標題")])],
+                 notes_by_n={}, apps=[], simplified=False)
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
+        fn = DocxRenderer().render_work(w, tmp, "bm.docx")
+        doc = zipfile.ZipFile(fn).read("word/document.xml").decode("utf-8")
+        # 书签名转义入 XML；Word 打开时解回原文（显示与导航不变）
+        self.assertIn('w:name="㊀問起&gt; &amp; &lt;x&gt; &quot;y&quot;"', doc)
+        ET.fromstring(doc)   # 整个部件合法可解析（裸 `&`/`<`/`"` 会让 ET 报错）
+
+
 class TestZhangPagination(unittest.TestCase):
     """章信号分页（R2 开关，默认开）+ 章恒豁免合页（R3）。
     level 号各书相对，只有「第X章」文字能跨书识别。"""
@@ -2457,6 +2483,55 @@ class TestHeadCbTypeDocx(unittest.TestCase):
         self.assertIn('w:name="道德經發隱"', rest)      # 卷级 mulu 书签落地
         self.assertIn('w:name="敘"', rest)             # 節级 mulu 书签同时落地
         self.assertIn('<w:outlineLvl w:val="0"/>', ppr)  # 取更高者（level 1 → 0）
+        self.assertNotIn("mulu 未落地", cats)
+
+    def test_vol_marker_keeps_juan_outline_top(self):
+        """空「卷」标记定卷级：上一卷科判队列（level 3）不再把卷题压到第三层。"""
+        body = [E(tag="mulu", attrs={"level": "3", "type": "其他"},
+                  children=[Text("二、隨標廣釋")]),
+                E(tag="juan", attrs={"n": "003", "fun": "open"}, children=[
+                    E(tag="mulu", attrs={"n": "003", "type": "卷"}, children=[]),
+                    E(tag="jhead", attrs={},
+                      children=[Text("成唯識論卷第三")])])]
+        doc = self._render(body)
+        ppr, rest = self._para_with(doc, "成唯識論卷第三")
+        self.assertIsNotNone(ppr)
+        self.assertIn('<w:outlineLvl w:val="0"/>', ppr)     # 卷级 → 顶层
+        self.assertIn('w:name="二、隨標廣釋"', rest)          # 科判书签仍落地
+        self.assertNotIn('w:name=""', rest)                 # 空「卷」标记不挂空名书签
+
+    def test_vol_marker_alone_outline_top(self):
+        """空「卷」标记单独入队：卷题进顶层，且无额外书签。"""
+        body = [E(tag="juan", attrs={"n": "001", "fun": "open"}, children=[
+            E(tag="mulu", attrs={"n": "001", "type": "卷"}, children=[]),
+            E(tag="jhead", attrs={}, children=[Text("成唯識論卷第一")])])]
+        doc = self._render(body)
+        ppr, rest = self._para_with(doc, "成唯識論卷第一")
+        self.assertIsNotNone(ppr)
+        self.assertIn('<w:outlineLvl w:val="0"/>', ppr)
+        self.assertNotIn("<w:bookmarkStart", rest)
+
+    def test_empty_nonvol_mulu_ignored(self):
+        """对照：空文字但不是「卷」型仍不入队、不影响大纲。"""
+        body = [E(tag="mulu", attrs={"level": "1", "type": "其他"}, children=[]),
+                E(tag="juan", attrs={"fun": "open"}, children=[
+                    E(tag="jhead", attrs={},
+                      children=[Text("成唯識論卷第一")])])]
+        doc = self._render(body)
+        ppr, rest = self._para_with(doc, "成唯識論卷第一")
+        self.assertIsNotNone(ppr)
+        self.assertNotIn("outlineLvl", ppr)
+
+    def test_vol_marker_unlanded_not_reported(self):
+        """未落地的空「卷」标记不记「mulu 未落地」（本身无书签可丢）。"""
+        from pycbeta import report as R
+        R.report.begin("T")
+        try:
+            self._render([E(tag="mulu", attrs={"n": "1", "type": "卷"},
+                            children=[])])
+            cats = [e["cat"] for e in R.report.entries()]
+        finally:
+            R.report.end()
         self.assertNotIn("mulu 未落地", cats)
 
     def test_unlanded_mulu_reported(self):

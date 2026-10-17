@@ -478,6 +478,16 @@ def _x(s: str) -> str:
     return escape(s)
 
 
+def _attr(s: str) -> str:
+    """XML 属性值转义（另转义双引号）：书签名等自由文字写进 w:name 前必过。
+
+    2026-10-16：T1585 目录文字自带 `>`（如「㊀問起>」）。裸 `>` 在属性值里虽合法，
+    却会坑按 `<[^>]+>` 剥标签的比对文本提取（属性内提前截断，残留 `"/>` 假差异）；
+    `&`/`<`/`"` 更会让 document.xml 直接非法。转义后 Word 显示与导航不变。"""
+    from xml.sax.saxutils import escape
+    return escape(s, {'"': "&quot;"})
+
+
 _COLOR_RE = re.compile(r'<w:color[^>]*/>')
 
 
@@ -1067,7 +1077,7 @@ class DocxRenderer:
         self._pending_juan = None
         bid = self._bm_id
         self._bm_id += 1
-        start = f'<w:bookmarkStart w:id="{bid}" w:name="{name}"/>'
+        start = f'<w:bookmarkStart w:id="{bid}" w:name="{_attr(name)}"/>'
         end = f'<w:bookmarkEnd w:id="{bid}"/>'
         # 置于段内：</w:pPr> 之后、</w:p> 之前，避免 pageBreakBefore 导致书签在上一页空白
         if "</w:pPr>" in para_xml:
@@ -1084,9 +1094,10 @@ class DocxRenderer:
         """把待落地的 mulu 队列（`<cb:mulu>`）落成段内隐形书签 + 大纲级别；无则不动作。
 
         - 书签置于段内（`</w:pPr>` 之后、`</w:p>` 之前，避免 pageBreakBefore 空白书签页）；
-        - 队列里**每条各挂一个书签**（名字＝各自 mulu 文字）：`<cb:mulu level="1">卷名</cb:mulu>`
+        - 队列里**每条有文字的挂一个书签**（名字＝各自 mulu 文字）：`<cb:mulu level="1">卷名</cb:mulu>`
           后紧跟 `<cb:mulu level="2">節名</cb:mulu>` 这类"中间无落点"的数据，两条一起落到同一段，
           不再被覆盖丢弃（2026-10-16 修；此前后一条直接覆盖前一条，前一条的书签/大纲凭空消失）；
+        - 空文字条目（空「卷」标记）只参与级别计算，不挂书签（见 mulu 分支）；
         - `outlineLvl` 取**更高级别**（`min(level)-1`），按 pPr schema 顺序追加在末尾（jc 之后）；
         - 承接段为 `<head>`/`<jhead>` 与 `<p cb:type="headN">`；**图片段不作落点**
           （卷首标题图因此仍归上一个条目，2026-10-16 用户确认接受）。
@@ -1094,9 +1105,11 @@ class DocxRenderer:
         if not (p and self.bookmarks and self._pending_mulus):
             return p
         for m in self._pending_mulus:
+            if not m["text"]:
+                continue   # 空「卷」标记：只提供级别（见 mulu 分支），不挂书签
             bid = self._bm_id
             self._bm_id += 1
-            start = f'<w:bookmarkStart w:id="{bid}" w:name="{m["text"]}"/>'
+            start = f'<w:bookmarkStart w:id="{bid}" w:name="{_attr(m["text"])}"/>'
             end = f'<w:bookmarkEnd w:id="{bid}"/>'
             if "</w:pPr>" in p:
                 p = p.replace("</w:pPr>", f"</w:pPr>{start}", 1)
@@ -1113,6 +1126,8 @@ class DocxRenderer:
     def _flush_pending_mulus(self) -> None:
         """文档结束/落点被丢弃时仍待落地的 mulu：记报告（不产出书签，但不静默丢）。"""
         for m in self._pending_mulus:
+            if not m["text"]:
+                continue   # 空「卷」标记无书签，不记「未落地」
             report.add("mulu 未落地",
                        f"目录标记「{m['text']}」后无 head 落点，书签未产出",
                        line=m.get("line"), key=("mulu", m.get("line"), m["text"]))
@@ -1953,7 +1968,13 @@ class DocxRenderer:
         if tag == "mulu":
             txt = self._render_text(e).strip()
             if not txt:
-                return ""   # 空目录标记（如 <cb:mulu n="1" type="卷">）不输出
+                # 空「卷」标记（如 <cb:mulu n="003" type="卷">）：只作卷级（level 1）
+                # 提示入队，保证卷题段落落在大纲顶层；不产出书签（见 _attach_mulu）。
+                # 否则卷题的级别会随上一卷科判队列（type="其他" level≥3）的 min 下沉。
+                if a.get("type") == "卷":
+                    self._pending_mulus.append({"level": 1, "text": "",
+                                                "line": e.sourceline})
+                return ""   # 其它空目录标记不输出
             try:
                 lvl = int(a.get("level") or "1")
             except ValueError:

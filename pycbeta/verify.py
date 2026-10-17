@@ -296,7 +296,9 @@ def _display_text(raw: str) -> str:
     txt = re.sub(r"[A-Z]{1,2}\d{1,4}[A-Za-z]?n\d+[A-Za-z]?_p[0-9a-z]+", "", txt)
     return re.sub(r"\n{3,}", "\n\n", txt).strip() + "\n"
 
-_TAG_RE = re.compile(r"<[^>]+>")
+# 标签剥除：属性值引号内的 `>` 不算标签结束（2026-10-16：T1585 书签名「㊀問起>」
+# 会被旧式 `<[^>]+>` 在属性内提前截断，残留 `"/>` 进比对文本与报告）
+_TAG_RE = re.compile(r"""<(?:'[^']*'|"[^"]*"|[^>"'])+>""")
 _STYLE_RE = re.compile(r"<(style|script)[^>]*>.*?</\1>", re.S | re.I)
 
 def _ann_brackets_from(presets):
