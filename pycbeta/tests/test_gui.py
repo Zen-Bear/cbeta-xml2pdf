@@ -1450,6 +1450,13 @@ class TestConfigBar(unittest.TestCase):
         self.assertIn(("span.border", "方框字"), EDITABLE_ROWS)
         self.assertIn("span.border", ROW_TIPS)
 
+    def test_div_orig_commentary_editable_rows(self):
+        from pycbeta.gui.css_editor import EDITABLE_ROWS, ROW_TIPS
+        self.assertIn(("div.div-orig", "原文"), EDITABLE_ROWS)
+        self.assertIn(("div.div-commentary", "注释"), EDITABLE_ROWS)
+        self.assertIn("div.div-orig", ROW_TIPS)
+        self.assertIn("div.div-commentary", ROW_TIPS)
+
     def test_pagination_hints_gray(self):
         # 分页各选项的括号说明：存在、灰色、纯文本（含 <pb> 不被当 HTML）
         from pycbeta.gui.panel import PAGINATION_KEYS, PAGINATION_HINTS
@@ -4953,6 +4960,31 @@ class TestCssEditor(unittest.TestCase):
             self.assertEqual(row["color_value"], "")
             self.assertEqual(row["weight"].text(), "默认")
             dlg._loaded_block = dlg._source_edit.toPlainText()
+        finally:
+            dlg._loaded_block = dlg._source_edit.toPlainText()
+            dlg.close()
+
+    def test_div_orig_commentary_rows_in_dialog(self):
+        from pycbeta.gui.css_editor import CssEditorDialog
+        dlg = CssEditorDialog(sample_xml=r"E:\nonexistent\no.xml")
+        try:
+            for sel, label in (("div.div-orig", "原文"),
+                               ("div.div-commentary", "注释")):
+                row = dlg._rows[sel]
+                # 无字体变量：字体栏置灰；出厂粗细不算覆盖（按钮显示"默认"）
+                self.assertIsNone(row.get("suffix"))
+                self.assertFalse(row["font_hant"].isEnabled())
+                self.assertFalse(row["font_hans"].isEnabled())
+                self.assertEqual(row["weight"].text(), "默认")
+                self.assertEqual(row["name_label"].text(), label)
+            # 可调：点粗细写覆盖块（默认 → 加粗）
+            dlg._cycle_weight("div.div-orig")
+            dlg._cycle_weight("div.div-commentary")
+            blk = dlg._source_edit.toPlainText()
+            self.assertIn("div.div-orig { font-weight: bold; }", blk)
+            self.assertIn("div.div-commentary { font-weight: bold; }", blk)
+            self.assertEqual(dlg._rows["div.div-commentary"]["weight"].text(),
+                             "加粗")
         finally:
             dlg._loaded_block = dlg._source_edit.toPlainText()
             dlg.close()

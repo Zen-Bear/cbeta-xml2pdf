@@ -51,6 +51,8 @@ EDITABLE_ROWS = (
     ("p.pin", "品名"),
     ("p.head", "标题"),
     ("p", "正文"),
+    ("div.div-orig", "原文"),
+    ("div.div-commentary", "注释"),
     ("p.dharani", "咒语"),
     ("p.form", "格式段"),
     ("p.figure", "图片"),
@@ -83,6 +85,8 @@ ROW_TIPS = {
     "p.head": "标题1–6级在源码页调（仅HTML/PDF，DOCX忽略）",
     "div.lg": "注记类偈行颜色在源码页（div.lg.note1/2）",
     "span.border": "科判/标题方框（seg/hi @rend=border）；边框线只在源码页调",
+    "div.div-orig": "原文段容器（div[@type=orig]）；官方 golden 与我方 docx 均加粗",
+    "div.div-commentary": "解释段容器（div[@type=commentary]）；官方无特殊样式，缩进来自 XML 的 margin-left",
 }
 
 

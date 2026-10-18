@@ -815,9 +815,10 @@
   - 文档：`主题与样式.md` 新增「方框字」节、`兜底值清单.md` 登记 `border_pt`（0.75）
   - 影响：`render_html`/`render_docx`/`theme` 都在 `_FP_IMPL_MODULES` ⇒ **全部已存校验指纹一次性失效**（下轮全库重验；与 v0.91/v0.92 同例）
   - 已知小差异：官方 epub 不框 YP 的 `<head>` 方框（官方 html 框），我方 html/epub 同管线会框；docx2pdf 引擎对方框的显示待实测（html2pdf 不受影响）
-- [ ] **待做** 左栏 UI 加 `div.div-orig`（原文）与 `div.div-commentary`（注释）两行（2026-10-15 用户指示）
-  - 现状：两者在 `pdf_docx.css`（`:219`/`:220`）与 `html_epub_official.css` 均有规则（orig 加粗、commentary 常规），但都不在 `EDITABLE_ROWS`（2026-09-10 扫描决议「不加行，只记录」）；本次 commentary 只补规则、外观不变，故仍未加行
-  - 要做：`css_editor.EDITABLE_ROWS` 加 `("div.div-orig","原文")`／`("div.div-commentary","注释")`（`TAG_SELECTOR` 已有 `div-orig`/`div-commentary`，由 `theme.py` 的 `_DIV_TYPES` 自动登记）＋ `ROW_TIPS` 说明；`test_gui` 补行存在断言
+- [x] **已完成** 左栏 UI 加 `div.div-orig`（原文）与 `div.div-commentary`（注释）两行（2026-10-18 落地；2026-10-15 用户指示）
+  - 落地：`css_editor.EDITABLE_ROWS` 加 `("div.div-orig","原文")`／`("div.div-commentary","注释")`（排在「正文」行之后）＋ `ROW_TIPS` 两条（原文段官方 golden 与我方 docx 均加粗；解释段官方无特殊样式、缩进来自 XML 的 margin-left）；`TAG_SELECTOR` 早已由 `theme.py` 的 `_DIV_TYPES` 自动登记，CSS 规则早在 `pdf_docx.css:219/220`
+  - 两行无字体变量（同「字义」行）：字体双栏置灰，可调字号/粗细/颜色；出厂粗细不算覆盖（按钮显示「默认」）
+  - 测试：`test_gui.test_div_orig_commentary_editable_rows`（行与提示存在）＋ `test_gui.test_div_orig_commentary_rows_in_dialog`（行可建、字体栏置灰、粗细默认态、标签文本）
   - 注意：左栏只面向 pdf_docx 主题，html 基底规则不在其可编辑范围（`docs/TODO.md:394`）
 - [ ] **搁置** `hi`/`seg` 的 `rend="bold"`（1993 处，YP 7 部）与 `hi rend="kaiti"`（6 处）的 html/epub 类映射（2026-10-15 扫描发现）
   - 官方 html/epub 分别出 `<span class="bold">`／`<span class="kaiti">`（基底已有 `.bold{font-weight:bold}`；`.kaiti` 官方值 `DFKai-SB, BiauKai` 基底缺）；我方现为纯文字
@@ -830,9 +831,6 @@
   - 实测：B0157/TX0016 段中段 37/15 → **0**，新旧产物归一化后文字逐字一致（249,539/154,449 字）；X0448 160 表全出 `tblPr`+`tblGrid`，结构护栏 0，1872 个非空格按文档序命中，首表合并序列与官方 docx 完全相同
   - 测试：`test_docx.TestTableDocx` 8 项（结构/框线开关/gridSpan+vMerge 占位/格内块级子不段中段/空格至少一空段/列宽封顶/表外段落不受 `_cell_depth` 影响/脏数据超出 `cols` 不丢字）；全量 1320 OK
   - 影响：`render_docx` 在 `_FP_IMPL_MODULES` ⇒ 已存校验指纹整体失效（下轮全库重验，同 v0.91/v0.92 例）
-- [ ] **待做** docx `table/@style="margin-left:Nem"` 映射（2026-10-16 表格立项时确认不映射，先记 TODO）
-  - 现状：`table/@style` 忽略；官方 docx 亦无缩进（199 表里 `tblInd` 0 处），html/epub 左对齐
-  - 语料：199 表中 36 表带 `style`（`margin-left:2em/3em/4em`）；若做，映射为 `tblPr/tblInd`（`w:w` = N × 字号 × 20 twips）
 - [x] **已完成** docx 表格：全网格单线框线 + `tblLayout fixed` + 智能列宽（2026-10-16 用户四项确认：只改 docx／智能少行+按需铺满+fixed／最小列宽 4 字／不进左栏 CSS；线粗 sz=6）
   - 框线：外围 `outset` → **全网格细单线** `single sz=6`（四边 + `insideH/insideV`，0.75pt ≈ 官方 epub 的 1px 全格线）；`rend` 含 no-border → 六边显式 `none`。加 `tblLayout w:type="fixed"`（不加则 Word 自动调整会改列宽，实测窄表被 Word 又缩）
   - 列宽：`_fit_col_widths` 重写——内容放得下按内容收窄；超版心取**最小的"每列最多 T 行"目标**（二分 T，表最矮、折行最少）并用满版心，每列保底 **4 字**（2026-10-16 用户由 2 字改 4 字）；列数多到 4 字×列数 > 版心（X0448 有 25 张 8–12 列表）时，保底降到"均分"再走同一算法（内容感知，不再一律等宽）；富余按"减一行代价最小"回填。（先试过"短列保整行"，实测反而更高——长文本列（識語 60 字）决定行高，保短列只会挤长列，故改"最小 T"）
