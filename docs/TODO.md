@@ -891,6 +891,12 @@
   - 测试：`test_docx.TestHeadCbTypeDocx` +4（卷标记保卷题顶层/卷标记单独入队无书签/空非卷型仍忽略/未落地不报告）；全量 1349 OK
   - 文档：`主题与样式.md`（标题分级节补空「卷」标记口径）
   - 影响：`render_docx` 在 `_FP_IMPL_MODULES` ⇒ 指纹失效同上一条，合并一次
+- [x] **已完成 v0.95 发版**（2026-10-21 打包，2026-10-22 发布）
+  - 提交 `ba2e4e9`（版本号 0.94 → 0.95）＋ 标签 `v0.95` ＋ GitHub Release（附件 `CBETA-XML2PDF-v0.95-win64.zip`，约 140MB）
+  - 打包：staging 目录 `%TEMP%\opencode\rel095\`（`presets/` 快照 ＋ `relnotes.md` ＋ `zipit.py`）；`CBETA-XML2PDF.spec` 的 presets 路径指向 `rel095/presets`（该 spec 被 `.gitignore` 排除，不入库）
+  - 内置 `presets/config.user.json` 取仓库内清洗版（不含本机路径；v0.94 误带本机基线路径，本次修正）
+  - 冒烟：打包产物离屏启动 15 秒存活正常
+  - 影响：版本号参与校验指纹 `_impl_digest` ⇒ 已存校验指纹一次性失效（下轮全库重验）
 - [x] **已完成 上游 cbeta-fetch 升级到 v0.2.0 并同步**（2026-10-21）
   - 上游 2026-10-21 18:40 发布 v0.2.0（commit `817d2070d5b502a860a4fe531607572d68a3dfe7`）：TLS 按主机预选（cbdata 只清 `VERIFY_X509_STRICT`）、分块流式下载 ＋ `Content-Length` 完整性校验、原子解压（同名 basename 整单失败）
   - xml2pdf：`pycbeta/_vendor/cbeta_fetch.py` 与 `pycbeta/_vendor/SOURCE.txt` 同步为 0.2.0（sha256 `353a6004984815e5afe2923fc59432ef9f7a7d8b043ad8d10bb294976fd5a2c7`，与上游工作区、publish 副本三份一致）
