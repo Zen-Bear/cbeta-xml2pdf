@@ -166,5 +166,87 @@ class TestDocxAttrEscaping(unittest.TestCase):
         self.assertEqual(_attr('a"b<c>&d'), "a&quot;b&lt;c&gt;&amp;d")
 
 
+class TestAtomicWrite(unittest.TestCase):
+    def test_write_overwrite_and_no_temp_residue(self):
+        from pycbeta.atomic import write_text
+        d = tempfile.mkdtemp()
+        try:
+            p = os.path.join(d, "sub", "a.json")
+            write_text(p, '{"a": 1}\n')
+            self.assertEqual(open(p, encoding="utf-8").read(), '{"a": 1}\n')
+            write_text(p, '{"a": 2}\n')
+            self.assertEqual(json.loads(open(p, encoding="utf-8").read())["a"], 2)
+            self.assertEqual(
+                [n for n in os.listdir(os.path.dirname(p))
+                 if n.startswith(".tmp-")], [])
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_failure_cleans_temp(self):
+        from pycbeta.atomic import write_text
+        d = tempfile.mkdtemp()
+        try:
+            with mock.patch("pycbeta.atomic.os.replace",
+                            side_effect=OSError("boom")):
+                with self.assertRaises(OSError):
+                    write_text(os.path.join(d, "a.json"), "x")
+            self.assertEqual(os.listdir(d), [])
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+
+class TestPdfBackendFallback(unittest.TestCase):
+    def test_raising_backend_falls_through(self):
+        from pycbeta import render_pdf as R
+        d = tempfile.mkdtemp()
+        try:
+            docx = os.path.join(d, "a.docx")
+            with open(docx, "wb") as f:
+                f.write(b"x")
+            pdf = os.path.join(d, "a.pdf")
+
+            def bad(_docx, _pdf):
+                raise RuntimeError("boom")
+
+            def good(_docx, pdf_fn):
+                with open(pdf_fn, "wb") as f:
+                    f.write(b"%PDF-1.4")
+                return pdf_fn
+
+            with mock.patch.dict(R._DOCX_BACKENDS,
+                                 {"bad": bad, "good": good}):
+                out = R.docx_to_pdf(docx, pdf, chain=["bad", "good"])
+            self.assertEqual(os.path.abspath(out), os.path.abspath(pdf))
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+
+class TestTimeoutGuard(unittest.TestCase):
+    def test_values(self):
+        from pycbeta.render_pdf import _timeout_seconds
+        self.assertEqual(_timeout_seconds({"timeoutSeconds": "abc"}), 120)
+        self.assertEqual(_timeout_seconds({"timeoutSeconds": -5}), 1)
+        self.assertEqual(_timeout_seconds({"timeoutSeconds": 99999}), 3600)
+        self.assertEqual(_timeout_seconds({}), 120)
+
+
+@unittest.skipUnless(os.name == "nt", "Windows 进程树")
+class TestKillProcessTree(unittest.TestCase):
+    def test_child_killed(self):
+        import subprocess as sp
+        import sys as _sys
+        from pycbeta.gui.__main__ import _kill_process_tree
+        p = sp.Popen([_sys.executable, "-c",
+                      "import time; time.sleep(30)"])
+        try:
+            _kill_process_tree(p)
+            self.assertIsNotNone(p.wait(timeout=10))
+        finally:
+            try:
+                p.kill()
+            except Exception:
+                pass
+
+
 if __name__ == "__main__":
     unittest.main()

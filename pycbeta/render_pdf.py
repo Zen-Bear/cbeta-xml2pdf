@@ -273,14 +273,17 @@ def _pdf_via_libreoffice(docx_fn: str, pdf_fn: str) -> Optional[str]:
     if not soffice:
         return None
     outdir = os.path.dirname(os.path.abspath(pdf_fn)) or "."
-    subprocess.run([soffice, "--headless", "--convert-to", "pdf",
-                    "--outdir", outdir, os.path.abspath(docx_fn)], check=True)
+    try:
+        subprocess.run([soffice, "--headless", "--convert-to", "pdf",
+                        "--outdir", outdir, os.path.abspath(docx_fn)],
+                       check=True, timeout=_SOFFICE_TIMEOUT)
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(
+            f"LibreOffice 转换超时（>{_SOFFICE_TIMEOUT} 秒）") from exc
     produced = os.path.join(outdir,
                             os.path.splitext(os.path.basename(docx_fn))[0] + ".pdf")
     if os.path.abspath(produced) != os.path.abspath(pdf_fn):
-        if os.path.exists(pdf_fn):
-            os.remove(pdf_fn)
-        os.rename(produced, pdf_fn)
+        os.replace(produced, pdf_fn)
     return os.path.abspath(pdf_fn)
 
 
@@ -327,7 +330,7 @@ def _pdf_via_external(name: str, docx_fn: str, pdf_fn: str) -> Optional[str]:
         .replace("{input}", os.path.abspath(docx_fn)) \
         .replace("{output}", os.path.abspath(pdf_fn))
     cmd = [exe] + _split_args(args_s)
-    timeout = int(cfg.get("timeoutSeconds") or 120)
+    timeout = _timeout_seconds(cfg, 120)
     subprocess.run(cmd, check=True, timeout=timeout)
     if not os.path.isfile(pdf_fn):
         raise RuntimeError(f"external engine '{name}' did not produce {pdf_fn}")
@@ -372,6 +375,19 @@ def _pdf_via_docbuilder(docx_fn: str, pdf_fn: str) -> Optional[str]:
 
 # DOCX->PDF 后端链（默认：Word → WPS → LibreOffice，保真度从高到低）
 DOCX_PDF_CHAIN = ("word", "wps", "libreoffice")
+_SOFFICE_TIMEOUT = 600
+_PRINCE_TIMEOUT = 300
+
+
+def _timeout_seconds(cfg, default: int = 120) -> int:
+    """外部引擎超时配置兜底：非法/越界回默认并钳制到 1–3600 秒。"""
+    try:
+        v = int((cfg or {}).get("timeoutSeconds") or default)
+    except (TypeError, ValueError):
+        v = default
+    return max(1, min(3600, v))
+
+
 _DOCX_BACKENDS = {
     "word": _pdf_via_word,
     "msword": _pdf_via_word,   # 别名（config.json defaultChain 用名）
@@ -403,7 +419,11 @@ def docx_to_pdf(docx_fn: str, pdf_fn: str, chain=None, used: dict = None) -> str
         if not backend:
             errors.append(f"unknown backend '{name}'")
             continue
-        pdf = backend(docx_fn, pdf_fn)
+        try:
+            pdf = backend(docx_fn, pdf_fn)
+        except Exception as exc:  # noqa: BLE001 —— 单后端失败不阻断后续后端
+            errors.append(f"{name}: {type(exc).__name__}: {exc}")
+            continue
         if pdf:
             if used is not None:
                 used["backend"] = name
@@ -830,7 +850,7 @@ a, a:visited {{ color: #000 !important; }}
         if landscape:
             cmd.append("--page-size=landscape")
         cmd += [os.path.abspath(html_fn), "-o", os.path.abspath(pdf_fn)]
-        subprocess.run(cmd, check=True)
+        subprocess.run(cmd, check=True, timeout=_PRINCE_TIMEOUT)
 
     def _weasyprint_to_pdf(self, html_fn: str, pdf_fn: str) -> None:
         try:

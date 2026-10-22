@@ -18,6 +18,7 @@ from typing import Dict, List, Optional
 
 from PySide6.QtCore import Qt, QThread, Signal, QUrl
 from PySide6.QtGui import QColor, QDesktopServices, QKeySequence, QShortcut
+from ..atomic import write_text
 from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QCheckBox, QComboBox, QColorDialog, QDialog,
     QDialogButtonBox, QDoubleSpinBox,
@@ -274,10 +275,7 @@ def load_slot(which="user", root=None):
 def save_current(data, root=None):
     """把 data 写入默认用户预设 `presets/config.user.json`（无轮换）。"""
     _factory, user = slot_paths(root)
-    os.makedirs(os.path.dirname(user), exist_ok=True)
-    with open(user, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-        f.write("\n")
+    write_text(user, json.dumps(data, ensure_ascii=False, indent=2) + "\n")
     return {"rotated": False}
 
 
@@ -326,9 +324,7 @@ def save_config_preset(name, data, root=None):
     d = os.path.abspath(config_presets_dir(root))
     os.makedirs(d, exist_ok=True)
     path = os.path.join(d, stem + ".json")
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-        f.write("\n")
+    write_text(path, json.dumps(data, ensure_ascii=False, indent=2) + "\n")
     return path
 
 
@@ -354,9 +350,7 @@ def set_config_preset_theme(path, value):
         data["pdf-docx-user-theme"] = \
             v if v.lower().endswith(".css") else v + ".css"
     ap = os.path.abspath(_config_preset_path(path))
-    with open(ap, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-        f.write("\n")
+    write_text(ap, json.dumps(data, ensure_ascii=False, indent=2) + "\n")
     return ap
 
 
@@ -2552,10 +2546,7 @@ def clear_xml_dir(root=None, preset_path=None):
         data, _actual = load_slot("user", root)
     data = apply_source_edits(data, {"source": {"xml_dir": ""}})
     if preset_path:
-        os.makedirs(os.path.dirname(os.path.abspath(preset_path)), exist_ok=True)
-        with open(preset_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-            f.write("\n")
+        write_text(preset_path, json.dumps(data, ensure_ascii=False, indent=2) + "\n")
         return
     save_current(data, root)
 
@@ -3225,11 +3216,8 @@ class SourceDialog(QDialog):
                 merged["verify"].pop("bases", None)
         if self._preset_path:
             try:
-                os.makedirs(os.path.dirname(
-                    os.path.abspath(self._preset_path)), exist_ok=True)
-                with open(self._preset_path, "w", encoding="utf-8") as f:
-                    json.dump(merged, f, ensure_ascii=False, indent=2)
-                    f.write("\n")
+                write_text(self._preset_path,
+                           json.dumps(merged, ensure_ascii=False, indent=2) + "\n")
             except OSError as exc:
                 QMessageBox.warning(self, "保存失败", str(exc))
                 return

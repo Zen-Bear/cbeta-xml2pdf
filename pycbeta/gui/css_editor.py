@@ -20,6 +20,7 @@ import zipfile
 
 from PySide6.QtCore import Qt, QThread, Signal, QTimer, QSignalBlocker, QUrl
 from PySide6.QtGui import QColor, QDesktopServices, QFont, QTextCharFormat, QTextCursor
+from ..atomic import write_text
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QColorDialog, QComboBox, QDialog,
     QFileDialog, QFormLayout, QGridLayout, QHBoxLayout, QLabel,
@@ -256,8 +257,7 @@ def save_preset_file(name, full_css_text, user_dir=None):
     user_dir = os.path.abspath(user_dir or user_presets_dir())
     os.makedirs(user_dir, exist_ok=True)
     path = os.path.join(user_dir, stem + ".css")
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(full_css_text)
+    write_text(path, full_css_text)
     return path
 
 
@@ -1893,8 +1893,7 @@ class CssEditorDialog(QDialog):
             self._save_preset_as()
             return not self._is_dirty()
         try:
-            with open(self._preset_path, "w", encoding="utf-8") as f:
-                f.write(self._source_edit.toPlainText())
+            write_text(self._preset_path, self._source_edit.toPlainText())
         except OSError as exc:
             QMessageBox.warning(self, "保存失败", str(exc))
             return False

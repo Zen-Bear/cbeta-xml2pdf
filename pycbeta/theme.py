@@ -21,6 +21,7 @@ from typing import Dict, List, Optional
 
 from .fonts import preferred_family
 from .report import report
+from .atomic import write_text
 
 _DEFAULT_CSS = os.path.join(os.path.dirname(__file__), "styles", "pdf_docx.css")
 
@@ -1055,8 +1056,7 @@ def set_run_slot(key, value, root=None):
         vals = dict(DEFAULT_RUN_CONFIG)
         vals[key] = value
         text = _render_run_template(vals)
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(text if text.endswith("\n") else text + "\n")
+    write_text(path, text if text.endswith("\n") else text + "\n")
     return path
 
 

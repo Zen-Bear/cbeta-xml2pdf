@@ -48,6 +48,24 @@ from PySide6.QtGui import (QColor, QCursor, QDesktopServices, QFont,
                            QKeySequence, QPalette, QShortcut)
 
 
+def _kill_process_tree(proc) -> None:
+    """终止桥子进程及其子孙（Windows 用 `taskkill /T`；失败回退 terminate）。"""
+    if proc is None:
+        return
+    if os.name == "nt":
+        try:
+            subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                           timeout=15, check=False)
+            return
+        except (OSError, subprocess.SubprocessError):
+            pass
+    try:
+        proc.terminate()
+    except OSError:
+        pass
+
+
 def parse_produced_paths(log, within=None):
     r"""子进程 stdout（如 `T0672: docx(footnote) -> C:\out\T0672.docx`）→ 存在的产物路径列表。
     只认 `->` 行尾且文件存在的路径，避免误吞日志文本；`within` 给定时还要求路径落在
@@ -288,11 +306,7 @@ class BatchWorker(QThread):
 
     def cancel(self):
         self._cancel = True
-        if self._proc is not None:
-            try:
-                self._proc.terminate()
-            except Exception:
-                pass
+        _kill_process_tree(self._proc)
 
     def run(self):
         from pycbeta import fetch
@@ -1375,6 +1389,19 @@ class MainWindow(QMainWindow):
         chosen = menu.exec(QCursor.pos())
         if chosen is not None and os.path.isfile(chosen.data()):
             QDesktopServices.openUrl(QUrl.fromLocalFile(chosen.data()))
+
+    def closeEvent(self, event):
+        """转换中关窗：先取消并等工作线程收尾，避免 QThread 随窗口销毁崩溃。"""
+        w = self.worker
+        if w is not None and w.isRunning():
+            w.cancel()
+            if not w.wait(10000):
+                QMessageBox.warning(
+                    self, "正在取消",
+                    "转换仍在收尾，请稍候再关闭窗口。")
+                event.ignore()
+                return
+        super().closeEvent(event)
 
     def _stop(self):
         if self.worker is not None:
