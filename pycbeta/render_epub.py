@@ -13,6 +13,7 @@ import zipfile
 import xml.sax.saxutils as sax
 from typing import List, Optional
 
+from .filename import sanitize
 from .model import Work
 from .annotate import active as _ann_active
 from .render_html import HtmlRenderer, CSS
@@ -98,7 +99,7 @@ class EpubRenderer:
             data = self._zip(work.id, spine, opf, nav, ncx, lang)
             os.makedirs(out_dir, exist_ok=True)
             if not filename:
-                filename = f"{work.id}.epub"
+                filename = sanitize(f"{work.id}.epub")
             fn = os.path.join(out_dir, filename)
             with open(fn, "wb") as f:
                 f.write(data)

@@ -16,7 +16,7 @@ import tempfile
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
-from PySide6.QtCore import Qt, QThread, Signal, QUrl
+from PySide6.QtCore import Qt, QThread, Signal, QTimer, QUrl
 from PySide6.QtGui import QColor, QDesktopServices, QKeySequence, QShortcut
 from ..atomic import write_text
 from PySide6.QtWidgets import (
@@ -647,6 +647,14 @@ class DataUpdateDialog(QDialog):
         brow.addWidget(self.status, 1)
         layout.addLayout(brow)
         self._worker = None
+
+    def closeEvent(self, event):
+        """更新运行中禁止关窗：QThread 随对话框销毁会触发 qFatal。"""
+        if self._worker is not None and self._worker.isRunning():
+            self.status.setText("更新进行中，完成后再关闭窗口")
+            event.ignore()
+            return
+        super().closeEvent(event)
 
     def _on_go(self):
         self.btn_go.setEnabled(False)
@@ -1942,8 +1950,10 @@ class XmlOptionsPanel(QWidget):
         try:
             _custom = (((self._presets or {}).get("source") or {}).get(
                 "verify_root") or "").strip() or None
-        except Exception:
-            _custom = None
+        except Exception as exc:
+            QMessageBox.warning(self, "清理校验产物",
+                                f"读取自定义校验根失败，已取消清理：{exc}")
+            return
         dirs = []
         for pat in ("*（验证）", "*（驗證）"):
             dirs += [d for d in _glob.glob(os.path.join(out_dir, pat))
@@ -1965,10 +1975,13 @@ class XmlOptionsPanel(QWidget):
             return
         names = "\n".join("  " + os.path.basename(d) for d in dirs[:12])
         more = f"\n  …（共 {len(dirs)} 个）" if len(dirs) > 12 else ""
+        _scope_note = ""
+        if not _custom and os.path.isdir(_vroot):
+            _scope_note = f"\n注意：未配置自定义校验根，将整树删除 {_vroot}\n"
         if QMessageBox.question(
                 self, "清理校验产物",
                 f"将删除以下 {len(dirs)} 个校验产物目录（不可撤销）：\n"
-                f"{names}{more}\n\n位置：{out_dir}\n删除后下次校验会重新生成。",
+                f"{names}{more}\n{_scope_note}\n位置：{out_dir}\n删除后下次校验会重新生成。",
                  QMessageBox.Yes | QMessageBox.No,
                  QMessageBox.No) != QMessageBox.Yes:
             return
@@ -2650,9 +2663,9 @@ class SourceDialog(QDialog):
         row_ver.addWidget(ver_clean)
         tio.addLayout(row_ver)
         self.io_out_edit.textChanged.connect(
-            lambda _t: self._refresh_verify_info())
+            lambda _t: self._schedule_verify_info())
         vr_edit.textChanged.connect(
-            lambda _t: self._refresh_verify_info())
+            lambda _t: self._schedule_verify_info())
         self._refresh_verify_info()
         tio.addWidget(self.title_t2s_box)
         t2s_lab = QLabel(
@@ -2962,6 +2975,15 @@ class SourceDialog(QDialog):
             dl[k] = v.text().strip() if v else ""
         return {"source": src, "downloads": dl}
 
+    def closeEvent(self, event):
+        """XML 更新运行中禁止关窗（QThread 生命周期保护）。"""
+        w = getattr(self, "_ebook_worker", None)
+        if w is not None and w.isRunning():
+            self.update_status.setText("更新进行中，完成后再关闭窗口")
+            event.ignore()
+            return
+        super().closeEvent(event)
+
     def _on_check_ebook_updates(self):
         """电子书远程更新检查（后台线程跑；跑完弹结果窗）。"""
         self.btn_check_update.setEnabled(False)
@@ -3028,6 +3050,17 @@ class SourceDialog(QDialog):
             return default_verify_root(self.io_out_edit.text().strip())
         except Exception:
             return ""
+
+    def _schedule_verify_info(self):
+        """输入变化防抖 300ms：避免逐键全树统计校验目录而冻结界面。"""
+        t = getattr(self, "_verify_info_timer", None)
+        if t is None:
+            t = QTimer(self)
+            t.setSingleShot(True)
+            t.setInterval(300)
+            t.timeout.connect(self._refresh_verify_info)
+            self._verify_info_timer = t
+        t.start()
 
     def _refresh_verify_info(self):
         """校验目录行刷新：字段灰字=跟随路径 + 空间占用重统（静默失败保底）。"""

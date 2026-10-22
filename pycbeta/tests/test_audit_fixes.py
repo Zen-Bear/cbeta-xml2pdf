@@ -367,5 +367,37 @@ class TestRenderNumericGuard(unittest.TestCase):
         self.assertLessEqual(len(out), 100)
 
 
+class TestDefaultOutputNames(unittest.TestCase):
+    def test_unsafe_work_id_stays_in_out_dir(self):
+        from pycbeta.model import Work
+        from pycbeta.render_md import MdRenderer
+        from pycbeta.render_txt import TxtRenderer
+        from pycbeta.render_docx import DocxRenderer
+        from pycbeta.render_epub import EpubRenderer
+        d = tempfile.mkdtemp()
+        try:
+            w = Work(id="../evil", source_file="", metadata={}, body=[],
+                     notes_by_n={}, apps=[], simplified=False)
+            for renderer in (MdRenderer(), TxtRenderer(), DocxRenderer(),
+                             EpubRenderer()):
+                p = renderer.render_work(w, d)
+                self.assertEqual(os.path.dirname(os.path.abspath(p)),
+                                 os.path.abspath(d), type(renderer).__name__)
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+
+class TestGuiLifecycleGuards(unittest.TestCase):
+    def test_close_event_guards_defined(self):
+        from pycbeta.gui.panel import DataUpdateDialog, SourceDialog
+        from pycbeta.gui.css_editor import CssEditorDialog
+        for cls in (DataUpdateDialog, SourceDialog, CssEditorDialog):
+            self.assertIn("closeEvent", cls.__dict__, cls.__name__)
+
+    def test_verify_info_debounce_wired(self):
+        from pycbeta.gui.panel import SourceDialog
+        self.assertTrue(hasattr(SourceDialog, "_schedule_verify_info"))
+
+
 if __name__ == "__main__":
     unittest.main()

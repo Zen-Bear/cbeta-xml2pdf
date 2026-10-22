@@ -2823,9 +2823,14 @@ class TestSourceDialog(unittest.TestCase):
         root = tempfile.mkdtemp()
         try:
             dlg = P.SourceDialog(out_dir=root)
+            from PySide6.QtTest import QTest
+
+            def _flush():
+                QTest.qWait(400)   # 等输入防抖计时器（300ms）触发刷新
             try:
                 vr = dlg.path_edits["verify_root"]
                 vr.setText("")  # 自包含：忽略本机用户预设
+                _flush()
                 want = os.path.join(root, "验证")
                 # 生效值与校验目录合一：空/清空时字段内灰字显示跟随路径
                 self.assertEqual(vr.placeholderText(), f"跟随输出：{want}")
@@ -2844,6 +2849,7 @@ class TestSourceDialog(unittest.TestCase):
                 other = tempfile.mkdtemp()
                 try:
                     dlg.io_out_edit.setText(other)  # 输出改 → 校验目录跟随
+                    _flush()
                     self.assertEqual(vr.placeholderText(),
                                      f"跟随输出：{os.path.join(other, '验证')}")
                     self.assertEqual(dlg.io_verify_edit.text(),
@@ -2857,9 +2863,11 @@ class TestSourceDialog(unittest.TestCase):
                               "w", encoding="utf-8") as f:
                         f.write("1234567")
                     vr.setText(custom)
+                    _flush()
                     self.assertEqual(vr.text(), custom)
                     self.assertIn("7 B", dlg.io_verify_edit.text())
                     vr.setText("")  # 清空回默认：placeholder 重现跟随路径
+                    _flush()
                     self.assertEqual(vr.placeholderText(),
                                      f"跟随输出：{os.path.join(other, '验证')}")
                 finally:

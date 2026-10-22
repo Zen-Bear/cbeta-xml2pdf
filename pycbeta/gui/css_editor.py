@@ -2723,11 +2723,13 @@ class CssEditorDialog(QDialog):
         if not self._confirm_discard():
             event.ignore()
             return
-        try:
-            if self._thread is not None and self._thread.isRunning():
-                self._thread.wait(2000)
-        finally:
-            super().closeEvent(event)
+        if self._thread is not None and self._thread.isRunning():
+            if not self._thread.wait(2000):
+                QMessageBox.information(
+                    self, "正在渲染", "样张仍在渲染，请稍候再关闭窗口。")
+                event.ignore()
+                return
+        super().closeEvent(event)
 
 
 def suppress_font_warnings():

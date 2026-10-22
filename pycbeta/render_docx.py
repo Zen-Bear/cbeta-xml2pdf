@@ -22,7 +22,7 @@ from .theme import (Theme, resolve_page, _hex6, strip_head_no, bracket_pair,
                     first_text_sourceline, page_border_spec)
 from .fonts import preferred_family
 from .render_html import split_juans
-from .filename import apply_template
+from .filename import apply_template, sanitize
 from .report import report
 from .annotate import active as _ann_active, split_annotated as _split_ann, parse_rt_size as _parse_rt_size, split_eq_reading as _split_eq, track_seen as _track_seen, page_repeat as _page_repeat
 
@@ -1240,7 +1240,7 @@ class DocxRenderer:
         author = work.metadata.get("author") or ""
         doc = self._build_docx(title, author, body)
         if not filename:
-            filename = f"{work.id}.docx"
+            filename = sanitize(f"{work.id}.docx")
         fn = os.path.join(out_dir, filename)
         with open(fn, "wb") as f:
             f.write(doc)
@@ -1310,7 +1310,7 @@ class DocxRenderer:
                 stem = os.path.splitext(filename)[0]
                 fn = f"{stem}_卷{juan_no}.docx"
             else:
-                fn = f"{work.id}_卷{juan_no}.docx"
+                fn = sanitize(f"{work.id}_卷{juan_no}.docx")
             path = os.path.join(out_dir, fn)
             with open(path, "wb") as f:
                 f.write(doc)

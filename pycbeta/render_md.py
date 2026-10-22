@@ -13,6 +13,7 @@ from .model import App, E, Gaiji, Lb, Note, NoteRef, Pb, Text, Work, \
 from .annotate import active as _ann_active, split_annotated as _split_ann, track_seen as _track_seen
 from .gaiji import GaijiDb
 from .theme import Theme, strip_head_no, bracket_pair, first_text_sourceline
+from .filename import sanitize
 from .report import report
 
 
@@ -70,7 +71,7 @@ class MdRenderer:
         text = text.rstrip() + "\n"
         os.makedirs(out_dir, exist_ok=True)
         if not filename:
-            filename = f"{work.id}.md"
+            filename = sanitize(f"{work.id}.md")
         fn = os.path.join(out_dir, filename)
         with open(fn, "w", encoding="utf-8") as f:
             f.write(text)

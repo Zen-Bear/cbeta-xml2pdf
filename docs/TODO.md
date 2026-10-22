@@ -951,6 +951,13 @@
   - 新增测试 2 项（主题坏值、渲染数值守护），合计 28 项
   - 回归：全量 **1380 OK（skipped=122）**
   - 指纹：改 `theme`/`render_docx`/`render_html` ⇒ 校验指纹整体失效
+- [x] **已完成 审核批 6（GUI 体验）实施（2026-10-22）**
+  - 修复：高危八（`DataUpdateDialog`/`SourceDialog` 增加 `closeEvent`，更新运行中阻止关窗并用状态行提示；`css_editor.closeEvent` 的 `wait` 超时改为阻止关闭）；中危十第一批（校验目录统计 300ms 防抖；清理确认框明示默认根整树删除；读自定义校验根失败中止清理）；中危十一（四个渲染器缺省产物名过 `filename.sanitize`）
+  - 新增测试：`test_audit_fixes.py` 追加 3 项（缺省产物名、closeEvent 守卫、防抖接线）；`test_gui` 的「校验行跟随输出」用例改为等待防抖（`QTest.qWait(400)`）
+  - 回归：全量 **1383 OK（skipped=122）**
+  - 指纹：改 `render_docx`/`render_md`/`render_txt`/`render_epub` ⇒ 校验指纹整体失效；GUI 件不触
+  - 过程记录：关窗守卫最初用模态 `QMessageBox`，导致 offscreen 测试用 Mock worker（`isRunning()` 为真值）关窗时卡死；已改为非模态状态行提示
+  - 未做（留后续）：`clean_verify_dirs` 后台化、`css_editor` 导出后台化
 - [x] **已完成 高危一** HTML/EPUB 属性引号未转义（可复现；2026-10-22 修复）
   - 位置（2026-10-22 补全清单，此前只列 5 处）：`render_html.py:52-53`（`_esc`＝`html.escape(s, quote=False)`，不转义 `"`）。属性上下文：`:255`、`:366`、`:527-528`、`:535`/`:538`/`:539`、`:630`、`:647`、`:663`、`:667`、`:700`、`:702`（`lg` 的 `cls`，补漏）、`:710`（`lg` 的 `text-indent`，补漏且原为完全未转义）、`:796`、`:802`、`:840`、`:893`、`:941-942`、`:945`、`:950`、`:956`/`:958`；`render_epub.py:22`（`sax.escape` 同样不转义引号；现用途全在文本节点，无属性位）
   - 实证：构造 `style='color:red" onmouseover="alert(1)'` 渲染出 `<p class="" style="color:red" onmouseover="alert(1)">`（属性被撑破）；`type='x" class="evil'` 出重复 `class` 属性
@@ -989,12 +996,12 @@
   - 触发：GUI「设为默认」在预设跨盘符时走 `slot = 路径` 兜底（`gui/panel.py:2038-2039`）喂绝对路径——Windows 常态即可命中；run.json 损坏由 `theme.py:1031` `.bad` 改名兜底但槽位丢失
   - 修复（2026-10-22）：`pat.subn` 改用函数替换（`lambda`/`_repl`），绕开模板转义层；单测 `test_audit_fixes.TestRunJsonSlotReplace`
   - 代价：改 `theme` ⇒ 校验指纹整体失效（已接受）
-- [ ] **待做 高危八** 更新对话框线程生命周期：运行中关窗 qFatal 崩溃（2026-10-22 实核）
-  - 位置：`gui/panel.py:662`（`DataUpdateWorker` 创建无父对象）、`:2982`（`EbookUpdateWorker` 同型）；全文件无 `closeEvent`/`reject` 兜底（全量检索 0 命中），“关闭”按钮置灰拦不住标题栏 X
-  - 触发：点「开始更新」或「更新XML」后在收尾前按 X 关窗 ⇒ `QThread destroyed while running` qFatal，整个进程崩溃；`gui/css_editor.py:2728-2729` 的 `closeEvent wait(2000)` 超时放行同型（样张重渲超 2 秒同样崩）
-  - 修法：运行中阻止关窗（覆写 `closeEvent`/`reject`），或关窗路径 `wait()` 等线程完成；css_editor 超时改为阻止关闭直至完成
+- [x] **已完成 高危八** 更新对话框线程生命周期：运行中关窗 qFatal 崩溃（2026-10-22 修复）
+  - 位置：`gui/panel.py`（`DataUpdateWorker` / `EbookUpdateWorker` 由对话框持有但无 `closeEvent` 兜底，“关闭”按钮置灰拦不住标题栏 X）；`gui/css_editor.py`（`closeEvent wait(2000)` 超时后仍放行）
+  - 触发：点「开始更新」或「更新XML」后在收尾前按 X 关窗 ⇒ `QThread destroyed while running` qFatal，整个进程崩溃；样张重渲超 2 秒时同样崩
+  - 修复（2026-10-22）：`DataUpdateDialog` 与 `SourceDialog` 增加 `closeEvent`——更新运行中阻止关窗并在状态行提示（**不用模态框**，避免测试/脚本卡死）；`css_editor.closeEvent` 的 `wait(2000)` 超时改为阻止关闭并提示
   - 代价：不触及 `_FP_IMPL_MODULES` ⇒ 不影响校验指纹
-  - 验收：补 GUI 单测（运行中 close 不崩）；手工复演 X 关窗
+  - 验收：单测 `test_audit_fixes.TestGuiLifecycleGuards`（三处 closeEvent 存在）；手工复演 X 关窗
 - [x] **已完成 中危一** 配置与预设写盘非原子（2026-10-22 修复；产物类剩余）
   - 位置（2026-10-22 补全清单；无 `os.replace` 的直写点）：`gui/panel.py` `open(path, "w")` 共 8 处——`:278-280`（`save_current` 写 `presets/config.user.json`）、`:329-331`（`save_config_preset`）、`:357-359`（`set_config_preset_theme`）、`:415-418`/`:431-435`/`:531-534`（`mkstemp` 临时件、调用方删，可接受）、`:2556-2558`（`clear_xml_dir` 写预设）、`:3230-3232`（`SourceDialog.accept` 有预设分支）；间接经 `save_current`：`:2560`/`:3237`。`gui/css_editor.py:259-260`、`:1896-1897`。`theme.py:1021-1046`（run.json 直写，`:1031` 失败时 `.bad` 改名）。产物类同样非原子：`verify.py:2072-2077`/`:2251-2259`（compare 文本对）、`:1003-1013`（merged docx）、`render_docx.py:1238`/`:1308`、`render_epub.py:103`、`render_md.py:75`、`render_txt.py:81`、`merge.py:228`（合册 XML）、`render_pdf.py:604`/`:635`（HTML 交付物）、`render_pdf.py:281-283`（先 `os.remove` 后 `os.rename`，崩溃窗口丢旧文件）
   - 影响：写一半崩溃或磁盘满 ⇒ 半截 JSON/CSS/产物；GUI 配置损坏起不来；验证产物残卷可能被下轮当输入误读
@@ -1051,17 +1058,18 @@
   - 代价：改 `theme` ⇒ 校验指纹整体失效
   - 验收：单测 `test_audit_fixes.TestThemeNumericGuard`（坏值不崩、`.5em` 仍解析）
 - [ ] **待做 中危十** GUI 删除与统计的卡顿/冻结面
-  - 位置：`panel.py:3041-3064`（`_refresh_verify_info` 每个 `textChanged` 同步全树 `os.walk` 统计校验目录大小——产物几万文件时逐键卡顿）；`panel.py:706-745`＋`1936-1985`/`3077-3101`（清理确认框只列 `*（验证）` 类目录名，`clean_verify_dirs` 对默认根是整树 `rmtree` 且在 GUI 线程执行——大产物树冻结分钟级，实际删除范围超出确认列表）；`css_editor.py:2715`/`2688-2691`（导出 PDF／DOCX 兜底渲染在 GUI 线程同步起外部引擎，界面冻结数十秒无进度无取消）
+  - 位置：`panel.py`（`_refresh_verify_info` 每个 `textChanged` 同步全树 `os.walk` 统计校验目录大小）；`panel.py`（清理确认框只列 `*（验证）` 类目录名，`clean_verify_dirs` 对默认根是整树 `rmtree` 且在 GUI 线程执行）；`css_editor.py:2715`/`2688-2691`（导出 PDF／DOCX 兜底渲染在 GUI 线程同步起外部引擎，界面冻结数十秒无进度无取消）
   - 另：`panel.py:1949-1952` 读 `source.verify_root` 失败被静默当 None ⇒ 清理范围旁路扩大到默认根整树
-  - 修法：统计防抖＋挪后台或缓存；删除挪后台并把整树实际范围列进确认框；读取失败显式中止清理；导出渲染挪后台线程（与高危八同批治理线程收尾）
+  - 已修部分（2026-10-22）：输入变化改 300ms 防抖（`_schedule_verify_info`），刷新按钮仍即时；清理确认框在默认根时明示「将整树删除 {输出}/验证」；读自定义校验根失败改为警告并中止清理
+  - 剩余：`clean_verify_dirs` 挪后台线程；`css_editor` 导出（PDF/DOCX）挪后台线程
   - 代价：不触及 `_FP_IMPL_MODULES` ⇒ 不影响校验指纹
-  - 验收：大产物目录逐键不卡；清理框列出全部实际删除项
-- [ ] **待做 中危十一** 各渲染器缺省产物名未净化（`work.id` 直拼）
-  - 位置：`render_docx.py:1235-1238`（`filename = f"{work.id}.docx"` 后 `os.path.join`）、`render_docx.py:1305-1308`（分卷 `f"{work.id}_第{juan_no}.docx"`）、`render_md.py:73`、`render_txt.py:79`、`render_epub.py:101`（同形 `f"{work.id}.<ext>"`）
-  - 触发：CLI/GUI 主路径传 `out_name`（已过 `filename.sanitize`）；库调用/第三方按 `render_work(w, out_dir)` 缺省调用时 `Work.id` 来自 XML `xml:id` 原样（`names.get_work_id_from_basename` 未命中形态回退原文）⇒ 畸形 `xml:id="../../x"` 可写出输出目录外
-  - 修法：缺省分支同样过 `filename.sanitize`（非法字符全角化会消掉分隔符）
-  - 代价：改 `render_docx`/`render_md`/`render_txt`/`render_epub` ⇒ 校验指纹整体失效
-  - 验收：`xml:id` 含路径分隔符的单测（产物仍落 `out_dir`）；常规输出逐字不变
+  - 验收：单测（防抖方法存在、既有行跟随用例改等待防抖后通过）；大产物目录手测
+- [x] **已完成 中危十一** 各渲染器缺省产物名未净化（2026-10-22 修复）
+  - 位置：`render_docx.py`（`f"{work.id}.docx"` 与分卷 `f"{work.id}_卷{n}.docx"`）、`render_md.py:73`、`render_txt.py:79`、`render_epub.py:101`（同形 `f"{work.id}.<ext>"`）
+  - 触发：CLI/GUI 主路径传 `out_name`（已过 `filename.sanitize`）；库调用/第三方按 `render_work(w, out_dir)` 缺省调用时 `Work.id` 来自 XML `xml:id` 原样 ⇒ 畸形 `xml:id="../../x"` 可写出输出目录外
+  - 修复（2026-10-22）：四个渲染器缺省分支统一 `filename.sanitize(...)`（非法字符全角化）
+  - 代价：改四个渲染器 ⇒ 校验指纹整体失效
+  - 验收：单测 `test_audit_fixes.TestDefaultOutputNames`（`../evil` 产物仍落 `out_dir`）
 - [ ] **待做 低危一** 宽 `except Exception` 全包 186 处（2026-10-22 实数）⇒ 失败无痕；建议至少写进转换报告或日志
   - 分布：`verify.py` 46、`gui/__main__.py` 28、`render_pdf.py` 27（其中 COM 区约 21 处属「逐语句不倒下」设计配套，可豁免）、`gui/panel.py` 22（2026-10-22 订正，原记 17）、`cli.py` 15、`gui/css_editor.py` 15、`fonts.py` 12、`annotate.py` 7、`update_data.py`/`fetch.py`/`filename.py` 各 3、`render_docx.py` 2、`theme.py`/`figures.py`/`report.py` 各 1；全包无裸 `except:`
   - 典型吞错实例：`cli.py:1241`（校验比对写盘失败静默置空，报告定位信息缺失）、`verify.py:1853`（配置解析失败静默回工厂默认）、`panel.py:1951`（清理读自选根失败静默回默认根）、`theme.py:592`（字体变量解析失败静默空表，DOCX 字体全回退无提示）、`css_editor.py:948`（解析失败把空表缓存为永久结果，后续字体判断失真）
