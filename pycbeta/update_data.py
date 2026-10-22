@@ -49,6 +49,11 @@ def load_sources(root=None):
             raise ValueError(f"remote_sources[{key}].kind 未知：{kind!r}")
         dest = spec.get("dest", "") or ""
         parts = tuple(p for p in dest.replace("\\", "/").split("/") if p)
+        bad = [p for p in parts if p in (".", "..") or (len(p) == 2 and p[1] == ":")]
+        if bad:
+            raise ValueError(
+                f"remote_sources[{key}].dest 含非法路径成分：{bad[0]!r}"
+                "（不得含 `..` 或盘符，防配置被替换后写出仓库）")
         skey = spec.get("source") or key.replace("-", "_")
         url = spec.get("url") or _cf.REMOTE_URLS.get(skey, "")
         if kind != "manual" and (not url or not parts):

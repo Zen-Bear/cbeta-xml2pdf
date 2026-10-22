@@ -226,7 +226,10 @@ class FontLocator:
                 if not fn.lower().endswith(FONT_EXTS):
                     continue
                 path = os.path.join(root, fn)
-                families = read_family_names(path)
+                try:
+                    families = read_family_names(path)
+                except Exception:  # noqa: BLE001 —— 单个字体损坏/被锁不拖垮整体索引
+                    continue
                 keys = [_normalize(f) for f in families]
                 stem = _normalize(os.path.splitext(fn)[0])
                 if stem:

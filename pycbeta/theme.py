@@ -615,7 +615,11 @@ def _subst_vars(value, vars):
             return vars[name]
         return fb.strip() if fb else m.group(0)
     prev, out = None, value or ""
+    seen = set()
     while prev != out:
+        if out in seen or len(seen) >= 32:
+            break        # 变量环 / 超长链：停止代入（有限次保证，不再挂死）
+        seen.add(out)
         prev = out
         out = _VAR_RE.sub(rep, out)
     return out
@@ -998,8 +1002,11 @@ def _replace_json_string_slot(text, key, value):
     """文本级换槽值：只动目标行，其余字节（含注释/空行/顺序）原样保留。
     键不存在则插到末尾 `}` 之前。"""
     pat = re.compile(r'("%s"\s*:\s*)"(?:[^"\\\n]|\\.)*"' % re.escape(key))
-    rep = r"\1" + json.dumps(value, ensure_ascii=False)
-    new, n = pat.subn(rep, text, count=1)
+    # 用函数替换绕开模板转义层：json.dumps 的 `\\` 不会被 re 再解释一次
+    #（旧写法 `r"\1" + json.dumps(...)` 会把 `\\` 减半成 `\`，产出非法 JSON）
+    def _repl(m):
+        return m.group(1) + json.dumps(value, ensure_ascii=False)
+    new, n = pat.subn(_repl, text, count=1)
     if n:
         return new
     ins = '\n  "%s": %s\n' % (key, json.dumps(value, ensure_ascii=False))

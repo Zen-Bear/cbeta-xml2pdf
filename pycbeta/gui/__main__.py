@@ -48,15 +48,30 @@ from PySide6.QtGui import (QColor, QCursor, QDesktopServices, QFont,
                            QKeySequence, QPalette, QShortcut)
 
 
-def parse_produced_paths(log):
+def parse_produced_paths(log, within=None):
     r"""子进程 stdout（如 `T0672: docx(footnote) -> C:\out\T0672.docx`）→ 存在的产物路径列表。
-    只认 `->` 行尾且文件存在的路径，避免误吞日志文本。"""
+    只认 `->` 行尾且文件存在的路径，避免误吞日志文本；`within` 给定时还要求路径落在
+    指定目录（字符串或列表）之下，防渲染核心/第三方引擎打印外部路径被误收编。"""
     import re
+    allowed = []
+    if within:
+        dirs = [within] if isinstance(within, (str, os.PathLike)) else list(within)
+        allowed = [os.path.normcase(os.path.abspath(d)) for d in dirs if d]
     out = []
     for line in (log or "").splitlines():
         m = re.search(r"->\s*(.+?\.\w+)\s*$", line)
-        if m and os.path.isfile(m.group(1).strip()):
-            out.append(m.group(1).strip())
+        if not m:
+            continue
+        p = m.group(1).strip()
+        if not os.path.isfile(p):
+            continue
+        if allowed:
+            ap = os.path.normcase(os.path.abspath(p))
+            if not any(ap == a or ap.startswith(a if a.endswith(os.sep)
+                                               else a + os.sep)
+                       for a in allowed):
+                continue
+        out.append(p)
     return out
 
 
@@ -778,7 +793,7 @@ class BatchWorker(QThread):
                 self._last_render_err = (_last_error_line(err)
                                          or _last_error_line(out))
                 self.log.emit(f"✗ {fmt} 生成失败：{self._last_render_err}")
-            return ok, parse_produced_paths(out) if ok else []
+            return ok, parse_produced_paths(out, within=out_dir) if ok else []
         except Exception as e:
             self._last_render_err = str(e)
             self.log.emit(f"✗ {fmt} 生成失败：{e}")

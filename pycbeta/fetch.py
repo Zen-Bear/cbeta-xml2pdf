@@ -342,6 +342,17 @@ def _catalog_title(presets, canon: str, no: str, vol: str = "") -> str:
     return ""
 
 
+def _catalog_dest(wdir: str, name: str) -> str:
+    """catalog 记录的 XML 文件名 → 落盘路径（只允许纯文件名）。
+
+    catalog（`cbeta/data/sutra_mapping.txt`）属仓内数据文件；若被替换成含
+    `..`/分隔符/盘符的值，直接拒绝，防写出 work 目录。"""
+    n = name or ""
+    if not n or n in (".", "..") or "/" in n or "\\" in n or ":" in n:
+        raise ValueError(f"catalog 文件名不合法：{n!r}")
+    return os.path.join(wdir, n)
+
+
 def _fmt_dir(fmt: str) -> str:
     """基线格式目录名：txt_notes（官方 text-with-notes）→ `txt/`；其余同名。"""
     return "txt" if fmt == "txt_notes" else fmt
@@ -432,9 +443,13 @@ def _fetch_one(work_id: str, fmt: str, canon: str, no: str,
     if fmt == "xml":
         saved = []
         for rec in files:
+            try:
+                dest = _catalog_dest(wdir, rec["file"])
+            except ValueError as exc:
+                print(f"{work_id}: {exc}")
+                continue
             url = dl.get("xml", DEFAULT_DOWNLOADS["xml"]).format(
                 canon=canon, vol=rec["vol"], file=rec["file"])
-            dest = os.path.join(wdir, rec["file"])
             if os.path.isfile(dest):
                 saved.append(dest)
                 continue
@@ -896,7 +911,12 @@ def check_ebook_updates(cbeta_ebook: str, presets: Optional[Dict] = None,
             continue
         changed, failed, details = 0, 0, []
         for rec in recs:
-            dest = os.path.join(d, rec["file"])
+            try:
+                dest = _catalog_dest(d, rec["file"])
+            except ValueError as exc:
+                failed += 1
+                details.append(f"{rec.get('file')} 跳过：{exc}")
+                continue
             url = xml_tmpl.format(canon=canon, vol=rec["vol"], file=rec["file"])
             st, detail = probe(url, dest)
             if st == "changed":

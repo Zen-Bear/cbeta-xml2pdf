@@ -179,6 +179,7 @@ def main(argv=None):
 
         def do(fmt, outdir, page, mono, notes, engine):
             nonlocal total, fail
+            total += 1
             try:
                 ok, detail = render_job(xml_fn, work, fmt, outdir, page, mono, notes, engine)
                 mark = "[OK]  " if ok else "[FAIL]"

@@ -59,12 +59,23 @@ def resolve_engine_vertical_lang(args, presets):
     return engine, vertical, lang
 
 
+def _print_safe(msg=""):
+    """stdout 打印的编码回退：管道/重定向为 GBK 等窄编码时不让扩展汉字中断整批任务。"""
+    try:
+        print(msg)
+    except UnicodeEncodeError:
+        print(str(msg).encode("gbk", "replace").decode("gbk", "replace"))
+
+
 def load_theme(path, lang="zh-Hant"):
     if path.endswith(".css"):
         from .theme import theme_file_text
         return Theme.from_css(theme_file_text(path), lang)
-    with open(path, encoding="utf-8") as f:
-        data = json.load(f)
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"主题 JSON 编码不是 UTF-8：{path}") from exc
     return Theme(data.get("tags") or data)
 
 
@@ -139,7 +150,7 @@ def _report_missing_figures(wid, fmt, renderer):
     """图片缺失汇总（警告 + 占位，不中断；txt/md 本就只出【圖】标记，不在此列）。"""
     miss = list(getattr(renderer, "missing_figures", None) or [])
     if miss:
-        print(f"{wid}: {fmt} 图片缺失（占位）：{', '.join(miss)}")
+        _print_safe(f"{wid}: {fmt} 图片缺失（占位）：{', '.join(miss)}")
         try:
             from .report import report
             for b in miss:
@@ -267,7 +278,7 @@ def render_one(w, fmt, out_dir, out_name, args, theme, html_base=None, figure_ba
         # 逐文件打印完整路径（GUI 文件列靠行尾 `-> <路径>.<ext>` 抓取；摘要式
         # `-> N file(s) in <dir>` 抓不到，会让 html 产物从文件列漏掉）
         for _fn in files:
-            print(f"{w.id}: html({note_mode}) -> {os.path.join(out_dir, _fn)}")
+            _print_safe(f"{w.id}: html({note_mode}) -> {os.path.join(out_dir, _fn)}")
 
     elif fmt == "docx":
         r = build_docx_renderer(args, theme, figure_base, note_mode)
@@ -1618,9 +1629,9 @@ def main(argv=None):
                 _rpt = os.path.join(verify_dir, _rep_base + ".txt")
                 with open(_rpt, "w", encoding="utf-8") as _f:
                     _f.write("\n".join(block) + "\n")
-                print(f"报告已写入: {_rpt}")
+                _print_safe(f"报告已写入: {_rpt}")
             except Exception as e:
-                print(f"写入报告失败: {e}")
+                _print_safe(f"写入报告失败: {e}")
             # 机读结论（指纹提案 §4）：与 report.txt 同目录覆盖写；失败只打印
             try:
                 from .verify import build_report_json as _v_json

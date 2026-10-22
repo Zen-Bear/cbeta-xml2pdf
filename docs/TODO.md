@@ -920,6 +920,12 @@
   - 观察（不立项）：`parser._scan_primary_vols` 用正则扫原文，若注释/CDATA 内出现 `<milestone>`/`nkr_note_` 字样会误判卷界（只影响跨卷星号抑制）；`test/verify_text.py` 的比对循环与 CLI 同款（开发脚本，实施长度门时需同步，已并入长度门条目）；`test/run_tests.py:168/223` 的 `total` 从未累加（汇总恒显示 0 项，已并入低危七）
   - 跳过用例构成：122 条全部为环境/语料门控（`requires_data` 无外部 CBETA 电子书库、缺 `pywin32`、认不到可选样式表、单文件直跑无基线、`test_zzz_repo_hygiene` 空基线），非失败、非屏蔽缺陷
   - 打包配置：`.spec` 的 presets 源指向 `%TEMP%\opencode\rel095\presets`（本机发版 staging），发版前必须手改；`.spec` 被 `.gitignore` 排除，与 v0.95 发版记录一致
+- [x] **已完成 审核批 1（快修）实施（2026-10-22）**
+  - 修复：高危六（`theme._subst_vars` 环/上限）、高危七（`theme._replace_json_string_slot` 改用函数替换）、中危六（`gui/__main__.parse_produced_paths` 前缀校验，调用点传 `out_dir`）、中危五第一批（`update_data.load_sources` 拒 `..`/盘符；`fetch._catalog_dest` 只收纯文件名，两落盘点改用）、低危三第一批（`cli._print_safe` 替换 3 处＋`load_theme` 编码提示）、低危七第一批（`fonts._scan` 逐文件容错；`test/run_tests.py` 计数）
+  - 新增测试：`pycbeta/tests/test_audit_fixes.py`（11 项，覆盖上述全部修法）
+  - 回归：全量 `python -m unittest discover -s pycbeta/tests -q -t .` = **1363 OK（skipped=122）**
+  - 指纹：改 `theme` 在 `_FP_IMPL_MODULES` ⇒ 已存校验指纹整体失效（攒批做完统一重验，不单独 bump 版本号）
+  - 未做（留后续批次）：中危五剩余 `os.replace` 逐项边界、低危三剩余 html 定位 glob、低危七剩余 `annotate.rt_css_rule`（记录不立项）
 - [ ] **待做 高危一** HTML/EPUB 属性引号未转义（可复现）
   - 位置（2026-10-22 补全为 15 处）：`render_html.py:52-53`（`_esc`＝`html.escape(s, quote=False)`，不转义 `"`）。属性上下文：`:255`、`:366`、`:527-528`、`:630`、`:647`、`:663`、`:667`、`:700`、`:796`、`:802`、`:840`、`:893`（已手动 `replace('"', "&quot;")`，口径不一致）、`:941-942`、`:945`、`:950`、`:956`/`:958`；其中 `:710`（`lg` 的 `text-indent` 直拼 `style='…'`）连 `_esc` 都没走，最弱。`render_epub.py:22`（`sax.escape` 同样不转义引号）
   - 实证：构造 `style='color:red" onmouseover="alert(1)'` 渲染出 `<p class="" style="color:red" onmouseover="alert(1)">`（属性被撑破）；`type='x" class="evil'` 出重复 `class` 属性
@@ -950,19 +956,17 @@
   - 修法：进 OOXML 的字体名统一 XML 属性转义（`& < > "`）并剥除非法字符
   - 代价：改 `theme` ⇒ 校验指纹整体失效
   - 验收：补单测；默认预设与现有语料输出逐字不变
-- [ ] **待做 高危六** `var()` 变量环使 CSS 解析永久挂死（已实测复现）
+- [x] **已完成 高危六** `var()` 变量环使 CSS 解析永久挂死（已实测复现；2026-10-22 修复）
   - 位置：`theme.py:610-621`（`_subst_vars`：`while prev != out: out = _VAR_RE.sub(rep, out)`，无迭代上限、无环检测）
   - 实证（2026-10-22 本会话复跑）：CSS `:root{--x:var(--y);--y:var(--x)}` ⇒ `_subst_vars` 8 秒不收敛；CLI/GUI 预览线程都会被冻住 ⇒ 一次坏 CSS 冻结全流程
-  - 修法：`while` 加迭代上限（如 32 次）＋环检测（替换源值本身仍含 `var(` 即记负缓存不再代入）
-  - 代价：改 `theme` ⇒ 校验指纹整体失效
-  - 验收：补环单测（限时收敛）；默认主题与官方基底 CSS 回归
-- [ ] **待做 高危七** run.json 文本替换模板把反斜杠减半（已实测复现，Windows 常态路径可命中）
+  - 修复（2026-10-22）：`_subst_vars` 增加已访问值集合与 32 次上限，环/超长链在有限次内停止代入；单测 `test_audit_fixes.TestThemeVarSubst`（环收敛＋正常链）
+  - 代价：改 `theme` ⇒ 校验指纹整体失效（已接受；攒批统一重验）
+- [x] **已完成 高危七** run.json 文本替换模板把反斜杠减半（已实测复现；2026-10-22 修复）
   - 位置：`theme.py:998-1001`（`rep = r"\1" + json.dumps(value, …)` 后 `pat.subn(rep, …)`——替换模板按正则转义规则处理，`json.dumps` 产出的 `\\` 减半成单个 `\` 落盘）
   - 实证（2026-10-22 本会话复跑）：`_replace_json_string_slot(… "E:\\dev\\cbeta\\my n.json" …)` 写出 `"E:\dev\cbeta\my n.json"`，属非法 JSON，重读报 `Invalid \escape`
   - 触发：GUI「设为默认」在预设跨盘符时走 `slot = 路径` 兜底（`gui/panel.py:2038-2039`）喂绝对路径——Windows 常态即可命中；run.json 损坏由 `theme.py:1031` `.bad` 改名兜底但槽位丢失
-  - 修法：替换改用函数形式（`re.sub(pattern, lambda m: …)`）绕开模板转义层
-  - 代价：改 `theme` ⇒ 校验指纹整体失效
-  - 验收：补单测（反斜杠/引号/回退引用样值）；GUI「设为默认」往返读回一致
+  - 修复（2026-10-22）：`pat.subn` 改用函数替换（`lambda`/`_repl`），绕开模板转义层；单测 `test_audit_fixes.TestRunJsonSlotReplace`
+  - 代价：改 `theme` ⇒ 校验指纹整体失效（已接受）
 - [ ] **待做 高危八** 更新对话框线程生命周期：运行中关窗 qFatal 崩溃（2026-10-22 实核）
   - 位置：`gui/panel.py:662`（`DataUpdateWorker` 创建无父对象）、`:2982`（`EbookUpdateWorker` 同型）；全文件无 `closeEvent`/`reject` 兜底（全量检索 0 命中），“关闭”按钮置灰拦不住标题栏 X
   - 触发：点「开始更新」或「更新XML」后在收尾前按 X 关窗 ⇒ `QThread destroyed while running` qFatal，整个进程崩溃；`gui/css_editor.py:2728-2729` 的 `closeEvent wait(2000)` 超时放行同型（样张重渲超 2 秒同样崩）
@@ -993,15 +997,15 @@
   - 触发：分发出去的「配置包」被替换为含 `dest: "../../xx"` 的 remote_sources.json ⇒ 更新内容（ttf／文本／JSON）覆盖仓库外任意同名文件
   - 另：`:202-258` 循环体内 `os.replace` 无逐项异常边界，单项被占用（字体验证程序/资源管理器锁定）时异常冒泡中断全部剩余更新项
   - 同类（2026-10-22 补读）：`fetch.py:437`/`:899` 把 catalog 记录的 `rec["file"]` 直接 `os.path.join(wdir, …)`——`cbeta/data/sutra_mapping.txt` 同属仓内数据文件，若被替换同样可写出 work 目录；修法一并校验文件名不含分隔符与 `..`
-  - 修法：解析时拒 `..`、盘符与绝对路径成分（或最终路径须落在仓库根内）；`os.replace` 加逐项异常边界计入 failed 后继续
+  - 已修部分（2026-10-22）：`load_sources` 解析时拒绝 `..`/盘符成分；新增 `fetch._catalog_dest` 只接受纯文件名（两个落盘点均改用）；单测 `test_audit_fixes.TestRemoteDestGuard`/`TestCatalogDest`
+  - 剩余：`:202-258` 的 `os.replace` 逐项异常边界（单项被锁不中断其余更新项）
   - 代价：不触及 `_FP_IMPL_MODULES` ⇒ 不影响校验指纹
   - 验收：恶意 `dest` 单测拒绝并报错；正规 8 源照常更新
-- [ ] **待做 中危六** GUI 产物收编只凭「行尾 `→`＋文件存在」
+- [x] **已完成 中危六** GUI 产物收编只凭「行尾 `→`＋文件存在」（2026-10-22 修复）
   - 位置：`gui/__main__.py:51-60`（`parse_produced_paths` 正则＋`os.path.isfile` 即收编）、消费点 `:781`、文件列 `:546-550`、单击打开 `:1343-1362`
   - 触发：渲染核心或第三方引擎在 stdout/stderr 打印任意 `xxx -> 已存在路径` ⇒ 该文件被当作本轮产物展示，用户单击即用系统默认程序打开别的文件
-  - 修法：收编路径做前缀校验（normcase 后必须位于本轮输出目录或校验目录之下）
+  - 修复（2026-10-22）：`parse_produced_paths(log, within=…)` 增加前缀校验（normcase 后必须位于本轮输出目录之下），调用点传 `out_dir`；未传 `within` 时保持旧行为（既有调用/单测不变）；单测 `test_audit_fixes.TestProducedPathsWithin`
   - 代价：不触及 `_FP_IMPL_MODULES` ⇒ 不影响校验指纹
-  - 验收：伪造子进程输出单测（外部路径不收编）；正常转换收编行为不变
 - [ ] **待做 中危七** 校验抽取单点失败不降级（损坏基线抛穿整轮）
   - 位置：`verify.py:2158`/`2171`/`2179`/`2190`/`2203`/`2214`/`2222`（基线试算循环内 `_extract_epub_parts(_p)[0]`、`extract_text` 等无逐文件 `try` ⇒ 单个损坏官方件抛穿，链上后续回退基线不再试算；与 `_body_of`（`:1174` 全捕返回 None）口径不一）；`:362`/`371`/`418`/`974`/`986`/`989`/`998`（docx/odt 抽取严格 UTF-8 解码无 `errors="replace"`，损坏件 UnicodeDecodeError 抛穿，同后果）
   - 触发：官方基线本地损坏/移动中断（vendor 0.2.0 已挡住下载截断，本地损坏仍存在）⇒ 该卷记入错误而非回退其他候选基线
@@ -1042,7 +1046,8 @@
   - 验收：坏 XML 单测出正常产物；语料回归逐字不变
 - [ ] **待做 低危三** CLI 输出编码零碎
   - 位置：`cli.py:142`/`270`/`1621`（裸 `print` 无 `UnicodeEncodeError` 回退——GBK 重定向管道遇书名扩展汉字在批量渲染完成后中断且退出码非零；对照 `:1141-1147` `vlog` 已有回退）；`cli.py:66-68`（`load_theme` 严格 UTF-8 无捕获，GBK 编码的主题文件直接 traceback）；`cli.py:1234-1247`（`--verify-only` 下 html 产物定位用全目录 `glob("*.html")` 取首项，多作品输出目录可能拿错文件）
-  - 修法：print 统一走 `vlog` 或进程级 UTF-8 封装；`load_theme` 捕 `UnicodeDecodeError` 给编码提示；html 定位改按 `{id}_p…` 命名规则
+  - 已修部分（2026-10-22）：新增 `_print_safe`（编码失败回退 GBK replace），替换 `:142`/`:270`/`:1621`（含 `:1623` 同类）；`load_theme` 捕获 `UnicodeDecodeError` 并抛 `ValueError` 带「编码不是 UTF-8」提示；单测 `test_audit_fixes.TestLoadThemeEncoding`
+  - 剩余：`:1234-1247` 的 html 产物定位改按命名规则
   - 代价：不触及 `_FP_IMPL_MODULES` ⇒ 不影响校验指纹
   - 验收：GBK 管道冒烟不中断；verify-only 多作品目录定位正确
 - [ ] **待做 低危四** verify.py 健壮性零碎（一批六件）
@@ -1072,7 +1077,9 @@
   - `fonts.py:223-229`（`_scan`）：对单个字体文件的 `read_family_names` 无异常边界（`open` 无 `try`）——扫描目录里有被锁/不可读的字体时整个索引构建失败，渲染随之崩；应逐文件 `try` 跳过
   - 另记（不立项）：`merge.py` 的 `tree.write` 合册 XML 非原子已并入中危一；`gaiji.py:30 pua()` 无调用点（若第三方调用，畸形编号 `int()` 会 ValueError）
   - `test/run_tests.py:168/223`：`total` 计数器从未累加（只加 `fail`），汇总恒显示「0 项」（开发脚本；`do()` 里补 `total += 1` 即可）
-  - 修法：前两条各一行级修（测试脚本计数器一行）；代价：改 `annotate` 在 `_FP_IMPL_MODULES` ⇒ 校验指纹整体失效（`fonts` 不在，不触）；验收：对应单测
+  - 已修部分（2026-10-22）：`_scan` 逐文件 `try/except` 跳过坏字体；`test/run_tests.py` 的 `do()` 补 `total += 1`；单测 `test_audit_fixes.TestFontScanResilience`
+  - 剩余：`annotate.py:95-111` 的 `rt_css_rule` 过滤（记录层面保留，不立项）
+  - 代价：改 `annotate` 会触指纹（本轮未改 `annotate`），`fonts` 不在 `_FP_IMPL_MODULES` 不触
 - [ ] **待做 测试稳定性** 全量 discover 偶发原生崩溃：2026-10-21 第一次 `python -m unittest discover -s pycbeta/tests -q -t .` 以 `0xC0000005`（Windows 访问冲突）退出且无失败摘要，重跑即 1352 OK（skipped=122）；27 个测试模块单独跑全部 OK ⇒ 属跨模块交互/解释器退出期问题，非某个用例失败。定位方向：offscreen 的 PySide6 与 native 库（WeasyPrint / PyMuPDF）退出顺序；未复现前不改代码
 - [x] **已完成 文档（publish 侧）** 上游提案文档与 publish `TODO.md` 同步到 v0.2.0 现状
   - `publish/docs/上游-cbeta-fetch-TLS与分块下载.md` 已加「实施结果（2026-10-21）」：上游 commit `817d207`、版本 `0.2.0`、两仓 vendor 同步记录、解压原子性与同名策略留第二批
