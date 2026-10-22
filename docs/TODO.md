@@ -760,7 +760,7 @@
   - 截断规则：整条 trial 先过长度门——超线 ⇒ 本 trial 直接 fail-截断，跳过 `diff_stats` 与正文旁路；未超 ⇒ 走今天的全量精确（注释差异照常全列）。停止只停当前 trial，不停基线链（一个基线截断照样试下一个）。已知取舍：正文缺 N 字、注释多 N 字（总长度差 0）时门不触发，仍走全量比对——罕见，只影响速度不影响结论。
   - 截断显示：`长度差 X > 阈值（未全量比对）`，**不给缺/多拆分、不列差异片段**（长度门不找差异位置，无片段可列）；`【源】/【新】/【源比较】/【新比较】`行照常（GUI 侧 compare 文件已先写；CLI 侧全部 trial 都截断时无 compare 文件，报告只给长度差）。`report.json` 不加新字段：沿用现有「fail + 缺/多=None」形态（`_record_counts`/`build_report_json` 已按 None 处理），`diff_scope` 不变。
   - 定位边界（已向用户说明）：截断报告只能说「差很多、别等了」，说不出哪里差；首字符就不同的对连「首差异锚点」都无价值，故本次不加锚点。真定位（前 N 差异块 + 行号）要靠分段比对。
-  - 落点（2026-10-20 简化，约 30~40 行）：① `verify.py:2261` 前 3 行（算长度差，超线记截断 trial 并 `continue`；compare 文件已在 `:2250-2259` 写好）；② `cli.py:1500` 前同样 3 行；③ 全截断兜底：`verify.py:2290` 前返回 `missing/extra/total=None` 的 fail 记录，`cli.py:1566` 的 `if best is None: continue` 改为输出 fail 记录（否则整个格式被静默跳过）；④ `verify.py:2463` 加截断显示分支。不碰 `_body_sidecar`（3 返回值与 3 处测试不变）、`best` 15 元组、`diff_stats`、xml 基线路径、指纹载荷。
+  - 落点（2026-10-20 简化，约 30~40 行）：① `verify.py:2261` 前 3 行（算长度差，超线记截断 trial 并 `continue`；compare 文件已在 `:2250-2259` 写好）；② `cli.py:1500` 前同样 3 行；③ 全截断兜底：`verify.py:2290` 前返回 `missing/extra/total=None` 的 fail 记录，`cli.py:1566` 的 `if best is None: continue` 改为输出 fail 记录（否则整个格式被静默跳过）；④ `verify.py:2463` 加截断显示分支。不碰 `_body_sidecar`（3 返回值与 3 处测试不变）、`best` 15 元组、`diff_stats`、xml 基线路径、指纹载荷；另有 `test/verify_text.py:239-366` 同款比对循环（开发脚本，实施时一并同步）
   - 影响：改 `verify.py` ⇒ `_impl_digest` 变（`_FP_IMPL_MODULES` 含 `verify`）⇒ 全部已存校验指纹一次性失效，需接受（与方案无关）。
   - 验收：构造用例——复制一个官方基线文件、截掉一半，断言秒级 fail、缺/多为空、报告有「未全量比对」；正常作品（如 T1579 html）仍 `缺0/多0`；T1499 txt（`缺0/多18` 注释差异、正文长度差小）仍出精确数 + `【仅仅注释差异】`；单测（截断/不截断/链 fallback/全截断兜底）＋ 全量回归；文档（`校验说明书.md` + `校验report.json说明.md` 各一行：fail 记录的缺/多可为空）同步。原 T1579 残卷场景已被「按卷核对与补缺」消除（该项已完成，见上），不再作为验收。
   - 注：原「html 10 秒依赖 `strip_head_no`」的注记已过时（行首令牌现恒剥，见上条「校验行首令牌恒剥、两侧同剥」），本次一并删除。
@@ -900,18 +900,31 @@
 - [x] **已完成 上游 cbeta-fetch 升级到 v0.2.0 并同步**（2026-10-21）
   - 上游 2026-10-21 18:40 发布 v0.2.0（commit `817d2070d5b502a860a4fe531607572d68a3dfe7`）：TLS 按主机预选（cbdata 只清 `VERIFY_X509_STRICT`）、分块流式下载 ＋ `Content-Length` 完整性校验、原子解压（同名 basename 整单失败）
   - xml2pdf：`pycbeta/_vendor/cbeta_fetch.py` 与 `pycbeta/_vendor/SOURCE.txt` 同步为 0.2.0（sha256 `353a6004984815e5afe2923fc59432ef9f7a7d8b043ad8d10bb294976fd5a2c7`，与上游工作区、publish 副本三份一致）
-  - 本仓 `fetch.py:273` 的「unverified SSL」注释已随本次订正（现说明共享层的证书策略与已知待改项）
+  - 本仓 `fetch.py:273` 的「unverified SSL」注释已随本次订正（当时写的是 0.1.2 回退口径「已知待改项」；2026-10-22 复核发现该「待改项」已被 0.2.0 做掉，注释已再订正为与 0.2.0 一致口径——TLS 按主机预选＋流式＋长度校验都在共享层，未提交）
   - 影响：`_vendor` 不在 `_FP_IMPL_MODULES` ⇒ 不触发校验指纹失效
 - [x] **已完成 全库代码审核（2026-10-21）**
   - 范围：`pycbeta/` 全包（30 个模块）＋ `test/` ＋ 根级脚本。方法：危险模式全量扫描（`eval`/`exec`/`subprocess`/zip/XML 解析/临时文件/宽 `except`/线程/路径拼接/文件编码）＋ 精读网络与写盘路径（`_vendor/cbeta_fetch.py`、`fetch.py`、`verify.py`（抽取与指纹段）、`update_data.py`、`figures.py`、`annotate.py`、`theme.py`（配置与预设段）、`gui/panel.py`、`gui/__main__.py`、`render_pdf.py`、`render_docx.py`（转义段）、`parser.py`、`merge.py`）＋ 两处可复现实验（属性注入、截断响应）
-  - 未逐行读完：`render_docx.py`（158KB）、`verify.py`（150KB）、`theme.py`（68KB）、`cli.py`（92KB）、`gui/css_editor.py`（118KB）——按风险点抽样，结论以抽样为准
+  - 当时未逐行读完：`render_docx.py`、`verify.py`、`theme.py`、`cli.py`、`gui/css_editor.py`（按风险点抽样；于 2026-10-22 第二轮全部补成逐行读完，见下）
   - 结论：3 项高危（HTML/EPUB 属性引号未转义、cbdata 证书失败回退不校验上下文、流式下载无长度校验）＋ 4 项中危（配置与预设写盘非原子、取消转换留半成品产物、LibreOffice 转换无超时、lxml 默认解析器未禁实体）＋ 低危（GUI 宽 `except` 吞异常、过期注释、重复语句）
   - 收敛：后两项高危已由上游 v0.2.0（commit `817d207`）修掉并同步两仓（见下两条「已完成」）；余下高危一项、中危四项待做
+  - 第二轮（2026-10-22）全文补审＋逐条核对后：新增待做高危五项、中危六项、低危五批；旧条目的行号/数量按实码订正（见下与各条目内 2026-10-22 标注）
+- [x] **已完成 全库代码审核第二轮：全文补审＋核对各条目（2026-10-22）**
+  - 范围与方法：第一轮只抽样的五个文件逐行读完——`render_docx.py`（3004 行）、`verify.py`（3328 行）、`theme.py`（1554 行）、`cli.py`（1679 行）、`gui/css_editor.py`（2797 行）；并补 `gui/panel.py`（3262 行）、`gui/__main__.py`（1488 行）、`update_data.py`、`render_pdf.py`（861 行）全文；第一轮已精读的 `render_html.py`、`render_epub.py`、`parser.py`、`filename.py`、`figures.py`、`names.py` 本轮通读核对；另补读 `fetch.py`（994 行）、`annotate.py`（593）、`fonts.py`（667）、`juan.py`（315）、`merge.py`（263）、`report.py`（362）、`render_md.py`（439）、`render_txt.py`（426）、`simplify.py`（136）、`model.py`（122）、`gaiji.py`（35）——至此 `pycbeta/` 生产模块全部全文读过。方法：五个后台只读审核分片负责，重大条目逐条由本会话亲手抽核或复现
+  - 复现（本会话亲手跑）：三条新增「高」全部实测——① theme 字体名注入走真实入口 `Theme.docx_run`，输出 `<w:rFonts w:ascii="x"/><w:color w:val="FF0000" …/>`（属性被闭合并可夹带任意 rPr 子元素）；② `_subst_vars` 变量环 8 秒不收敛（顺带实测：该循环持有的全局锁会连解释器退出阶段一起拖死）；③ run.json 替换模板产物为非法 JSON（`Invalid \escape`）
+  - 核对订正的旧记录：高危一属性上下文 5 处 ⇒ 实为 15 处（且 `:710` 完全未转义）；`render_docx.py` `_attr` 行号 `:488` ⇒ `:481-488`；`render_epub.py` `sax.escape` 现有用途全在文本节点（非现成漏洞，属未来属位扩展的口径约束）；`gui/panel.py` 宽 `except` 17 ⇒ 22、`gui/__main__.py`「20 余处」⇒ 28；`render_pdf.py` 子进程调用点补第 4 处 `:833`（prince）；宽 `except` 全包实数 186 处；`parser.py:90-91` 重复语句仍在
+  - 干净面（记录在案免复查）：`filename.sanitize`（非法字符全角化＋保留名＋200 字上限）与 `figures.split_graphic_url`（只取末段）确保作品 ID→文件名、图片名无路径穿越通道；`theme.py` 全量正则无灾难性回溯；`render_pdf.py` DocBuilder 拼接只有两个文件路径（Windows 文件名禁 `"`，现口径免疫）；`verify.py` 指纹为纯计算、zip 成员名从不参与文件系统路径；生产代码无 `eval`/`exec`/`shell=True`/`os.system`/`pickle`/`yaml.load`；「远程配置包」之外无外部输入直接驱动路径的通道；`juan.py` 卷号有 `_MAX_JUAN` 上限、milestone 解析带守护；`report.py` 纯内存收集不落盘；`gaiji.py:30 pua()` 全仓无调用点（死代码）
+  - 产物：新增待做高危四~八、中危五~十一、低危二~七；中危一写盘点清单补全、中危二补取消残留清单、中危三补 prince／COM／逐后端降级
+- [x] **已完成 全库代码审核第三轮：核心解析与未审区域（2026-10-22）**
+  - 范围：`parser.py` 全文（532 行，此前只读片段——IR 构建、校勘区间 `_wrap_corr`、跨卷星号抑制 `_scan_primary_vols`、`_backfill` 逐行核对）；根级 `CBETA-XML2PDF.spec`、`requirements.txt`、`run.json`、`.gitignore`；`test/run_tests.py`、`test/merge_cbreader.py`、`test/verify_text.py` 全文；测试基座 `pycbeta/tests/_data.py`、`test_zzz_repo_hygiene.py`；并核对 122 条跳过用例的构成
+  - 结果：无新增高/中危。解析层与文档口径一致（milestone 数值有守护、校勘区间未配对宁漏不误、星号抑制按注主锚卷号、注释回填只作用于 body 的 NoteRef）；未发现新的路径、注入或资源面
+  - 观察（不立项）：`parser._scan_primary_vols` 用正则扫原文，若注释/CDATA 内出现 `<milestone>`/`nkr_note_` 字样会误判卷界（只影响跨卷星号抑制）；`test/verify_text.py` 的比对循环与 CLI 同款（开发脚本，实施长度门时需同步，已并入长度门条目）；`test/run_tests.py:168/223` 的 `total` 从未累加（汇总恒显示 0 项，已并入低危七）
+  - 跳过用例构成：122 条全部为环境/语料门控（`requires_data` 无外部 CBETA 电子书库、缺 `pywin32`、认不到可选样式表、单文件直跑无基线、`test_zzz_repo_hygiene` 空基线），非失败、非屏蔽缺陷
+  - 打包配置：`.spec` 的 presets 源指向 `%TEMP%\opencode\rel095\presets`（本机发版 staging），发版前必须手改；`.spec` 被 `.gitignore` 排除，与 v0.95 发版记录一致
 - [ ] **待做 高危一** HTML/EPUB 属性引号未转义（可复现）
-  - 位置：`render_html.py:52-53`（`_esc` 用 `html.escape(s, quote=False)`，不转义 `"`），属性上下文 `:630`（`class="div-…"`）、`:647`/`:667`/`:700`（`style="…"`）、`:663`（`class="…"`）；`render_epub.py:22`（`sax.escape` 同样不转义引号）；`:893` 已单独 `replace('"', "&quot;")`（口径不一致）
+  - 位置（2026-10-22 补全为 15 处）：`render_html.py:52-53`（`_esc`＝`html.escape(s, quote=False)`，不转义 `"`）。属性上下文：`:255`、`:366`、`:527-528`、`:630`、`:647`、`:663`、`:667`、`:700`、`:796`、`:802`、`:840`、`:893`（已手动 `replace('"', "&quot;")`，口径不一致）、`:941-942`、`:945`、`:950`、`:956`/`:958`；其中 `:710`（`lg` 的 `text-indent` 直拼 `style='…'`）连 `_esc` 都没走，最弱。`render_epub.py:22`（`sax.escape` 同样不转义引号）
   - 实证：构造 `style='color:red" onmouseover="alert(1)'` 渲染出 `<p class="" style="color:red" onmouseover="alert(1)">`（属性被撑破）；`type='x" class="evil'` 出重复 `class` 属性
   - 现状数据：`cbeta_xml` 全库 229 个官方 XML 中含 `&quot;` 的 0 个（含 `style="…"` 属性的 177 个）⇒ 当前语料不触发，属硬化缺口而非正在发生的漏洞
-  - 修法：属性上下文统一走引号转义（`html.escape(s, quote=True)` 或新增 `_attr()`，与 `render_docx.py:488` 已有 `_attr` 同口径）；文本节点维持现口径
+  - 修法：属性上下文统一走引号转义（`html.escape(s, quote=True)` 或新增 `_attr()`，与 `render_docx.py:481-488` 已有 `_attr` 同口径）；文本节点维持现口径
   - 代价：改 `render_html`/`render_epub` 在 `_FP_IMPL_MODULES` ⇒ 已存校验指纹整体失效（下轮全库重验）
   - 验收：补两条单测（属性含引号不撑破属性）；229 部语料重渲染产物逐字不变
 - [x] **已完成 高危二** cbdata 证书失败回退不校验上下文（上游 v0.2.0 已修，2026-10-21 同步两仓）
@@ -923,25 +936,143 @@
   - 原问题：`download`/`fetch_if_changed` 的 `shutil.copyfileobj` 后直接 `os.replace`，未比对 `Content-Length` ⇒ 截断响应被当作完整文件落盘（实证：声明 100、实发 10，`copyfileobj` 不抛异常；旧写法 `r.read()` 会抛 `IncompleteRead`）
   - 上游修法（commit `817d207`）：`_copy_stream()` 边写边计字节（`:192-201`），`_check_length()` 比对 `Content-Length`，不符抛 `IOError`（`:204-208`），三处写盘点均调用（`:229-230`、`:240-241`、`:311-312`）⇒ 短读按失败重试
   - 影响：改 vendor 不触及 `_FP_IMPL_MODULES` ⇒ 不影响校验指纹
-- [ ] **待做 中危一** 配置与预设写盘非原子
-  - 位置：`gui/panel.py:274-281`（`save_current` 写 `presets/config.user.json`）、`:320-332`（`save_config_preset`）、`:343-360`（`set_config_preset_theme`）、`:417`、`:433`、`:533`；`gui/css_editor.py:259`、`:1896`——均 `open(path, "w")` 直写
-  - 影响：写一半崩溃或磁盘满 ⇒ 留下半截 JSON ⇒ 下次启动读配置失败（GUI 起不来）
-  - 修法：统一走「临时文件 ＋ `os.replace`」；publish 仓已有同类实现 `cbeta_publish/utils/atomic.py`（尚未提交），可移植思路
+- [ ] **待做 高危四** DOCX 图片名属性注入（可复现，2026-10-22 实核）
+  - 位置：`render_docx.py:1820`（`nm = _x(base)`，`_x` 在 `:476-478` 只转义 `&<>`）写进 `wp:docPr @name` 与 `pic:cNvPr @name`（同一 f-string 组）；`base` 来自 XML `<graphic url>` 的 basename
+  - 触发：XML 写 `url="x&quot;y.gif"` ⇒ 属性值解码出 `"` ⇒ document.xml 属性提前闭合 ⇒ 非法 OOXML，Word 打不开、回读校验直接失败。与 v0.94 修书签名（`_attr` `:481-488`）同族，是转义清单里唯一漏掉的「来自 XML 属性值的属性位」
+  - 现状数据：官方 229 XML 不含 `&quot;` ⇒ 语料不触发，属硬化缺口
+  - 修法：`nm` 改走 `_attr`（其余属位来源全是本机配置/主题而非 XML，已按低危五分列）
+  - 代价：改 `render_docx` 在 `_FP_IMPL_MODULES` ⇒ 校验指纹整体失效
+  - 验收：补单测（graphic url 含 `&quot;` 产出 docx 仍可开）；全量单测通过
+- [ ] **待做 高危五** 预设 CSS 字体名直拼进 OOXML rPr（已实测复现）
+  - 位置：`theme.py:1448-1449`（`docx_run` 内 `f'<w:rFonts w:ascii="{latin_name}" w:eastAsia="{east}" w:hAnsi="{latin_name}"/>'` 无任何 XML 转义；`:1436-1440` 的 `strip('"')`/`strip("'")` 只剥首尾，值中部引号原样保留）
+  - 实证（2026-10-22 本会话复跑）：CSS `body { font-family: x"/><w:color w:val="FF0000; }` ⇒ `docx_run("body")` 输出 `<w:rFonts w:ascii="x"/><w:color w:val="FF0000" …/>`，属性被闭合、可夹带任意 rPr 子元素
+  - 触发：复制/下载他人预设 CSS（presets 可流通，属预期内任意文本）⇒ DOCX 损坏或被夹带格式定义
+  - 修法：进 OOXML 的字体名统一 XML 属性转义（`& < > "`）并剥除非法字符
+  - 代价：改 `theme` ⇒ 校验指纹整体失效
+  - 验收：补单测；默认预设与现有语料输出逐字不变
+- [ ] **待做 高危六** `var()` 变量环使 CSS 解析永久挂死（已实测复现）
+  - 位置：`theme.py:610-621`（`_subst_vars`：`while prev != out: out = _VAR_RE.sub(rep, out)`，无迭代上限、无环检测）
+  - 实证（2026-10-22 本会话复跑）：CSS `:root{--x:var(--y);--y:var(--x)}` ⇒ `_subst_vars` 8 秒不收敛；CLI/GUI 预览线程都会被冻住 ⇒ 一次坏 CSS 冻结全流程
+  - 修法：`while` 加迭代上限（如 32 次）＋环检测（替换源值本身仍含 `var(` 即记负缓存不再代入）
+  - 代价：改 `theme` ⇒ 校验指纹整体失效
+  - 验收：补环单测（限时收敛）；默认主题与官方基底 CSS 回归
+- [ ] **待做 高危七** run.json 文本替换模板把反斜杠减半（已实测复现，Windows 常态路径可命中）
+  - 位置：`theme.py:998-1001`（`rep = r"\1" + json.dumps(value, …)` 后 `pat.subn(rep, …)`——替换模板按正则转义规则处理，`json.dumps` 产出的 `\\` 减半成单个 `\` 落盘）
+  - 实证（2026-10-22 本会话复跑）：`_replace_json_string_slot(… "E:\\dev\\cbeta\\my n.json" …)` 写出 `"E:\dev\cbeta\my n.json"`，属非法 JSON，重读报 `Invalid \escape`
+  - 触发：GUI「设为默认」在预设跨盘符时走 `slot = 路径` 兜底（`gui/panel.py:2038-2039`）喂绝对路径——Windows 常态即可命中；run.json 损坏由 `theme.py:1031` `.bad` 改名兜底但槽位丢失
+  - 修法：替换改用函数形式（`re.sub(pattern, lambda m: …)`）绕开模板转义层
+  - 代价：改 `theme` ⇒ 校验指纹整体失效
+  - 验收：补单测（反斜杠/引号/回退引用样值）；GUI「设为默认」往返读回一致
+- [ ] **待做 高危八** 更新对话框线程生命周期：运行中关窗 qFatal 崩溃（2026-10-22 实核）
+  - 位置：`gui/panel.py:662`（`DataUpdateWorker` 创建无父对象）、`:2982`（`EbookUpdateWorker` 同型）；全文件无 `closeEvent`/`reject` 兜底（全量检索 0 命中），“关闭”按钮置灰拦不住标题栏 X
+  - 触发：点「开始更新」或「更新XML」后在收尾前按 X 关窗 ⇒ `QThread destroyed while running` qFatal，整个进程崩溃；`gui/css_editor.py:2728-2729` 的 `closeEvent wait(2000)` 超时放行同型（样张重渲超 2 秒同样崩）
+  - 修法：运行中阻止关窗（覆写 `closeEvent`/`reject`），或关窗路径 `wait()` 等线程完成；css_editor 超时改为阻止关闭直至完成
   - 代价：不触及 `_FP_IMPL_MODULES` ⇒ 不影响校验指纹
+  - 验收：补 GUI 单测（运行中 close 不崩）；手工复演 X 关窗
+- [ ] **待做 中危一** 配置与预设写盘非原子
+  - 位置（2026-10-22 补全清单；无 `os.replace` 的直写点）：`gui/panel.py` `open(path, "w")` 共 8 处——`:278-280`（`save_current` 写 `presets/config.user.json`）、`:329-331`（`save_config_preset`）、`:357-359`（`set_config_preset_theme`）、`:415-418`/`:431-435`/`:531-534`（`mkstemp` 临时件、调用方删，可接受）、`:2556-2558`（`clear_xml_dir` 写预设）、`:3230-3232`（`SourceDialog.accept` 有预设分支）；间接经 `save_current`：`:2560`/`:3237`。`gui/css_editor.py:259-260`、`:1896-1897`。`theme.py:1021-1046`（run.json 直写，`:1031` 失败时 `.bad` 改名）。产物类同样非原子：`verify.py:2072-2077`/`:2251-2259`（compare 文本对）、`:1003-1013`（merged docx）、`render_docx.py:1238`/`:1308`、`render_epub.py:103`、`render_md.py:75`、`render_txt.py:81`、`merge.py:228`（合册 XML）、`render_pdf.py:604`/`:635`（HTML 交付物）、`render_pdf.py:281-283`（先 `os.remove` 后 `os.rename`，崩溃窗口丢旧文件）
+  - 影响：写一半崩溃或磁盘满 ⇒ 半截 JSON/CSS/产物；GUI 配置损坏起不来；验证产物残卷可能被下轮当输入误读
+  - 修法：统一走「临时文件 ＋ `os.replace`」（配置与预设先做，产物类可后置）；publish 仓已有同类实现 `cbeta_publish/utils/atomic.py`（尚未提交），可移植思路
+  - 代价：改 `verify`/`theme` ⇒ 校验指纹整体失效；GUI/渲染层不触指纹
 - [ ] **待做 中危二** 取消转换留下半成品产物
-  - 位置：`gui/__main__.py:274-280`（`cancel()` → `self._proc.terminate()`，Windows 为硬杀）
-  - 影响：正在写的 docx/html/epub 留在输出目录，且看起来是完整文件
-  - 修法：转换产物先写临时名再改名，或取消后清理本行产物
-- [ ] **待做 中危三** LibreOffice 转换无超时
-  - 位置：`render_pdf.py:276-277`（`subprocess.run([soffice, …], check=True)` 无 `timeout`；外部引擎 `:331` 有 120 秒、docbuilder `:362` 有 180 秒）
-  - 影响：soffice 挂起时该行任务永久卡住
-  - 修法：加 `timeout=`（与其它引擎同量级）并捕获 `TimeoutExpired` 记失败
+  - 位置：`gui/__main__.py:274-280`（`cancel()` → `self._proc.terminate()`，Windows 为硬杀）；`Popen` 无 `timeout`（`:767-770`，引擎挂死则该行永久卡住只能手动取消）；无 `closeEvent`（全文件检索 0 命中）——转换中直接关窗 ⇒ worker 线程与桥子进程孤儿化继续写盘
+  - 硬杀后残留清单（2026-10-22 补）：输出目录 `cli.py:339`（pdf 目标名）、`:399`（html 中转）、`:412`/`:415`（html 目标）、`:355-356`/`:404-406`（引擎标签改名）、`:366-367`/`:371`（docx 副本）；临时目录 `cli.py:346`（`xml2pdf-pdfdocx-`，硬杀后 finally 不执行）；验证子产物 `cli.py:1517-1520`/`:1619-1620`/`:1640-1642`；GUI 行内落盘点取消后仍执行：`gui/__main__.py:477-478`（合并转换报告）、`:504-505`（行验证报告）、`:540-543`（report.json）；`verify_one`（`:439-455`）与 `_resolve`（`:620-672`）无取消检查点；取消行终态记「失败：…」而非「已取消」（`:551-553`）
+  - 影响：正在写的 docx/html/epub 留在输出目录，且看起来是完整文件；外部引擎与 COM 进程成孤儿（`render_pdf.py:276-277`、`:833` 无超时，Word/WPS COM 无看门狗）
+  - 修法：产物先写临时名再 `os.replace`；取消改 Windows 作业对象杀子进程树（连带引擎孙进程）；`closeEvent` 触发取消并等待线程与子进程；`Popen` 加超时
+- [ ] **待做 中危三** PDF 外部转换超时与降级缺口
+  - 位置（2026-10-22 补全）：`render_pdf.py:276-277`（soffice 无 `timeout`）、`:833`（prince 无 `timeout`，原记录漏列）、`:361`（docbuilder 180 秒）、`:331`（外部引擎 120 秒，但 `:330` `int(cfg.get("timeoutSeconds"))` 无兜底，配置坏值直接 ValueError 抛穿）；COM 区 `:50`/`:126-229`（`_COM_LOCK` 持锁期间无看门狗，Word/WPS 弹出模态即全进程冻结）；`:401-411`（`docx_to_pdf` 后端循环无逐后端 `try`，soffice `check=True` 的 `CalledProcessError` 与外部引擎超时越过「逐后端降级」设计直接中断全链）
+  - 影响：soffice/prince 挂起时该行任务永久卡住；单个后端抛错则整链中断而非降级到下一个后端
+  - 修法：soffice/prince 加 `timeout=`；后端循环逐 `except` 记 errors 继续下一个；COM 加判活看门狗（超时按该 ProgID 失败处理）
 - [ ] **待做 中危四** lxml 默认解析器未禁实体
-  - 位置：`parser.py:62`（`etree.parse(xml_fn)`，默认 `resolve_entities=True`）、`verify.py:1399`（官方基线直读同口径）；对照 `merge.py:194` 已用 `resolve_entities=False`
+  - 位置：`parser.py:62`（`etree.parse(xml_fn)`，默认 `resolve_entities=True`）、`verify.py:1399`（官方基线直读同口径）；对照 `merge.py:194` 已用 `resolve_entities=False`（2026-10-22 复核：生产代码 `etree.parse` 调用点全查就这三处，范围与此条一致）
   - 影响：异常或恶意 XML 可触发实体膨胀（billion laughs）耗尽内存；实体内容可能进入产物
   - 修法：统一改用 `etree.XMLParser(resolve_entities=False)`（与 `merge.py` 同口径）
   - 代价：改 `parser`/`verify` 在 `_FP_IMPL_MODULES` ⇒ 已存校验指纹整体失效
-- [ ] **待做 低危** GUI 宽 `except` 吞异常（`gui/panel.py` 17 处、`gui/__main__.py` 20 余处）⇒ 失败无痕；建议至少写进转换报告或日志
+- [ ] **待做 中危五** remote_sources.json 的 `dest` 不拒 `..` ⇒ 配置可驱动写仓外任意文件
+  - 位置：`update_data.py:51`（`dest` 按 `/` 拆段仅滤空段，`..`/盘符/绝对路径成分原样通过）、`:199`（`os.path.join(base, *src["dest"])`）、`:249`（`os.replace(tmp, dest)` 直落盘）
+  - 触发：分发出去的「配置包」被替换为含 `dest: "../../xx"` 的 remote_sources.json ⇒ 更新内容（ttf／文本／JSON）覆盖仓库外任意同名文件
+  - 另：`:202-258` 循环体内 `os.replace` 无逐项异常边界，单项被占用（字体验证程序/资源管理器锁定）时异常冒泡中断全部剩余更新项
+  - 同类（2026-10-22 补读）：`fetch.py:437`/`:899` 把 catalog 记录的 `rec["file"]` 直接 `os.path.join(wdir, …)`——`cbeta/data/sutra_mapping.txt` 同属仓内数据文件，若被替换同样可写出 work 目录；修法一并校验文件名不含分隔符与 `..`
+  - 修法：解析时拒 `..`、盘符与绝对路径成分（或最终路径须落在仓库根内）；`os.replace` 加逐项异常边界计入 failed 后继续
+  - 代价：不触及 `_FP_IMPL_MODULES` ⇒ 不影响校验指纹
+  - 验收：恶意 `dest` 单测拒绝并报错；正规 8 源照常更新
+- [ ] **待做 中危六** GUI 产物收编只凭「行尾 `→`＋文件存在」
+  - 位置：`gui/__main__.py:51-60`（`parse_produced_paths` 正则＋`os.path.isfile` 即收编）、消费点 `:781`、文件列 `:546-550`、单击打开 `:1343-1362`
+  - 触发：渲染核心或第三方引擎在 stdout/stderr 打印任意 `xxx -> 已存在路径` ⇒ 该文件被当作本轮产物展示，用户单击即用系统默认程序打开别的文件
+  - 修法：收编路径做前缀校验（normcase 后必须位于本轮输出目录或校验目录之下）
+  - 代价：不触及 `_FP_IMPL_MODULES` ⇒ 不影响校验指纹
+  - 验收：伪造子进程输出单测（外部路径不收编）；正常转换收编行为不变
+- [ ] **待做 中危七** 校验抽取单点失败不降级（损坏基线抛穿整轮）
+  - 位置：`verify.py:2158`/`2171`/`2179`/`2190`/`2203`/`2214`/`2222`（基线试算循环内 `_extract_epub_parts(_p)[0]`、`extract_text` 等无逐文件 `try` ⇒ 单个损坏官方件抛穿，链上后续回退基线不再试算；与 `_body_of`（`:1174` 全捕返回 None）口径不一）；`:362`/`371`/`418`/`974`/`986`/`989`/`998`（docx/odt 抽取严格 UTF-8 解码无 `errors="replace"`，损坏件 UnicodeDecodeError 抛穿，同后果）
+  - 触发：官方基线本地损坏/移动中断（vendor 0.2.0 已挡住下载截断，本地损坏仍存在）⇒ 该卷记入错误而非回退其他候选基线
+  - 修法：试算逐文件 `try` 记入报告后继续；解码统一 `errors="replace"`（比对归一类已有此口径）
+  - 代价：改 `verify` ⇒ 校验指纹整体失效
+  - 验收：损坏基线单测（出差异报告而非中断）
+- [ ] **待做 中危八** 自产验证产物防误采仅目录名一道防线
+  - 位置：`verify.py:1776-1784`（`"（验证）" in af` 子串是唯一针对自产产物的防线；`:2070-2075`/`:2252-2257`/`:2169` 同型）
+  - 触发：库调用方把 `out_root` 指到 `source` 树内不带该子串的目录 ⇒ 上一轮 `*_compare_*`/`*_official_merged_docx` 留在发现范围；`txt_notes` 全局模式 `**/txt/{s}_*.txt` 恰可与输出目录段名 `txt` 命中 ⇒ 拿自产 compare 当基线「自比对假绿」；CLI/GUI 默认布局已覆盖，仅自定义/直调路径有洞
+  - 修法：发现时按文件名排除已知校验产物模式（`_compare_`、`_official_merged_`），不依赖目录命名约定
+  - 代价：改 `verify` ⇒ 校验指纹整体失效
+  - 验收：自定义输出根单测（compare 不再被采为基线）
+- [ ] **待做 中危九** 主题数值解析崩溃面（tags 直供路径实测崩）
+  - 位置：`theme.py:1126-1131`/`1139-1147`（`^([\d.]+)…` 过正则即裸 `float()`，无兜底；`body_font_size: "1.2.3pt"` 崩 `apply_page_typography`）、`:1518-1521`（行高 `1.2.3` 先存进 tags，延迟崩于 `docx_para`）；对照 `page_border_spec`（`:320-345`）已是 try＋report 口径
+  - 触发：纸张预设 JSON 手工写成非数值 ⇒ 渲染入口直接 ValueError 中断
+  - 修法：数值解析统一走带兜底的 helper（try＋`report.add` 提示后忽略该值）
+  - 代价：改 `theme` ⇒ 校验指纹整体失效
+  - 验收：坏值单测（记报告不崩）；默认预设输出逐字不变
+- [ ] **待做 中危十** GUI 删除与统计的卡顿/冻结面
+  - 位置：`panel.py:3041-3064`（`_refresh_verify_info` 每个 `textChanged` 同步全树 `os.walk` 统计校验目录大小——产物几万文件时逐键卡顿）；`panel.py:706-745`＋`1936-1985`/`3077-3101`（清理确认框只列 `*（验证）` 类目录名，`clean_verify_dirs` 对默认根是整树 `rmtree` 且在 GUI 线程执行——大产物树冻结分钟级，实际删除范围超出确认列表）；`css_editor.py:2715`/`2688-2691`（导出 PDF／DOCX 兜底渲染在 GUI 线程同步起外部引擎，界面冻结数十秒无进度无取消）
+  - 另：`panel.py:1949-1952` 读 `source.verify_root` 失败被静默当 None ⇒ 清理范围旁路扩大到默认根整树
+  - 修法：统计防抖＋挪后台或缓存；删除挪后台并把整树实际范围列进确认框；读取失败显式中止清理；导出渲染挪后台线程（与高危八同批治理线程收尾）
+  - 代价：不触及 `_FP_IMPL_MODULES` ⇒ 不影响校验指纹
+  - 验收：大产物目录逐键不卡；清理框列出全部实际删除项
+- [ ] **待做 中危十一** 各渲染器缺省产物名未净化（`work.id` 直拼）
+  - 位置：`render_docx.py:1235-1238`（`filename = f"{work.id}.docx"` 后 `os.path.join`）、`render_docx.py:1305-1308`（分卷 `f"{work.id}_第{juan_no}.docx"`）、`render_md.py:73`、`render_txt.py:79`、`render_epub.py:101`（同形 `f"{work.id}.<ext>"`）
+  - 触发：CLI/GUI 主路径传 `out_name`（已过 `filename.sanitize`）；库调用/第三方按 `render_work(w, out_dir)` 缺省调用时 `Work.id` 来自 XML `xml:id` 原样（`names.get_work_id_from_basename` 未命中形态回退原文）⇒ 畸形 `xml:id="../../x"` 可写出输出目录外
+  - 修法：缺省分支同样过 `filename.sanitize`（非法字符全角化会消掉分隔符）
+  - 代价：改 `render_docx`/`render_md`/`render_txt`/`render_epub` ⇒ 校验指纹整体失效
+  - 验收：`xml:id` 含路径分隔符的单测（产物仍落 `out_dir`）；常规输出逐字不变
+- [ ] **待做 低危一** 宽 `except Exception` 全包 186 处（2026-10-22 实数）⇒ 失败无痕；建议至少写进转换报告或日志
+  - 分布：`verify.py` 46、`gui/__main__.py` 28、`render_pdf.py` 27（其中 COM 区约 21 处属「逐语句不倒下」设计配套，可豁免）、`gui/panel.py` 22（2026-10-22 订正，原记 17）、`cli.py` 15、`gui/css_editor.py` 15、`fonts.py` 12、`annotate.py` 7、`update_data.py`/`fetch.py`/`filename.py` 各 3、`render_docx.py` 2、`theme.py`/`figures.py`/`report.py` 各 1；全包无裸 `except:`
+  - 典型吞错实例：`cli.py:1241`（校验比对写盘失败静默置空，报告定位信息缺失）、`verify.py:1853`（配置解析失败静默回工厂默认）、`panel.py:1951`（清理读自选根失败静默回默认根）、`theme.py:592`（字体变量解析失败静默空表，DOCX 字体全回退无提示）、`css_editor.py:948`（解析失败把空表缓存为永久结果，后续字体判断失真）
+- [ ] **待做 低危二** 畸形 XML 数值守护（同源一族）
+  - 位置：`render_docx.py:336`/`344`、`render_html.py:110`（`int(n.attrs.get("n"))` 无 `try`——milestone `n` 非数字即 ValueError 中断整笔（html/epub/docx 链路），对照 `parser.py:466` 同属性有 `try` 兜底）；`render_html.py:869-874`（`<space quantity>` 无上限，畸形大值撑爆内存；官方值 1-3）
+  - 修法：int 失败回退 `(cur_no or 0)+1`（与 `parser` 同口径）；quantity 上限钳制
+  - 代价：改 `render_docx`/`render_html` ⇒ 校验指纹整体失效
+  - 验收：坏 XML 单测出正常产物；语料回归逐字不变
+- [ ] **待做 低危三** CLI 输出编码零碎
+  - 位置：`cli.py:142`/`270`/`1621`（裸 `print` 无 `UnicodeEncodeError` 回退——GBK 重定向管道遇书名扩展汉字在批量渲染完成后中断且退出码非零；对照 `:1141-1147` `vlog` 已有回退）；`cli.py:66-68`（`load_theme` 严格 UTF-8 无捕获，GBK 编码的主题文件直接 traceback）；`cli.py:1234-1247`（`--verify-only` 下 html 产物定位用全目录 `glob("*.html")` 取首项，多作品输出目录可能拿错文件）
+  - 修法：print 统一走 `vlog` 或进程级 UTF-8 封装；`load_theme` 捕 `UnicodeDecodeError` 给编码提示；html 定位改按 `{id}_p…` 命名规则
+  - 代价：不触及 `_FP_IMPL_MODULES` ⇒ 不影响校验指纹
+  - 验收：GBK 管道冒烟不中断；verify-only 多作品目录定位正确
+- [ ] **待做 低危四** verify.py 健壮性零碎（一批六件）
+  - `:55`＋`:420`/`430`/`450`/`519`/`1166-1173`：UTF-8 BOM 不剥（`\ufeff` 不在归一字符类）⇒ 官方 txt 带 BOM 时 `maxDiff=0` 配置下恒假差；读取换 `utf-8-sig` 或归一剥 `\ufeff`
+  - `:973`/`985`：`merge_docx` 的 `zipfile.ZipFile` 句柄未 `with` ⇒ Windows 句柄滞留影响后续改名/删除
+  - `:1785`：`find_official` 里 `isfile` 与 `getsize` 之间竞态 ⇒ `OSError` 抛穿（包异常记 0 跳过）
+  - `:2129-2142`：自动取基线块整体无兜底（对照 `:1974-1981` 已有 try）⇒ presets 损坏整卷记为错误
+  - `:2324-2332`：`cfg_int` 对非数值串直接抛 ValueError（无兜底）
+  - `:420`-`:1012` 各处：整件驻留内存（T0220 级 17MB 基线＋逐字符索引峰值数百 MB）——仅记录，暂不立项
+  - 代价：改 `verify` ⇒ 校验指纹整体失效；验收：对应件各补单测
+- [ ] **待做 低危五** render_docx 配置域与性能零碎（一批）
+  - `:948-951`：`notes_marker_font` 用文本转义（`_x`）写 `w:rFonts` 属性位（配置域，值含 `"` 即损坏）；`:694`/`725`/`816`/`2761`/`2866`：字体名原样拼属性，`:725` 还先进 `re.sub` 替换串（值含 `\` 即「bad escape」崩）——均为本机配置/主题来源，默认链不触发
+  - `:2671-2673`：`footnoteSeparator` 数值无 `try`（对照 `_series_size_pt` `:975-978` 有兜底）
+  - `:2299-2309`：`_strip_quote_text` 原地改树 ⇒ 同一 Work 对象复用渲染（同进程二次渲染/多格式循环）输出不可复现
+  - `:2814`/`:385`：分页模式每轮全量拷贝累计字符串＋智能合页每轮全量估高（数千节时秒级到数十秒）
+  - 修法：统一属性转义 helper、数值兜底、渲染期临时剥离不改原树、分节串进列表最后 join、估高改增量
+  - 代价：改 `render_docx` ⇒ 校验指纹整体失效；验收：坏字体名/分隔符单测；长书分页耗时对比
+- [ ] **待做 低危六** GUI 与 PDF 链路零碎（一批）
+  - `css_editor.py:1937-1958`→`1883-1904`：删预设成功后 `_preset_path` 未清空、「保存」仍亮 ⇒ 点保存把刚删的文件原样复活
+  - `css_editor.py:2431`/`1520`：`css-editor-*` 临时目录从不删除（多次兜底导出／多会话在 percent-TEMP 下累积目录与 preview.docx）
+  - `panel.py:3236-3237`：`SourceDialog.accept` 无预设分支走 `save_current` 无 `OSError` 捕获（有预设分支 `:3230-3235` 已有）——config.user.json 被占用时未捕获异常
+  - 句柄零碎：`render_html.py:938`、`render_epub.py:135`（读取未 `with`）
+  - `render_pdf.py:855`：`page.goto(f"file:///{html_path}")` 未做 URL 编码（文件名含 `#`/`%` 时载入错误路径）；`:859`＋`cli.py:979`：`--pdf-zoom` 未钳制（注释自称 0.1-2，越界 playwright 报错）
+  - 修法：逐项一行级修；代价：`render_pdf`/`render_html`/`render_epub` 触指纹整体失效，GUI 件不触；验收：对应单测
+- [ ] **待做 低危七** 小模块零碎（本轮补读新增）
+  - `annotate.py:95-111`（`rt_css_rule`）：注音字体名过滤只剥 `"`、`;`、`{}`，未剥 `<`——含 `</style>` 的值可逃出 `<style>` 元素（与 theme 原始 CSS 直插、`render_pdf.py:698`/`:751` 同族；用户 CSS 本设计为原文嵌入，故只记不单独立项）
+  - `fonts.py:223-229`（`_scan`）：对单个字体文件的 `read_family_names` 无异常边界（`open` 无 `try`）——扫描目录里有被锁/不可读的字体时整个索引构建失败，渲染随之崩；应逐文件 `try` 跳过
+  - 另记（不立项）：`merge.py` 的 `tree.write` 合册 XML 非原子已并入中危一；`gaiji.py:30 pua()` 无调用点（若第三方调用，畸形编号 `int()` 会 ValueError）
+  - `test/run_tests.py:168/223`：`total` 计数器从未累加（只加 `fail`），汇总恒显示「0 项」（开发脚本；`do()` 里补 `total += 1` 即可）
+  - 修法：前两条各一行级修（测试脚本计数器一行）；代价：改 `annotate` 在 `_FP_IMPL_MODULES` ⇒ 校验指纹整体失效（`fonts` 不在，不触）；验收：对应单测
 - [ ] **待做 测试稳定性** 全量 discover 偶发原生崩溃：2026-10-21 第一次 `python -m unittest discover -s pycbeta/tests -q -t .` 以 `0xC0000005`（Windows 访问冲突）退出且无失败摘要，重跑即 1352 OK（skipped=122）；27 个测试模块单独跑全部 OK ⇒ 属跨模块交互/解释器退出期问题，非某个用例失败。定位方向：offscreen 的 PySide6 与 native 库（WeasyPrint / PyMuPDF）退出顺序；未复现前不改代码
 - [x] **已完成 文档（publish 侧）** 上游提案文档与 publish `TODO.md` 同步到 v0.2.0 现状
   - `publish/docs/上游-cbeta-fetch-TLS与分块下载.md` 已加「实施结果（2026-10-21）」：上游 commit `817d207`、版本 `0.2.0`、两仓 vendor 同步记录、解压原子性与同名策略留第二批

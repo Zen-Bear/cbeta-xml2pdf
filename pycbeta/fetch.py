@@ -271,10 +271,11 @@ def find_local_xml(xml_dir: str, canon: str, no: str,
 
 
 def _http_download(url: str, dest: str, timeout: int = 90) -> bool:
-    """委托共享层下载（默认校验证书 + 重试 + 原子替换）。
+    """委托共享层下载（重试 + 原子替换）。
 
-    证书策略在共享层：非 cbdata 主机走默认上下文；cbdata 主机在证书校验失败时
-    回退一次不校验上下文（已知问题，待上游改为「只放宽严格附加检查」）。"""
+    证书策略在共享层（vendor cbeta-fetch 0.2.0）：TLS 按主机预选——非 cbdata
+    主机走默认严格校验；cbdata 主机只放宽 OpenSSL 附加严格检查，证书链与
+    主机名照常校验；流式写入临时文件并校验 Content-Length 后才替换。"""
     return _cf.download(url, dest, timeout=timeout)
 
 
