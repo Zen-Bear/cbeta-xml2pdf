@@ -1001,11 +1001,12 @@
   - 影响：soffice/prince 挂起时该行任务永久卡住；单个后端抛错则整链中断而非降级到下一个后端
   - 已修部分（2026-10-22）：soffice 加 600 秒超时、prince 加 300 秒超时；后端循环逐 `except` 记 errors 继续；`timeoutSeconds` 走 `_timeout_seconds`（坏值回 120、钳制 1–3600）；soffice 产物改 `os.replace`；单测 `test_audit_fixes.TestPdfBackendFallback`/`TestTimeoutGuard`
   - 剩余：COM 区判活看门狗（Word/WPS 模态）
-- [ ] **待做 中危四** lxml 默认解析器未禁实体
+- [x] **已完成 中危四** lxml 默认解析器未禁实体（2026-10-22 修复）
   - 位置：`parser.py:62`（`etree.parse(xml_fn)`，默认 `resolve_entities=True`）、`verify.py:1399`（官方基线直读同口径）；对照 `merge.py:194` 已用 `resolve_entities=False`（2026-10-22 复核：生产代码 `etree.parse` 调用点全查就这三处，范围与此条一致）
   - 影响：异常或恶意 XML 可触发实体膨胀（billion laughs）耗尽内存；实体内容可能进入产物
-  - 修法：统一改用 `etree.XMLParser(resolve_entities=False)`（与 `merge.py` 同口径）
+  - 修复（2026-10-22）：两处改用 `etree.XMLParser(resolve_entities=False)`
   - 代价：改 `parser`/`verify` 在 `_FP_IMPL_MODULES` ⇒ 已存校验指纹整体失效
+  - 验收：单测 `test_audit_fixes.TestEntitySafety`（外部实体不展开、不读本地文件）
 - [ ] **待做 中危五** remote_sources.json 的 `dest` 不拒 `..` ⇒ 配置可驱动写仓外任意文件
   - 位置：`update_data.py:51`（`dest` 按 `/` 拆段仅滤空段，`..`/盘符/绝对路径成分原样通过）、`:199`（`os.path.join(base, *src["dest"])`）、`:249`（`os.replace(tmp, dest)` 直落盘）
   - 触发：分发出去的「配置包」被替换为含 `dest: "../../xx"` 的 remote_sources.json ⇒ 更新内容（ttf／文本／JSON）覆盖仓库外任意同名文件
@@ -1020,18 +1021,18 @@
   - 触发：渲染核心或第三方引擎在 stdout/stderr 打印任意 `xxx -> 已存在路径` ⇒ 该文件被当作本轮产物展示，用户单击即用系统默认程序打开别的文件
   - 修复（2026-10-22）：`parse_produced_paths(log, within=…)` 增加前缀校验（normcase 后必须位于本轮输出目录之下），调用点传 `out_dir`；未传 `within` 时保持旧行为（既有调用/单测不变）；单测 `test_audit_fixes.TestProducedPathsWithin`
   - 代价：不触及 `_FP_IMPL_MODULES` ⇒ 不影响校验指纹
-- [ ] **待做 中危七** 校验抽取单点失败不降级（损坏基线抛穿整轮）
-  - 位置：`verify.py:2158`/`2171`/`2179`/`2190`/`2203`/`2214`/`2222`（基线试算循环内 `_extract_epub_parts(_p)[0]`、`extract_text` 等无逐文件 `try` ⇒ 单个损坏官方件抛穿，链上后续回退基线不再试算；与 `_body_of`（`:1174` 全捕返回 None）口径不一）；`:362`/`371`/`418`/`974`/`986`/`989`/`998`（docx/odt 抽取严格 UTF-8 解码无 `errors="replace"`，损坏件 UnicodeDecodeError 抛穿，同后果）
-  - 触发：官方基线本地损坏/移动中断（vendor 0.2.0 已挡住下载截断，本地损坏仍存在）⇒ 该卷记入错误而非回退其他候选基线
-  - 修法：试算逐文件 `try` 记入报告后继续；解码统一 `errors="replace"`（比对归一类已有此口径）
+- [x] **已完成 中危七** 校验抽取单点失败不降级（损坏基线抛穿整轮；2026-10-22 修复）
+  - 位置：`verify.py:2158`/`2171`/`2179`/`2190`/`2203`/`2214`/`2222`（基线试算循环内 `_extract_epub_parts(_p)[0]`、`extract_text` 等无逐文件 `try` ⇒ 单个损坏官方件抛穿，链上后续回退基线不再试算）；`:362`/`371`/`418`/`974`/`986`/`989`/`998`（docx/odt 抽取严格 UTF-8 解码无 `errors="replace"`）
+  - 修复（2026-10-22）：试算循环加 `_xt` 兜底（读失败记 `error`、返回空文本、继续下一基线）；epub/docx 合并调用同样兜住；7 处 `.decode("utf-8")` 统一 `errors="replace"`；**避免空基线假绿**——带 `error` 的 trial 不判 OK、不参与 best，全部基线不可读时返回 `status=fail` 且缺/多/总为 None（报告显示「读取失败」）
+  - 触发：官方基线本地损坏/移动中断 ⇒ 该卷得到失败报告而非中断
   - 代价：改 `verify` ⇒ 校验指纹整体失效
-  - 验收：损坏基线单测（出差异报告而非中断）
-- [ ] **待做 中危八** 自产验证产物防误采仅目录名一道防线
-  - 位置：`verify.py:1776-1784`（`"（验证）" in af` 子串是唯一针对自产产物的防线；`:2070-2075`/`:2252-2257`/`:2169` 同型）
-  - 触发：库调用方把 `out_root` 指到 `source` 树内不带该子串的目录 ⇒ 上一轮 `*_compare_*`/`*_official_merged_docx` 留在发现范围；`txt_notes` 全局模式 `**/txt/{s}_*.txt` 恰可与输出目录段名 `txt` 命中 ⇒ 拿自产 compare 当基线「自比对假绿」；CLI/GUI 默认布局已覆盖，仅自定义/直调路径有洞
-  - 修法：发现时按文件名排除已知校验产物模式（`_compare_`、`_official_merged_`），不依赖目录命名约定
+  - 验收：单测 `test_audit_fixes.TestBaselineReadDegrade`（损坏基线不抛穿、不误判通过、报告含「读取失败」）
+- [x] **已完成 中危八** 自产验证产物防误采仅目录名一道防线（2026-10-22 修复）
+  - 位置：`verify.py:1776-1784`（`"（验证）" in af` 子串是唯一针对自产产物的防线）
+  - 触发：库调用方把 `out_root` 指到 `source` 树内不带该子串的目录 ⇒ 上一轮 `*_compare_*`/`*_official_merged_docx` 留在发现范围；`txt_notes` 全局模式 `**/txt/{s}_*.txt` 恰可与输出目录段名 `txt` 命中 ⇒ 拿自产 compare 当基线「自比对假绿」
+  - 修复（2026-10-22）：发现时按文件名排除 `_compare_`、`_official_merged_`（不再依赖目录命名）；`isfile`/`getsize` 包 `OSError` 跳过
   - 代价：改 `verify` ⇒ 校验指纹整体失效
-  - 验收：自定义输出根单测（compare 不再被采为基线）
+  - 验收：单测 `test_audit_fixes.TestOfficialArtifactExclusion`
 - [ ] **待做 中危九** 主题数值解析崩溃面（tags 直供路径实测崩）
   - 位置：`theme.py:1126-1131`/`1139-1147`（`^([\d.]+)…` 过正则即裸 `float()`，无兜底；`body_font_size: "1.2.3pt"` 崩 `apply_page_typography`）、`:1518-1521`（行高 `1.2.3` 先存进 tags，延迟崩于 `docx_para`）；对照 `page_border_spec`（`:320-345`）已是 try＋report 口径
   - 触发：纸张预设 JSON 手工写成非数值 ⇒ 渲染入口直接 ValueError 中断
@@ -1064,14 +1065,15 @@
   - 剩余：`:1234-1247` 的 html 产物定位改按命名规则
   - 代价：不触及 `_FP_IMPL_MODULES` ⇒ 不影响校验指纹
   - 验收：GBK 管道冒烟不中断；verify-only 多作品目录定位正确
-- [ ] **待做 低危四** verify.py 健壮性零碎（一批六件）
-  - `:55`＋`:420`/`430`/`450`/`519`/`1166-1173`：UTF-8 BOM 不剥（`\ufeff` 不在归一字符类）⇒ 官方 txt 带 BOM 时 `maxDiff=0` 配置下恒假差；读取换 `utf-8-sig` 或归一剥 `\ufeff`
-  - `:973`/`985`：`merge_docx` 的 `zipfile.ZipFile` 句柄未 `with` ⇒ Windows 句柄滞留影响后续改名/删除
-  - `:1785`：`find_official` 里 `isfile` 与 `getsize` 之间竞态 ⇒ `OSError` 抛穿（包异常记 0 跳过）
-  - `:2129-2142`：自动取基线块整体无兜底（对照 `:1974-1981` 已有 try）⇒ presets 损坏整卷记为错误
-  - `:2324-2332`：`cfg_int` 对非数值串直接抛 ValueError（无兜底）
-  - `:420`-`:1012` 各处：整件驻留内存（T0220 级 17MB 基线＋逐字符索引峰值数百 MB）——仅记录，暂不立项
-  - 代价：改 `verify` ⇒ 校验指纹整体失效；验收：对应件各补单测
+- [x] **已完成 低危四** verify.py 健壮性零碎（2026-10-22 修复）
+  - `:55`：BOM（`\ufeff`）已并入归一化剥离字符类
+  - `:973`/`985`：`merge_docx` 全部 `zipfile.ZipFile` 改 `with`（含输出 zip），句柄不再滞留
+  - `:1785`：`find_official` 的 `isfile`/`getsize` 竞态已包 `OSError` 跳过
+  - `:2129-2142`：自动取基线整块加 `try/except`，失败按现有基线继续（不再整卷记为错误）
+  - `:2324-2332`：`cfg_int` 对非数值串回缺省（`0` 仍原样保留）
+  - `:420`-`:1012` 整件驻留内存：仅记录，暂不立项
+  - 单测：`test_audit_fixes.TestNormalizeAndCfgInt`、`TestOfficialArtifactExclusion`（竞态路径）
+  - 代价：改 `verify` ⇒ 校验指纹整体失效（已接受）
 - [ ] **待做 低危五** render_docx 配置域与性能零碎（一批）
   - `:948-951`：`notes_marker_font` 用文本转义（`_x`）写 `w:rFonts` 属性位（配置域，值含 `"` 即损坏）；`:694`/`725`/`816`/`2761`/`2866`：字体名原样拼属性，`:725` 还先进 `re.sub` 替换串（值含 `\` 即「bad escape」崩）——均为本机配置/主题来源，默认链不触发
   - `:2671-2673`：`footnoteSeparator` 数值无 `try`（对照 `_series_size_pt` `:975-978` 有兜底）

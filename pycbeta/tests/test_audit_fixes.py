@@ -248,5 +248,99 @@ class TestKillProcessTree(unittest.TestCase):
                 pass
 
 
+class TestEntitySafety(unittest.TestCase):
+    def test_external_entity_not_expanded(self):
+        from pycbeta.parser import P5Parser
+        d = tempfile.mkdtemp()
+        try:
+            secret = os.path.join(d, "secret.txt")
+            with open(secret, "w", encoding="utf-8") as f:
+                f.write("TOPSECRET")
+            xml = os.path.join(d, "x.xml")
+            with open(xml, "w", encoding="utf-8") as f:
+                f.write('<?xml version="1.0"?>\n'
+                        '<!DOCTYPE TEI [<!ENTITY xxe SYSTEM "file:///'
+                        + secret.replace("\\", "/") + '">]>\n'
+                        '<TEI xmlns="http://www.tei-c.org/ns/1.0"><text><body>'
+                        '<p>&xxe;</p></body></text></TEI>')
+            w = P5Parser().parse(xml)
+            text = "".join(getattr(n, "text", "") or "" for n in w.body)
+            self.assertNotIn("TOPSECRET", text)
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+
+class TestOfficialArtifactExclusion(unittest.TestCase):
+    def test_compare_files_not_treated_as_baseline(self):
+        import pycbeta.verify as V
+        d = tempfile.mkdtemp()
+        try:
+            os.makedirs(os.path.join(d, "txt"))
+            for name, body in (("x_001.txt", "正文"),
+                               ("x_compare_html_official.txt", "自产")):
+                with open(os.path.join(d, "txt", name), "w",
+                          encoding="utf-8") as f:
+                    f.write(body)
+            found = [os.path.basename(p)
+                     for p in V.find_official(d, "x", "txt_notes")]
+            self.assertIn("x_001.txt", found)
+            self.assertNotIn("x_compare_html_official.txt", found)
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+
+class TestNormalizeAndCfgInt(unittest.TestCase):
+    def test_bom_stripped(self):
+        from pycbeta.verify import normalize
+        self.assertEqual(normalize("\ufeff甲 乙"), "甲乙")
+
+    def test_cfg_int_invalid_falls_back(self):
+        from pycbeta.verify import cfg_int
+        self.assertEqual(cfg_int("abc", 10), 10)
+        self.assertEqual(cfg_int(None, 5), 5)
+        self.assertEqual(cfg_int(0, 10), 0)
+
+
+class TestBaselineReadDegrade(unittest.TestCase):
+    def test_corrupt_baseline_does_not_abort_or_pass(self):
+        from unittest import mock
+        import pycbeta.verify as V
+        from pycbeta.model import Work
+        d = tempfile.mkdtemp(prefix="vdegrade-")
+        try:
+            os.makedirs(os.path.join(d, "txt"))
+            base = os.path.join(d, "txt", "x_001.txt")
+            with open(base, "w", encoding="utf-8") as f:
+                f.write("正文甲")
+            gen = os.path.join(d, "gen_x.txt")
+            with open(gen, "w", encoding="utf-8") as f:
+                f.write("正文甲")
+            work = Work(id="x", source_file="", metadata={}, body=[],
+                        notes_by_n={}, apps=[], simplified=False)
+            real = V.extract_text
+
+            def flaky(path, **kw):
+                if os.path.abspath(path) == os.path.abspath(base):
+                    raise OSError("corrupt baseline")
+                return real(path, **kw)
+
+            with mock.patch.object(V, "P5Parser") as P, \
+                    mock.patch.object(V, "generate_formal",
+                                      return_value=[gen]), \
+                    mock.patch.object(V, "extract_text", side_effect=flaky):
+                P.return_value.parse.return_value = work
+                rec = V.verify_one("x.xml", "txt", d, os.path.join(d, "v"),
+                                   gen_paths=[gen])
+            # 不抛穿，且绝不因「空基线」误判通过
+            self.assertEqual(rec["status"], "fail")
+            errs = [t.get("error") for t in rec.get("trials") or []
+                    if t.get("error")]
+            self.assertTrue(errs)
+            self.assertIn("corrupt baseline", errs[0])
+            self.assertIn("读取失败", "\n".join(V.format_verify_report([rec])))
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+
 if __name__ == "__main__":
     unittest.main()

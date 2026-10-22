@@ -59,7 +59,7 @@ class P5Parser:
 
     def parse(self, xml_fn: str) -> Work:
         self.xml_fn = xml_fn
-        tree = etree.parse(xml_fn)
+        tree = etree.parse(xml_fn, etree.XMLParser(resolve_entities=False))
         root = tree.getroot()
         self.root = root
         self._strip_ns(root)

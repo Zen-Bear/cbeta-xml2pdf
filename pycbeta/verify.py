@@ -52,7 +52,7 @@ def normalize(text: str, ruby_brackets=None) -> str:
     text = re.sub(r"[#>*`\-]{1,3}", "", text)
     text = re.sub(r"◎", "", text)
     text = re.sub(r"\(cf\.[^)]*\)", "", text)
-    return re.sub(r"[\s\u3000]+", "", text)
+    return re.sub(r"[\s\u3000\ufeff]+", "", text)
 
 
 def normalize_with_lines(text: str, ruby_brackets=None):
@@ -359,7 +359,7 @@ def _extract_docx_parts(path: str):
     """docx → (正文, 脚注文本 或 None)。None = 无 `word/footnotes.xml` 部件。
     抽取口径与 `extract_text` 的 docx 分支逐字节一致（正文 + "\\n" + 脚注）。"""
     with zipfile.ZipFile(path) as z:
-        xml = z.read("word/document.xml").decode("utf-8")
+        xml = z.read("word/document.xml").decode("utf-8", "replace")
         xml = _EQ_RE.sub(_eq_base, xml)
         xml = _W_RUBY_RE.sub("", xml)
         # 行内 <w:br/>（同段目录/偈颂/预排的分行）保留为换行，避免剥标签后
@@ -368,7 +368,7 @@ def _extract_docx_parts(path: str):
         xml = re.sub(r"<w:br[^>]*>", "\n", xml)
         body = _TAG_RE.sub("", xml)
         try:
-            fn = z.read("word/footnotes.xml").decode("utf-8")
+            fn = z.read("word/footnotes.xml").decode("utf-8", "replace")
         except KeyError:
             return body, None
         fn = _EQ_RE.sub(_eq_base, fn)
@@ -415,7 +415,7 @@ def extract_text(path: str, strip_jiaozhu: bool = True) -> str:
         return body + ("\n" + notes if notes is not None else "")
     if ext == ".odt":
         with zipfile.ZipFile(path) as z:
-            return _TAG_RE.sub("", z.read("content.xml").decode("utf-8"))
+            return _TAG_RE.sub("", z.read("content.xml").decode("utf-8", "replace"))
     if ext in (".html", ".xhtml", ".htm"):
         raw = open(path, encoding="utf-8", errors="replace").read()
         raw = _body_only(raw)
@@ -970,46 +970,47 @@ def strip_docx_head(text: str, title: str, docnumber: str = "", series: str = ""
 def merge_docx(paths: List[str], out_path: str) -> str:
     """将多卷官方 docx 合并为单个 docx：body 依次拼接、footnotes 统一放文末，
     抽取 TXT 时脚注全部位于页尾，与生成单文件 docx 对齐。"""
-    z0 = zipfile.ZipFile(paths[0])
-    doc0 = z0.read("word/document.xml").decode("utf-8")
+    with zipfile.ZipFile(paths[0]) as z0:
+        doc0 = z0.read("word/document.xml").decode("utf-8", "replace")
 
-    def _body_children(xml: str) -> str:
-        i = xml.find("<w:body>")
-        j = xml.rfind("</w:body>")
-        seg = xml[i + len("<w:body>"):j] if i != -1 and j != -1 else ""
-        return re.sub(r"<w:sectPr>.*?</w:sectPr>\s*$", "", seg, flags=re.S)
+        def _body_children(xml: str) -> str:
+            i = xml.find("<w:body>")
+            j = xml.rfind("</w:body>")
+            seg = xml[i + len("<w:body>"):j] if i != -1 and j != -1 else ""
+            return re.sub(r"<w:sectPr>.*?</w:sectPr>\s*$", "", seg, flags=re.S)
 
-    segs = []
-    foots = []
-    for p in paths:
-        z = zipfile.ZipFile(p)
-        d = z.read("word/document.xml").decode("utf-8")
-        segs.append(_body_children(d))
+        segs = []
+        foots = []
+        for p in paths:
+            with zipfile.ZipFile(p) as z:
+                d = z.read("word/document.xml").decode("utf-8", "replace")
+                segs.append(_body_children(d))
+                try:
+                    fn = z.read("word/footnotes.xml").decode("utf-8", "replace")
+                    foots.extend(re.findall(r"<w:footnote[ >].*?</w:footnote>",
+                                            fn, flags=re.S))
+                except KeyError:
+                    pass
+        sect = re.search(r"<w:sectPr>.*?</w:sectPr>", doc0, flags=re.S)
+        head = doc0[:doc0.find("<w:body>")]
+        merged_doc = head + "<w:body>" + "".join(segs) + (sect.group(0) if sect else "") + "</w:body></w:document>"
+        merged_fn = ""
         try:
-            fn = z.read("word/footnotes.xml").decode("utf-8")
-            foots.extend(re.findall(r"<w:footnote[ >].*?</w:footnote>", fn, flags=re.S))
+            fn0 = z0.read("word/footnotes.xml").decode("utf-8", "replace")
+            open_tag = fn0[:fn0.find(">") + 1]
+            merged_fn = open_tag + "".join(foots) + "</w:footnotes>"
         except KeyError:
             pass
-    sect = re.search(r"<w:sectPr>.*?</w:sectPr>", doc0, flags=re.S)
-    head = doc0[:doc0.find("<w:body>")]
-    merged_doc = head + "<w:body>" + "".join(segs) + (sect.group(0) if sect else "") + "</w:body></w:document>"
-    merged_fn = ""
-    try:
-        fn0 = z0.read("word/footnotes.xml").decode("utf-8")
-        open_tag = fn0[:fn0.find(">") + 1]
-        merged_fn = open_tag + "".join(foots) + "</w:footnotes>"
-    except KeyError:
-        pass
-    os.makedirs(os.path.dirname(out_path), exist_ok=True)
-    with zipfile.ZipFile(out_path, "w", zipfile.ZIP_DEFLATED) as zo:
-        for n in z0.namelist():
-            if n == "word/document.xml":
-                zo.writestr(n, merged_doc)
-            elif n == "word/footnotes.xml":
-                if merged_fn:
-                    zo.writestr(n, merged_fn)
-            else:
-                zo.writestr(n, z0.read(n))
+        os.makedirs(os.path.dirname(out_path), exist_ok=True)
+        with zipfile.ZipFile(out_path, "w", zipfile.ZIP_DEFLATED) as zo:
+            for n in z0.namelist():
+                if n == "word/document.xml":
+                    zo.writestr(n, merged_doc)
+                elif n == "word/footnotes.xml":
+                    if merged_fn:
+                        zo.writestr(n, merged_fn)
+                else:
+                    zo.writestr(n, z0.read(n))
     return out_path
 
 def diff_stats(ours: str, theirs: str, max_ctx: int = 5):
@@ -1396,7 +1397,7 @@ def _extract_xml_parts(path: str, inline_brackets: str = "fullwidth",
     def ln(e):
         return etree.QName(e).localname if isinstance(e.tag, str) else ""
 
-    tree = etree.parse(path)
+    tree = etree.parse(path, etree.XMLParser(resolve_entities=False))
     root = tree.getroot()
 
     def find_first(el, name):
@@ -1777,14 +1778,23 @@ def _find_official_in(source: str, stem: str, kind: str,
             # 校验产物目录（CLI/GUI 的 `{id 书名}（验证）/`）不得当基线：
             # 正式比对档与基线同 stem，自比对会假绿
             continue
-        if " " in os.path.basename(af):
+        _base = os.path.basename(af)
+        if "_compare_" in _base or "_official_merged_" in _base:
+            # 自产校验产物（compare 文本对 / 合并 docx）：即便落在自定义输出根、
+            # 且该根位于 source 树内，也不得被当作官方基线（防自比对假绿）
+            continue
+        if " " in _base:
             continue
         parts = af.split(os.sep)
         if any(p in html_dirs for p in parts):
             continue
-        if af not in seen and os.path.isfile(af) and os.path.getsize(af) > 0:
-            seen.add(af)
-            out.append(af)
+        try:
+            if af in seen or not os.path.isfile(af) or os.path.getsize(af) <= 0:
+                continue
+        except OSError:
+            continue
+        seen.add(af)
+        out.append(af)
     # 两档排序（统一根目录下）：平展优先——顶层条目名以 work id（短名，如 YP0021）
     # 或 stem 开头的命中排前面，如 `YP0021 異部宗輪論語體釋\\YP0021.html`；
     # 仓库布局（如 `T\\T0349\\html\\T0349_001.html`，下载落盘即此布局）次之。
@@ -2125,22 +2135,26 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
     official = _discover()
     _coverage = {}
     if bool((cfg or {}).get("auto_fetch", True)):
-        from .fetch import complete_baselines, ensure_baselines
-        presets = load_effective_presets(config_path)
-        need = need_for_base(base_kind)
-        # 材料化模型：基线落 cbeta_ebook work 目录（缺省回退 source）
-        ebook = ((presets.get("source") or {}).get("cbeta_ebook") or "").strip() \
-            or source
-        if base_kind not in official:
-            # 首选基线缺失：按需下载（docx/odt 非 T/X 等 404 静默跳过）
-            ensure_baselines(work.id, need, presets, ebook,
-                             juan=_juan if _strict_juan else None)
-            official = _discover()
-        if _juan and not _strict_juan:
-            # 全量任务：按卷核对，残卷（历史按卷校验留下）补缺后再比
-            # （T1579 txt 仅 2/100 卷被当全量比，2026-10-14 实锤）
-            _coverage = complete_baselines(work.id, need, presets, ebook, _juan)
-            official = _discover()
+        try:
+            from .fetch import complete_baselines, ensure_baselines
+            presets = load_effective_presets(config_path)
+            need = need_for_base(base_kind)
+            # 材料化模型：基线落 cbeta_ebook work 目录（缺省回退 source）
+            ebook = ((presets.get("source") or {}).get("cbeta_ebook") or "").strip() \
+                or source
+            if base_kind not in official:
+                # 首选基线缺失：按需下载（docx/odt 非 T/X 等 404 静默跳过）
+                ensure_baselines(work.id, need, presets, ebook,
+                                 juan=_juan if _strict_juan else None)
+                official = _discover()
+            if _juan and not _strict_juan:
+                # 全量任务：按卷核对，残卷（历史按卷校验留下）补缺后再比
+                # （T1579 txt 仅 2/100 卷被当全量比，2026-10-14 实锤）
+                _coverage = complete_baselines(work.id, need, presets, ebook, _juan)
+                official = _discover()
+        except Exception as exc:  # noqa: BLE001 —— 取基线失败不阻断比对（按缺失继续）
+            print(f"{work.id}: 自动取基线失败，按现有基线继续："
+                  f"{type(exc).__name__}: {exc}")
     bases = _bases(official)
     if not bases:
         return {"xml": xml_fn, "fmt": fmt, "status": "no_baseline",
@@ -2148,14 +2162,29 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
                 "baseline_coverage": _coverage or None}
     best = None
     trials = []
+    _extract_err = [""]
+
+    def _xt(path, **kw):
+        """损坏基线读取兜底：记错误并返回空文本，让该 trial 失败后继续下一基线。"""
+        try:
+            return extract_text(path, **kw)
+        except Exception as exc:  # noqa: BLE001
+            _extract_err[0] = f"{type(exc).__name__}: {exc}"
+            return ""
+
     for bkind, bpath in bases:
+        _extract_err[0] = ""
         if bkind == "epub":
             # 官方 epub 导出无尾注/校勘块（note-inline 内联）→ 只比**正文段**
             # （注释由 txt_notes 试算覆盖；T1499 实锤）
             _paths = [bpath] if isinstance(bpath, str) else list(bpath or [])
             _parts = []
             for _p in _paths:
-                _t = _extract_epub_parts(_p)[0]
+                try:
+                    _t = _extract_epub_parts(_p)[0]
+                except Exception as exc:  # noqa: BLE001 —— 损坏 epub 不抛穿整轮
+                    _extract_err[0] = f"{type(exc).__name__}: {exc}"
+                    _t = ""
                 if not compare_infos:
                     _t = strip_infos(_t)
                 _parts.append(_t)
@@ -2167,8 +2196,12 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
             if bkind == "docx":
                 # 多卷官方 docx 先合并为单个 docx，再抽取 TXT：脚注统一在文末
                 merged_docx = os.path.join(outdir, f"{stem}_official_merged_{bkind}.docx")
-                merged_docx = merge_docx(bpath, merged_docx)
-                merged_raw = extract_text(merged_docx)
+                try:
+                    merged_docx = merge_docx(bpath, merged_docx)
+                except Exception as exc:  # noqa: BLE001 —— 损坏 docx 不抛穿整轮
+                    _extract_err[0] = f"{type(exc).__name__}: {exc}"
+                    merged_docx = ""
+                merged_raw = _xt(merged_docx) if merged_docx else ""
                 merged_raw = strip_docx_head(merged_raw, title, t_docnumber, t_series)
                 if not compare_infos:
                     merged_raw = strip_infos(merged_raw)
@@ -2176,7 +2209,7 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
             else:
                 parts = []
                 for p in bpath:
-                    txt = extract_text(p)
+                    txt = _xt(p)
                     if not compare_infos:
                         txt = strip_infos(txt)
                     parts.append(txt)
@@ -2200,7 +2233,7 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
             else:
                 parts = []
                 for p in bpath:
-                    txt = extract_text(p, strip_jiaozhu=(fmt not in ("html", "epub")))
+                    txt = _xt(p, strip_jiaozhu=(fmt not in ("html", "epub")))
                     if bkind == "docx" or (bkind == "html" and fmt == "docx"):
                         title = t_title
                         txt = strip_docx_head(txt, title, t_docnumber, t_series)
@@ -2211,7 +2244,7 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
             bpath_disp = f"{bpath[0]} (+{len(bpath)-1})"
         elif isinstance(bpath, list):
             # 单文件：docx 亦过滤 title/docNumber（与多卷首卷一致）；docx 回退 html 同理
-            theirs_raw = extract_text(bpath[0], strip_jiaozhu=(fmt not in ("html", "epub")))
+            theirs_raw = _xt(bpath[0], strip_jiaozhu=(fmt not in ("html", "epub")))
             if bkind == "docx" or (bkind == "html" and fmt == "docx"):
                 title = t_title
                 theirs_raw = strip_docx_head(theirs_raw, title, t_docnumber, t_series)
@@ -2219,7 +2252,7 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
                 theirs_raw = strip_infos(theirs_raw)
             bpath_disp = bpath[0]
         else:
-            theirs_raw = extract_text(bpath, strip_jiaozhu=(fmt not in ("html", "epub")))
+            theirs_raw = _xt(bpath, strip_jiaozhu=(fmt not in ("html", "epub")))
             if bkind == "docx" or (bkind == "html" and fmt == "docx"):
                 title = t_title
                 theirs_raw = strip_docx_head(theirs_raw, title, t_docnumber, t_series)
@@ -2270,7 +2303,9 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
         _scope = ("unknown" if _notes_only is None
                   else ("notes_only" if _notes_only else "body"))
         trials.append({"kind": bkind, "official": bpath_disp, "missing": mi,
-                       "extra": ex, "total": total, "ok": total <= max_diff,
+                       "extra": ex, "total": total,
+                       "ok": total <= max_diff and not _extract_err[0],
+                       "error": _extract_err[0] or None,
                        "official_files": list(bpath) if isinstance(bpath, list)
                        else ([bpath] if isinstance(bpath, str) else []),
                        "ctx": ctx, "norm_official": theirs,
@@ -2282,11 +2317,18 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
         cur = (bkind, bpath_disp, m, mi, ex, ctx, total, src_cmp, gen_cmp, theirs,
                ctx_locations(ctx, t_line, theirs_line), t_ours,
                _bm, _be, _scope)
-        if best is None or total < best[6]:
+        if not _extract_err[0] and (best is None or total < best[6]):
             best = cur
-        if total <= max_diff:
+        if total <= max_diff and not _extract_err[0]:
             st = "fail" if struct_issues else "ok"
             return {"xml": xml_fn, "fmt": fmt, "status": st, "gen": gen_path, "official": bpath_disp, "official_kind": bkind, "matched": m, "missing": mi, "extra": ex, "total": total, "ctx": ctx, "src_cmp": src_cmp, "gen_cmp": gen_cmp, "norm_gen": t_ours, "norm_official": theirs, "trials": trials, "struct_issues": struct_issues, "body_missing": _bm, "body_extra": _be, "diff_scope": _scope, "baseline_coverage": _coverage or None}
+    if best is None:
+        # 所有基线都无法读取：返回 fail 记录（不抛穿；报告列 trials 内的读取失败）
+        return {"xml": xml_fn, "fmt": fmt, "status": "fail", "gen": gen_path,
+                "official": None, "matched": 0, "missing": None, "extra": None,
+                "total": None, "ctx": [], "src_cmp": "", "gen_cmp": "",
+                "trials": trials, "struct_issues": struct_issues,
+                "baseline_coverage": _coverage or None}
     (bkind, bpath, m, mi, ex, ctx, total, src_cmp, gen_cmp, best_theirs,
      best_loc, best_ours, best_bm, best_be, best_scope) = best
     return {"xml": xml_fn, "fmt": fmt, "status": "fail", "gen": gen_path, "official": bpath, "official_kind": bkind, "matched": m, "missing": mi, "extra": ex, "total": total, "ctx": ctx, "ctx_loc": best_loc, "src_cmp": src_cmp, "gen_cmp": gen_cmp, "norm_gen": best_ours, "norm_official": best_theirs, "trials": trials, "struct_issues": struct_issues, "body_missing": best_bm, "body_extra": best_be, "diff_scope": best_scope, "baseline_coverage": _coverage or None}
@@ -2329,7 +2371,10 @@ def cfg_int(value, default):
     """
     if value is None or value == "":
         return default
-    return int(value)
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def diff_scope_tag(scope, body_missing=None, body_extra=None, total=None):
@@ -2453,6 +2498,11 @@ def _format_verify_record(r, diff_lines: int = 5, max_diff: int = 10):
                    "norm_official": r.get("norm_official")}]
     for t in trials:
         ok = bool(t.get("ok"))
+        if t.get("error"):
+            lines.append(f"  [FAIL] ({fmt}→{t.get('kind')} 读取失败：{t['error']})")
+            if t.get("official"):
+                lines.append(f"  {fmt}→{t.get('kind') or '?'} 【源】{t['official']}")
+            continue
         mark = "[OK]" if ok else "[FAIL]"
         op = "≤" if ok else ">"
         # 旁路结论（差异是否全在注释）并入本行行末、`【】` 包裹；
