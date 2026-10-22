@@ -72,6 +72,18 @@ class TestDetectBaselineDirs(unittest.TestCase):
         finally:
             shutil.rmtree(d, ignore_errors=True)
 
+    def test_detect_html(self):
+        import shutil
+        from pycbeta.fetch import detect_baseline_dirs
+        for name in ("html", "htm"):
+            d = tempfile.mkdtemp()
+            try:
+                os.makedirs(os.path.join(d, name))
+                got = detect_baseline_dirs(d)
+                self.assertEqual(os.path.basename(got["html"]), name)
+            finally:
+                shutil.rmtree(d, ignore_errors=True)
+
     def test_txt_notes_beats_plain_txt(self):
         import shutil
         from pycbeta.fetch import detect_baseline_dirs

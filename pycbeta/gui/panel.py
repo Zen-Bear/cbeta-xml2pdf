@@ -2731,6 +2731,7 @@ class SourceDialog(QDialog):
         t0.addWidget(rlab)
         for key, label in (("txt", "TXT 无注释"),
                            ("txt_notes", "TXT 带注释"),
+                           ("html", "HTML"),
                            ("docx", "DOCX"),
                            ("epub", "EPUB"),
                            ("pdf", "PDF")):
@@ -2960,8 +2961,8 @@ class SourceDialog(QDialog):
         src = {k: e.text().strip() for k, e in self.path_edits.items()}
         src["title_t2s"] = bool(self.title_t2s_box.isChecked())
         src["baselines"] = {k: self.base_edits[k].text().strip()
-                            for k in ("txt", "txt_notes", "docx", "epub",
-                                      "pdf")}
+                            for k in ("txt", "txt_notes", "html", "docx",
+                                      "epub", "pdf")}
         src["baselines_root"] = self.base_root_edit.text().strip()
         dl = {}
         for i in range(self.dl_table.rowCount()):
@@ -3004,7 +3005,7 @@ class SourceDialog(QDialog):
         root = self.base_root_edit.text().strip()
         got = detect_baseline_dirs(root) if root else {}
         filled = []
-        for key in ("txt", "txt_notes", "docx", "epub", "pdf"):
+        for key in ("txt", "txt_notes", "html", "docx", "epub", "pdf"):
             if got.get(key) and key in self.base_edits:
                 self.base_edits[key].setText(got[key])
                 filled.append(key)
@@ -3178,7 +3179,7 @@ class SourceDialog(QDialog):
         values["source"]["title_t2s"] = bool(self.title_t2s_box.isChecked())
         values["source"]["baselines"] = {
             k: self.base_edits[k].text().strip()
-            for k in ("txt", "txt_notes", "docx", "epub", "pdf")}
+            for k in ("txt", "txt_notes", "html", "docx", "epub", "pdf")}
         values["source"]["baselines_root"] = \
             self.base_root_edit.text().strip()
         values["source"]["out_dir"] = self.io_out_edit.text().strip()

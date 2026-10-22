@@ -382,8 +382,8 @@ class TestSourceBaselineTab(unittest.TestCase):
             self.assertEqual(dlg.src_tabs.tabText(1), "校验基线")
             self.assertEqual(dlg.src_tabs.tabText(2), "本地官方电子书")
             self.assertEqual(list(dlg.base_edits.keys()),
-                             ["xml_dir", "txt", "txt_notes", "docx", "epub",
-                              "pdf"])
+                             ["xml_dir", "txt", "txt_notes", "html", "docx",
+                              "epub", "pdf"])
             for e in dlg.base_edits.values():
                 self.assertTrue(e.isReadOnly())
         finally:
@@ -500,16 +500,18 @@ class TestSourceBaselineTab(unittest.TestCase):
         from pycbeta.gui.panel import SourceDialog
         dlg = SourceDialog()
         try:
-            # 五项都显式设置：不依赖本机 config.user.json 的既有值（如 pdf 基线根）
+            # 六项都显式设置：不依赖本机 config.user.json 的既有值（如 pdf 基线根）
             dlg.base_edits["txt"].setText("")
             dlg.base_edits["txt_notes"].setText("R:/txt")
+            dlg.base_edits["html"].setText("R:/html")
             dlg.base_edits["docx"].setText("R:/docx")
             dlg.base_edits["epub"].setText("")
             dlg.base_edits["pdf"].setText("")
             p = dlg._dialog_presets()
             self.assertEqual(p["source"]["baselines"],
                              {"txt": "", "txt_notes": "R:/txt",
-                              "docx": "R:/docx", "epub": "", "pdf": ""})
+                              "html": "R:/html", "docx": "R:/docx",
+                              "epub": "", "pdf": ""})
         finally:
             dlg.close()
 
@@ -519,8 +521,8 @@ class TestSourceBaselineTab(unittest.TestCase):
         from pycbeta.gui.panel import SourceDialog
         d = tempfile.mkdtemp()
         try:
-            for name in ("cbeta-text-with-notes", "cbeta_docx_2026r2",
-                         "cbeta_epub_2026r2"):
+            for name in ("cbeta-text-with-notes", "html",
+                         "cbeta_docx_2026r2", "cbeta_epub_2026r2"):
                 os.makedirs(os.path.join(d, name))
             dlg = SourceDialog()
             try:
@@ -529,6 +531,9 @@ class TestSourceBaselineTab(unittest.TestCase):
                 self.assertEqual(
                     dlg.base_edits["txt_notes"].text(),
                     os.path.abspath(os.path.join(d, "cbeta-text-with-notes")))
+                self.assertEqual(
+                    dlg.base_edits["html"].text(),
+                    os.path.abspath(os.path.join(d, "html")))
                 self.assertEqual(
                     dlg.base_edits["docx"].text(),
                     os.path.abspath(os.path.join(d, "cbeta_docx_2026r2")))
@@ -2934,6 +2939,7 @@ class TestSourceDialog(unittest.TestCase):
         try:
             dlg.path_edits["cbeta_ebook"].setText("B")
             dlg.base_edits["txt"].setText("R:/t")
+            dlg.base_edits["html"].setText("R:/h")
             dlg.base_edits["pdf"].setText("R:/p")
             dlg.io_out_edit.setText("O:/o")
             saved = {}
@@ -2946,6 +2952,7 @@ class TestSourceDialog(unittest.TestCase):
                                            return_value=({"source": {}}, None)):
                         dlg.accept()
             self.assertEqual(saved["source"]["baselines"]["txt"], "R:/t")
+            self.assertEqual(saved["source"]["baselines"]["html"], "R:/h")
             self.assertEqual(saved["source"]["baselines"]["pdf"], "R:/p")
             self.assertEqual(saved["source"]["out_dir"], "O:/o")
         finally:

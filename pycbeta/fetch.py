@@ -106,6 +106,7 @@ def title_t2s(presets=None) -> bool:
 #: 防止 `text-with-notes` 被纯 `txt` 规则截胡；大小写不敏感）
 BASELINE_DIR_HINTS = (
     ("txt_notes", ("text-with-notes", "txt_notes")),
+    ("html", ("html", "htm")),
     ("docx", ("docx",)),
     ("epub", ("epub",)),
     ("pdf", ("pdf",)),
@@ -270,7 +271,10 @@ def find_local_xml(xml_dir: str, canon: str, no: str,
 
 
 def _http_download(url: str, dest: str, timeout: int = 90) -> bool:
-    """委托共享层下载（unverified SSL + 重试 + 原子替换）。"""
+    """委托共享层下载（默认校验证书 + 重试 + 原子替换）。
+
+    证书策略在共享层：非 cbdata 主机走默认上下文；cbdata 主机在证书校验失败时
+    回退一次不校验上下文（已知问题，待上游改为「只放宽严格附加检查」）。"""
     return _cf.download(url, dest, timeout=timeout)
 
 

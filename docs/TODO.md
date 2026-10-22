@@ -6,17 +6,17 @@
 - **当前优先级（2026-10-06 审计；2026-10-06 更新：X1077 用户实测全绿；publish 仓 P0–P4 已全完成，无遗留）**：
   - P0 收尾（已提交 `6ba95c5`/`c59ec8d`）：xml2pdf GUI（转换中/预填经名来源/光标落文件列）+ 外部引擎 URL + TODO 审计；publish 封面演示待提交。
   - P1：按卷范围 juan **已落地（2026-10-07，见文末「已完成 按卷范围」）**；外部引擎分发已改走上游 URL（安装文档已写明，不传 Release）。
-  - P2：html/epub 用户 CSS（原定最低优先级，backlog，方案已定）。门禁外红灯已全消（2026-10-06：T0001/X1077 六格式全绿）；校验报告「差异是否全在注释」已落地（Q3，`diff_scope`）；Q1（html 回退 txt）降为可选/低。
-  - P3/关闭：body-placed foot 注渲染（大，需另行立项定范围）；T01 `_cbreader` 重合（数据卫生，低）；元素/字体扫描（已记录，无代码改动）；html2pdf 分页（决议不做）；`verify_one`/`build_report_json` 行级共享（收益小，暂不）。
+  - P2：html/epub 用户 CSS **已落地（2026-10-07，见下「已完成 html/epub 使用 CSS（用户增量）」）**。门禁外红灯已全消（2026-10-06：T0001/X1077 六格式全绿）；校验报告「差异是否全在注释」已落地（Q3，`diff_scope`）；Q1（html 回退 txt）降为可选/低。
+  - P3/关闭：body-placed foot 注渲染（2026-10-21 全库 229 XML 实测 body 内 `place="foot"` 0 处、TX0006 6 碎片亦 0 ⇒ 暂不立项，除非另有 CBReader 书库源）；T01 `_cbreader` 重合（数据卫生，低）；元素/字体扫描（已记录，无代码改动）；html2pdf 分页（决议不做）；`verify_one`/`build_report_json` 行级共享（收益小，暂不）。
 - [x] **已完成 render-time 按字回退**（2026-09-06 用户报 標楷體 U+43F6 预览/Word 双 tofu）：`RENDER_FALLBACKS=(SimSun,PMingLiU,微软雅黑)`，`_fb_emit` 按 cmap 查覆盖、缺字拆 run（只换 eastAsia）；无文件不断言保持原样；真全缺（如悉昙 PUA）保持 tofu + 预览点名。T0672 对账文本一致；单测 TestRenderFallback 6 项；全量 302 OK，verify 8/0
   - 追补（2026-09-06）：回退链分繁简（Hant 首选 PMingLiU，Hans 首选 SimSun；跟 gaiji_lang；含 SimSunExtB/CBETA Supplement）；`output.docx.gaijiFonts` 未动（删的只是顶层 font_sets）；`linkActivated` 改 flag 跟踪消 RuntimeWarning；Ranjana.ttf/Siddam.ttf 实测 0/58 样本 PUA（纯装饰 CJK，不接线）
   - RJ 悉昙接线（2026-09-06）：官方 docx 实锤 `eastAsia="Ranjana"` + rjchar 常规字（不用 PUA）；parser 收 `rjchar`，`_resolve_gaiji` RJ 优先，`_ranjana_font_for` 按覆盖选字体（Ranjana→Siddam），无则主题字体直显（可读）；sample plane-16 PUA 清零，101 Ranjana run；单测 TestRanjana 5 项；全量 308 OK，verify 8/0
   - 回退链/siddhamFonts 进 config（2026-09-06）：`output.docx.fallbackFonts{zh-Hant,zh-Hans}`（替代硬编码，微软雅黑垫底）+ `output.docx.siddhamFonts`（缺省 ["Ranjana","Siddam"]）；`cbeta/fonts/README.md` 补悉昙节；单测 311 OK，verify 8/0
 
-- [x] **已完成 P1** GUI 链路 B（2026-09-17 用户销项：设计文档 `docs/GUI设计.md`、可复用模块边界 `docs/第三方调用说明.md` §6.1、publish 链路B 契约均落地；面板/独立窗/一键送校验已上线。遗留小项 `output.pdf_zoom` 待后续版本移除，见下条）
+- [x] **已完成 P1** GUI 链路 B（2026-09-17 用户销项：设计文档 `docs/GUI设计.md`、可复用模块边界 `docs/第三方调用说明.md` §6.1、publish 链路B 契约均落地；面板/独立窗/一键送校验已上线。小项 `output.pdf_zoom` 复核后保留，见下条）
   - 目录清理执行（2026-09-04）：git 首提交 3168e76（安全网，.gitignore 覆盖 out*/__pycache__/用户槽）→ 缺字库搬家 ruby-cbeta→cbeta/data（gaiji.py 改道，三处文档引用同步；data 与原逐字节一致；names.py 出处注释保留）→ 删 ruby-cbeta 整目录/engines僵尸config/out产物/test/out*/__pycache__/空pycbeta/fonts → docs 三 txt 转 md（无交叉引用）→ 清 tmp 调试残留；验证：缺字冒烟（33893 条，𤬪正常解析）+ 单测 217 OK + T0349 端到端；第二提交 3eb588b；1.75GB 两 zip 用户已移走冷盘（从未入库，工作区干净，无需提交）
   - 落地 panel（2026-09-04）：`pycbeta/gui/panel.py`（XmlOptions 七卡：输出格式/页面/分页/排版/注释/注音/校验；字体并入输出格式卡t2s在上字体在下自动切zh-Hans；纸张下拉`名（宽×高mm）`+定宽220；分页含佛典丛书名右列+双列说明小字；排版双列；引擎组仅pdf启用；注音卡常用六项括号预设下拉；校验文案基线→官方文档；边距四输入；保存/还原出厂三槽 `config.user/last.json`；临时 presets 写入器）+ `__main__.py` 独立窗（目录/編號列表/自动下载/批量表/QThread/取消）+ requirements PySide6；单测 test_gui 23 项（含引擎单引擎 5 项+布局 3 项+产物路径 2 项）；单引擎按管线动态填项+可用性探测（COM+主程序双条件，修 pywin32 误报）+安装提示（缺失红字），配置框置顶；文件列显示产物名链接（UserRole 存全路径，单击打开）；单引擎探测修 pywin32 误报（COM+主程序双条件）并支持版本号目录 glob（D:\WPS Office\12.1.0.21915 实证 wps 已安装）；编号列表大小写不敏感（fetch 层归一化大写，CLI 同样受益）；窗口标题 CBETA XML 格式转换 v1.0；官方基线改名官方电子书；输出行加打开目录按钮；数据源窗口（source 三路径 + downloads 八模板可视编辑，走三槽保存，apply_source_edits 纯函数可测）；catalog 备份到 cbeta/data/sutra_mapping.txt（默认仍指 publish 原件）；输入来源双向自动切换（同行 HBox 左对齐相邻）；复选框同行相邻；标题带 GUI 日期（gui/*.py 最新 mtime）；输出框默认 cwd/out；文件列多产物菜单选择打开（_on_file/_open_cell 分离）；pdf 默认 footnote（中间 docx 53 真脚注，修 render_one pdf 分支 endnote 默认）；页面边距上下/左右两列；排版两脏数据开关归第二列；全量 200 OK；独立窗 offscreen 实例化通过
-  - 待废弃 `output.pdf_zoom`（2026-09-04 用户确认）：GUI 不暴露；config 保留；后续版本移除
+  - `output.pdf_zoom` 保留（2026-10-20 复核：`render_pdf.py:795` 在用，HTML→PDF 整页缩放；GUI 未暴露）；`docs/GUI设计.md:43` 的「PDF 缩放」输入行是陈旧描述，不改功能
   - 适配 cbeta/ 目录重组（2026-09-04）：`CBETA 補充字型/`→`cbeta/fonts/`，9 处引用改道（fonts.supplement_path/render_pdf._font_data_uri 改走共用函数/双测试改 supplement_path()/config 注释/两份设计文档）；补 test_fonts 缺失的 model 导入；全量 200 OK + verify 16/0
   - `pycbeta/gui/panel.py`：`XmlOptions`（page/font_set/engine/margins/formats + output/pagination/series_title/verify 覆盖） + `XmlOptionsPanel(QWidget)`（页面/字体/输出格式/注释/排版/分页/经藏名/校验 八选项卡，get_options/set_options）+ `XmlOptionsDialog(QDialog)`（exec→XmlOptions|None）
   - `pycbeta/gui/__main__.py`：`python -m pycbeta.gui` 独立窗（输入=目录/文件 或 佛典編號列表；find_local_xml→fetch_work 下载 XML→可选 ensure_baselines 下载官方基线→批量转换；QThread 进度/取消；sys.path 无侵入）
@@ -32,7 +32,7 @@
   - 安装文档：`docs/安装说明.md`（2026-09-04：Python 库分组表/八引擎安装验证表/字体安装/CLI 全参数/GUI 使用/校验测试/常见问题）；README 同步（安装节指向新文档、CLI 表补齐 verify/font-check/list-fonts 等缺行）
 
 - [x] **已完成 P12** 本地单卷跨目录版本 XML（2026-09-09 立项，2026-09-10 落地 A 方案）
-  - 预检实锤（TX0006：TX07 001-006 + TX08 007-015 + TX09 016-049，seq 全局连续；juan milestone 1-49 连续；每碎片完整 TEI 无 back）：题名仅卷范围各异（取首卷，元数据噪声）；锚点零冲突（重复 id 仅各卷根 xml:id + witness）；charDecl 仅 015 卷 1 字（CB16748，恰被同卷唯一 `<g>` 引用）；body 内 foot 注 4（渲染/抽取双双丢弃，既有语义）+ 无锚 app 8（渲染直吐 lem/rdg，抽取侧镜像漏收——本次修齐）
+  - 预检实锤（TX0006：TX07 001-006 + TX08 007-015 + TX09 016-049，seq 全局连续；juan milestone 1-49 连续；每碎片完整 TEI 无 back）：题名仅卷范围各异（取首卷，元数据噪声）；锚点零冲突（重复 id 仅各卷根 xml:id + witness）；charDecl 仅 015 卷 1 字（CB16748，恰被同卷唯一 `<g>` 引用）；body 内 foot 注 4（渲染/抽取双双丢弃，既有语义；2026-10-21 复核：本机 `cbeta_xml` 全库 229 XML 与 TX0006 6 碎片 body 内 `place="foot"` 均为 0，此 4 处未复现）+ 无锚 app 8（渲染直吐 lem/rdg，抽取侧镜像漏收——本次修齐）
   - 落点：`test/merge_cbreader.py` 分组键改 `(canon,no)`（无卷号 stem 回退旧键，长度不同永不串组；排序 `(vol,seq)`）；`merge()` 加 charDecl 按 id 跨卷并集 + 题名差异提示 + back 实质内容警告（body-only 语义不变）；跨册落首卷目录沿首卷 stem（`TX/TX07/TX07n0006.xml`，work id TX0006 不变，零管线改动）；`--only` 三形态（碎片 stem/归一 stem/佛典編號）；单测 `pycbeta/tests/test_merge.py` 7 项
   - 抽取侧附带修正（aux-only，零渲染影响）：`_extract_xml_parts` body 内无 from/corresp 的 app 收子文本（镜像渲染泛型默认分支；有锚 app 仍丢，残留已知）；单测 `test_body_app_without_anchor_mirrors_render`
   - 验收：TX0006 实合 49 碎片→1 部（199 body 节点）；合部 body/注块与碎片拼接逐字相等（509548 字）；辅轨 `--baseline xml` 0/0；docx 冒烟 826KB/4642 段/outline 俱全；单测 28 OK（merge/txt/verify）；全量回归按用户指示跳过（改动面：一次性合部脚本 + aux 抽取镜像，渲染/解析零触碰）
@@ -78,7 +78,7 @@
     - **T0001（T01n0001 長阿含經）根因**：官方对「被 mod(a/b) 拆分取代的 orig 注（`nkr_note_orig_*`）」的处理 = **正文锚点压制 + 尾注块保留（孤注）**；我方 html 此前正文多出锚点（全 22 卷唯一差异 `0028009`），致比对错位 12/12。修复：`render_html._render_noteref` 接 `model.suppressed_orig_notes`——`_orig_suppressed` 命中时**尾注块照常入 `_back_old`**（孤注），正文锚点返回空、不占标记号；`inline` 分支直接压制。单测 `TestSplitOrigSuppressedHtml`。
     - **格式核对**：`txt`/`md`/`docx` 官方基线**不含**该 orig 注（实测 `T0001_004.txt` 无 `其積又火`）→ 全压制；`epub` 亦**整条不出**（官方 epub 为全内联注、无尾注区；`EpubRenderer(suppress_orphan_orig=True)` 转内部 `HtmlRenderer`，2026-10-06 补：epub 的 `txt_notes` trial 由「多12」转 0/0）；仅 `html` 保留孤注（与官方 html 一致）。
     - 附带：`normalize` 加 `html.unescape`（官方 html 正则剥标签后 `&quot;`/`&#39;` 实体残留，生成侧 raw 字符；T0001 html 104→12 大头）。
-    - 仍留（非红灯，另行立项）：渲染 body-placed foot 注、T01 `_cbreader` charDecl 重合（卫生）；辅轨 `No.` 镜像已随 X1077 全绿作废。
+    - 仍留（非红灯）：渲染 body-placed foot 注（2026-10-21 实测全库 0 处，暂不立项）、T01 `_cbreader` charDecl 重合（卫生）；辅轨 `No.` 镜像已随 X1077 全绿作废。
   - 校验设计决议（2026-10-06 用户点档）：
     - [x] **Q3 已提升并落地**：校验报告告知「差异是否全部在注释」。显式分段（html/epub `_extract_html_parts`/`_extract_epub_parts`；docx `_extract_docx_parts`；官方 txt `_extract_txt_parts`；我方 txt `_split_txt_ours`；md `_split_md_body`）+ 正文段**严格 0** 判定；`verify_one` trial/记录加 `body_missing/body_extra/diff_scope`；报告 trial 行下加 `正文差异 …` 行（行首不用 `[OK]/[FAIL]/[--]`，避免下游块标记误读）；`report.json` 加 `fmts.<fmt>.diff_scope`（多记录聚合 body>unknown>notes_only）。单测 `TestBodySidecar`（8）+ `test_report_json.TestBuildReportJson.test_diff_scope_aggregate`；全量 1126 OK。文档：`校验说明书.md` §5 + `校验report.json说明.md` §3。
     - [ ] **（可选/低）Q1** html 校验失败回退 txt 基线：现决议**不回退**（设计使然，非漏写）——`verify.bases.html=["html"]`、`resolve_bases` 只试链内；实质结构对不上（html 侧校注 inline 保留 `strip_jiaozhu=False`，txt 基线经 `_norm_official_txt` 注挪文末，直接比必红），且会掩盖 html 特有问题（见 `校验说明书.md` §4.2d 排查要点）。仅作可选增强，默认不开。
@@ -93,6 +93,7 @@
   - C 报告：`verify_one` 返回补 `norm_gen/norm_official`；新增 `format_verify_report(records, diff_lines, max_diff)`；GUI `run()` 每行跨 xml 累积产物、行末写 `{stem}_verify_report.txt` 并**排文件列最后**（`*_compare_*.txt` 仍在前）；`_verify_one` 保留整条返回 dict；`test_gui.TestVerifyFeedback.test_format_verify_report` + `run()` 报告断言
   - 迁移：存量 P5b（现仅 `X59n1077.xml`）需跑数据源窗口「更新XML」或删 work XML 重材料化，验收 `edition` 回 `XML TEI P5`
   - 未做（另议）：P5a/P5b 真兼容（`<choice>` 对齐 + body `type=add` 校勘注转脚注 + `@rend=hide`），当前仅正文 base 正确、校勘注仍缺
+  - 2026-10-21 语料实测：229 XML 全为 `XML TEI P5`（0 P5a/P5b）；`choice` 11 处、`rend="hide"` 409 处均在 back（`choice` 父 `t`/`l`；`hide` 全是 `note type="add"`，由 anchor/app 引用），不进正文渲染；`app type="add"` 0 处 ⇒ 主库无样本，暂不立项；仅真正使用 P5a/P5b 源时再做
 - [x] **已完成** 报告/文件列/数据源文案/输出命名四项（2026-09-10 用户点档）
   - 报告：`verify_one` 增 `trials`（每个尝试过的基线：kind/missing/extra/total/ok/ctx/norm_official）；`format_verify_report` 标签改 `({fmt}→{基线kind} 缺X/多Y ≤|>阈值N)` 并逐条列出所有尝试基线（标 [OK]/[FAIL]，失败列前 N 条差异）
   - 文件列：验证产物 `*_compare_*.txt` **不列**（仍落盘），只列渲染产物 + `{stem}_verify_report.txt`（排最后）
@@ -437,8 +438,7 @@
   - 现象/取证：官方**同一颗字**在 docx 用字符样式 `corr` 红 `FF0000`（`<w:rStyle w:val="corr"/>`，T0001_001.docx 全文 12 处；styles.xml `corr` → color FF0000）；官方 **epub** 用 `<span class='corr'>` + `cbeta.css` 的 `.corr{color:red}`；官方 **html 不标红**（全库扫描 0 处 `corr`/`cbeta` span）；txt 无颜色
   - 判定规则：正文所采用的读法 `app/lem` 的 `@wit` 含 **`#wit.cbeta`**（IR 解析为 `app.lem.wit` 含 `【CB】`/`【CB-…】`）→ 该校改字标红；lem 为 `#wit.orig`（如 `['【大】']`）不标。例：`0005009` lem `['【CB】','【宮-CB】']` → 官方红；`0006002` lem `['【大】']` → 不红。T01 lem 含 `【CB` 213 处，juan1 与官方 12 处量级吻合
   - 我方现状：判定信息已具备（`app.lem.wit`），但正文夹在 `<anchor beg.../>…<anchor end.../>` 之间，parser 丢弃 `end` 锚点且不记区间 → IR 无法定位校改字；三渲染器均无 `corr`，golden 只有未用的 `.cbeta`、无 `.corr`
-  - 拟定实施（范围待定，未做）：parser `_traverse` 维护 corr 区间栈（`beg` 且 lem 含 `#wit.cbeta` 开，匹配 `end` 闭），包合成 IR 节点 `E(tag="corr", children=[…])`（App 一并包入、正文渲染为空无害；建议按**原始 `#wit.cbeta` id** 判，不依赖 label）；docx → 红字（官方字符样式或主题色内联）；epub → `span.corr` + golden `.corr{color:red}`；html/md/txt → 只渲染子节点不产生 span（与官方 html/txt 一致、保 golden 对照）；死命令三件套：`TAG_SELECTOR["corr"]="span.corr"` + `EDITABLE_ROWS ("span.corr","CBETA校改")` + CSS 规则
-  - 待用户定：实现范围（docx+epub 对齐官方 / 六格式全标红(html 偏离官方) / 暂不做）与判定键（原始 `wit.cbeta` id（推荐）/ 解析后 `【CB` label）
+  - 原拟定实施（落地前记录；实际见 `corr-cbeta` 已完成条）：parser `_traverse` 维护 corr 区间栈（`beg` 且 lem 含 `#wit.cbeta` 开，匹配 `end` 闭），包合成 IR 节点 `E(tag="corr", children=[…])`（App 一并包入、正文渲染为空无害；建议按**原始 `#wit.cbeta` id** 判，不依赖 label）；docx → 红字（官方字符样式或主题色内联）；epub → `span.corr` + golden `.corr{color:red}`；html/md/txt → 只渲染子节点不产生 span（与官方 html/txt 一致、保 golden 对照）；死命令三件套：`TAG_SELECTOR["corr"]="span.corr"` + `EDITABLE_ROWS ("span.corr","CBETA校改")` + CSS 规则
 - [x] **已记录（无代码改动）** 元素覆盖扫描（2026-09-10 三项并查，决议：都不加行，只记录）
   - test XML 19 文件 body 普查：左栏缺失但可见 = `l`（13/4819）/`caesura`（11/4747）/`cb:t/tt`（T01/X59n1077）/`list/item`（3 文件）/正文内 `title`（6/126）/`hi/seg[border]/note[hide]`/`space`（4/430）/`yin/zi/sg+entry/term`（X59/X60）/`figure/graphic`（3/74）/`g`（12/947）+`app/lem/rdg`/`div@type=orig/commentary/jing/pin/fen/w/other`（other 1808，左栏仅 xu/note）；`rend` 四行 19 文件零命中无样张；结构性无需调 = lb(70125)/pb/milestone/cb:juan/jhead/docNumber/mulu(2087)/anchor(9837)
   - schema（cbeta-p5.rnc）对照：唯一值得加的是 `table/row/cell`（走 bip-table，左栏无行）——本次不加；`list` 低优先级；其余透传/功能性不值得单列；header 无行系正确忽略
@@ -643,13 +643,13 @@
 
 - [x] **决议放弃（仅记录）** 方向2：publish 官方缓存 → xml2pdf 校验复用（2026-10-07 用户立项；2026-10-07 用户决议放弃）
   - 放弃理由：publish 已配本地库 `official_library=E:\CBETA\2026r2`（pdf/epub/docx/txt_notes 全免下载）+ `default_source=xml`（官方源少用）→ publish 缓存基本为空，复用面窄；2026r2 无 html 目录，缺口仅 html（低频、一次性小下载）
-  - 遗留可选项（暂不做）：GUI 补 html 行（`panel.py` 3 处 + `fetch.py` hints，防手改被 GUI 保存覆盖丢键），将来若有本地 html 库可再指
-  - 原方案（存档）：代码（否则手改 JSON 会被 GUI 保存覆盖丢键）：`panel.py` 三处加 `html` 行——数据源窗口「本地官方电子书」tab 显示行（`2586-2591`，该 tab 无 html 行）、保存键（`2935-2937`）、`_dialog_presets`（`2754-2756`）；`fetch.py:107-113` 的 `BASELINE_DIR_HINTS` 加 `("html", ("html","htm"))`（自动检测可填）
+  - 已补（2026-10-21）：GUI 补 html 行完成（`panel.py` 4 处 + `fetch.py` hints；防手改 `source.baselines.html` 被 GUI 保存覆盖丢键）
+  - 实现：`panel.py` 显示行／`_dialog_presets`／自动检测／保存四处加 `html`；`fetch.py:107-114` 的 `BASELINE_DIR_HINTS` 加 `("html", ("html","htm"))`；文档：`GUI设计.md`／`校验说明书.md`／`第三方调用说明.md` 的基线格式清单同步
   - 配置：`source.baselines.html = E:\dev\cbeta\cbeta_ebook\html`（GUI 配）
-  - 依据：`extra_roots` 优先、单根胜出（`verify.py:1872-1879`；CLI `cli.py:1047-1052`）；publish 缓存 `{fmt}/{work}/` 平展文件递归可命中（vendor 平展解压 `_vendor/cbeta_fetch.py:192-200`），`_is_flat` 排序正常
-  - 只配 html：`txt_notes/docx/epub` 继续 2026r2 全量库，不动；同格式不双配；同字节基线指纹身份相同（`_file_identity` 只含 basename/size/sha256），为 P2 铺路
-  - 测试：`test_gui` 补 html 行往返（显示/保存/检测）；`test_fetch` 补 hints
-  - 验证：T0001 移走 `work/html` 后 `--verify`，断言 `report.json` 的 `inputs.baselines.html` 路径在 `cbeta_ebook` 下
+  - 依据：`extra_roots` 优先、单根胜出（`find_official`，`verify.py:1654-1676`；CLI 经 `cli.py:1312/1339` 传入 `extra_roots`）；publish 缓存 `{fmt}/{work}/` 平展文件递归可命中（vendor 平展解压 `_vendor/cbeta_fetch.py:192-200`），`_is_flat` 排序正常
+  - 只配 html：`txt_notes/docx/epub` 继续 2026r2 全量库，不动；同格式不双配；同字节基线指纹身份相同（`_fp_file_identity` 只含 name/size/sha256，不含 mtime），为 P2 铺路
+  - 测试：`test_gui`（html 行键列表、预设、检测、保存）＋ `test_fetch.test_detect_html`（html/htm）；全量 1352 OK（skipped=122）
+  - 验证：T1711 端到端冒烟通过（`source.baselines.html` 指 `E:\dev\cbeta\cbeta_ebook\html`，命中 `T1711_001.html`、`ok 缺0/多0`）；T0001 不在本机 html 库，未跑；显示/预设/检测/保存由上述单测覆盖
   - 非目标：txt（xml2pdf 无纯 txt 基线，publish txt 只能自下，互不干扰）
 
 - [x] **决议放弃（仅记录）** 方向3：`sync-fmt-root` 把 work 基线镜像成格式优先布局（2026-10-07 用户立项；2026-10-07 用户决议放弃）
@@ -750,18 +750,20 @@
   - 测试：`TestHeadNoTokenAlwaysStripped` 2 项（开关关掉时官方令牌仍剥 ⇒ 0/0；两侧都有令牌 ⇒ 两侧同剥）
   - 端到端实测（2026-10-14）：把 `strip_head_no` 置 **false** 跑 T1579 html 校验（修复前该场景 7 分钟未完被超时杀掉、按外推约 1 小时）⇒ **`ok 缺0/多0`、5.3 秒** ✓
   - 代价（已告知用户）：该元数据行写错不再被校验发现
-  - 遗留（未改）：指纹入参 `canonical_verify_config` 仍含 `strip_head_no` ⇒ 开关切换会改指纹而结论不变（建议后续去掉，会一次性改变既有指纹）
+  - 遗留（未改）：指纹入参 `canonical_verify_config` 仍含 `strip_head_no` ⇒ 开关切换会改指纹而结论不变（建议后续去掉，会一次性改变既有指纹；不单独做，随下次因其他改动导致的指纹整体失效顺带）
   - 诊断踩坑备忘：初测误拿 `out/` 生产档当生成侧（生产档与验证重生档内容差很多——「校验恒比注」设计使然，校验永远按 canonical 设置重生）；真 pair 是 `（验证）` 目录文件。死掉的假设：`\r`（`normalize` 全剥空白）、官方 epub 内联注（全库仅 4 个 22 字）、有界下界（30 万字场景 66.2s≈全量，无收益，已砍）
-- [ ] **待做** 校验正文差异早停（长度门；2026-10-14 定稿）
+- [ ] **待做** 校验正文差异早停（长度门；2026-10-14 定稿，2026-10-20 方案简化）
   - 现状变化（2026-10-14）：它主要针对"长度悬殊"（残卷/错卷）那一类——该类已被"基线按卷核对与补缺"从源头治掉（残卷自动补全）⇒ 紧迫性下降；仍保留待做，等实际再遇到"长度差很大但基线齐全"的比对时再启用 ✓
-  - 背景见上条查明。门专治「Δ长度 > 停止线」：T1579 txt（Δ≈110 万）秒判；**epub trial（Δ=2,057 > 10）同样秒判**（70 分钟+→<1s）；html 已 0/0 无需救。B 只剩「等长＋差异≤停止线＋文本巨大」（门是哑的场景，如补完基线后差异很小的百万字对）
-  - 口径（已锁定）：配置 `verify.maxBodyDiff`（默认 10）＋ CLI `--verify-max-body-diff` ＋ GUI 设置面板「正文差异停止线」（默认 10）；生效停止线 = max(`maxBodyDiff`, 当前 `maxDiff`)，防阈值调高时假红；pass 路径永远全量精确、永不截断
-  - 门：O(1) 长度门——`|Δ长度| > 停止线` 即判停（差异 ≥ |Δ长度|，数学证明，只漏停不误停；1 行）。有界下界版已砍（无收益 ＋ ~40 行复刻代码与误停风险）
-  - 两段门：trial 内正文段先过长度门——超线 ⇒ 本 trial 直接 fail-截断，跳过全量比对（注释段也不比）；未超 ⇒ 走今天的全量精确（注释差异照常全列）。停止只停当前 trial，不停基线链（一个基线截断照样试下一个）
-  - 截断显示：`合计>阈值（未全量比对）`，**不给缺/多拆分、不列差异片段**（长度门不找差异位置，无片段可列）；`【源】/【新】/【源比较】/【新比较】`行照常；`report.json` 加 `truncated`（`diff_scope` 取值不变）
-  - 定位边界（已向用户说明）：C 截断报告只能说「差很多、别等了」，说不出哪里差；首字符就不同的对连「首差异锚点」都无价值，故本次不加锚点。真定位（前 N 差异块 + 行号）要靠分段比对
-  - `verify.py` 改动限 4 处：① `_body_sidecar(..., stop_diff=None)`：normalize 后插长度门，超线返回 `truncated`（第 4 返回值）；② `verify_one` trial 循环把 sidecar 提至 `diff_stats` 之前，截断即 `continue` 下一个基线（`best` 15 元组不动；全 trial 截断加兜底 return，防 `best` 解包炸）；③ `_format_verify_record` + `diff_scope_tag` 截断字面；④ 无。`diff_stats`（精确路径/签名）与 xml 基线路径不动。CLI 侧与 GUI 同口径（调 sidecar）。总量约 90~110 行
-  - 验收：T1579 txt trial 秒判；T1579 epub trial：长度差 102 > 10 ⇒ 门触发、报告显示「未全量比对」（无精确数字；若要精确数字需分段比对，整对实测 缺135/多33、约 2 秒）；T1499 txt（`缺0/多18` 注释差异，正文 Δ 小）仍出精确数 + `【仅仅注释差异】`；T1579 html 仍 0/0（门不触发）；单测（截断/不截断/注释跳过/链 fallback/钳制）＋ 全量回归；文档（校验说明书/第三方调用说明）同步 ＋ **加注记「html 10 秒依赖 `strip_head_no`，关掉会变慢（C 落地后变截断显示而非卡死）」**。长度门是证明、无需「误截断率大回放」
+  - 背景：门专治「长度差 > 阈值」：T1579 txt 残卷（历史场景）秒判；T1579 epub trial 同样秒判（70 分钟+ → <1s）；html 已 0/0 无需救。只剩「等长＋差异≤阈值＋文本巨大」是门哑的场景（如补完基线后差异很小的百万字对）。
+  - 口径（2026-10-20 简化，以本版为准）：不新增配置键、CLI 开关、GUI 输入框；阈值直接用现有 `maxDiff`，严格大于才截断。判定对象 = trial 实际要比的两串（`t_ours`/`theirs`），不是正文段旁路。依据：`diff_stats` 的「缺+多」≥ 两串长度差（`verify.py:1035-1038`），长度差 > `maxDiff` ⇒ 本 trial 必然 fail ⇒ 门只可能截断必然失败的 trial，pass 路径永远全量精确、永不受影响。
+  - 门：O(1) 长度门——`|Δ长度| > maxDiff` 即判停（约 3 行）。有界下界版已砍（无收益 ＋ ~40 行复刻代码与误停风险）。
+  - 截断规则：整条 trial 先过长度门——超线 ⇒ 本 trial 直接 fail-截断，跳过 `diff_stats` 与正文旁路；未超 ⇒ 走今天的全量精确（注释差异照常全列）。停止只停当前 trial，不停基线链（一个基线截断照样试下一个）。已知取舍：正文缺 N 字、注释多 N 字（总长度差 0）时门不触发，仍走全量比对——罕见，只影响速度不影响结论。
+  - 截断显示：`长度差 X > 阈值（未全量比对）`，**不给缺/多拆分、不列差异片段**（长度门不找差异位置，无片段可列）；`【源】/【新】/【源比较】/【新比较】`行照常（GUI 侧 compare 文件已先写；CLI 侧全部 trial 都截断时无 compare 文件，报告只给长度差）。`report.json` 不加新字段：沿用现有「fail + 缺/多=None」形态（`_record_counts`/`build_report_json` 已按 None 处理），`diff_scope` 不变。
+  - 定位边界（已向用户说明）：截断报告只能说「差很多、别等了」，说不出哪里差；首字符就不同的对连「首差异锚点」都无价值，故本次不加锚点。真定位（前 N 差异块 + 行号）要靠分段比对。
+  - 落点（2026-10-20 简化，约 30~40 行）：① `verify.py:2261` 前 3 行（算长度差，超线记截断 trial 并 `continue`；compare 文件已在 `:2250-2259` 写好）；② `cli.py:1500` 前同样 3 行；③ 全截断兜底：`verify.py:2290` 前返回 `missing/extra/total=None` 的 fail 记录，`cli.py:1566` 的 `if best is None: continue` 改为输出 fail 记录（否则整个格式被静默跳过）；④ `verify.py:2463` 加截断显示分支。不碰 `_body_sidecar`（3 返回值与 3 处测试不变）、`best` 15 元组、`diff_stats`、xml 基线路径、指纹载荷。
+  - 影响：改 `verify.py` ⇒ `_impl_digest` 变（`_FP_IMPL_MODULES` 含 `verify`）⇒ 全部已存校验指纹一次性失效，需接受（与方案无关）。
+  - 验收：构造用例——复制一个官方基线文件、截掉一半，断言秒级 fail、缺/多为空、报告有「未全量比对」；正常作品（如 T1579 html）仍 `缺0/多0`；T1499 txt（`缺0/多18` 注释差异、正文长度差小）仍出精确数 + `【仅仅注释差异】`；单测（截断/不截断/链 fallback/全截断兜底）＋ 全量回归；文档（`校验说明书.md` + `校验report.json说明.md` 各一行：fail 记录的缺/多可为空）同步。原 T1579 残卷场景已被「按卷核对与补缺」消除（该项已完成，见上），不再作为验收。
+  - 注：原「html 10 秒依赖 `strip_head_no`」的注记已过时（行首令牌现恒剥，见上条「校验行首令牌恒剥、两侧同剥」），本次一并删除。
 - [ ] **搁置（2026-10-14 用户指示）** 大文本分段比对（适用范围：等长或长度差小、差异不大、但文本百万字的对）
   - 搁置理由：它针对的是"等长 + 差异散布 + 超长文本"那一类慢试算（T1579 epub 试算 65.5 分钟）；现在第一个试算就通过（`缺0/多0`），那类试算不再被触发 ⇒ 暂不启动，等将来真有作品走到第二个试算再做 ✓
   - 整对实证（2026-10-14）：T1579 epub 完整对（95.5 万字）——现行口径（autojunk=False）**缺135/多33，耗时 65.5 分钟**；分段比对 **缺135/多33，约 2 秒** ⇒ **数字完全相同、快约 2000 倍**
@@ -773,8 +775,8 @@
 - [ ] **搁置（2026-10-14 用户指示）** 按卷比较（逐卷比对；2026-10-14 讨论立项）
   - 搁置理由同"大文本分段比对"：目前没有作品被触发到"等长 + 差异散布"的慢试算 ⇒ 暂不启动 ✓
   - 原理：比对耗时约与文本长度的 2.6 次方成正比 ⇒ 切成每卷一比，"各卷平方之和"远小于"整篇平方"。实测参照：T1579 epub 整篇 95.5 万字一次性比对 65.5 分钟；分段比对同数字约 2 秒（按卷是分段比对更粗的粒度，量级相同）
-  - 底座已具备：项目已有按卷过滤（`filter_work_juan`、`verify_one(juan=…)`、基线按卷限定 `strict_juan`）；缺的只是"整篇比对改为逐卷比对 + 汇总"这一步
-  - 我们这侧的切卷前提：html 两侧都天然逐卷（现成）；epub 包内逐章（现成）；txt/md/docx 是单文件 ⇒ 需要"按卷重整"（正文按卷切开、注释按锚点分配到各卷）
+  - 底座已具备：项目已有按卷过滤（`filter_work_juan`、`verify_one(juan=…)`、基线按卷限定 `strict_juan`）；缺口是"整篇比对改为逐卷比对 + 汇总"，外加 txt/md/docx 的按卷重整
+  - 切卷前提：html 两侧都天然逐卷；epub 两侧也逐卷——官方 `.epub` 容器内是 `OEBPS/juans/NNN.xhtml`（2026-10-20 实测 T1579 100 卷、TX0001 34 卷、T0001 22 卷，均含正文）；我方 epub 按来源卷生成章（一卷可拆多章，`juan` 只在缺标题时回退写入标题，`render_epub.py:137-142`）⇒ 需先补「章→卷」映射；txt/md/docx 是单文件 ⇒ 需要"按卷重整"（正文按卷切开、注释按锚点分配到各卷）
   - 注释必须一起分卷：否则第 1 卷的官方注被算成"我们缺"、最后一卷把全部注算成"我们多"，比整篇一次性比对更糟。归属规则 = 注锚点所在卷；解析器已跟踪当前卷（跨卷星号那次改动加的）
   - 附带收益：① 消除"我们注集中文末、官方注随卷"造成的先天残差；② 报告可逐卷（如"第 5 卷：正文 0 差异、注释 缺3/多2"）；③ 残缺基线直接列出缺哪几卷，而不是百万字的"多"；④ 天然配合"停止线只判正文、注释继续比"
   - 代价：单文件格式（txt/md/docx）要新增按卷重整；数字会变（分卷 + 注释重新归属）⇒ 需全库回放验收；报告与 `report.json` 结构改为"逐卷 + 汇总"
@@ -790,7 +792,7 @@
   - 适用范围（首次跑会自动补缺卷，下载时间计入弹窗"校验"耗时；补完第二次即为秒级）：T1579 `txt/` 仅 2/100 卷；另有 T0220 3/600、T0279 2/80、T0310 2/120、T0374 2/40、T0397 1/60、T1542 1/18
   - 实测（T1579 txt）：首次 校验 1 分 36 秒（其中主要是补下 98 卷）→ 第二次 **`缺0/多0`、校验 5.4 秒** ✓；也彻底证实此前"缺0/多96万"只是残卷造成的假差异
 - [ ] **搁置（2026-10-14 用户指示）** 指纹回退口径对齐（下游《上游审核-指纹首选缺失与回退》审核后定稿，暂不动工）
-  - 问题：非 T/X 藏经（如 K 部的 K0016、K1482）的 docx/pdf 上，首选 docx 缺失且官方连 T/X 都不提供 ⇒ 真校验下载 404 后回退 html 给出结论 ✓，但指纹侧硬性要求首选在场、直接缺席返回未定义 ⇒ 每轮都重验、复用永远不中 ✗
+  - 问题：非 T/X 藏经（如 K 部的 K0016、K1482）的 docx/pdf 上，首选 docx 缺失，且官方 docx 只对 T、X 提供（非 T/X 藏经没有；2026-10-20 实测 `cbeta_docx_2026r2` 仅 T/X 两目录）⇒ 真校验下载 404 后回退 html 给出结论 ✓，但指纹侧硬性要求首选在场、直接缺席返回未定义 ⇒ 每轮都重验、复用永远不中 ✗
   - 方案（定稿）：`fetch.py` 新增规则单一来源（如"官方仅 T、X 提供"的种与藏经判定；未知种恒为可提供），指纹侧仅放宽"规则判定必然不可下载"的情形（按 `resolve_bases` 的回退结果证明，与真跑同口径）；载荷带规则版本常量，将来规则修订时旧记录一次性失效重验；临时 404 等仍返回未定义（将来可能成功，本次不能证明）
   - **暂不做的原因**：改动约 80 行，中等偏小，但收获几乎为零——不提速（省的不过约一次基线发现，修后提速只有约 46 毫秒）、不让结论更对；唯一的收获是非 T/X 藏经的两格式在二轮重制时跳过几次校验，而**指纹载荷一改就会让全部现存记录一次性失效**（下一次全库跑会整体重验，成本高）⇒ 等真在《藏要》第二辑这种大批次上被"未复用"反复拖慢时再做
 - [x] **已完成** 校验指纹提速与语义修正（2026-10-14 下游《上游审核-指纹慢根因》审核后落地）
@@ -806,7 +808,7 @@
   - 测试：`cfg_int` 取值、`max_diff=0` 下缺3判 FAIL、输入框 0 往返（保存与回显都是 0）
   - 说明：修完后配 `maxDiff: 0` 会看到更多 fail（以前被放过的 1–10 字差异现在报出）——这是修 bug，不是变严
 - [x] **已完成** 方框字（`seg`/`hi` 的 `rend="border"`）渲染（2026-10-15 用户点档：TX12n0007 发现新 tag）
-  - 现象：`<seg rend="border">釋</seg>`（科判字）/ `<hi rend="border">題前概說</hi>`（标题字）——原书里的「方框字」。语料：`seg[border]` 350 处／8 部（全 TX）；`hi[border]` 44 处／22 部（全 YP，多在 `<head>`）；`seg`/`hi` 的 rend 另有 `bold`（1993 处）与 `kaiti`（6 处），本次不做（见下）
+  - 现象：`<seg rend="border">釋</seg>`（科判字）/ `<hi rend="border">題前概說</hi>`（标题字）——原书里的「方框字」。语料：`seg[border]` 350 处／8 部（全 TX）；`hi[border]` 44 处／22 部（全 YP，多在 `<head>`）；`seg`/`hi` 的 rend 另有 `bold`（1993 处）与 `kaiti`（10 处），本次不做（见下）
   - 官方口径：官方 epub `cbeta.css` 即 `span.border { border: 1px black solid }`、正文出 `<span class="border">`；官方 html 也出该 class（规则在网站样式、文件里没有）。官方 docx 无 TX/YP（无从对照）
   - 修法：`render_html._render_misc`（seg/hi 且 rend 含 border → `span.border`；html/epub/pdf-html2pdf 同一管线）＋ `render_docx._render_e`（同判定 → run 打 `border` 标签）；`theme.TRANSLATABLE` 加 `border`、新增 `_border_ooxml`（CSS 简写 → `w:bdr`，1px=0.75pt、solid→single、缺色 auto）、`TAG_SELECTOR["border"]="span.border"`、`REQUIRED_THEME_TAGS["border"]=("border",)`；`pdf_docx.css`／`html_epub_official.css` 各加 `span.border { border: 1px black solid; }`，`epub_print.css` 按派生约定同步
   - 死命令三件套：`TAG_SELECTOR` ＋ 左栏行 `("span.border","方框字")`（`css_editor.EDITABLE_ROWS`，`ROW_TIPS` 注明边框线只在源码页调）＋ CSS 规则
@@ -820,9 +822,9 @@
   - 两行无字体变量（同「字义」行）：字体双栏置灰，可调字号/粗细/颜色；出厂粗细不算覆盖（按钮显示「默认」）
   - 测试：`test_gui.test_div_orig_commentary_editable_rows`（行与提示存在）＋ `test_gui.test_div_orig_commentary_rows_in_dialog`（行可建、字体栏置灰、粗细默认态、标签文本）
   - 注意：左栏只面向 pdf_docx 主题，html 基底规则不在其可编辑范围（`docs/TODO.md:394`）
-- [ ] **搁置** `hi`/`seg` 的 `rend="bold"`（1993 处，YP 7 部）与 `hi rend="kaiti"`（6 处）的 html/epub 类映射（2026-10-15 扫描发现）
-  - 官方 html/epub 分别出 `<span class="bold">`／`<span class="kaiti">`（基底已有 `.bold{font-weight:bold}`；`.kaiti` 官方值 `DFKai-SB, BiauKai` 基底缺）；我方现为纯文字
-  - 暂不做：与本次方框同一机制，但影响面更大（YP 多部 html 输出会变），等有实际需求再一并做
+- [ ] **搁置** `seg`/`hi` 的 `rend="bold"`（1993 处 / 9 部：YP 7 + TX 2）与 `rend="kaiti"`（10 处 / 2 部：`hi` 6 + `p` 4）的 html/epub 类映射（2026-10-15 扫描发现；2026-10-20 语料复核）
+  - 官方 epub 实测：`seg @rend="bold"` → `<span class="bold">`（TX0001 21 处）、`p @rend="kaiti"` → `<span class="kaiti">`（CC0003 4 处）；`hi @rend="bold"`（1968 处，7 部 YP）与 `hi @rend="kaiti"`（YPa001 6 处）官方不出 span（YP0023.epub 的 span.bold=0，偈颂行落 `span.lg-row`）。基底已有 `.bold`，`.kaiti` 官方值 `DFKai-SB, BiauKai` 基底缺；我方现为纯文字。官方 html 本地无库，未核。
+  - 暂不做：按官方口径只需做 `seg`/`p` 共 29 处，收益小；`hi` 1968 处官方 epub 不出 span，若跟随会偏离官方形态，是否做需另定。等有实际需求再定范围。
 - [x] **已完成** docx `<table>` 完整支持（2026-10-16 用户立项；B28n0157 实报「没能支持 `<table cols="5"><row><cell>…`」）
   - 修前：`_render_table` 只出 `<w:tbl>/<w:tr>/<w:tc>` 裸骨架——无 `tblPr`/`tblGrid`，`cols`/`rows` 合并丢失；`cell` 全部子节点塞进一个 `_para`，`cell` 内 `<p>` 造成段中段（Word/WPS 丢弃嵌套段落）。B0157 实测 37 处、TX0016 15 处
   - 修法（`render_docx.py`）：`_render_table` 重写为 `_render_docx_table`（tblPr/tblGrid/网格模拟/列宽）+ `_docx_cell`/`_render_cell_body`/`_est_text_tw`/`_cell_para_fix`；`cell` 内块级子照 `_render_item` 模式拆兄弟段落（至少保一空段）；`cols`/`rows` → `gridSpan`/`vMerge`，续行补 `<w:vMerge/>` 空占位格（保留同跨度 `gridSpan`，与官方 X0448 同形）；`_cell_depth` 标记让格内 `p` 段落内联覆写 `ind firstLine=0` + `jc left`
@@ -889,3 +891,53 @@
   - 测试：`test_docx.TestHeadCbTypeDocx` +4（卷标记保卷题顶层/卷标记单独入队无书签/空非卷型仍忽略/未落地不报告）；全量 1349 OK
   - 文档：`主题与样式.md`（标题分级节补空「卷」标记口径）
   - 影响：`render_docx` 在 `_FP_IMPL_MODULES` ⇒ 指纹失效同上一条，合并一次
+- [x] **已完成 上游 cbeta-fetch 升级到 v0.2.0 并同步**（2026-10-21）
+  - 上游 2026-10-21 18:40 发布 v0.2.0（commit `817d2070d5b502a860a4fe531607572d68a3dfe7`）：TLS 按主机预选（cbdata 只清 `VERIFY_X509_STRICT`）、分块流式下载 ＋ `Content-Length` 完整性校验、原子解压（同名 basename 整单失败）
+  - xml2pdf：`pycbeta/_vendor/cbeta_fetch.py` 与 `pycbeta/_vendor/SOURCE.txt` 同步为 0.2.0（sha256 `353a6004984815e5afe2923fc59432ef9f7a7d8b043ad8d10bb294976fd5a2c7`，与上游工作区、publish 副本三份一致）
+  - 本仓 `fetch.py:273` 的「unverified SSL」注释已随本次订正（现说明共享层的证书策略与已知待改项）
+  - 影响：`_vendor` 不在 `_FP_IMPL_MODULES` ⇒ 不触发校验指纹失效
+- [x] **已完成 全库代码审核（2026-10-21）**
+  - 范围：`pycbeta/` 全包（30 个模块）＋ `test/` ＋ 根级脚本。方法：危险模式全量扫描（`eval`/`exec`/`subprocess`/zip/XML 解析/临时文件/宽 `except`/线程/路径拼接/文件编码）＋ 精读网络与写盘路径（`_vendor/cbeta_fetch.py`、`fetch.py`、`verify.py`（抽取与指纹段）、`update_data.py`、`figures.py`、`annotate.py`、`theme.py`（配置与预设段）、`gui/panel.py`、`gui/__main__.py`、`render_pdf.py`、`render_docx.py`（转义段）、`parser.py`、`merge.py`）＋ 两处可复现实验（属性注入、截断响应）
+  - 未逐行读完：`render_docx.py`（158KB）、`verify.py`（150KB）、`theme.py`（68KB）、`cli.py`（92KB）、`gui/css_editor.py`（118KB）——按风险点抽样，结论以抽样为准
+  - 结论：3 项高危（HTML/EPUB 属性引号未转义、cbdata 证书失败回退不校验上下文、流式下载无长度校验）＋ 4 项中危（配置与预设写盘非原子、取消转换留半成品产物、LibreOffice 转换无超时、lxml 默认解析器未禁实体）＋ 低危（GUI 宽 `except` 吞异常、过期注释、重复语句）
+  - 收敛：后两项高危已由上游 v0.2.0（commit `817d207`）修掉并同步两仓（见下两条「已完成」）；余下高危一项、中危四项待做
+- [ ] **待做 高危一** HTML/EPUB 属性引号未转义（可复现）
+  - 位置：`render_html.py:52-53`（`_esc` 用 `html.escape(s, quote=False)`，不转义 `"`），属性上下文 `:630`（`class="div-…"`）、`:647`/`:667`/`:700`（`style="…"`）、`:663`（`class="…"`）；`render_epub.py:22`（`sax.escape` 同样不转义引号）；`:893` 已单独 `replace('"', "&quot;")`（口径不一致）
+  - 实证：构造 `style='color:red" onmouseover="alert(1)'` 渲染出 `<p class="" style="color:red" onmouseover="alert(1)">`（属性被撑破）；`type='x" class="evil'` 出重复 `class` 属性
+  - 现状数据：`cbeta_xml` 全库 229 个官方 XML 中含 `&quot;` 的 0 个（含 `style="…"` 属性的 177 个）⇒ 当前语料不触发，属硬化缺口而非正在发生的漏洞
+  - 修法：属性上下文统一走引号转义（`html.escape(s, quote=True)` 或新增 `_attr()`，与 `render_docx.py:488` 已有 `_attr` 同口径）；文本节点维持现口径
+  - 代价：改 `render_html`/`render_epub` 在 `_FP_IMPL_MODULES` ⇒ 已存校验指纹整体失效（下轮全库重验）
+  - 验收：补两条单测（属性含引号不撑破属性）；229 部语料重渲染产物逐字不变
+- [x] **已完成 高危二** cbdata 证书失败回退不校验上下文（上游 v0.2.0 已修，2026-10-21 同步两仓）
+  - 原问题：`_vendor/cbeta_fetch.py` 的 `_open()` 捕获证书错误后改用不校验上下文重试一次 ⇒ cbdata 官方电子书与 scope-selector JSON 下载可被中间人替换
+  - 上游修法（commit `817d207`）：改为按主机预选上下文——`_context_for(url)`（`:145-156`）对 cbdata 主机用 `ssl.create_default_context()` 且只清 `VERIFY_X509_STRICT`（缺 Subject Key Identifier 即可通过），证书链与主机名照常校验；其余主机维持默认上下文；不做异常驱动的降级；`getattr(ssl, "VERIFY_X509_STRICT", 0)` 兼容 Python 3.12 及更早
+  - 本仓复核：`_vendor/cbeta_fetch.py:145-168` 落点正确（无 `ssl._create_unverified_context()` 残留）；两仓 vendor 与 `SOURCE.txt` 均为 0.2.0 / `817d207` / sha256 `353a6004…`
+  - 影响：改 vendor 不触及 `_FP_IMPL_MODULES` ⇒ 不影响校验指纹
+- [x] **已完成 高危三** 流式下载无完整性校验（上游 v0.2.0 已修，2026-10-21 同步两仓）
+  - 原问题：`download`/`fetch_if_changed` 的 `shutil.copyfileobj` 后直接 `os.replace`，未比对 `Content-Length` ⇒ 截断响应被当作完整文件落盘（实证：声明 100、实发 10，`copyfileobj` 不抛异常；旧写法 `r.read()` 会抛 `IncompleteRead`）
+  - 上游修法（commit `817d207`）：`_copy_stream()` 边写边计字节（`:192-201`），`_check_length()` 比对 `Content-Length`，不符抛 `IOError`（`:204-208`），三处写盘点均调用（`:229-230`、`:240-241`、`:311-312`）⇒ 短读按失败重试
+  - 影响：改 vendor 不触及 `_FP_IMPL_MODULES` ⇒ 不影响校验指纹
+- [ ] **待做 中危一** 配置与预设写盘非原子
+  - 位置：`gui/panel.py:274-281`（`save_current` 写 `presets/config.user.json`）、`:320-332`（`save_config_preset`）、`:343-360`（`set_config_preset_theme`）、`:417`、`:433`、`:533`；`gui/css_editor.py:259`、`:1896`——均 `open(path, "w")` 直写
+  - 影响：写一半崩溃或磁盘满 ⇒ 留下半截 JSON ⇒ 下次启动读配置失败（GUI 起不来）
+  - 修法：统一走「临时文件 ＋ `os.replace`」；publish 仓已有同类实现 `cbeta_publish/utils/atomic.py`（尚未提交），可移植思路
+  - 代价：不触及 `_FP_IMPL_MODULES` ⇒ 不影响校验指纹
+- [ ] **待做 中危二** 取消转换留下半成品产物
+  - 位置：`gui/__main__.py:274-280`（`cancel()` → `self._proc.terminate()`，Windows 为硬杀）
+  - 影响：正在写的 docx/html/epub 留在输出目录，且看起来是完整文件
+  - 修法：转换产物先写临时名再改名，或取消后清理本行产物
+- [ ] **待做 中危三** LibreOffice 转换无超时
+  - 位置：`render_pdf.py:276-277`（`subprocess.run([soffice, …], check=True)` 无 `timeout`；外部引擎 `:331` 有 120 秒、docbuilder `:362` 有 180 秒）
+  - 影响：soffice 挂起时该行任务永久卡住
+  - 修法：加 `timeout=`（与其它引擎同量级）并捕获 `TimeoutExpired` 记失败
+- [ ] **待做 中危四** lxml 默认解析器未禁实体
+  - 位置：`parser.py:62`（`etree.parse(xml_fn)`，默认 `resolve_entities=True`）、`verify.py:1399`（官方基线直读同口径）；对照 `merge.py:194` 已用 `resolve_entities=False`
+  - 影响：异常或恶意 XML 可触发实体膨胀（billion laughs）耗尽内存；实体内容可能进入产物
+  - 修法：统一改用 `etree.XMLParser(resolve_entities=False)`（与 `merge.py` 同口径）
+  - 代价：改 `parser`/`verify` 在 `_FP_IMPL_MODULES` ⇒ 已存校验指纹整体失效
+- [ ] **待做 低危** GUI 宽 `except` 吞异常（`gui/panel.py` 17 处、`gui/__main__.py` 20 余处）⇒ 失败无痕；建议至少写进转换报告或日志
+- [ ] **待做 测试稳定性** 全量 discover 偶发原生崩溃：2026-10-21 第一次 `python -m unittest discover -s pycbeta/tests -q -t .` 以 `0xC0000005`（Windows 访问冲突）退出且无失败摘要，重跑即 1352 OK（skipped=122）；27 个测试模块单独跑全部 OK ⇒ 属跨模块交互/解释器退出期问题，非某个用例失败。定位方向：offscreen 的 PySide6 与 native 库（WeasyPrint / PyMuPDF）退出顺序；未复现前不改代码
+- [x] **已完成 文档（publish 侧）** 上游提案文档与 publish `TODO.md` 同步到 v0.2.0 现状
+  - `publish/docs/上游-cbeta-fetch-TLS与分块下载.md` 已加「实施结果（2026-10-21）」：上游 commit `817d207`、版本 `0.2.0`、两仓 vendor 同步记录、解压原子性与同名策略留第二批
+  - publish `TODO.md` 第四批：TLS、分块流式两条已勾选；解压原子性与同名冲突仍为未做（第二批）
+  - 遗留：该文档 §3 与 §5、§6 的「现状」描述仍以 `0.1.2` 为准（保留作对照），实施口径以 `0.2.0` 为准
