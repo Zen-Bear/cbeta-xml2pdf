@@ -50,7 +50,13 @@ LINEHEAD_RE = re.compile(
 
 
 def _esc(s: str) -> str:
+    """文本节点转义（不转义引号；属性值请用 `_attr`）。"""
     return html.escape(s, quote=False)
+
+
+def _attr(s: str) -> str:
+    """HTML 属性值转义（含单双引号）；属性上下文一律用它，避免撑破属性。"""
+    return html.escape(s, quote=True)
 
 
 def _plain_text(n) -> str:
@@ -252,7 +258,7 @@ class HtmlRenderer:
         for kind, n in ops:
             if kind == "open":
                 t = n.attrs.get("type")
-                cls = f' class="div-{_esc(t)}"' if t else ""
+                cls = f' class="div-{_attr(t)}"' if t else ""
                 out.append(f"<div{cls}>")
                 self._div_stack += 1
             elif kind == "close":
@@ -363,7 +369,7 @@ class HtmlRenderer:
 
     def _line_info(self, node) -> str:
         ln = self._first_line(node) or self._lb or ""
-        return f"<span class='lineInfo' line='{_esc(ln)}'></span>"
+        return f"<span class='lineInfo' line='{_attr(ln)}'></span>"
 
     _PRE_BLANK = "[ \t\u3000]"
 
@@ -524,19 +530,19 @@ class HtmlRenderer:
                 g = self._ann_text(glyph) if self._annotations is not None \
                     else _esc(glyph)
                 return f"{g}({_esc(roman)})"
-            return (f"<span class='ranja' roman='{_esc(roman)}' "
-                    f"code='{_esc(node.code)}' char='{_esc(glyph)}'/>")
+            return (f"<span class='ranja' roman='{_attr(roman)}' "
+                    f"code='{_attr(node.code)}' char='{_attr(glyph)}'/>")
         if raw and ord(raw[0]) >= 0x2A700:
             char = self._resolve_gaiji(node.code, raw)
             if char and all(unicodedata.category(c) == "Co"
                             for c in char):
                 # 无解 PUA：官方 html 置空（文本抽取为空），官方 txt 作 ◇；
                 # 空 span 留 data-gid 供 `_join_epub_ours` 补 □（txt 形）
-                return f'<span class="gaiji" data-gid="{_esc(node.code)}"></span>'
+                return f'<span class="gaiji" data-gid="{_attr(node.code)}"></span>'
             if self._annotations is not None:
                 inner = self._ann_text(char)
-                return f'<span class="gaiji" data-gid="{_esc(node.code)}">{inner}</span>'
-            return f'<span class="gaiji" data-gid="{_esc(node.code)}">{_esc(char)}</span>'
+                return f'<span class="gaiji" data-gid="{_attr(node.code)}">{inner}</span>'
+            return f'<span class="gaiji" data-gid="{_attr(node.code)}">{_esc(char)}</span>'
         char = self._resolve_gaiji(node.code, raw)
         if self._annotations is not None:
             return self._ann_text(char)
@@ -627,7 +633,7 @@ class HtmlRenderer:
         cls = ""
         t = a.get("type")
         if t:
-            cls = f" class=\"div-{_esc(t)}\""
+            cls = f" class=\"div-{_attr(t)}\""
         self._div_stack += 1
         inner = self._render_nodes(e.children)
         self._div_stack -= 1
@@ -644,7 +650,7 @@ class HtmlRenderer:
                            key=("igstyle", e.sourceline, style))
             style = None
         if ptype == "pre":
-            s = f' style="{_esc(style)}"' if style else ""
+            s = f' style="{_attr(style)}"' if style else ""
             prev = self._in_pre
             self._in_pre = True
             self._pre_line_start = True   # 预排去缩进：段首视为行首
@@ -660,11 +666,11 @@ class HtmlRenderer:
                 inner = self._render_nodes(e.children)
             return f'<p data-head-level="{m.group(1)}" class="head">{inner}</p>'
         if ptype:
-            cls = f" class=\"{_esc(ptype)}\""
+            cls = f" class=\"{_attr(ptype)}\""
         else:
             from .figures import is_figure_only
             cls = ' class="figure"' if is_figure_only(e) else ' class=""'
-        s = f' style="{_esc(style)}"' if style else ""
+        s = f' style="{_attr(style)}"' if style else ""
         return f"<p{cls}{s}>{self._line_info(e)}{self._render_nodes(e.children)}</p>"
 
     def _render_tt(self, e: E) -> str:
@@ -697,9 +703,9 @@ class HtmlRenderer:
         if m:
             indent = m.group(1).strip()
         cls = f"lg {t}" if t else "lg"
-        s = f' style="{_esc(style)}"' if style else ""
+        s = f' style="{_attr(style)}"' if style else ""
         rows = self._render_lg_rows(e.children, indent)
-        return f'<div class="{cls}"{s}>{rows}</div>'
+        return f'<div class="{_attr(cls)}"{s}>{rows}</div>'
 
     def _render_lg_rows(self, children, indent: str) -> str:
         out = []
@@ -707,7 +713,7 @@ class HtmlRenderer:
         for c in children:
             if isinstance(c, E) and c.tag == "l":
                 cells = self._split_l_cells(c)
-                first_style = f" style='text-indent:{indent}'" if first and indent else ""
+                first_style = f" style='text-indent:{_attr(indent)}'" if first and indent else ""
                 first = False
                 cell_html = "".join(f"<div class='lg-cell'{first_style if i == 0 else ''}>{part}</div>"
                                     for i, part in enumerate(cells))
@@ -793,13 +799,13 @@ class HtmlRenderer:
             return ""   # epub 口径：连尾注块一起不出（官方 txt/epub 均无此孤注）
         # 尾注块恒出（含被取代的 orig → 孤注，与官方 html 一致）
         self._back_old.append(
-            f"<span class='footnote' id='n{_esc(n)}'><a href='#note_anchor_{_esc(n)}'>[{_esc(n)}]</a> {content}</span>\n"
+            f"<span class='footnote' id='n{_attr(n)}'><a href='#note_anchor_{_attr(n)}'>[{_esc(n)}]</a> {content}</span>\n"
         )
         if _sup:
             return ""   # 正文锚点压制（不占标记号）
         self._old_seq += 1
         seq = self._old_seq
-        return f'<a id="note_anchor_{_esc(n)}" class="noteAnchor" href="#n{_esc(n)}">[{seq}]</a>'
+        return f'<a id="note_anchor_{_attr(n)}" class="noteAnchor" href="#n{_attr(n)}">[{seq}]</a>'
 
     def _render_star_app(self, app: App) -> str:
         """星号位校勘（有 corresp 的 App，如 `<anchor type="star"/>` 锚定的注记）：
@@ -837,7 +843,7 @@ class HtmlRenderer:
                 content += f"(cf. {refs})"
             lb, rb = bracket_pair(self.note_inline_brackets)
             return f"<span class='note-inline'>{lb}{content}{rb}</span>"
-        return f"<span class='note-star' data-n='{_esc(n)}'></span>"
+        return f"<span class='note-star' data-n='{_attr(n)}'></span>"
 
     @staticmethod
     def _render_cf(app: Optional[App], note: Note) -> str:
@@ -890,7 +896,7 @@ class HtmlRenderer:
                     and _is_zhang(t))
                 if _is_brk and t:
                     return ('<div class="mulu-break" data-title="'
-                            + _esc(t).replace('"', "&quot;") + '"></div>')
+                            + _attr(t) + '"></div>')
             return ""
         if tag == "graphic":
             return self._render_graphic(e)
@@ -938,22 +944,22 @@ class HtmlRenderer:
                 data = base64.b64encode(open(path, "rb").read()).decode("ascii")
                 mime = path.rsplit(".", 1)[-1].lower() or "png"
                 # alt 留文件名（文本抽取无视属性；`_join_epub_ours` 物化官方 txt 图注 `【圖：x】`）
-                return (f'<img src="data:image/{_esc(mime)};base64,{data}" '
-                        f'alt="{_esc(base)}" />')
+                return (f'<img src="data:image/{_attr(mime)};base64,{data}" '
+                        f'alt="{_attr(base)}" />')
             if base not in self.missing_figures:
                 self.missing_figures.append(base)
-        return f"<span imgsrc='{_esc(os.path.basename(url))}' class='graphic'></span>"
+        return f"<span imgsrc='{_attr(os.path.basename(url))}' class='graphic'></span>"
 
     def _render_table(self, e: E) -> str:
         if e.tag == "table":
             style = e.attrs.get("style")
-            s = f' style="{_esc(style)}"' if style else ""
+            s = f' style="{_attr(style)}"' if style else ""
             return f'<div class="bip-table"{s}>{self._render_nodes(e.children)}</div>'
         if e.tag == "row":
             return f"<div class='bip-table-row'>{self._render_nodes(e.children)}</div>"
         extra = ""
         if e.attrs.get("rows"):
-            extra += f' rowspan="{_esc(e.attrs["rows"])}"'
+            extra += f' rowspan="{_attr(e.attrs["rows"])}"'
         if e.attrs.get("cols"):
-            extra += f' colspan="{_esc(e.attrs["cols"])}"'
+            extra += f' colspan="{_attr(e.attrs["cols"])}"'
         return f'<div class="bip-table-cell"{extra}>{self._render_nodes(e.children)}</div>'

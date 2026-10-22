@@ -926,13 +926,19 @@
   - 回归：全量 `python -m unittest discover -s pycbeta/tests -q -t .` = **1363 OK（skipped=122）**
   - 指纹：改 `theme` 在 `_FP_IMPL_MODULES` ⇒ 已存校验指纹整体失效（攒批做完统一重验，不单独 bump 版本号）
   - 未做（留后续批次）：中危五剩余 `os.replace` 逐项边界、低危三剩余 html 定位 glob、低危七剩余 `annotate.rt_css_rule`（记录不立项）
-- [ ] **待做 高危一** HTML/EPUB 属性引号未转义（可复现）
-  - 位置（2026-10-22 补全为 15 处）：`render_html.py:52-53`（`_esc`＝`html.escape(s, quote=False)`，不转义 `"`）。属性上下文：`:255`、`:366`、`:527-528`、`:630`、`:647`、`:663`、`:667`、`:700`、`:796`、`:802`、`:840`、`:893`（已手动 `replace('"', "&quot;")`，口径不一致）、`:941-942`、`:945`、`:950`、`:956`/`:958`；其中 `:710`（`lg` 的 `text-indent` 直拼 `style='…'`）连 `_esc` 都没走，最弱。`render_epub.py:22`（`sax.escape` 同样不转义引号）
+- [x] **已完成 审核批 2（转义统一）实施（2026-10-22）**
+  - 修复：高危一（`render_html` 新增 `_attr`，属性位全部切换，补漏 `:699/:702` 的 `lg` 类名与 `:710` 缩进）；高危四（`render_docx` 图片名 `_attr`）；高危五（`theme` 新增 `_xml_attr`，`docx_run` 字体名转义）；低危五第一批（`render_docx` 字体名全部 `_attr`、`:725` 改函数替换消除 bad escape、`footnoteSeparator` 数值兜底＋钳制）
+  - 新增测试：`test_audit_fixes.py` 追加 5 项（HTML helper／`lg` 类名＋缩进／`p` 的 style／theme `docx_run`／docx `_attr`），合计 16 项
+  - 回归：全量 `python -m unittest discover -s pycbeta/tests -q -t .` = **1368 OK（skipped=122）**
+  - 指纹：改 `render_html`/`render_docx`/`theme` 均在 `_FP_IMPL_MODULES` ⇒ 已存校验指纹整体失效（与批 1 合并，攒批统一重验）
+  - 说明：`render_epub` 未改（`sax.escape` 现用途全在文本节点）；高危四在 Windows 上属端到端不可达（文件名禁 `"`），按硬化修复
+  - 未做（留后续批次）：低危五剩余 `_strip_quote_text` 原地改树与分页/估高二次方开销
+- [x] **已完成 高危一** HTML/EPUB 属性引号未转义（可复现；2026-10-22 修复）
+  - 位置（2026-10-22 补全清单，此前只列 5 处）：`render_html.py:52-53`（`_esc`＝`html.escape(s, quote=False)`，不转义 `"`）。属性上下文：`:255`、`:366`、`:527-528`、`:535`/`:538`/`:539`、`:630`、`:647`、`:663`、`:667`、`:700`、`:702`（`lg` 的 `cls`，补漏）、`:710`（`lg` 的 `text-indent`，补漏且原为完全未转义）、`:796`、`:802`、`:840`、`:893`、`:941-942`、`:945`、`:950`、`:956`/`:958`；`render_epub.py:22`（`sax.escape` 同样不转义引号；现用途全在文本节点，无属性位）
   - 实证：构造 `style='color:red" onmouseover="alert(1)'` 渲染出 `<p class="" style="color:red" onmouseover="alert(1)">`（属性被撑破）；`type='x" class="evil'` 出重复 `class` 属性
   - 现状数据：`cbeta_xml` 全库 229 个官方 XML 中含 `&quot;` 的 0 个（含 `style="…"` 属性的 177 个）⇒ 当前语料不触发，属硬化缺口而非正在发生的漏洞
-  - 修法：属性上下文统一走引号转义（`html.escape(s, quote=True)` 或新增 `_attr()`，与 `render_docx.py:481-488` 已有 `_attr` 同口径）；文本节点维持现口径
-  - 代价：改 `render_html`/`render_epub` 在 `_FP_IMPL_MODULES` ⇒ 已存校验指纹整体失效（下轮全库重验）
-  - 验收：补两条单测（属性含引号不撑破属性）；229 部语料重渲染产物逐字不变
+  - 修复（2026-10-22）：`render_html` 新增 `_attr()`（`html.escape(quote=True)`），上述属性位全部切换；`_esc` 仅保留文本节点；单测 `test_audit_fixes.TestHtmlAttrEscaping`（helper、`lg` 类名/缩进、`p` 的 style）
+  - 代价：改 `render_html`/`render_epub` 在 `_FP_IMPL_MODULES` ⇒ 已存校验指纹整体失效（攒批统一重验）
 - [x] **已完成 高危二** cbdata 证书失败回退不校验上下文（上游 v0.2.0 已修，2026-10-21 同步两仓）
   - 原问题：`_vendor/cbeta_fetch.py` 的 `_open()` 捕获证书错误后改用不校验上下文重试一次 ⇒ cbdata 官方电子书与 scope-selector JSON 下载可被中间人替换
   - 上游修法（commit `817d207`）：改为按主机预选上下文——`_context_for(url)`（`:145-156`）对 cbdata 主机用 `ssl.create_default_context()` 且只清 `VERIFY_X509_STRICT`（缺 Subject Key Identifier 即可通过），证书链与主机名照常校验；其余主机维持默认上下文；不做异常驱动的降级；`getattr(ssl, "VERIFY_X509_STRICT", 0)` 兼容 Python 3.12 及更早
@@ -942,20 +948,18 @@
   - 原问题：`download`/`fetch_if_changed` 的 `shutil.copyfileobj` 后直接 `os.replace`，未比对 `Content-Length` ⇒ 截断响应被当作完整文件落盘（实证：声明 100、实发 10，`copyfileobj` 不抛异常；旧写法 `r.read()` 会抛 `IncompleteRead`）
   - 上游修法（commit `817d207`）：`_copy_stream()` 边写边计字节（`:192-201`），`_check_length()` 比对 `Content-Length`，不符抛 `IOError`（`:204-208`），三处写盘点均调用（`:229-230`、`:240-241`、`:311-312`）⇒ 短读按失败重试
   - 影响：改 vendor 不触及 `_FP_IMPL_MODULES` ⇒ 不影响校验指纹
-- [ ] **待做 高危四** DOCX 图片名属性注入（可复现，2026-10-22 实核）
+- [x] **已完成 高危四** DOCX 图片名属性注入（2026-10-22 修复）
   - 位置：`render_docx.py:1820`（`nm = _x(base)`，`_x` 在 `:476-478` 只转义 `&<>`）写进 `wp:docPr @name` 与 `pic:cNvPr @name`（同一 f-string 组）；`base` 来自 XML `<graphic url>` 的 basename
-  - 触发：XML 写 `url="x&quot;y.gif"` ⇒ 属性值解码出 `"` ⇒ document.xml 属性提前闭合 ⇒ 非法 OOXML，Word 打不开、回读校验直接失败。与 v0.94 修书签名（`_attr` `:481-488`）同族，是转义清单里唯一漏掉的「来自 XML 属性值的属性位」
-  - 现状数据：官方 229 XML 不含 `&quot;` ⇒ 语料不触发，属硬化缺口
-  - 修法：`nm` 改走 `_attr`（其余属位来源全是本机配置/主题而非 XML，已按低危五分列）
+  - 触发：XML 写 `url="x&quot;y.gif"` ⇒ 属性值解码出 `"` ⇒ document.xml 属性提前闭合 ⇒ 非法 OOXML，Word 打不开、回读校验直接失败。与 v0.94 修书签名（`_attr` `:481-488`）同族；注意 Windows 文件名禁 `"`/`<`/`>`，该图片文件在本机不可能存在 ⇒ 端到端不可达，属硬化缺口（代码路径仍按属性位修）
+  - 现状数据：官方 229 XML 不含 `&quot;` ⇒ 语料不触发
+  - 修复（2026-10-22）：`nm` 改走 `_attr`；单测 `test_audit_fixes.TestDocxAttrEscaping`
   - 代价：改 `render_docx` 在 `_FP_IMPL_MODULES` ⇒ 校验指纹整体失效
-  - 验收：补单测（graphic url 含 `&quot;` 产出 docx 仍可开）；全量单测通过
-- [ ] **待做 高危五** 预设 CSS 字体名直拼进 OOXML rPr（已实测复现）
+- [x] **已完成 高危五** 预设 CSS 字体名直拼进 OOXML rPr（已实测复现；2026-10-22 修复）
   - 位置：`theme.py:1448-1449`（`docx_run` 内 `f'<w:rFonts w:ascii="{latin_name}" w:eastAsia="{east}" w:hAnsi="{latin_name}"/>'` 无任何 XML 转义；`:1436-1440` 的 `strip('"')`/`strip("'")` 只剥首尾，值中部引号原样保留）
   - 实证（2026-10-22 本会话复跑）：CSS `body { font-family: x"/><w:color w:val="FF0000; }` ⇒ `docx_run("body")` 输出 `<w:rFonts w:ascii="x"/><w:color w:val="FF0000" …/>`，属性被闭合、可夹带任意 rPr 子元素
   - 触发：复制/下载他人预设 CSS（presets 可流通，属预期内任意文本）⇒ DOCX 损坏或被夹带格式定义
-  - 修法：进 OOXML 的字体名统一 XML 属性转义（`& < > "`）并剥除非法字符
+  - 修复（2026-10-22）：新增 `theme._xml_attr`（`& < > "`），`docx_run` 的 `w:ascii`/`w:eastAsia`/`w:hAnsi` 全部过转义；单测 `test_audit_fixes.TestThemeFontEscaping`
   - 代价：改 `theme` ⇒ 校验指纹整体失效
-  - 验收：补单测；默认预设与现有语料输出逐字不变
 - [x] **已完成 高危六** `var()` 变量环使 CSS 解析永久挂死（已实测复现；2026-10-22 修复）
   - 位置：`theme.py:610-621`（`_subst_vars`：`while prev != out: out = _VAR_RE.sub(rep, out)`，无迭代上限、无环检测）
   - 实证（2026-10-22 本会话复跑）：CSS `:root{--x:var(--y);--y:var(--x)}` ⇒ `_subst_vars` 8 秒不收敛；CLI/GUI 预览线程都会被冻住 ⇒ 一次坏 CSS 冻结全流程
@@ -1063,8 +1067,9 @@
   - `:2671-2673`：`footnoteSeparator` 数值无 `try`（对照 `_series_size_pt` `:975-978` 有兜底）
   - `:2299-2309`：`_strip_quote_text` 原地改树 ⇒ 同一 Work 对象复用渲染（同进程二次渲染/多格式循环）输出不可复现
   - `:2814`/`:385`：分页模式每轮全量拷贝累计字符串＋智能合页每轮全量估高（数千节时秒级到数十秒）
-  - 修法：统一属性转义 helper、数值兜底、渲染期临时剥离不改原树、分节串进列表最后 join、估高改增量
-  - 代价：改 `render_docx` ⇒ 校验指纹整体失效；验收：坏字体名/分隔符单测；长书分页耗时对比
+  - 已修部分（2026-10-22）：字体名全部改走 `_attr`（含 `:725` 改用函数替换，顺带消除 bad escape）；`footnoteSeparator` 数值加 `try`＋范围钳制；单测 `test_audit_fixes.TestDocxAttrEscaping`
+  - 剩余：`_strip_quote_text` 原地改树（渲染期临时剥离）、分页/估高的二次方开销
+  - 代价：改 `render_docx` ⇒ 校验指纹整体失效（已接受）
 - [ ] **待做 低危六** GUI 与 PDF 链路零碎（一批）
   - `css_editor.py:1937-1958`→`1883-1904`：删预设成功后 `_preset_path` 未清空、「保存」仍亮 ⇒ 点保存把刚删的文件原样复活
   - `css_editor.py:2431`/`1520`：`css-editor-*` 临时目录从不删除（多次兜底导出／多会话在 percent-TEMP 下累积目录与 preview.docx）

@@ -691,7 +691,7 @@ class DocxRenderer:
         if fonts:
             # 显式字体优先：去掉主题带来的 rFonts 再追加（同一 rPr 内重复 w:rFonts 时 Word 取首个，不去会失效）
             rpr = re.sub(r"<w:rFonts[^>]*/>", "", rpr)
-            rpr += f'<w:rFonts w:ascii="{fonts}" w:eastAsia="{preferred_family(fonts)}" w:hint="eastAsia"/>'
+            rpr += f'<w:rFonts w:ascii="{_attr(fonts)}" w:eastAsia="{_attr(preferred_family(fonts))}" w:hint="eastAsia"/>'
         if rpr:
             rpr = f"<w:rPr>{rpr}</w:rPr>"
         return rpr
@@ -722,7 +722,8 @@ class DocxRenderer:
         out = []
         for chunk, fb in chunks:
             rr = rpr if not fb else re.sub(
-                f'w:eastAsia="[^"]+"', f'w:eastAsia="{preferred_family(fb)}"',
+                r'w:eastAsia="[^"]+"',
+                lambda _m: f'w:eastAsia="{_attr(preferred_family(fb))}"',
                 rpr, count=1)
             out.append(f"<w:r>{rr}<w:t xml:space=\"preserve\">"
                        f"{_x(chunk)}</w:t></w:r>")
@@ -813,7 +814,7 @@ class DocxRenderer:
         rpr += f"<w:sz w:val=\"{hps}\"/><w:szCs w:val=\"{hps}\"/>"
         font = (rt_font or props.get("fonts") or "").replace('"', "")
         if font:
-            rpr += f"<w:rFonts w:ascii=\"{font}\" w:eastAsia=\"{preferred_family(font)}\" w:hint=\"eastAsia\"/>"
+            rpr += f"<w:rFonts w:ascii=\"{_attr(font)}\" w:eastAsia=\"{_attr(preferred_family(font))}\" w:hint=\"eastAsia\"/>"
         if rpr:
             rpr = f"<w:rPr>{rpr}</w:rPr>"
         return rpr
@@ -945,7 +946,7 @@ class DocxRenderer:
                 sz = int(base * 2)
         color = _hex6((self.theme.tags.get("note-ref") or {}).get("color"))
         rpr = f'<w:color w:val="{color}"/>' if color else ""
-        font = _x(self.notes_marker_font)
+        font = _attr(self.notes_marker_font)
         return (f"<w:rPr><w:sz w:val=\"{sz}\"/><w:szCs w:val=\"{sz}\"/>{rpr}"
                 '<w:vertAlign w:val="superscript"/>'
                 f'<w:rFonts w:ascii="{font}"/></w:rPr>')
@@ -1817,7 +1818,7 @@ class DocxRenderer:
                 self._media.append({"path": path, "ext": ext, "rid": rid, "name": base})
             w, h = self._fit_image_px(image_size(path) or (480, 360))
             cx, cy = w * EMU_PER_PX, h * EMU_PER_PX
-            nm = _x(base)
+            nm = _attr(base)
             # drawing id 按 drawing 发号（全包唯一）；媒体复用（脚注重引正文图）不涨
             # _media_seq，曾致正文/脚注同图 docPr id 重复（CC0003 0185 两处同为 102）。
             self._drawing_seq += 1
@@ -2668,9 +2669,21 @@ class DocxRenderer:
         """脚注分隔线 pPr：底边框线（粗细/长短/与首行脚注间距，来自
         config.json output.docx.footnoteSeparator；缺省 0.5pt / 30% / 20 twips）。"""
         cfg = self.footnote_separator or {}
-        thick = float(cfg.get("thicknessPt") or 0.5)
-        length = float(cfg.get("lengthPercent") or 30)
-        space = int(cfg.get("spaceTwips") or 20)
+        try:
+            thick = float(cfg.get("thicknessPt") or 0.5)
+        except (TypeError, ValueError):
+            thick = 0.5
+        try:
+            length = float(cfg.get("lengthPercent") or 30)
+        except (TypeError, ValueError):
+            length = 30.0
+        try:
+            space = int(cfg.get("spaceTwips") or 20)
+        except (TypeError, ValueError):
+            space = 20
+        thick = max(0.1, min(20.0, thick))
+        length = max(0.0, min(100.0, length))
+        space = max(0, min(2000, space))
         sz = max(2, int(round(thick * 8)))          # w:sz 单位 = 1/8 pt
         text_width = self.page_w - self.page_margins["left"] - self.page_margins["right"]
         right_ind = int(text_width * (100 - length) / 100)   # 线长=栏宽的 length%
@@ -2758,7 +2771,7 @@ class DocxRenderer:
                     ff = [n.strip().strip('"').strip("'") for n in ff.split(",")][0]
                 size = self._series_size_pt(st)
                 _srpr = (
-                    f'<w:rPr><w:rFonts w:ascii="{self.latin_font}" w:eastAsia="{preferred_family(ff)}" w:hAnsi="{self.latin_font}"/>'
+                    f'<w:rPr><w:rFonts w:ascii="{_attr(self.latin_font)}" w:eastAsia="{_attr(preferred_family(ff))}" w:hAnsi="{_attr(self.latin_font)}"/>'
                     f'<w:sz w:val="{size}"/><w:szCs w:val="{size}"/></w:rPr>')
                 series_para = (
                     f'<w:p><w:pPr><w:pStyle w:val="series-title"/>'
@@ -2863,7 +2876,7 @@ class DocxRenderer:
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
             '<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="'
-            f'{self.latin_font}" w:eastAsia="{preferred_family(self._body_font())}" w:hAnsi="{self.latin_font}"/>'
+            f'{_attr(self.latin_font)}" w:eastAsia="{_attr(preferred_family(self._body_font()))}" w:hAnsi="{_attr(self.latin_font)}"/>'
             f'<w:sz w:val="{int(self.doc_size * 2)}"/></w:rPr></w:rPrDefault></w:docDefaults>'
             '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/>'
             f'<w:pPr>{self._normal_spacing()}</w:pPr></w:style>'

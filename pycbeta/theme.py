@@ -380,6 +380,12 @@ def _hex6(color: object):
     return None
 
 
+def _xml_attr(s) -> str:
+    """OOXML 属性值转义（含双引号）；字体名等自由文本进属性前必须过它。"""
+    from xml.sax.saxutils import escape
+    return escape(str(s), {'"': "&quot;"})
+
+
 # CSS border 简写里可能出现的线型 / 具名色（够用即可；其余色走 _hex6）
 _BORDER_STYLES = {"solid": "single", "double": "double",
                   "dashed": "dashed", "dotted": "dotted"}
@@ -1452,8 +1458,8 @@ class Theme:
                 # 中文拼写繁简并存时（如霞鹜文楷 TC 鶩 U+9DA9/鹜 U+9E5C），
                 # OOXML 精确匹配要求与 GDI 一致，否则 Word/WPS 回退宋体。
                 east = preferred_family(names[0])
-                out.append(f'<w:rFonts w:ascii="{latin_name}" w:eastAsia="{east}" '
-                           f'w:hAnsi="{latin_name}"/>')
+                out.append(f'<w:rFonts w:ascii="{_xml_attr(latin_name)}" w:eastAsia="{_xml_attr(east)}" '
+                           f'w:hAnsi="{_xml_attr(latin_name)}"/>')
         bdr = _border_ooxml(props.get("border"))
         if bdr:
             out.append(bdr)

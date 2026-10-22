@@ -125,5 +125,46 @@ class TestFontScanResilience(unittest.TestCase):
             shutil.rmtree(d, ignore_errors=True)
 
 
+class TestHtmlAttrEscaping(unittest.TestCase):
+    def test_attr_and_text_helpers(self):
+        from pycbeta.render_html import _attr, _esc
+        self.assertEqual(_attr('a"b<c>d&e\'f'),
+                         "a&quot;b&lt;c&gt;d&amp;e&#x27;f")
+        self.assertNotIn("&quot;", _esc('a"b'))
+
+    def test_lg_class_and_indent_escaped(self):
+        from pycbeta.model import E
+        from pycbeta.render_html import HtmlRenderer
+        e = E(tag="lg", attrs={"type": 'x" onmouseover="alert(1)',
+                               "style": "text-indent:1em' onx='y"})
+        out = HtmlRenderer()._render_lg(e)
+        self.assertNotIn('onmouseover="alert(1)"', out)
+        self.assertIn("&quot;", out)
+
+    def test_p_style_escaped(self):
+        from pycbeta.model import E, Text
+        from pycbeta.render_html import HtmlRenderer
+        e = E(tag="p", attrs={"style": 'color:red" onmouseover="alert(1)'},
+              children=[Text("x")])
+        out = HtmlRenderer()._render_e(e)
+        self.assertNotIn('onmouseover="alert(1)"', out)
+        self.assertIn("&quot;", out)
+
+
+class TestThemeFontEscaping(unittest.TestCase):
+    def test_docx_run_font_escaped(self):
+        from pycbeta.theme import Theme
+        css = 'body { font-family: x"/><w:color w:val="FF0000; }'
+        out = Theme.from_css(css).docx_run("body")
+        self.assertNotIn("<w:color", out)
+        self.assertIn("&quot;", out)
+
+
+class TestDocxAttrEscaping(unittest.TestCase):
+    def test_attr_helper(self):
+        from pycbeta.render_docx import _attr
+        self.assertEqual(_attr('a"b<c>&d'), "a&quot;b&lt;c&gt;&amp;d")
+
+
 if __name__ == "__main__":
     unittest.main()
