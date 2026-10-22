@@ -333,7 +333,10 @@ def split_sections(body, rules: dict, layout=None) -> list:
                 for d in open_divs:
                     cur.append(("open", d))
                 if is_milestone:
-                    cur_no = int(n.attrs.get("n")) if n.attrs.get("n") else (cur_no or 0) + 1
+                    try:
+                        cur_no = int(n.attrs.get("n"))
+                    except (TypeError, ValueError):
+                        cur_no = (cur_no or 0) + 1
                     cur_start = None
                 else:
                     # mulu/pb 节点归入新节（mulu 保留 pending 书签，pb 渲染为空）
@@ -341,7 +344,10 @@ def split_sections(body, rules: dict, layout=None) -> list:
                     cur_start = (_mulu_level(n)
                                  if isinstance(n, E) and n.tag == "mulu" else None)
             elif is_milestone:
-                cur_no = int(n.attrs.get("n")) if n.attrs.get("n") else (cur_no or 0) + 1
+                try:
+                    cur_no = int(n.attrs.get("n"))
+                except (TypeError, ValueError):
+                    cur_no = (cur_no or 0) + 1
             else:
                 cur.append((kind, n))
         else:

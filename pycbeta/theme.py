@@ -419,7 +419,7 @@ def _border_spec(value: object):
         if low in _BORDER_STYLES:
             style = _BORDER_STYLES[low]
             continue
-        m = re.match(r"^([\d.]+)(px|pt)$", low)
+        m = re.match(r"^(\d*\.?\d+)(px|pt)$", low)
         if m:
             v = float(m.group(1))
             if v == 0:
@@ -472,10 +472,10 @@ def _tbl_borders_ooxml(value: object) -> str:
 
 def _abs_pt(value: object, base_pt: float):
     """font-size 值 → pt 浮点（pt 直接；em/% 按 base 换算；非法 None）。纯函数。"""
-    m = re.match(r"^\s*([\d.]+)\s*pt\s*$", value or "")
+    m = re.match(r"^\s*(\d*\.?\d+)\s*pt\s*$", value or "")
     if m:
         return float(m.group(1))
-    m = re.match(r"^\s*([\d.]+)\s*(em|%)\s*$", value or "")
+    m = re.match(r"^\s*(\d*\.?\d+)\s*(em|%)\s*$", value or "")
     if m:
         v = float(m.group(1))
         return v / 100.0 * base_pt if m.group(2) == "%" else v * base_pt
@@ -486,7 +486,7 @@ def _scale_font_size(value: object, factor: float) -> Optional[str]:
     """把单个 font-size 值等比缩放：只放绝对单位 pt；em/% 是相对单位，
     随其基准（段落字号/父元素）自动放大，不在此乘——否则与放大的基准相乘造成双重放大
     （2026-09-06 实锤：1.5 下注码 1em×18pt=27pt，而非 18pt）。非数值格式返回 None（保持原值）。"""
-    m = re.match(r"^\s*([\d.]+)\s*(pt|em|%)\s*$", value or "")
+    m = re.match(r"^\s*(\d*\.?\d+)\s*(pt|em|%)\s*$", value or "")
     if not m:
         return None
     if m.group(2) != "pt":
@@ -1136,7 +1136,7 @@ def apply_page_typography(theme, page, page_presets):
     explicit = getattr(theme, "_explicit", set())
     fs = entry.get("body_font_size")
     if isinstance(fs, str) and fs.strip():
-        m = re.match(r"^\s*([\d.]+)\s*pt\s*$", fs)
+        m = re.match(r"^\s*(\d*\.?\d+)\s*pt\s*$", fs)
         if m and float(m.group(1)) > 0:
             props["font-size"] = f"{float(m.group(1)):g}pt"
             if ("p", "font-size") not in explicit:
@@ -1149,7 +1149,7 @@ def apply_page_typography(theme, page, page_presets):
                        key=("pagefs", page, str(fs)), sticky=True)
     lh = entry.get("body_line_height")
     if lh is not None and str(lh).strip():
-        if re.match(r"^\s*[\d.]+\s*$", str(lh)):
+        if re.match(r"^\s*\d*\.?\d+\s*$", str(lh)):
             props["line-height"] = str(lh).strip()
             if ("p", "line-height") not in explicit:
                 theme.tags.setdefault("p", {})["line-height"] = props["line-height"]
@@ -1272,7 +1272,7 @@ class Theme:
         注意只认绝对 pt（em 基准必须保持绝对，否则复利）；body 优先于 p，
         否则 p 的 DEFAULT 默认值（12pt）会盖住 body 显式值。"""
         for tag in ("body", "p"):
-            m = re.match(r"^\s*([\d.]+)\s*pt\s*$",
+            m = re.match(r"^\s*(\d*\.?\d+)\s*pt\s*$",
                          (self.tags.get(tag) or {}).get("font-size") or "")
             if m:
                 return float(m.group(1))
@@ -1494,7 +1494,7 @@ class Theme:
         out = {}
 
         def em(s):
-            m = re.match(r"([\d.]+)em", s)
+            m = re.match(r"(\d*\.?\d+)em", s)
             return float(m.group(1)) if m else 0.0
 
         if not vals:
@@ -1528,7 +1528,7 @@ class Theme:
             # CSS 层叠：无本标签行距时继承 body（与浏览器/PDF 一致；
             # 2026-09-06 实锤 DOCX 曾全员单倍、PDF 按 1.8，两边打架）
             lh = (self.tags.get("body") or {}).get("line-height")
-        m = re.match(r"([\d.]+)", lh or "")
+        m = re.match(r"(\d*\.?\d+)", lh or "")
         if m:
             # CSS line-height -> Word "N 倍行距" (240 = 单倍)
             spacing_attrs.append(f'w:line="{int(float(m.group(1)) * 240)}" '
@@ -1536,7 +1536,7 @@ class Theme:
         mgn = self._parse_margin(props.get("margin") or "")
         for css_prop, key in (("margin-top", "top"), ("margin-bottom", "bottom")):
             v = props.get(css_prop)
-            mm = re.match(r"([\d.]+)em", v or "")
+            mm = re.match(r"(\d*\.?\d+)em", v or "")
             if mm:
                 mgn[key] = float(mm.group(1))
         if "top" in mgn:
@@ -1547,12 +1547,12 @@ class Theme:
             parts["spacing"] = f"<w:spacing {' '.join(spacing_attrs)}/>"
         ind_parts = []
         ti = None if no_first_line else props.get("text-indent")
-        m = re.match(r"([\d.]+)em", ti or "")
+        m = re.match(r"(\d*\.?\d+)em", ti or "")
         if m:
             ind_parts.append(f'w:firstLine="{self._em_to_twips(float(m.group(1)), font_pt)}"')
         ind_left = indent_em
         ml = props.get("margin-left")
-        m = re.match(r"([\d.]+)em", ml or "")
+        m = re.match(r"(\d*\.?\d+)em", ml or "")
         if m:
             ind_left += float(m.group(1))
         if "left" in mgn:

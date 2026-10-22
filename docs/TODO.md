@@ -940,6 +940,17 @@
   - 指纹：改 `theme`/`render_pdf` ⇒ 已存校验指纹整体失效（与批 1/2 合并，攒批统一重验）
   - 未做（留后续批次）：产物类原子写（docx/html/epub/md/txt/pdf/compare/merged）、取消检查点与残留临时目录清理、取消行终态文案、COM 判活看门狗
   - 备注：工作区 `pycbeta/_vendor` 已被另一会话同步到上游 **v0.2.1**（`d28fc5d`，解压原子性与同名策略），非本批改动、未提交
+- [x] **已完成 审核批 4（校验健壮性）实施（2026-10-22）**
+  - 修复：中危四（`parser.py`/`verify.py` 两处 `etree.parse` 改 `resolve_entities=False`）；中危七（试算循环 `_xt` 兜底、epub/docx 合并兜底、7 处解码 `errors="replace"`；并加「读取失败的 trial 不判 OK、不参与 best、全部不可读返回 fail」守卫）；中危八（按 `_compare_`/`_official_merged_` 文件名排除自产产物；`isfile`/`getsize` 竞态兜底）；低危四（BOM 剥离、`merge_docx` 全部 `with`、自动取基线 try、`cfg_int` 兜底）
+  - 新增测试 5 项（实体不展开、产物排除、BOM+cfg_int、损坏基线降级），合计 26 项
+  - 回归：全量 **1378 OK（skipped=122）**
+  - 指纹：改 `parser`/`verify` ⇒ 校验指纹整体失效
+  - 备注：实现中发现并堵住「空基线 + 短文本 ⇒ extra ≤ 阈值误判 OK」的假绿路径
+- [x] **已完成 审核批 5（数值与主题）实施（2026-10-22）**
+  - 修复：中危九（theme 11 处数值正则收紧为 `\d*\.?\d+`，坏值走既有告警分支，`.5em` 仍解析）；低危二（`render_docx.py`/`render_html.py` 三处 milestone `int()` 加守护；`<space quantity>` 钳制 1–100）
+  - 新增测试 2 项（主题坏值、渲染数值守护），合计 28 项
+  - 回归：全量 **1380 OK（skipped=122）**
+  - 指纹：改 `theme`/`render_docx`/`render_html` ⇒ 校验指纹整体失效
 - [x] **已完成 高危一** HTML/EPUB 属性引号未转义（可复现；2026-10-22 修复）
   - 位置（2026-10-22 补全清单，此前只列 5 处）：`render_html.py:52-53`（`_esc`＝`html.escape(s, quote=False)`，不转义 `"`）。属性上下文：`:255`、`:366`、`:527-528`、`:535`/`:538`/`:539`、`:630`、`:647`、`:663`、`:667`、`:700`、`:702`（`lg` 的 `cls`，补漏）、`:710`（`lg` 的 `text-indent`，补漏且原为完全未转义）、`:796`、`:802`、`:840`、`:893`、`:941-942`、`:945`、`:950`、`:956`/`:958`；`render_epub.py:22`（`sax.escape` 同样不转义引号；现用途全在文本节点，无属性位）
   - 实证：构造 `style='color:red" onmouseover="alert(1)'` 渲染出 `<p class="" style="color:red" onmouseover="alert(1)">`（属性被撑破）；`type='x" class="evil'` 出重复 `class` 属性
@@ -1033,12 +1044,12 @@
   - 修复（2026-10-22）：发现时按文件名排除 `_compare_`、`_official_merged_`（不再依赖目录命名）；`isfile`/`getsize` 包 `OSError` 跳过
   - 代价：改 `verify` ⇒ 校验指纹整体失效
   - 验收：单测 `test_audit_fixes.TestOfficialArtifactExclusion`
-- [ ] **待做 中危九** 主题数值解析崩溃面（tags 直供路径实测崩）
-  - 位置：`theme.py:1126-1131`/`1139-1147`（`^([\d.]+)…` 过正则即裸 `float()`，无兜底；`body_font_size: "1.2.3pt"` 崩 `apply_page_typography`）、`:1518-1521`（行高 `1.2.3` 先存进 tags，延迟崩于 `docx_para`）；对照 `page_border_spec`（`:320-345`）已是 try＋report 口径
+- [x] **已完成 中危九** 主题数值解析崩溃面（2026-10-22 修复）
+  - 位置：`theme.py:1126-1131`/`1139-1147`（`^([\d.]+)…` 过正则即裸 `float()`，无兜底；`body_font_size: "1.2.3pt"` 崩 `apply_page_typography`）、`:1518-1521`（行高 `1.2.3` 先存进 tags，延迟崩于 `docx_para`）
   - 触发：纸张预设 JSON 手工写成非数值 ⇒ 渲染入口直接 ValueError 中断
-  - 修法：数值解析统一走带兜底的 helper（try＋`report.add` 提示后忽略该值）
+  - 修复（2026-10-22）：theme 内 11 处数值正则由 `[\d.]+` 收紧为 `\d*\.?\d+`（保留 `.5em` 写法，拒绝 `1.2.3`）；坏值走既有 else/report 分支，不再进 `float()`
   - 代价：改 `theme` ⇒ 校验指纹整体失效
-  - 验收：坏值单测（记报告不崩）；默认预设输出逐字不变
+  - 验收：单测 `test_audit_fixes.TestThemeNumericGuard`（坏值不崩、`.5em` 仍解析）
 - [ ] **待做 中危十** GUI 删除与统计的卡顿/冻结面
   - 位置：`panel.py:3041-3064`（`_refresh_verify_info` 每个 `textChanged` 同步全树 `os.walk` 统计校验目录大小——产物几万文件时逐键卡顿）；`panel.py:706-745`＋`1936-1985`/`3077-3101`（清理确认框只列 `*（验证）` 类目录名，`clean_verify_dirs` 对默认根是整树 `rmtree` 且在 GUI 线程执行——大产物树冻结分钟级，实际删除范围超出确认列表）；`css_editor.py:2715`/`2688-2691`（导出 PDF／DOCX 兜底渲染在 GUI 线程同步起外部引擎，界面冻结数十秒无进度无取消）
   - 另：`panel.py:1949-1952` 读 `source.verify_root` 失败被静默当 None ⇒ 清理范围旁路扩大到默认根整树
@@ -1054,11 +1065,11 @@
 - [ ] **待做 低危一** 宽 `except Exception` 全包 186 处（2026-10-22 实数）⇒ 失败无痕；建议至少写进转换报告或日志
   - 分布：`verify.py` 46、`gui/__main__.py` 28、`render_pdf.py` 27（其中 COM 区约 21 处属「逐语句不倒下」设计配套，可豁免）、`gui/panel.py` 22（2026-10-22 订正，原记 17）、`cli.py` 15、`gui/css_editor.py` 15、`fonts.py` 12、`annotate.py` 7、`update_data.py`/`fetch.py`/`filename.py` 各 3、`render_docx.py` 2、`theme.py`/`figures.py`/`report.py` 各 1；全包无裸 `except:`
   - 典型吞错实例：`cli.py:1241`（校验比对写盘失败静默置空，报告定位信息缺失）、`verify.py:1853`（配置解析失败静默回工厂默认）、`panel.py:1951`（清理读自选根失败静默回默认根）、`theme.py:592`（字体变量解析失败静默空表，DOCX 字体全回退无提示）、`css_editor.py:948`（解析失败把空表缓存为永久结果，后续字体判断失真）
-- [ ] **待做 低危二** 畸形 XML 数值守护（同源一族）
-  - 位置：`render_docx.py:336`/`344`、`render_html.py:110`（`int(n.attrs.get("n"))` 无 `try`——milestone `n` 非数字即 ValueError 中断整笔（html/epub/docx 链路），对照 `parser.py:466` 同属性有 `try` 兜底）；`render_html.py:869-874`（`<space quantity>` 无上限，畸形大值撑爆内存；官方值 1-3）
-  - 修法：int 失败回退 `(cur_no or 0)+1`（与 `parser` 同口径）；quantity 上限钳制
+- [x] **已完成 低危二** 畸形 XML 数值守护（同源一族；2026-10-22 修复）
+  - 位置：`render_docx.py:336`/`344`、`render_html.py:110`（`int(n.attrs.get("n"))` 无 `try`——milestone `n` 非数字即 ValueError 中断整笔）；`render_html.py:869-874`（`<space quantity>` 无上限，畸形大值撑爆内存；官方值 1-3）
+  - 修复（2026-10-22）：三处 `int()` 加 `try` 回退 `(cur_no or 0)+1`（与 `parser` 同口径）；`<space quantity>` 钳制到 1–100
   - 代价：改 `render_docx`/`render_html` ⇒ 校验指纹整体失效
-  - 验收：坏 XML 单测出正常产物；语料回归逐字不变
+  - 验收：单测 `test_audit_fixes.TestRenderNumericGuard`（坏 milestone 不崩、空格长度 ≤100）
 - [ ] **待做 低危三** CLI 输出编码零碎
   - 位置：`cli.py:142`/`270`/`1621`（裸 `print` 无 `UnicodeEncodeError` 回退——GBK 重定向管道遇书名扩展汉字在批量渲染完成后中断且退出码非零；对照 `:1141-1147` `vlog` 已有回退）；`cli.py:66-68`（`load_theme` 严格 UTF-8 无捕获，GBK 编码的主题文件直接 traceback）；`cli.py:1234-1247`（`--verify-only` 下 html 产物定位用全目录 `glob("*.html")` 取首项，多作品输出目录可能拿错文件）
   - 已修部分（2026-10-22）：新增 `_print_safe`（编码失败回退 GBK replace），替换 `:142`/`:270`/`:1621`（含 `:1623` 同类）；`load_theme` 捕获 `UnicodeDecodeError` 并抛 `ValueError` 带「编码不是 UTF-8」提示；单测 `test_audit_fixes.TestLoadThemeEncoding`

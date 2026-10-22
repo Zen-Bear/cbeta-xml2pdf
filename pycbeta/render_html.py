@@ -113,7 +113,13 @@ def split_juans(body) -> List[tuple]:
             cur = []
             for d in open_divs:
                 cur.append(("open", d))
-            cur_no = int(n.attrs.get("n")) if n.attrs.get("n") else cur_no + 1
+            if n.attrs.get("n"):
+                try:
+                    cur_no = int(n.attrs.get("n"))
+                except (TypeError, ValueError):
+                    cur_no += 1
+            else:
+                cur_no += 1
         else:
             if kind == "open":
                 open_divs.append(n)
@@ -874,8 +880,9 @@ class HtmlRenderer:
         if tag == "space":
             try:
                 q = int(e.attrs.get("quantity") or 1)
-            except ValueError:
+            except (TypeError, ValueError):
                 q = 1
+            q = max(1, min(q, 100))   # 畸形大值不撑爆内存（官方值 1–3）
             report.count("其它显示调整", "空格 <space>", line=e.sourceline)
             return "　" * q
         if tag == "mulu":

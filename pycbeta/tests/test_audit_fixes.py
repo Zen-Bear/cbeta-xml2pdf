@@ -342,5 +342,30 @@ class TestBaselineReadDegrade(unittest.TestCase):
             shutil.rmtree(d, ignore_errors=True)
 
 
+class TestThemeNumericGuard(unittest.TestCase):
+    def test_bad_values_do_not_crash(self):
+        from pycbeta.theme import Theme, _abs_pt, apply_page_typography
+        self.assertIsNone(_abs_pt("1.2.3pt", 12))
+        self.assertEqual(_abs_pt(".5em", 12), 6.0)
+        th = Theme()
+        apply_page_typography(th, "x", {"x": {
+            "body_font_size": "1.2.3pt", "body_line_height": "1.2.3"}})
+        self.assertEqual(th.tags.get("body", {}).get("font-size"), "12pt")
+
+
+class TestRenderNumericGuard(unittest.TestCase):
+    def test_malformed_milestone_and_quantity(self):
+        from pycbeta.model import E, Text
+        from pycbeta.render_html import HtmlRenderer, split_juans
+        from pycbeta.render_docx import split_sections
+        body = [E(tag="milestone", attrs={"unit": "juan", "n": "卷一"}),
+                E(tag="p", children=[Text("甲")])]
+        self.assertTrue(split_juans(body))
+        self.assertTrue(split_sections(body, {}))
+        out = HtmlRenderer()._render_e(
+            E(tag="space", attrs={"quantity": "999999"}))
+        self.assertLessEqual(len(out), 100)
+
+
 if __name__ == "__main__":
     unittest.main()
