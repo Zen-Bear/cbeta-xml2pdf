@@ -103,7 +103,7 @@ def rt_css_rule(ann):
         decls.append(f"font-size: {rs.strip()}")
     rf = (ann or {}).get("rt_font") or ""
     if isinstance(rf, str) and rf.strip():
-        safe = re.sub(r'[";{}]', "", rf.strip())
+        safe = re.sub(r'[<>";{}\r\n]', "", rf.strip())
         if safe:
             decls.append(f'font-family: "{safe}"')
     if not decls:

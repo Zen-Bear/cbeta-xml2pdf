@@ -3255,7 +3255,11 @@ class SourceDialog(QDialog):
                 QMessageBox.warning(self, "保存失败", str(exc))
                 return
         else:
-            save_current(merged)
+            try:
+                save_current(merged)
+            except OSError as exc:
+                QMessageBox.warning(self, "保存失败", str(exc))
+                return
         super().accept()
 
 

@@ -133,7 +133,8 @@ class EpubRenderer:
     def _build_chapters(self, tmp: str, html_files: List[str], title: str) -> List[dict]:
         chapters = []
         for fn in html_files:
-            html = open(os.path.join(tmp, fn), encoding="utf-8").read()
+            with open(os.path.join(tmp, fn), encoding="utf-8") as _f:
+                html = _f.read()
             body = self._extract_body(html)
             m = re.search(r"_(\d+)\.html$", fn)
             juan = int(m.group(1)) if m else len(chapters) + 1

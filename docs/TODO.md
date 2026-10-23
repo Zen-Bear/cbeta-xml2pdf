@@ -958,6 +958,12 @@
   - 指纹：改 `render_docx`/`render_md`/`render_txt`/`render_epub` ⇒ 校验指纹整体失效；GUI 件不触
   - 过程记录：关窗守卫最初用模态 `QMessageBox`，导致 offscreen 测试用 Mock worker（`isRunning()` 为真值）关窗时卡死；已改为非模态状态行提示
   - 未做（留后续）：`clean_verify_dirs` 后台化、`css_editor` 导出后台化
+- [x] **已完成 审核零碎收尾（2026-10-22）**
+  - 修复：低危三（html 定位按 `work.id` 前缀筛选）、低危五（`_strip_quote_text` 渲染后还原、智能合页估高增量、分页串 join）、低危六（删预设清路径、临时目录归 `self._tmp` 并关窗清理、`save_current` 捕获、`Path.as_uri()`、`pdf_zoom` 双端钳制、两处读取改 `with`）、低危七（`rt_css_rule` 过滤补 `<`/`>`/换行）、中危二部分（取消时跳过校验、取消行终态「已取消」）
+  - 新增测试 3 项（引号还原/复用一致、`rt_css_rule` 过滤、取消行文案），合计 34 项
+  - 回归：全量 **1386 OK（skipped=122）**
+  - 指纹：改 `render_docx`/`render_pdf`/`annotate`/`render_html`/`render_epub` ⇒ 指纹整体失效（`cli`/GUI 不触）
+  - 未做：中危二硬杀临时目录清理（需与并发实例区分）、中危三 COM 看门狗、中危十后台化两项、产物原子写
 - [x] **已完成 高危一** HTML/EPUB 属性引号未转义（可复现；2026-10-22 修复）
   - 位置（2026-10-22 补全清单，此前只列 5 处）：`render_html.py:52-53`（`_esc`＝`html.escape(s, quote=False)`，不转义 `"`）。属性上下文：`:255`、`:366`、`:527-528`、`:535`/`:538`/`:539`、`:630`、`:647`、`:663`、`:667`、`:700`、`:702`（`lg` 的 `cls`，补漏）、`:710`（`lg` 的 `text-indent`，补漏且原为完全未转义）、`:796`、`:802`、`:840`、`:893`、`:941-942`、`:945`、`:950`、`:956`/`:958`；`render_epub.py:22`（`sax.escape` 同样不转义引号；现用途全在文本节点，无属性位）
   - 实证：构造 `style='color:red" onmouseover="alert(1)'` 渲染出 `<p class="" style="color:red" onmouseover="alert(1)">`（属性被撑破）；`type='x" class="evil'` 出重复 `class` 属性
@@ -1012,8 +1018,8 @@
   - 位置：`gui/__main__.py:274-280`（`cancel()` → `self._proc.terminate()`，Windows 为硬杀）；`Popen` 无 `timeout`（`:767-770`，引擎挂死则该行永久卡住只能手动取消）；无 `closeEvent`（全文件检索 0 命中）——转换中直接关窗 ⇒ worker 线程与桥子进程孤儿化继续写盘
   - 硬杀后残留清单（2026-10-22 补）：输出目录 `cli.py:339`（pdf 目标名）、`:399`（html 中转）、`:412`/`:415`（html 目标）、`:355-356`/`:404-406`（引擎标签改名）、`:366-367`/`:371`（docx 副本）；临时目录 `cli.py:346`（`xml2pdf-pdfdocx-`，硬杀后 finally 不执行）；验证子产物 `cli.py:1517-1520`/`:1619-1620`/`:1640-1642`；GUI 行内落盘点取消后仍执行：`gui/__main__.py:477-478`（合并转换报告）、`:504-505`（行验证报告）、`:540-543`（report.json）；`verify_one`（`:439-455`）与 `_resolve`（`:620-672`）无取消检查点；取消行终态记「失败：…」而非「已取消」（`:551-553`）
   - 影响：正在写的 docx/html/epub 留在输出目录，且看起来是完整文件；外部引擎与 COM 进程成孤儿
-  - 已修部分（2026-10-22）：新增 `_kill_process_tree`（Windows `taskkill /T /F`，失败回退 `terminate`）替换硬杀；`MainWindow.closeEvent` 转换中先取消并 `wait(10000)`，未收尾则阻止关窗；单测 `test_audit_fixes.TestKillProcessTree`
-  - 剩余：`Popen` 超时（故意不做固定上限，长书合法耗时长）、硬杀后的临时目录清理、取消检查点、取消行终态文案、产物原子写
+  - 已修部分（2026-10-22）：新增 `_kill_process_tree`（Windows `taskkill /T /F`，失败回退 `terminate`）替换硬杀；`MainWindow.closeEvent` 转换中先取消并 `wait(10000)`，未收尾则阻止关窗；取消时跳过校验（`if ok and verify_on and not self._cancel`）；取消行终态改「已取消」；单测 `test_audit_fixes.TestKillProcessTree`/`TestRowOutcomeCancel`
+  - 剩余：`Popen` 超时（故意不做固定上限，长书合法耗时长）、硬杀后的临时目录清理（需与并发实例区分，待设计）、产物原子写（归中危一剩余）
 - [ ] **待做 中危三** PDF 外部转换超时与降级缺口
   - 位置（2026-10-22 补全）：`render_pdf.py:276-277`（soffice 无 `timeout`）、`:833`（prince 无 `timeout`，原记录漏列）、`:361`（docbuilder 180 秒）、`:331`（外部引擎 120 秒，但 `:330` `int(cfg.get("timeoutSeconds"))` 无兜底，配置坏值直接 ValueError 抛穿）；COM 区 `:50`/`:126-229`（`_COM_LOCK` 持锁期间无看门狗，Word/WPS 弹出模态即全进程冻结）；`:401-411`（`docx_to_pdf` 后端循环无逐后端 `try`，soffice `check=True` 的 `CalledProcessError` 与外部引擎超时越过「逐后端降级」设计直接中断全链）
   - 影响：soffice/prince 挂起时该行任务永久卡住；单个后端抛错则整链中断而非降级到下一个后端
@@ -1078,12 +1084,11 @@
   - 修复（2026-10-22）：三处 `int()` 加 `try` 回退 `(cur_no or 0)+1`（与 `parser` 同口径）；`<space quantity>` 钳制到 1–100
   - 代价：改 `render_docx`/`render_html` ⇒ 校验指纹整体失效
   - 验收：单测 `test_audit_fixes.TestRenderNumericGuard`（坏 milestone 不崩、空格长度 ≤100）
-- [ ] **待做 低危三** CLI 输出编码零碎
-  - 位置：`cli.py:142`/`270`/`1621`（裸 `print` 无 `UnicodeEncodeError` 回退——GBK 重定向管道遇书名扩展汉字在批量渲染完成后中断且退出码非零；对照 `:1141-1147` `vlog` 已有回退）；`cli.py:66-68`（`load_theme` 严格 UTF-8 无捕获，GBK 编码的主题文件直接 traceback）；`cli.py:1234-1247`（`--verify-only` 下 html 产物定位用全目录 `glob("*.html")` 取首项，多作品输出目录可能拿错文件）
-  - 已修部分（2026-10-22）：新增 `_print_safe`（编码失败回退 GBK replace），替换 `:142`/`:270`/`:1621`（含 `:1623` 同类）；`load_theme` 捕获 `UnicodeDecodeError` 并抛 `ValueError` 带「编码不是 UTF-8」提示；单测 `test_audit_fixes.TestLoadThemeEncoding`
-  - 剩余：`:1234-1247` 的 html 产物定位改按命名规则
+- [x] **已完成 低危三** CLI 输出编码零碎（2026-10-22 修复）
+  - 位置：`cli.py:142`/`270`/`1621`（裸 `print` 无 `UnicodeEncodeError` 回退）；`load_theme` 严格 UTF-8 无捕获；`:1234-1247`（`--verify-only` 下 html 产物定位用全目录 `glob("*.html")` 取首项）
+  - 修复（2026-10-22）：`_print_safe`（编码失败回退 GBK replace）替换相关 print；`load_theme` 捕获 `UnicodeDecodeError` 并抛带提示的 `ValueError`；html 定位优先按 `work.id` 前缀筛选，无命中再回退全目录
   - 代价：不触及 `_FP_IMPL_MODULES` ⇒ 不影响校验指纹
-  - 验收：GBK 管道冒烟不中断；verify-only 多作品目录定位正确
+  - 验收：单测 `test_audit_fixes.TestLoadThemeEncoding`；GBK 管道冒烟
 - [x] **已完成 低危四** verify.py 健壮性零碎（2026-10-22 修复）
   - `:55`：BOM（`\ufeff`）已并入归一化剥离字符类
   - `:973`/`985`：`merge_docx` 全部 `zipfile.ZipFile` 改 `with`（含输出 zip），句柄不再滞留
@@ -1098,24 +1103,21 @@
   - `:2671-2673`：`footnoteSeparator` 数值无 `try`（对照 `_series_size_pt` `:975-978` 有兜底）
   - `:2299-2309`：`_strip_quote_text` 原地改树 ⇒ 同一 Work 对象复用渲染（同进程二次渲染/多格式循环）输出不可复现
   - `:2814`/`:385`：分页模式每轮全量拷贝累计字符串＋智能合页每轮全量估高（数千节时秒级到数十秒）
-  - 已修部分（2026-10-22）：字体名全部改走 `_attr`（含 `:725` 改用函数替换，顺带消除 bad escape）；`footnoteSeparator` 数值加 `try`＋范围钳制；单测 `test_audit_fixes.TestDocxAttrEscaping`
-  - 剩余：`_strip_quote_text` 原地改树（渲染期临时剥离）、分页/估高的二次方开销
+  - 已修部分（2026-10-22）：字体名全部改走 `_attr`（含 `:725` 改用函数替换，顺带消除 bad escape）；`footnoteSeparator` 数值加 `try`＋范围钳制；`_strip_quote_text` 改为渲染后还原（跨首尾调用按节点去重，不把改动留在 IR）；智能合页估高改增量、分页串改列表 join；单测 `test_audit_fixes.TestDocxAttrEscaping`/`TestVerseQuoteRestore`
   - 代价：改 `render_docx` ⇒ 校验指纹整体失效（已接受）
-- [ ] **待做 低危六** GUI 与 PDF 链路零碎（一批）
-  - `css_editor.py:1937-1958`→`1883-1904`：删预设成功后 `_preset_path` 未清空、「保存」仍亮 ⇒ 点保存把刚删的文件原样复活
-  - `css_editor.py:2431`/`1520`：`css-editor-*` 临时目录从不删除（多次兜底导出／多会话在 percent-TEMP 下累积目录与 preview.docx）
-  - `panel.py:3236-3237`：`SourceDialog.accept` 无预设分支走 `save_current` 无 `OSError` 捕获（有预设分支 `:3230-3235` 已有）——config.user.json 被占用时未捕获异常
-  - 句柄零碎：`render_html.py:938`、`render_epub.py:135`（读取未 `with`）
-  - `render_pdf.py:855`：`page.goto(f"file:///{html_path}")` 未做 URL 编码（文件名含 `#`/`%` 时载入错误路径）；`:859`＋`cli.py:979`：`--pdf-zoom` 未钳制（注释自称 0.1-2，越界 playwright 报错）
-  - 修法：逐项一行级修；代价：`render_pdf`/`render_html`/`render_epub` 触指纹整体失效，GUI 件不触；验收：对应单测
-- [ ] **待做 低危七** 小模块零碎（本轮补读新增）
-  - `annotate.py:95-111`（`rt_css_rule`）：注音字体名过滤只剥 `"`、`;`、`{}`，未剥 `<`——含 `</style>` 的值可逃出 `<style>` 元素（与 theme 原始 CSS 直插、`render_pdf.py:698`/`:751` 同族；用户 CSS 本设计为原文嵌入，故只记不单独立项）
-  - `fonts.py:223-229`（`_scan`）：对单个字体文件的 `read_family_names` 无异常边界（`open` 无 `try`）——扫描目录里有被锁/不可读的字体时整个索引构建失败，渲染随之崩；应逐文件 `try` 跳过
+- [x] **已完成 低危六** GUI 与 PDF 链路零碎（2026-10-22 修复）
+  - 删除预设后 `_preset_path` 清空（下次保存走「另存」，不再复活刚删文件）
+  - `css_editor` 的兜底导出临时目录改到 `self._tmp` 下，关窗统一 `rmtree`（不再累积）
+  - `SourceDialog.accept` 无预设分支的 `save_current` 补 `OSError` 捕获
+  - `render_pdf` 的 `page.goto` 改用 `Path.as_uri()`；`pdf_zoom` 在 CLI 与渲染入口双重钳制 0.1–2
+  - 句柄零碎（`render_html.py:951`、`render_epub.py:136`）：读取改 `with`
+  - 代价：`render_pdf` 触指纹；GUI 件不触；验收：单测 `test_audit_fixes.TestPdf*`/`TestDefaultOutputNames`
+- [x] **已完成 低危七** 小模块零碎（2026-10-22 修复）
+  - `annotate.py:95-111`（`rt_css_rule`）：过滤补剥 `<`/`>`/换行，`</style>` 无法逃逸；单测 `test_audit_fixes.TestRtCssFilter`
+  - `fonts.py:223-229`（`_scan`）：逐文件 `try/except` 跳过坏字体（单测 `TestFontScanResilience`）
+  - `test/run_tests.py:168/223`：`total` 计数补齐
   - 另记（不立项）：`merge.py` 的 `tree.write` 合册 XML 非原子已并入中危一；`gaiji.py:30 pua()` 无调用点（若第三方调用，畸形编号 `int()` 会 ValueError）
-  - `test/run_tests.py:168/223`：`total` 计数器从未累加（只加 `fail`），汇总恒显示「0 项」（开发脚本；`do()` 里补 `total += 1` 即可）
-  - 已修部分（2026-10-22）：`_scan` 逐文件 `try/except` 跳过坏字体；`test/run_tests.py` 的 `do()` 补 `total += 1`；单测 `test_audit_fixes.TestFontScanResilience`
-  - 剩余：`annotate.py:95-111` 的 `rt_css_rule` 过滤（记录层面保留，不立项）
-  - 代价：改 `annotate` 会触指纹（本轮未改 `annotate`），`fonts` 不在 `_FP_IMPL_MODULES` 不触
+  - 代价：改 `annotate` 触指纹（本轮已改）；`fonts` 不在 `_FP_IMPL_MODULES` 不触
 - [ ] **待做 测试稳定性** 全量 discover 偶发原生崩溃：2026-10-21 第一次 `python -m unittest discover -s pycbeta/tests -q -t .` 以 `0xC0000005`（Windows 访问冲突）退出且无失败摘要，重跑即 1352 OK（skipped=122）；27 个测试模块单独跑全部 OK ⇒ 属跨模块交互/解释器退出期问题，非某个用例失败。定位方向：offscreen 的 PySide6 与 native 库（WeasyPrint / PyMuPDF）退出顺序；未复现前不改代码
 - [x] **已完成 文档（publish 侧）** 上游提案文档与 publish `TODO.md` 同步到 v0.2.0 现状
   - `publish/docs/上游-cbeta-fetch-TLS与分块下载.md` 已加「实施结果（2026-10-21）」：上游 commit `817d207`、版本 `0.2.0`、两仓 vendor 同步记录、解压原子性与同名策略留第二批

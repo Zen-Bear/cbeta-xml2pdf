@@ -867,12 +867,17 @@ a, a:visited {{ color: #000 !important; }}
     def _chromium_to_pdf(self, html_fn: str, pdf_fn: str, landscape: bool,
                          scale: float = 1.0) -> None:
         from playwright.sync_api import sync_playwright
+        from pathlib import Path
         html_path = os.path.abspath(html_fn)
         pdf_path = os.path.abspath(pdf_fn)
+        try:
+            scale = max(0.1, min(2.0, float(scale or 1.0)))
+        except (TypeError, ValueError):
+            scale = 1.0
         with sync_playwright() as p:
             browser = p.chromium.launch()
             page = browser.new_page()
-            page.goto(f"file:///{html_path}")
+            page.goto(Path(html_path).as_uri())
             if self.footnotes:
                 page.wait_for_selector(".pagedjs_pages", timeout=30000)
                 page.wait_for_timeout(4000)

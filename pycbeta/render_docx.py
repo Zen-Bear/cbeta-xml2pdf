@@ -383,15 +383,18 @@ def split_sections(body, rules: dict, layout=None) -> list:
             _default_layout()["usable_h_pt"]
         out = []
         cno, cops = sections[0][0], sections[0][1]
+        h_cops = estimate_section_height_pt(cops, lay)
         for (no, ops), st in zip(sections[1:], starts[1:]):
             # 章豁免（R3，恒生效）：incoming 节首是「第X章」→ 不并入上一节，
             # 章独立起页（单向：只挡「吞章头」，短章吸后文仍保留）
             if (st in smart and not _is_zhang(first_mulu_text(ops))
-                    and estimate_section_height_pt(cops, lay) / usable_h < frac):
-                cops = cops + ops   # 合并（跨节 div close/open 对相抵，无副作用）
+                    and h_cops / usable_h < frac):
+                cops.extend(ops)    # 原地拼接，避免整队复制
+                h_cops += estimate_section_height_pt(ops, lay)  # 估高可加
             else:
                 out.append((cno, cops))
                 cno, cops = no, ops
+                h_cops = estimate_section_height_pt(cops, lay)
         out.append((cno, cops))
         sections = out
     return sections
@@ -2286,7 +2289,10 @@ class DocxRenderer:
         return out
 
     def _strip_quote_text(self, nodes, leading=False, trailing=False):
-        """去掉偈颂首/尾的「『 』」：改第一个/最后一个 Text 节点内容。"""
+        """去掉偈颂首/尾的「『 』」：改第一个/最后一个 Text 节点内容。
+
+        返回 `[(Text, 原文)]`，调用方在渲染完该行后还原——不把修改留在 IR 上，
+        同一 Work 复用渲染（二次渲染/多格式循环）才能稳定复现。"""
         def find(nodes, last):
             seq = nodes if not last else reversed(nodes)
             for n in seq:
@@ -2298,22 +2304,26 @@ class DocxRenderer:
                         return r
             return None
 
+        changed = {}
         removed = ""
         if leading:
             t = find(nodes, False)
             if t:
                 before = t.text
                 t.text = before.lstrip("「『")
+                changed[id(t)] = (t, before)
                 removed += before[:len(before) - len(t.text)]
         if trailing:
             t = find(nodes, True)
             if t:
                 before = t.text
                 t.text = before.rstrip("』」")
+                changed.setdefault(id(t), (t, before))
                 removed = before[len(t.text):] + removed
         if removed:
             report.add("偈颂去引号", f"去掉偈颂首尾引号「{removed}」",
                        line=self._cur_line, key=("vquote", removed, self._cur_line))
+        return list(changed.values())
 
     @staticmethod
     def _leading_quotes(e) -> int:
@@ -2357,25 +2367,33 @@ class DocxRenderer:
                     pending_runs = "".join(self._render_node(p) for p in pending)
                     pending = []
                 children = list(c.children)
+                _restore = {}
                 if self.strip_verse_quotes:
                     if idx == 0:
-                        self._strip_quote_text(children, leading=True)
+                        for _t, _b in self._strip_quote_text(children, leading=True):
+                            _restore.setdefault(id(_t), (_t, _b))
                     if idx == len(l_els) - 1:
-                        self._strip_quote_text(children, trailing=True)
-                parts = []
-                buf = []
-                for cc in children:
-                    if isinstance(cc, E) and cc.tag == "caesura":
+                        for _t, _b in self._strip_quote_text(children, trailing=True):
+                            _restore.setdefault(id(_t), (_t, _b))
+                try:
+                    parts = []
+                    buf = []
+                    for cc in children:
+                        if isinstance(cc, E) and cc.tag == "caesura":
+                            parts.append(self._render_tagged(buf, "verse", rend))
+                            buf = []
+                        else:
+                            buf.append(cc)
+                    if buf or not parts:
                         parts.append(self._render_tagged(buf, "verse", rend))
-                        buf = []
-                    else:
-                        buf.append(cc)
-                if buf or not parts:
-                    parts.append(self._render_tagged(buf, "verse", rend))
-                sep = self._run(self.verse_caesura, "verse")
-                ln = sep.join(parts)
-                if pending_runs:
-                    ln = pending_runs + ln
+                    sep = self._run(self.verse_caesura, "verse")
+                    ln = sep.join(parts)
+                    if pending_runs:
+                        ln = pending_runs + ln
+                finally:
+                    # 还原临时剥离的引号（不把渲染期修改留在 IR 上）
+                    for _t, _before in _restore.values():
+                        _t.text = _before
                 lines.append(ln)
             elif isinstance(c, (NoteRef, App)):
                 pending.append(c)
@@ -2827,16 +2845,19 @@ class DocxRenderer:
             # 分页模式：每个分页单元一节；duplex → oddPage（单数页开始，Word 自动补空白偶页）
             duplex = bool(self.pagination.get("duplex", False))
             t = "oddPage" if duplex else ""
-            inner = series_para + title_para
+            parts_inner = [series_para, title_para]
             if body:
                 for sec in body[:-1]:
-                    inner += sec + section_break(t)
+                    parts_inner.append(sec)
+                    parts_inner.append(section_break(t))
                 if self.pagination.get("tei", True):
-                    inner += body[-1] + section_break(t) + en_section + tei_page + sect("")
+                    parts_inner.extend([body[-1], section_break(t),
+                                        en_section, tei_page, sect("")])
                 else:
-                    inner += body[-1] + en_section + tei_page + sect(t)
+                    parts_inner.extend([body[-1], en_section, tei_page, sect(t)])
             else:
-                inner += en_section + tei_page + sect("")
+                parts_inner.extend([en_section, tei_page, sect("")])
+            inner = "".join(parts_inner)
         else:
             inner = f"{series_para}{title_para}{body}{en_section}{tei_page}{sect('')}"
         document = (

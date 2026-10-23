@@ -987,7 +987,11 @@ def main(argv=None):
         args.pre_dedent_spaces = int(out_defaults.get("pre_dedent_spaces", 4))
     except (TypeError, ValueError):
         args.pre_dedent_spaces = 4
-    args.pdf_zoom = float(out_defaults.get("pdf_zoom", 1.0))
+    try:
+        _zoom = float(out_defaults.get("pdf_zoom", 1.0))
+    except (TypeError, ValueError):
+        _zoom = 1.0
+    args.pdf_zoom = max(0.1, min(2.0, _zoom))   # 注释口径 0.1–2，越界钳制
     args.t2s = bool(out_defaults.get("t2s"))
     if args.font_scale is None:
         try:
@@ -1252,7 +1256,14 @@ def main(argv=None):
                     except Exception:
                         return []
                     if target_fmt == "html":
-                        return sorted(_glob.glob(os.path.join(_od, "*.html")))
+                        _alls = sorted(_glob.glob(os.path.join(_od, "*.html")))
+                        _pref = getattr(w, "id", "") or ""
+                        if _pref:
+                            _hit = [p for p in _alls
+                                    if os.path.basename(p).startswith(_pref)]
+                            if _hit:
+                                return _hit
+                        return _alls
                     if not _on:
                         return []
                     return [os.path.join(_od, _on)]

@@ -14,6 +14,7 @@
 """
 import os
 import re
+import shutil
 import sys
 import tempfile
 import zipfile
@@ -1955,6 +1956,9 @@ class CssEditorDialog(QDialog):
             return
         self.preset_box.refresh(current_theme_value())
         self.status.setText("用户预设已删除")
+        if getattr(self, "_preset_path", None) and \
+                os.path.abspath(self._preset_path) == os.path.abspath(path):
+            self._preset_path = None   # 已删除：下次保存走「另存」，避免复活
 
     def _left_panel(self):
         w = QWidget()
@@ -2427,7 +2431,7 @@ class CssEditorDialog(QDialog):
             simplify_work(work)
             lang = "zh-Hans"
         theme = Theme.from_css(css, lang or self._preview_lang())
-        out = _tf.mkdtemp(prefix="css-editor-")
+        out = _tf.mkdtemp(prefix="inline-", dir=self._tmp)
         fn = DocxRenderer(theme=theme, notes="footnote",
                           bookmarks=True).render_work(work, out, "preview.docx")
         return fn if isinstance(fn, str) else fn[0]
@@ -2729,6 +2733,7 @@ class CssEditorDialog(QDialog):
                     self, "正在渲染", "样张仍在渲染，请稍候再关闭窗口。")
                 event.ignore()
                 return
+        shutil.rmtree(getattr(self, "_tmp", ""), ignore_errors=True)
         super().closeEvent(event)
 
 

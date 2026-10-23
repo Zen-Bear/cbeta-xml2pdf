@@ -257,8 +257,11 @@ def _make_id_job(tok):
             "bad_juan": bad_juan}
 
 
-def _row_outcome(render_ok, row_ver, verify_on, render_errors=None):
+def _row_outcome(render_ok, row_ver, verify_on, render_errors=None,
+                 cancelled=False):
     """行终态（状态列文本, 配色等级）。等级 ∈ ok/fail/none/"" 。"""
+    if cancelled and not render_ok:
+        return "已取消", ""
     if not render_ok:
         detail = "；".join(render_errors or [])
         base = f"失败：{detail}" if detail else "失败"
@@ -465,7 +468,7 @@ class BatchWorker(QThread):
                                 f"{fmt}: {self._last_render_err or '未知错误'}")
                         done_units += 1
                         self.total_progress.emit(done_units, max(total_units, 1))
-                        if ok and verify_on:
+                        if ok and verify_on and not self._cancel:
                             self.row_status.emit(idx, f"校验中（{fmt}）…")
                             _vt0 = time.monotonic()
                             vr = self._verify_one(xml, fmt, verify_dir or out_dir,
@@ -578,7 +581,8 @@ class BatchWorker(QThread):
                     files.sort(key=lambda p: 1 if _RE_REPORT.search(p) else 0)
                     self.row_file.emit(idx, ";".join(files))
                 text, level = _row_outcome(
-                    render_ok, row_ver, verify_on, render_errors)
+                    render_ok, row_ver, verify_on, render_errors,
+                    cancelled=self._cancel)
                 self.row_status.emit(idx, text)
                 self.row_verify.emit(idx, level)
         finally:

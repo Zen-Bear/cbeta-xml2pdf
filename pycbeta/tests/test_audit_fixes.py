@@ -399,5 +399,45 @@ class TestGuiLifecycleGuards(unittest.TestCase):
         self.assertTrue(hasattr(SourceDialog, "_schedule_verify_info"))
 
 
+class TestVerseQuoteRestore(unittest.TestCase):
+    def test_ir_restored_and_second_render_identical(self):
+        from pycbeta.model import Work, E, Text
+        from pycbeta.render_docx import DocxRenderer
+        from pycbeta.verify import extract_text
+        d1, d2 = tempfile.mkdtemp(), tempfile.mkdtemp()
+        try:
+            w = Work(id="T1", source_file="", metadata={"title": "t"}, body=[
+                E(tag="lg", children=[
+                    E(tag="l", children=[Text("「甲」")])])],
+                notes_by_n={}, apps=[])
+            r = DocxRenderer(verse_strip_quotes=True)
+            p1 = r.render_work(w, d1, "a.docx")
+            node = w.body[0].children[0].children[0]
+            self.assertEqual(node.text, "「甲」")   # 渲染后 IR 已还原
+            p2 = r.render_work(w, d2, "a.docx")
+            self.assertEqual(extract_text(p1), extract_text(p2))
+            self.assertNotIn("「甲」", extract_text(p1))  # 渲染期确实剥离
+        finally:
+            shutil.rmtree(d1, ignore_errors=True)
+            shutil.rmtree(d2, ignore_errors=True)
+
+
+class TestRtCssFilter(unittest.TestCase):
+    def test_style_breakout_chars_removed(self):
+        from pycbeta.annotate import rt_css_rule
+        out = rt_css_rule({"style": "ruby",
+                           "rt_font": "</style><script>x</script>"})
+        self.assertNotIn("<", out)
+        self.assertNotIn(">", out)
+
+
+class TestRowOutcomeCancel(unittest.TestCase):
+    def test_cancelled_row_text(self):
+        from pycbeta.gui.__main__ import _row_outcome
+        self.assertEqual(_row_outcome(False, [], False, ["x"],
+                                      cancelled=True)[0], "已取消")
+        self.assertEqual(_row_outcome(False, [], False, ["x"])[0], "失败：x")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -948,7 +948,8 @@ class HtmlRenderer:
             path = find_figure(base, self.figure_dirs)
             if path:
                 import base64
-                data = base64.b64encode(open(path, "rb").read()).decode("ascii")
+                with open(path, "rb") as _f:
+                    data = base64.b64encode(_f.read()).decode("ascii")
                 mime = path.rsplit(".", 1)[-1].lower() or "png"
                 # alt 留文件名（文本抽取无视属性；`_join_epub_ours` 物化官方 txt 图注 `【圖：x】`）
                 return (f'<img src="data:image/{_attr(mime)};base64,{data}" '
