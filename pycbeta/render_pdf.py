@@ -44,6 +44,8 @@ def _find_soffice() -> Optional[str]:
 # Word / WPS 的 COM ProgID
 _COM_WORD = ("Word.Application",)
 _COM_WPS = ("KWPS.Application", "wps.Application")
+# COM 隔离子进程超时（秒）：模态弹窗/挂死时只终止子进程树，不冻结主进程
+_COM_TIMEOUT = 300
 
 # COM 并发纪律：Office 是 STA 服务器，进程内转换串行化。
 # 只约束本进程（subprocess 批量各进程独立，不受影响）。
@@ -99,7 +101,8 @@ def _prep_open_path(docx_fn: str):
 
 
 def _com_convert(docx_fn: str, pdf_fn: str, progids, dispatch=None,
-                 dispatch_ex=None, get_active=None) -> Optional[str]:
+                 dispatch_ex=None, get_active=None,
+                 owned_pid_file=None) -> Optional[str]:
     """用指定 ProgID 的 office COM（Word/WPS）导出 PDF。失败返回 None。
 
     用户未开 Word/WPS 时优先 DispatchEx 新建**独立实例**（安全：隐藏、只读、Quit(0)）。
@@ -150,6 +153,19 @@ def _com_convert(docx_fn: str, pdf_fn: str, progids, dispatch=None,
                     try:
                         app = dispatch_ex(progid)
                         owned = True
+                        if owned_pid_file:
+                            # 记录新建 Office 实例 PID：父进程超时可精确终止，
+                            # 不碰用户自己打开的 Word/WPS（附着时 owned=False）。
+                            try:
+                                import win32process
+                                _, _pid = win32process.GetWindowThreadProcessId(
+                                    app.Hwnd)
+                                if _pid:
+                                    with open(owned_pid_file, "w",
+                                              encoding="utf-8") as _pf:
+                                        _pf.write(str(int(_pid)))
+                            except Exception:  # noqa: BLE001
+                                pass
                     except Exception:
                         app = None
                 if app is None:
@@ -260,12 +276,130 @@ def _com_restore(app, prev: dict) -> None:
 
 
 
+def _kill_process_tree(proc) -> None:
+    """终止子进程及其子进程（Windows `taskkill /T`；失败回退 `proc.kill`）。"""
+    if proc is None:
+        return
+    try:
+        if os.name == "nt":
+            subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                           stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL, timeout=10)
+        else:
+            proc.kill()
+    except Exception:  # noqa: BLE001 —— 终止失败再试一次
+        try:
+            proc.kill()
+        except Exception:
+            pass
+
+
+def _kill_pid_if_office(pid: int) -> None:
+    """超时终止新建 Office 实例：先核进程名，避免 PID 复用误杀无关进程。"""
+    if not pid or os.name != "nt":
+        return
+    try:
+        out = subprocess.run(
+            ["tasklist", "/FI", f"PID eq {int(pid)}", "/FO", "CSV", "/NH"],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            text=True, timeout=10).stdout or ""
+    except Exception:  # noqa: BLE001 —— 查不到就不杀（安全优先）
+        return
+    low = out.lower()
+    if not any(n in low for n in ("winword.exe", "wps.exe", "kwps.exe")):
+        return
+    try:
+        subprocess.run(["taskkill", "/PID", str(int(pid)), "/T", "/F"],
+                       stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL, timeout=10)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _com_convert_isolated(docx_fn: str, pdf_fn: str, progids,
+                          timeout: int = _COM_TIMEOUT) -> Optional[str]:
+    """在独立子进程里跑 COM 转换（Word/WPS → PDF）。
+
+    - 模态弹窗/挂死时只终止子进程树（含它新建的 Word/WPS 实例），
+      不冻结主进程，也不误杀用户已开着的文档；
+    - 输出先写同目录临时文件，成功后 `os.replace`，超时/失败删临时文件；
+    - 未安装/转换失败返回 None（由 `docx_to_pdf` 继续下一后端）；
+      超时抛 `RuntimeError`（父进程记录原因后继续下一后端）。
+    """
+    pdf_fn = os.path.abspath(pdf_fn)
+    out_dir = os.path.dirname(pdf_fn) or "."
+    try:
+        os.makedirs(out_dir, exist_ok=True)
+        fd, tmp_pdf = tempfile.mkstemp(prefix="xml2pdf-com-",
+                                       suffix=".pdf", dir=out_dir)
+        os.close(fd)
+    except OSError:
+        return None
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    env = dict(os.environ)
+    env["PYTHONPATH"] = (repo_root + os.pathsep + env["PYTHONPATH"]
+                         if env.get("PYTHONPATH") else repo_root)
+    pid_file = tmp_pdf + ".pid"
+    cmd = [sys.executable, "-m", "pycbeta.com_helper",
+           "--docx", os.path.abspath(docx_fn),
+           "--pdf", tmp_pdf,
+           "--progids", ",".join(progids),
+           "--pid-file", pid_file]
+    creationflags = (getattr(subprocess, "CREATE_NO_WINDOW", 0)
+                     if os.name == "nt" else 0)
+    proc = None
+    try:
+        with _COM_LOCK:
+            proc = subprocess.Popen(
+                cmd, cwd=repo_root, env=env,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                creationflags=creationflags)
+            try:
+                proc.communicate(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                try:
+                    with open(pid_file, encoding="utf-8") as _pf:
+                        _pid = int(_pf.read().strip() or 0)
+                except (OSError, ValueError):
+                    _pid = 0
+                # 先精确终止本次新建的 Office 实例（核进程名，防 PID 复用），
+                # 再终止隔离子进程树；用户自己开的实例不写 pid_file，不受影响。
+                _kill_pid_if_office(_pid)
+                _kill_process_tree(proc)
+                try:
+                    proc.communicate(timeout=5)
+                except Exception:
+                    pass
+                raise RuntimeError(
+                    f"Word/WPS 转换超时（>{timeout} 秒），已终止隔离进程")
+        if (proc.returncode != 0 or not os.path.isfile(tmp_pdf)
+                or os.path.getsize(tmp_pdf) <= 0):
+            return None
+        os.replace(tmp_pdf, pdf_fn)
+        return pdf_fn
+    except RuntimeError:
+        raise
+    except Exception:  # noqa: BLE001 —— 子进程启动失败等，按不可用处理
+        return None
+    finally:
+        try:
+            if os.path.isfile(tmp_pdf):
+                os.remove(tmp_pdf)
+        except OSError:
+            pass
+        try:
+            if os.path.isfile(pid_file):
+                os.remove(pid_file)
+        except OSError:
+            pass
+
+
 def _pdf_via_word(docx_fn: str, pdf_fn: str) -> Optional[str]:
-    return _com_convert(docx_fn, pdf_fn, _COM_WORD)
+    return _com_convert_isolated(docx_fn, pdf_fn, _COM_WORD)
 
 
 def _pdf_via_wps(docx_fn: str, pdf_fn: str) -> Optional[str]:
-    return _com_convert(docx_fn, pdf_fn, _COM_WPS)
+    return _com_convert_isolated(docx_fn, pdf_fn, _COM_WPS)
 
 
 def _pdf_via_libreoffice(docx_fn: str, pdf_fn: str) -> Optional[str]:

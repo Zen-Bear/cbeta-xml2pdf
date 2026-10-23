@@ -787,6 +787,23 @@ def verify_dir_size(out_dir, verify_root=None):
     return total, count
 
 
+class _CleanVerifyThread(QThread):
+    """后台清理校验产物：GUI 线程只做确认与结果展示。"""
+    done = Signal(int, object)
+
+    def __init__(self, out_dir, verify_root=None, parent=None):
+        super().__init__(parent)
+        self._out = out_dir
+        self._root = verify_root
+
+    def run(self):
+        try:
+            removed, errs = clean_verify_dirs(self._out, self._root)
+        except Exception as exc:  # noqa: BLE001 —— 线程内异常不外抛
+            removed, errs = 0, [f"{type(exc).__name__}: {exc}"]
+        self.done.emit(removed, errs)
+
+
 class XmlOptionsPanel(QWidget):
     """七选项卡面板。get_options/set_options；值变更发 optionsChanged。"""
     optionsChanged = Signal(object)
@@ -1985,12 +2002,22 @@ class XmlOptionsPanel(QWidget):
                  QMessageBox.Yes | QMessageBox.No,
                  QMessageBox.No) != QMessageBox.Yes:
             return
-        removed, errs = clean_verify_dirs(out_dir, _custom)
+        if getattr(self, "_clean_thread", None) is not None \
+                and self._clean_thread.isRunning():
+            return
+        t = _CleanVerifyThread(out_dir, _custom, self)
+        t.done.connect(self._clean_verify_done)
+        t.finished.connect(t.deleteLater)
+        self._clean_thread = t
+        self.clean_verify_btn.setEnabled(False)
+        t.start()
+
+    def _clean_verify_done(self, removed, errs):
+        self.clean_verify_btn.setEnabled(True)
         msg = f"已删除 {removed} 个校验产物目录。"
         if errs:
             msg += "\n失败：\n" + "\n".join(errs[:5])
         QMessageBox.information(self, "清理校验产物", msg)
-
     # ---------- 配置预设（一切按下拉选中项） ----------
     def _set_cfg_title(self, action=None):
         """配置框标题常驻最后动作（不消失）；换预设/还原出厂后复原为“配置”。"""
@@ -2982,6 +3009,11 @@ class SourceDialog(QDialog):
             self.update_status.setText("更新进行中，完成后再关闭窗口")
             event.ignore()
             return
+        t = getattr(self, "_clean_thread", None)
+        if t is not None and t.isRunning() and not t.wait(2000):
+            self.update_status.setText("正在清理校验产物，完成后再关闭窗口")
+            event.ignore()
+            return
         super().closeEvent(event)
 
     def _on_check_ebook_updates(self):
@@ -3118,7 +3150,16 @@ class SourceDialog(QDialog):
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.No) != QMessageBox.Yes:
             return
-        removed, errs = clean_verify_dirs(out_dir, custom)
+        if getattr(self, "_clean_thread", None) is not None \
+                and self._clean_thread.isRunning():
+            return
+        t = _CleanVerifyThread(out_dir, custom, self)
+        t.done.connect(self._clean_io_done)
+        t.finished.connect(t.deleteLater)
+        self._clean_thread = t
+        t.start()
+
+    def _clean_io_done(self, removed, errs):
         msg = f"已删除 {removed} 个校验产物目录。"
         if errs:
             msg += "\n失败：\n" + "\n".join(errs[:5])

@@ -596,7 +596,10 @@ def resolve_font_vars(css_text):
         import tinycss2
         rules = tinycss2.parse_stylesheet(css_text or "", skip_comments=True,
                                           skip_whitespace=True)
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 —— 解析失败按空表，但留痕
+        import sys as _sys
+        print(f"字体变量解析失败，按空表继续："
+              f"{type(exc).__name__}: {exc}", file=_sys.stderr)
         return hant, hans
     for rule in rules:
         if rule.type != "qualified-rule":

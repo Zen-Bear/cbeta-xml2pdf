@@ -1512,6 +1512,12 @@ def main(argv=None):
     _ap.add_argument("--autostart", action="store_true", help="窗现即开始转换")
     _raw = sys.argv[1:] if argv is None else list(argv)
     _known, _rest = _ap.parse_known_args(_raw)
+    # 清理上次硬杀遗留的临时目录（超过 24h；不影响并发实例）
+    try:
+        from pycbeta.tempdirs import cleanup_stale_temp_dirs
+        cleanup_stale_temp_dirs()
+    except Exception:  # noqa: BLE001 —— 清理失败不阻断启动
+        pass
     app = QApplication.instance() or QApplication([sys.argv[0]] + _rest)
     from pycbeta.gui.css_editor import ensure_tooltip_style
     ensure_tooltip_style()  # 黑 tooltip 可见（应用级一次）

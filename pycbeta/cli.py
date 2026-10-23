@@ -842,6 +842,12 @@ def main(argv=None):
                     help="配合 --update-data：只下载比对不写盘")
 
     args = ap.parse_args(argv)
+    # 清理上次硬杀遗留的临时目录（超过 24h；不影响并发实例）
+    try:
+        from .tempdirs import cleanup_stale_temp_dirs
+        cleanup_stale_temp_dirs()
+    except Exception:  # noqa: BLE001 —— 清理失败不阻断主流程
+        pass
 
     if args.verify_only:
         # 只校验已有产物：隐含 --verify，走同一校验段但跳过渲染
@@ -1563,9 +1569,12 @@ def main(argv=None):
                             _f.write(_t_disp)
                         with open(gen_cmp, "w", encoding="utf-8") as _f:
                             _f.write(_o_disp)
-                    except Exception:
+                    except Exception as exc:
                         src_cmp = gen_cmp = ""
                         _o_disp = _t_disp = ""
+                        print(f"{w.id}: {fmt} 比较文件写入失败，"
+                              f"报告将缺行号定位：{type(exc).__name__}: {exc}",
+                              file=sys.stderr)
                     _o_n2, o_line, o_rawln = _v_nwl(_o_disp or _o_nsrc, _rb)
                     _t_n2, t_line, t_rawln = _v_nwl(_t_disp or _theirs_norm.last_prepped, _rb)
                     locs = _v_loc(ctx, o_line, t_line)

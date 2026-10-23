@@ -947,7 +947,8 @@ def qt_aliases():
             _qt_alias_cache = build_qt_aliases(
                 rows, QFontDatabase.families())
         except Exception:  # noqa: BLE001
-            _qt_alias_cache = {}
+            # 失败结果不缓存：下次调用可重试，避免一次性空表永久失真
+            return {}
     return _qt_alias_cache
 
 
@@ -1131,6 +1132,58 @@ def check_font_stacks(css_text, aliases=None, qt_families=None,
 
 
 # ---------------- 后台重渲线程 ----------------
+
+def _render_preview_docx(sample_path, css, out_dir, lang, t2s=False):
+    """纯渲染（不读 GUI 控件）：预览线程与导出线程共用。"""
+    from pycbeta.parser import P5Parser
+    from pycbeta.render_docx import DocxRenderer
+    from pycbeta.theme import Theme
+    work = P5Parser().parse(sample_path)
+    if t2s:
+        from pycbeta.simplify import simplify_work
+        simplify_work(work)
+        lang = "zh-Hans"
+    theme = Theme.from_css(css, lang)
+    fn = DocxRenderer(theme=theme, notes="footnote",
+                      bookmarks=True).render_work(
+        work, out_dir, filename="preview.docx")
+    return fn if isinstance(fn, str) else fn[0]
+
+
+class _ExportThread(QThread):
+    """后台导出：生成/复用样张 → 复制 DOCX 或转 PDF，不冻结界面。"""
+    status = Signal(str)
+    done = Signal(str, str)
+    failed = Signal(str)
+
+    def __init__(self, kind, dest, *, src=None, render_args=None,
+                 chain=None, parent=None):
+        super().__init__(parent)
+        self._kind = kind
+        self._dest = dest
+        self._src = src
+        self._render_args = render_args
+        self._chain = chain
+
+    def run(self):
+        try:
+            src = self._src
+            if not src or not os.path.isfile(src):
+                if not self._render_args:
+                    raise RuntimeError("没有可导出的样张")
+                self.status.emit("正在生成样张…")
+                src = _render_preview_docx(*self._render_args)
+            if self._kind == "docx":
+                import shutil
+                shutil.copyfile(src, self._dest)
+            else:
+                self.status.emit("正在转 PDF…")
+                from pycbeta.render_pdf import docx_to_pdf
+                docx_to_pdf(src, self._dest, chain=self._chain)
+            self.done.emit(self._kind, self._dest)
+        except Exception as exc:  # noqa: BLE001 —— 错误进状态行，不崩界面
+            self.failed.emit(str(exc))
+
 
 class _RenderThread(QThread):
     done = Signal(str)
@@ -2421,20 +2474,10 @@ class CssEditorDialog(QDialog):
     def _render_inline(self, css, lang=None):
         """同步重渲（单测/导出前保底用；界面走线程）。返回 docx 路径。"""
         import tempfile as _tf
-        from pycbeta.parser import P5Parser
-        from pycbeta.render_docx import DocxRenderer
-        from pycbeta.theme import Theme
-        work = P5Parser().parse(self.sample_edit.text().strip())
-        t2s = self.t2s_box.isChecked()
-        if t2s:
-            from pycbeta.simplify import simplify_work
-            simplify_work(work)
-            lang = "zh-Hans"
-        theme = Theme.from_css(css, lang or self._preview_lang())
         out = _tf.mkdtemp(prefix="inline-", dir=self._tmp)
-        fn = DocxRenderer(theme=theme, notes="footnote",
-                          bookmarks=True).render_work(work, out, "preview.docx")
-        return fn if isinstance(fn, str) else fn[0]
+        return _render_preview_docx(
+            self.sample_edit.text().strip(), css, out,
+            lang or self._preview_lang(), self.t2s_box.isChecked())
 
     def _report_info(self, error=None):
         """当前预览检查信息（纯数据，可单测）；字体可用性经别名判定。"""
@@ -2680,53 +2723,72 @@ class CssEditorDialog(QDialog):
 
     # ----- 导出 -----
     def _export_docx(self):
-        import shutil
         path, _ = QFileDialog.getSaveFileName(self, "保存样张 DOCX", "preview.docx",
                                               "Word (*.docx)")
         if not path:
             return
-        src = self._last_docx
-        if not src or not os.path.isfile(src):
-            try:
-                src = self._render_inline(self._last_good_css or self.work_css())
-            except Exception as exc:  # noqa: BLE001
-                QMessageBox.warning(self, "导出失败", str(exc))
-                return
-        try:
-            shutil.copyfile(src, path)
-        except OSError as exc:
-            QMessageBox.warning(self, "导出失败", str(exc))
-            return
-        self._set_export_status("DOCX", path)
+        self._start_export("docx", path)
 
     def _export_pdf(self):
         path, _ = QFileDialog.getSaveFileName(self, "导出样张 PDF", "preview.pdf",
                                               "PDF (*.pdf)")
         if not path:
             return
-        from pycbeta.render_pdf import docx_to_pdf
-        src = self._last_docx
-        if not src or not os.path.isfile(src):
-            try:
-                src = self._render_inline(self._last_good_css or self.work_css())
-            except Exception as exc:  # noqa: BLE001
-                QMessageBox.warning(self, "导出失败", str(exc))
-                return
-        self.status.setText("正在转 PDF…")
-        QApplication.setOverrideCursor(Qt.WaitCursor)
-        try:
-            docx_to_pdf(src, path, chain=self._engine_chain)
-        except Exception as exc:  # noqa: BLE001
-            QMessageBox.warning(self, "导出失败", str(exc))
+        self._start_export("pdf", path)
+
+    def _start_export(self, kind, path):
+        """GUI 线程只做准备；生成/复制/转 PDF 全在 _ExportThread。"""
+        t = getattr(self, "_export_thread", None)
+        if t is not None and t.isRunning():
+            QMessageBox.information(self, "正在导出",
+                                    "上一个导出任务尚未完成。")
             return
-        finally:
-            QApplication.restoreOverrideCursor()
-        self._set_export_status("PDF", path)
+        src = self._last_docx if (
+            self._last_docx and os.path.isfile(self._last_docx)) else None
+        render_args = None
+        if src is None:
+            import tempfile as _tf
+            render_args = (
+                self.sample_edit.text().strip(),
+                self._last_good_css or self.work_css(),
+                _tf.mkdtemp(prefix="inline-", dir=self._tmp),
+                self._preview_lang(),
+                self.t2s_box.isChecked(),
+            )
+        t = _ExportThread(kind, path, src=src, render_args=render_args,
+                          chain=self._engine_chain, parent=self)
+        t.status.connect(self.status.setText)
+        t.done.connect(self._on_export_done)
+        t.failed.connect(self._on_export_failed)
+        t.finished.connect(t.deleteLater)
+        self._export_thread = t
+        self.btn_docx.setEnabled(False)
+        self.btn_pdf.setEnabled(False)
+        self.status.setText("正在导出…")
+        t.start()
+
+    def _on_export_done(self, kind, path):
+        self.btn_docx.setEnabled(True)
+        self.btn_pdf.setEnabled(True)
+        self._set_export_status(kind.upper(), path)
+
+    def _on_export_failed(self, msg):
+        self.btn_docx.setEnabled(True)
+        self.btn_pdf.setEnabled(True)
+        self.status.setText("导出失败")
+        QMessageBox.warning(self, "导出失败", msg)
 
     def closeEvent(self, event):
         if not self._confirm_discard():
             event.ignore()
             return
+        t = getattr(self, "_export_thread", None)
+        if t is not None and t.isRunning():
+            if not t.wait(2000):
+                QMessageBox.information(
+                    self, "正在导出", "导出仍在进行，请稍候再关闭窗口。")
+                event.ignore()
+                return
         if self._thread is not None and self._thread.isRunning():
             if not self._thread.wait(2000):
                 QMessageBox.information(

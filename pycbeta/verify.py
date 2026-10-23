@@ -2005,8 +2005,10 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
                        for p in gen_path)
     try:
         cfg = (load_effective_presets(config_path).get("verify") or {})
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 —— 读失败按默认继续，但留痕
         cfg = {}
+        print(f"{work.id}: 读取校验配置失败，按默认继续："
+              f"{type(exc).__name__}: {exc}", file=sys.stderr)
     try:
         _presets_full = load_effective_presets(config_path)
     except Exception:

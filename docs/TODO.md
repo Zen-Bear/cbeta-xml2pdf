@@ -975,6 +975,15 @@
   - 特别验证：截断时补正文旁路（O(n) 判等），正文全对仅注释差异仍标 `notes_only`/`【仅仅注释差异】`；T1509 html 链 860 字差即属此类
   - 指纹：改 `verify.py` ⇒ 校验指纹整体失效（`cli` 不触）
   - 剩余：等长超长对仍需分段/按卷比对（搁置）
+- [x] **已完成 审核收尾批（2026-10-23）**
+  - 中危五剩余：`update_data.py` 的 `os.replace` 逐项 `try`（锁定项跳过，其余继续）；单测 `TestUpdateDataReplaceBoundary`
+  - 低危一典型点：`cli.py` 比较文件写入失败、`verify.py` 校验配置读取失败、`theme.py` 字体变量解析失败 → stderr；`css_editor.py` 字体别名失败不缓存空表；单测 `TestVerifyConfigWarning`/`TestThemeFontVarWarning`/`TestQtAliasCache`
+  - 中危十：`clean_verify_dirs` 两处入口后台线程；`css_editor` 导出 DOCX/PDF 后台线程（含生成样张/转 PDF、按钮禁用、关窗等待）；GUI 手测待做
+  - 中危二部分：启动清理 24h 前的 `xml2pdf-*` 临时目录（`pycbeta/tempdirs.py`，cli/gui 入口调用）；单测 `TestStaleTempCleanup`
+  - 中危三：COM 转换改隔离子进程（`pycbeta/com_helper.py` + `render_pdf._com_convert_isolated`，300 秒超时；超时按 PID/进程名终止本次新建的 Word/WPS 实例，再杀子进程树；输出临时文件 + `os.replace`）；WPS 实测 1.0 秒成功；单测 5 项 `TestComConvertIsolation`
+  - 回归：全量 **1407 OK（skipped=122）**
+  - 指纹：改 `theme.py`/`verify.py`/`render_pdf.py` ⇒ 校验指纹整体失效（全库重验仍待安排）
+  - 未做：产物原子写（逐渲染器改造）；全库重验（运营）；中危十 GUI 手测
 - [x] **已完成 高危一** HTML/EPUB 属性引号未转义（可复现；2026-10-22 修复）
   - 位置（2026-10-22 补全清单，此前只列 5 处）：`render_html.py:52-53`（`_esc`＝`html.escape(s, quote=False)`，不转义 `"`）。属性上下文：`:255`、`:366`、`:527-528`、`:535`/`:538`/`:539`、`:630`、`:647`、`:663`、`:667`、`:700`、`:702`（`lg` 的 `cls`，补漏）、`:710`（`lg` 的 `text-indent`，补漏且原为完全未转义）、`:796`、`:802`、`:840`、`:893`、`:941-942`、`:945`、`:950`、`:956`/`:958`；`render_epub.py:22`（`sax.escape` 同样不转义引号；现用途全在文本节点，无属性位）
   - 实证：构造 `style='color:red" onmouseover="alert(1)'` 渲染出 `<p class="" style="color:red" onmouseover="alert(1)">`（属性被撑破）；`type='x" class="evil'` 出重复 `class` 属性
@@ -1030,25 +1039,25 @@
   - 硬杀后残留清单（2026-10-22 补）：输出目录 `cli.py:339`（pdf 目标名）、`:399`（html 中转）、`:412`/`:415`（html 目标）、`:355-356`/`:404-406`（引擎标签改名）、`:366-367`/`:371`（docx 副本）；临时目录 `cli.py:346`（`xml2pdf-pdfdocx-`，硬杀后 finally 不执行）；验证子产物 `cli.py:1517-1520`/`:1619-1620`/`:1640-1642`；GUI 行内落盘点取消后仍执行：`gui/__main__.py:477-478`（合并转换报告）、`:504-505`（行验证报告）、`:540-543`（report.json）；`verify_one`（`:439-455`）与 `_resolve`（`:620-672`）无取消检查点；取消行终态记「失败：…」而非「已取消」（`:551-553`）
   - 影响：正在写的 docx/html/epub 留在输出目录，且看起来是完整文件；外部引擎与 COM 进程成孤儿
   - 已修部分（2026-10-22）：新增 `_kill_process_tree`（Windows `taskkill /T /F`，失败回退 `terminate`）替换硬杀；`MainWindow.closeEvent` 转换中先取消并 `wait(10000)`，未收尾则阻止关窗；取消时跳过校验（`if ok and verify_on and not self._cancel`）；取消行终态改「已取消」；单测 `test_audit_fixes.TestKillProcessTree`/`TestRowOutcomeCancel`
-  - 剩余：`Popen` 超时（故意不做固定上限，长书合法耗时长）、硬杀后的临时目录清理（需与并发实例区分，待设计）、产物原子写（归中危一剩余）
-- [ ] **待做 中危三** PDF 外部转换超时与降级缺口
+  - 剩余：`Popen` 超时（故意不做固定上限，长书合法耗时长）、产物原子写（归中危一剩余）；硬杀残留已加启动清理（>24h 的 `xml2pdf-*`，见 2026-10-23 收尾批）
+- [x] **已完成 中危三** PDF 外部转换超时与降级缺口（2026-10-22 超时/降级；2026-10-23 COM 隔离）
   - 位置（2026-10-22 补全）：`render_pdf.py:276-277`（soffice 无 `timeout`）、`:833`（prince 无 `timeout`，原记录漏列）、`:361`（docbuilder 180 秒）、`:331`（外部引擎 120 秒，但 `:330` `int(cfg.get("timeoutSeconds"))` 无兜底，配置坏值直接 ValueError 抛穿）；COM 区 `:50`/`:126-229`（`_COM_LOCK` 持锁期间无看门狗，Word/WPS 弹出模态即全进程冻结）；`:401-411`（`docx_to_pdf` 后端循环无逐后端 `try`，soffice `check=True` 的 `CalledProcessError` 与外部引擎超时越过「逐后端降级」设计直接中断全链）
   - 影响：soffice/prince 挂起时该行任务永久卡住；单个后端抛错则整链中断而非降级到下一个后端
   - 已修部分（2026-10-22）：soffice 加 600 秒超时、prince 加 300 秒超时；后端循环逐 `except` 记 errors 继续；`timeoutSeconds` 走 `_timeout_seconds`（坏值回 120、钳制 1–3600）；soffice 产物改 `os.replace`；单测 `test_audit_fixes.TestPdfBackendFallback`/`TestTimeoutGuard`
-  - 剩余：COM 区判活看门狗（Word/WPS 模态）
+  - 剩余：无（2026-10-23 COM 转换改隔离子进程：`render_pdf.com_helper` + 父进程 300 秒超时；超时先按 PID/进程名精确终止**本次新建**的 Word/WPS 实例，再终止子进程树，用户已开实例不写 pid、不受影响；WPS 实测 1.0 秒成功，Word 本机未安装自动降级；模态挂死真实手测待做；单测 `TestComConvertIsolation`）
 - [x] **已完成 中危四** lxml 默认解析器未禁实体（2026-10-22 修复）
   - 位置：`parser.py:62`（`etree.parse(xml_fn)`，默认 `resolve_entities=True`）、`verify.py:1399`（官方基线直读同口径）；对照 `merge.py:194` 已用 `resolve_entities=False`（2026-10-22 复核：生产代码 `etree.parse` 调用点全查就这三处，范围与此条一致）
   - 影响：异常或恶意 XML 可触发实体膨胀（billion laughs）耗尽内存；实体内容可能进入产物
   - 修复（2026-10-22）：两处改用 `etree.XMLParser(resolve_entities=False)`
   - 代价：改 `parser`/`verify` 在 `_FP_IMPL_MODULES` ⇒ 已存校验指纹整体失效
   - 验收：单测 `test_audit_fixes.TestEntitySafety`（外部实体不展开、不读本地文件）
-- [ ] **待做 中危五** remote_sources.json 的 `dest` 不拒 `..` ⇒ 配置可驱动写仓外任意文件
+- [x] **已完成 中危五** remote_sources.json 的 `dest` 不拒 `..` ⇒ 配置可驱动写仓外任意文件（2026-10-22 修复主体；2026-10-23 补逐项写入边界）
   - 位置：`update_data.py:51`（`dest` 按 `/` 拆段仅滤空段，`..`/盘符/绝对路径成分原样通过）、`:199`（`os.path.join(base, *src["dest"])`）、`:249`（`os.replace(tmp, dest)` 直落盘）
   - 触发：分发出去的「配置包」被替换为含 `dest: "../../xx"` 的 remote_sources.json ⇒ 更新内容（ttf／文本／JSON）覆盖仓库外任意同名文件
   - 另：`:202-258` 循环体内 `os.replace` 无逐项异常边界，单项被占用（字体验证程序/资源管理器锁定）时异常冒泡中断全部剩余更新项
   - 同类（2026-10-22 补读）：`fetch.py:437`/`:899` 把 catalog 记录的 `rec["file"]` 直接 `os.path.join(wdir, …)`——`cbeta/data/sutra_mapping.txt` 同属仓内数据文件，若被替换同样可写出 work 目录；修法一并校验文件名不含分隔符与 `..`
   - 已修部分（2026-10-22）：`load_sources` 解析时拒绝 `..`/盘符成分；新增 `fetch._catalog_dest` 只接受纯文件名（两个落盘点均改用）；单测 `test_audit_fixes.TestRemoteDestGuard`/`TestCatalogDest`
-  - 剩余：`:202-258` 的 `os.replace` 逐项异常边界（单项被锁不中断其余更新项）
+  - 剩余：无（2026-10-23 补完 `:202-258` 的 `os.replace` 逐项 `try`：单项被锁定只跳过该项，其余继续；单测 `TestUpdateDataReplaceBoundary`）
   - 代价：不触及 `_FP_IMPL_MODULES` ⇒ 不影响校验指纹
   - 验收：恶意 `dest` 单测拒绝并报错；正规 8 源照常更新
 - [x] **已完成 中危六** GUI 产物收编只凭「行尾 `→`＋文件存在」（2026-10-22 修复）
@@ -1074,11 +1083,11 @@
   - 修复（2026-10-22）：theme 内 11 处数值正则由 `[\d.]+` 收紧为 `\d*\.?\d+`（保留 `.5em` 写法，拒绝 `1.2.3`）；坏值走既有 else/report 分支，不再进 `float()`
   - 代价：改 `theme` ⇒ 校验指纹整体失效
   - 验收：单测 `test_audit_fixes.TestThemeNumericGuard`（坏值不崩、`.5em` 仍解析）
-- [ ] **待做 中危十** GUI 删除与统计的卡顿/冻结面
+- [x] **已完成 中危十** GUI 删除与统计的卡顿/冻结面（2026-10-22 防抖/提示；2026-10-23 后台化）
   - 位置：`panel.py`（`_refresh_verify_info` 每个 `textChanged` 同步全树 `os.walk` 统计校验目录大小）；`panel.py`（清理确认框只列 `*（验证）` 类目录名，`clean_verify_dirs` 对默认根是整树 `rmtree` 且在 GUI 线程执行）；`css_editor.py:2715`/`2688-2691`（导出 PDF／DOCX 兜底渲染在 GUI 线程同步起外部引擎，界面冻结数十秒无进度无取消）
   - 另：`panel.py:1949-1952` 读 `source.verify_root` 失败被静默当 None ⇒ 清理范围旁路扩大到默认根整树
   - 已修部分（2026-10-22）：输入变化改 300ms 防抖（`_schedule_verify_info`），刷新按钮仍即时；清理确认框在默认根时明示「将整树删除 {输出}/验证」；读自定义校验根失败改为警告并中止清理
-  - 剩余：`clean_verify_dirs` 挪后台线程；`css_editor` 导出（PDF/DOCX）挪后台线程
+  - 剩余：无（2026-10-23 补完：`clean_verify_dirs` 两处入口改 `_CleanVerifyThread` 后台线程；`css_editor` 导出 DOCX/PDF 改 `_ExportThread`，含生成样张/转 PDF、按钮禁用、关窗等待；GUI 手测待做）
   - 代价：不触及 `_FP_IMPL_MODULES` ⇒ 不影响校验指纹
   - 验收：单测（防抖方法存在、既有行跟随用例改等待防抖后通过）；大产物目录手测
 - [x] **已完成 中危十一** 各渲染器缺省产物名未净化（2026-10-22 修复）
@@ -1087,9 +1096,10 @@
   - 修复（2026-10-22）：四个渲染器缺省分支统一 `filename.sanitize(...)`（非法字符全角化）
   - 代价：改四个渲染器 ⇒ 校验指纹整体失效
   - 验收：单测 `test_audit_fixes.TestDefaultOutputNames`（`../evil` 产物仍落 `out_dir`）
-- [ ] **待做 低危一** 宽 `except Exception` 全包 186 处（2026-10-22 实数）⇒ 失败无痕；建议至少写进转换报告或日志
+- [x] **已完成（典型点）低危一** 宽 `except Exception` 全包 186 处（2026-10-22 实数；2026-10-23 处理 5 个典型点）
   - 分布：`verify.py` 46、`gui/__main__.py` 28、`render_pdf.py` 27（其中 COM 区约 21 处属「逐语句不倒下」设计配套，可豁免）、`gui/panel.py` 22（2026-10-22 订正，原记 17）、`cli.py` 15、`gui/css_editor.py` 15、`fonts.py` 12、`annotate.py` 7、`update_data.py`/`fetch.py`/`filename.py` 各 3、`render_docx.py` 2、`theme.py`/`figures.py`/`report.py` 各 1；全包无裸 `except:`
   - 典型吞错实例：`cli.py:1241`（校验比对写盘失败静默置空，报告定位信息缺失）、`verify.py:1853`（配置解析失败静默回工厂默认）、`panel.py:1951`（清理读自选根失败静默回默认根）、`theme.py:592`（字体变量解析失败静默空表，DOCX 字体全回退无提示）、`css_editor.py:948`（解析失败把空表缓存为永久结果，后续字体判断失真）
+  - 2026-10-23 典型点留痕：`cli.py` 比较文件写入失败、`verify.py` 校验配置读取失败、`theme.py` 字体变量解析失败 → stderr；`css_editor.py` 字体别名构建失败不再缓存空表（下次可重试）；`panel.py` 清理读根失败已于批 6 改为警告并中止。单测 `TestVerifyConfigWarning`/`TestThemeFontVarWarning`/`TestQtAliasCache`；其余 181 处按「逐语句不倒下」设计或继续观察。
 - [x] **已完成 低危二** 畸形 XML 数值守护（同源一族；2026-10-22 修复）
   - 位置：`render_docx.py:336`/`344`、`render_html.py:110`（`int(n.attrs.get("n"))` 无 `try`——milestone `n` 非数字即 ValueError 中断整笔）；`render_html.py:869-874`（`<space quantity>` 无上限，畸形大值撑爆内存；官方值 1-3）
   - 修复（2026-10-22）：三处 `int()` 加 `try` 回退 `(cur_no or 0)+1`（与 `parser` 同口径）；`<space quantity>` 钳制到 1–100
@@ -1109,7 +1119,7 @@
   - `:420`-`:1012` 整件驻留内存：仅记录，暂不立项
   - 单测：`test_audit_fixes.TestNormalizeAndCfgInt`、`TestOfficialArtifactExclusion`（竞态路径）
   - 代价：改 `verify` ⇒ 校验指纹整体失效（已接受）
-- [ ] **待做 低危五** render_docx 配置域与性能零碎（一批）
+- [x] **已完成 低危五** render_docx 配置域与性能零碎（2026-10-23 复核：四项均已修）
   - `:948-951`：`notes_marker_font` 用文本转义（`_x`）写 `w:rFonts` 属性位（配置域，值含 `"` 即损坏）；`:694`/`725`/`816`/`2761`/`2866`：字体名原样拼属性，`:725` 还先进 `re.sub` 替换串（值含 `\` 即「bad escape」崩）——均为本机配置/主题来源，默认链不触发
   - `:2671-2673`：`footnoteSeparator` 数值无 `try`（对照 `_series_size_pt` `:975-978` 有兜底）
   - `:2299-2309`：`_strip_quote_text` 原地改树 ⇒ 同一 Work 对象复用渲染（同进程二次渲染/多格式循环）输出不可复现

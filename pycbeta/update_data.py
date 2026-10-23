@@ -250,8 +250,15 @@ def update_all(root=None, dry_run=False, download=None, sources=None,
                 report.append({"key": key, "status": "preview",
                                "detail": "[预演，未写入] " + detail})
                 continue
-            os.makedirs(os.path.dirname(dest), exist_ok=True)
-            os.replace(tmp, dest)
+            try:
+                os.makedirs(os.path.dirname(dest), exist_ok=True)
+                os.replace(tmp, dest)
+            except OSError as exc:
+                # 单项被占用/锁定时只跳过该项，继续更新其余来源
+                report.append({"key": key, "status": "failed",
+                               "detail": f"写入失败（已跳过，继续其余项）："
+                                         f"{type(exc).__name__}: {exc}"})
+                continue
             report.append({"key": key, "status": "updated", "detail": detail})
             pending[key] = {"at": _now_iso(), "detail": detail,
                             "etag": petag, "last_modified": plm}

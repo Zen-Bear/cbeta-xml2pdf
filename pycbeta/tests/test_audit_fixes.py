@@ -601,5 +601,234 @@ class TestVerifyOneLengthGate(unittest.TestCase):
         self.assertIn("【正文差异（未全量比对）】", txt)
 
 
+class TestUpdateDataReplaceBoundary(unittest.TestCase):
+    def test_locked_item_does_not_abort_rest(self):
+        from pycbeta import update_data as U
+        d = tempfile.mkdtemp(prefix="upd-")
+        try:
+            sources = [
+                {"key": "a", "kind": "text", "url": "u-a",
+                 "dest": ["data", "a.txt"]},
+                {"key": "b", "kind": "text", "url": "u-b",
+                 "dest": ["data", "b.txt"]},
+            ]
+
+            def dl(_url, dest):
+                with open(dest, "wb") as f:
+                    f.write(b"abc\n")
+                return True
+
+            real_replace = os.replace
+            calls = {"n": 0}
+
+            def fake_replace(src, dst):
+                calls["n"] += 1
+                if calls["n"] == 1:
+                    raise OSError("locked")
+                return real_replace(src, dst)
+
+            with mock.patch.object(U.os, "replace",
+                                   side_effect=fake_replace):
+                report = U.update_all(
+                    root=d, sources=sources, download=dl,
+                    probe=lambda *a, **k: ("failed", None, None))
+            by = {r["key"]: r for r in report}
+            self.assertEqual(by["a"]["status"], "failed")
+            self.assertIn("写入失败", by["a"]["detail"])
+            self.assertEqual(by["b"]["status"], "updated")
+            self.assertFalse(os.path.isfile(
+                os.path.join(d, "data", "a.txt")))
+            self.assertTrue(os.path.isfile(
+                os.path.join(d, "data", "b.txt")))
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+
+class TestVerifyConfigWarning(unittest.TestCase):
+    def test_config_read_failure_warns(self):
+        import contextlib
+        import io
+        from pycbeta.model import Work
+        import pycbeta.verify as V
+        d = tempfile.mkdtemp(prefix="vcfg-")
+        try:
+            gen = os.path.join(d, "T.txt")
+            with open(gen, "w", encoding="utf-8") as f:
+                f.write("甲")
+            work = Work(id="T", source_file="", metadata={}, body=[],
+                        notes_by_n={}, apps=[], simplified=False)
+            err = io.StringIO()
+            with mock.patch.object(V, "P5Parser") as P, \
+                    mock.patch.object(V, "generate_formal",
+                                      return_value=[gen]), \
+                    mock.patch.object(V, "find_official",
+                                      return_value=[]), \
+                    mock.patch.object(V, "load_effective_presets",
+                                      side_effect=RuntimeError("bad cfg")):
+                P.return_value.parse.return_value = work
+                with contextlib.redirect_stderr(err):
+                    V.verify_one("x.xml", "txt", d, os.path.join(d, "v"),
+                                 gen_paths=[gen])
+            self.assertIn("读取校验配置失败", err.getvalue())
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+
+class TestThemeFontVarWarning(unittest.TestCase):
+    def test_parse_failure_warns(self):
+        import contextlib
+        import io
+        try:
+            import tinycss2  # noqa: F401
+        except ImportError:
+            self.skipTest("tinycss2 未安装")
+        from pycbeta.theme import resolve_font_vars
+        err = io.StringIO()
+        with mock.patch("tinycss2.parse_stylesheet",
+                        side_effect=RuntimeError("bad css")), \
+                contextlib.redirect_stderr(err):
+            out = resolve_font_vars(":root{}")
+        self.assertEqual(out, ({}, {}))
+        self.assertIn("字体变量解析失败", err.getvalue())
+
+
+class TestQtAliasCache(unittest.TestCase):
+    def test_failure_not_cached(self):
+        import pycbeta.gui.css_editor as CE
+        from pycbeta.gui.css_editor import (clear_qt_alias_cache,
+                                            qt_aliases)
+        clear_qt_alias_cache()
+        with mock.patch("pycbeta.fonts.locator",
+                        side_effect=RuntimeError("no fonts")):
+            self.assertEqual(qt_aliases(), {})
+        self.assertIsNone(CE._qt_alias_cache)
+
+
+class TestStaleTempCleanup(unittest.TestCase):
+    def test_old_removed_new_kept(self):
+        import time
+        from pycbeta.tempdirs import cleanup_stale_temp_dirs
+        root = tempfile.gettempdir()
+        old = tempfile.mkdtemp(prefix="xml2pdf-test-", dir=root)
+        new = tempfile.mkdtemp(prefix="xml2pdf-test-", dir=root)
+        try:
+            past = time.time() - 7200
+            os.utime(old, (past, past))
+            removed, failed = cleanup_stale_temp_dirs(
+                max_age_hours=1, prefixes=("xml2pdf-test-",))
+            self.assertGreaterEqual(removed, 1)
+            self.assertFalse(os.path.isdir(old))
+            self.assertTrue(os.path.isdir(new))
+            self.assertEqual(failed, [])
+        finally:
+            shutil.rmtree(old, ignore_errors=True)
+            shutil.rmtree(new, ignore_errors=True)
+
+
+class TestComConvertIsolation(unittest.TestCase):
+    def test_success_replaces_atomically(self):
+        import glob
+        from pycbeta import render_pdf as R
+        d = tempfile.mkdtemp(prefix="comiso-")
+        try:
+            pdf = os.path.join(d, "o.pdf")
+
+            class FakeProc:
+                pid = 12345
+                returncode = 0
+
+                def __init__(self, cmd):
+                    self.cmd = cmd
+
+                def communicate(self, timeout=None):
+                    i = self.cmd.index("--pdf")
+                    with open(self.cmd[i + 1], "wb") as f:
+                        f.write(b"%PDF-1.4 test")
+                    return (b"", b"")
+
+            with mock.patch.object(
+                    R.subprocess, "Popen",
+                    side_effect=lambda cmd, **kw: FakeProc(cmd)):
+                out = R._com_convert_isolated(
+                    "in.docx", pdf, ("Word.Application",), timeout=1)
+            self.assertEqual(out, os.path.abspath(pdf))
+            self.assertTrue(os.path.isfile(pdf))
+            self.assertFalse(glob.glob(os.path.join(d, "xml2pdf-com-*")))
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_timeout_kills_tree_and_raises(self):
+        import glob
+        from pycbeta import render_pdf as R
+        d = tempfile.mkdtemp(prefix="comiso-")
+        try:
+            pdf = os.path.join(d, "o.pdf")
+
+            class HangProc:
+                pid = 23456
+                returncode = None
+
+                def communicate(self, timeout=None):
+                    raise R.subprocess.TimeoutExpired(cmd="x", timeout=1)
+
+            killed = []
+            with mock.patch.object(R.subprocess, "Popen",
+                                   return_value=HangProc()), \
+                    mock.patch.object(
+                        R, "_kill_process_tree",
+                        side_effect=lambda p: killed.append(p)):
+                with self.assertRaises(RuntimeError):
+                    R._com_convert_isolated(
+                        "in.docx", pdf, ("Word.Application",), timeout=1)
+            self.assertEqual(len(killed), 1)
+            self.assertFalse(os.path.isfile(pdf))
+            self.assertFalse(glob.glob(os.path.join(d, "xml2pdf-com-*")))
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_word_backend_uses_isolation(self):
+        from pycbeta import render_pdf as R
+        with mock.patch.object(R, "_com_convert_isolated",
+                               return_value="x.pdf") as iso:
+            self.assertEqual(R._pdf_via_word("a.docx", "b.pdf"), "x.pdf")
+        iso.assert_called_once_with("a.docx", "b.pdf", R._COM_WORD)
+
+    def test_helper_exit_codes(self):
+        from pycbeta import com_helper
+        args = ["--docx", "a", "--pdf", "b",
+                "--progids", "Word.Application"]
+        with mock.patch("pycbeta.render_pdf._com_convert",
+                        return_value="b"):
+            self.assertEqual(com_helper.main(args), 0)
+        with mock.patch("pycbeta.render_pdf._com_convert",
+                        return_value=None):
+            self.assertEqual(com_helper.main(args), 2)
+
+    def test_kill_pid_only_office(self):
+        import types
+        from pycbeta import render_pdf as R
+        if os.name != "nt":
+            self.skipTest("Windows only")
+        calls = []
+
+        def fake_run(cmd, **kw):
+            calls.append(cmd)
+            if cmd[0] == "tasklist":
+                return types.SimpleNamespace(
+                    stdout='"WINWORD.EXE","1234","Console","1","1,000 K"')
+            return types.SimpleNamespace(stdout="")
+
+        with mock.patch.object(R.subprocess, "run", side_effect=fake_run):
+            R._kill_pid_if_office(1234)
+        self.assertTrue(any(c[0] == "taskkill" for c in calls))
+        calls.clear()
+        with mock.patch.object(
+                R.subprocess, "run",
+                side_effect=lambda cmd, **kw: types.SimpleNamespace(
+                    stdout='"notepad.exe","1234","Console","1","1,000 K"')):
+            R._kill_pid_if_office(1234)
+        self.assertFalse(any(c[0] == "taskkill" for c in calls))
+
+
 if __name__ == "__main__":
     unittest.main()
