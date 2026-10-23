@@ -1395,14 +1395,22 @@ class MainWindow(QMainWindow):
             QDesktopServices.openUrl(QUrl.fromLocalFile(chosen.data()))
 
     def closeEvent(self, event):
-        """转换中关窗：先取消并等工作线程收尾，避免 QThread 随窗口销毁崩溃。"""
+        """转换中关窗：先取消并等工作线程收尾，避免 QThread 随窗口销毁崩溃。
+        等不到时给「强制退出」——校验可能卡在整篇比对，不能永远挡住关窗。"""
         w = self.worker
         if w is not None and w.isRunning():
             w.cancel()
             if not w.wait(10000):
-                QMessageBox.warning(
-                    self, "正在取消",
-                    "转换仍在收尾，请稍候再关闭窗口。")
+                box = QMessageBox(self)
+                box.setIcon(QMessageBox.Warning)
+                box.setWindowTitle("仍在收尾")
+                box.setText("转换/校验线程还在收尾（校验可能卡在整篇比对）。\n"
+                            "强制退出会立即结束程序，可能留下未完成产物。")
+                force = box.addButton("强制退出", QMessageBox.DestructiveRole)
+                box.addButton("继续等待", QMessageBox.RejectRole)
+                box.exec()
+                if box.clickedButton() is force:
+                    os._exit(1)
                 event.ignore()
                 return
         super().closeEvent(event)

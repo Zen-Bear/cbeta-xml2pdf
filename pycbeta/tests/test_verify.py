@@ -1957,8 +1957,10 @@ class TestEpubTrialBodyOnly(unittest.TestCase):
         trials = {t["kind"]: t for t in rec.get("trials", [])}
         self.assertIn("txt_notes", trials)
         self.assertIn("epub", trials)
-        # txt 试算：epub→txt 形含注块 → 官方 txt 无注 → 多（注释照计）
-        self.assertGreater(trials["txt_notes"]["extra"], 0)
+        # txt 试算：epub→txt 形含注块 → 官方 txt 无注 → 长度差 > 0；
+        # 长度门（max_diff=0）直接截断，缺/多为 None（不再跑整篇比对）
+        self.assertTrue(trials["txt_notes"].get("truncated"))
+        self.assertGreater(trials["txt_notes"].get("length_diff") or 0, 0)
         # epub 试算：只比正文段 → 0/0（尾注不计）
         self.assertEqual((trials["epub"]["missing"], trials["epub"]["extra"]),
                          (0, 0))

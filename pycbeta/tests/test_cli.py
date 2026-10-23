@@ -960,13 +960,89 @@ class TestVerifyReportBaselineLabel(unittest.TestCase):
             self.assertIn(f"（基线 {txt_base}）", s)
             self.assertIn(f"（基线 {epub_base}）", s)
             self.assertIn("→ txt_notes 失败:", s)
-            self.assertIn("→ epub 失败:", s)
+            # epub 试算长度差 1 > 阈值 0 ⇒ 长度门截断（不再跑整篇比对）
+            self.assertRegex(s, r"→ epub (失败|截断):")
             # 下游解析：`【源】` 前 disp 取 `→` 左侧 = 产物格式
             for ln in s.splitlines():
                 if "【源】" in ln and "〖" not in ln:
                     self.assertEqual(
                         ln.split("【源】")[0].strip().split("→")[0].strip(),
                         "epub")
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+
+class TestVerifyAllTruncated(unittest.TestCase):
+    """CLI 全截断：不得静默跳过整个格式（缺/多输出为 `?`）。"""
+
+    def test_all_truncated_not_silently_skipped(self):
+        import io
+        import json
+        import shutil
+        import zipfile
+        from contextlib import redirect_stdout
+        from types import SimpleNamespace
+        from unittest import mock
+        from pycbeta.cli import main
+        from pycbeta.filename import default_output_name
+        d = tempfile.mkdtemp()
+        try:
+            xml = os.path.join(d, "T01n0001.xml")
+            with open(xml, "w", encoding="utf-8") as f:
+                f.write("<TEI/>")
+            name = default_output_name("T0001", None, True)
+            gen = os.path.join(d, name + ".epub")
+            with zipfile.ZipFile(gen, "w") as z:
+                z.writestr("OEBPS/ch1.xhtml",
+                           "<html><body><p>甲</p></body></html>")
+            txt_base = os.path.join(d, "base", "txt", "T0001_001.txt")
+            epub_base = os.path.join(d, "base", "epub", "T0001.epub")
+            os.makedirs(os.path.dirname(txt_base), exist_ok=True)
+            with open(txt_base, "w", encoding="utf-8") as f:
+                f.write("甲乙")
+            os.makedirs(os.path.dirname(epub_base), exist_ok=True)
+            with zipfile.ZipFile(epub_base, "w") as z:
+                z.writestr("OEBPS/ch1.xhtml",
+                           "<html><body><p>甲乙丙</p></body></html>")
+            cfgp = os.path.join(d, "cfg.json")
+            with open(cfgp, "w", encoding="utf-8") as f:
+                json.dump({"verify": {"auto_fetch": False}}, f)
+            work = SimpleNamespace(id="T0001", metadata={})
+
+            def _find(source, stem, kind, juan=None, extra_roots=(),
+                      strict_juan=False):
+                return {"txt_notes": [txt_base],
+                        "epub": [epub_base]}.get(kind, [])
+
+            def _extract(p, strip_jiaozhu=True):
+                ap = os.path.abspath(p)
+                if ap == os.path.abspath(txt_base):
+                    return "甲乙"      # 比生成多 1 字
+                if ap == os.path.abspath(epub_base):
+                    return "甲乙丙"    # 比生成多 2 字
+                return "甲"            # 生成档
+
+            with mock.patch("pycbeta.parser.P5Parser") as P, \
+                    mock.patch("pycbeta.verify.work_juan_numbers",
+                               return_value=[]), \
+                    mock.patch("pycbeta.cli.process_file") as PF, \
+                    mock.patch("pycbeta.verify.find_official",
+                               side_effect=_find), \
+                    mock.patch("pycbeta.verify.extract_text",
+                               side_effect=_extract):
+                P.return_value.parse.return_value = work
+                with redirect_stdout(io.StringIO()):
+                    main(["--config", cfgp, "-i", xml, "-f", "epub",
+                          "--verify-only", "--verify-max-diff", "0"])
+            PF.assert_not_called()
+            rep = os.path.join(d, "验证", name + "（验证）",
+                               "T0001_校验报告.txt")
+            with open(rep, encoding="utf-8") as f:
+                s = f.read()
+            self.assertIn("[FAIL] (缺?/多? >阈值0)", s)
+            self.assertIn("→ txt_notes 截断:", s)
+            self.assertIn("→ epub 截断:", s)
+            self.assertIn("FAIL(?/?)", s)
         finally:
             shutil.rmtree(d, ignore_errors=True)
 

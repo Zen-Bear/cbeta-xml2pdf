@@ -1042,6 +1042,21 @@ def diff_stats(ours: str, theirs: str, max_ctx: int = 5):
     return matched, missing, extra, ctx
 
 
+def length_gate(ours: str, theirs: str, max_diff: int):
+    """长度门：返回 (是否截断, 长度差)。
+
+    `diff_stats` 的 `缺+多 = len(官方)+len(生成)-2×matched ≥ |长度差|`
+    ⇒ 长度差严格大于阈值时本 trial 必然 fail，可跳过整篇 `SequenceMatcher`。
+    只截断必然失败的 trial；通过路径永远全量精确比对。
+    """
+    d = abs(len(ours) - len(theirs))
+    try:
+        over = d > int(max_diff)
+    except (TypeError, ValueError):
+        over = d > 10
+    return over, d
+
+
 def trial_pass_line(bkind: str, mi: int, ex: int, total: int, max_diff: int) -> str:
     """trial 通过行（阈值内）：0/0 记逐字完全一致；非 0/0 如实打出缺/多数。
 
@@ -1179,12 +1194,14 @@ def _body_of(path: str, kind: str, txt_form: bool = False):
 
 def _body_sidecar(gen_paths, fmt, bpath, bkind, *, title="", docnumber="",
                   series="", compare_infos=False, strip_tokens=None,
-                  t2s=False, ruby_brackets=None):
+                  t2s=False, ruby_brackets=None, exact=True):
     """旁路「仅正文」比对（校验报告用）：返回 (body_missing, body_extra, notes_only)。
 
     - 两侧各自取正文段（`_body_of`，注释不参与），套与主 trial 相同的预处理；
     - 判定**严格 0**：正文段归一后 0 差异 ⇒ notes_only=True（差异全在注释）；
-    - 任一侧分不出正文段（如 odt / 未知 kind）⇒ (None, None, None)（unknown）。
+    - 任一侧分不出正文段（如 odt / 未知 kind）⇒ (None, None, None)（unknown）；
+    - `exact=False`：长度门截断时只判「正文串是否完全相同」（O(n)），
+      不跑 `SequenceMatcher`；正文不同返回 (None, None, False)。
     """
     paths = [bpath] if isinstance(bpath, str) else list(bpath or [])
     gb = []
@@ -1221,6 +1238,11 @@ def _body_sidecar(gen_paths, fmt, bpath, bkind, *, title="", docnumber="",
         off_body = t2s_baseline(off_body)
     gn = normalize(_display_text(gen_body), ruby_brackets)
     on = normalize(_display_text(off_body), ruby_brackets)
+    if not exact:
+        # 截断 trial 只需知道「正文是否完全一致」：不跑 SequenceMatcher。
+        if gn == on:
+            return 0, 0, True
+        return None, None, False
     _m, bm, be, _ctx = diff_stats(gn, on, 0)
     return bm, be, (bm + be == 0)
 
@@ -2291,6 +2313,33 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
         except Exception:
             src_cmp = gen_cmp = ""
         _phase("比对")
+        if not _extract_err[0]:
+            _trunc, _ldiff = length_gate(t_ours, theirs, max_diff)
+            if _trunc:
+                # 长度门：差 > 阈值 ⇒ 缺+多 ≥ 差 > 阈值，本 trial 必然 fail；
+                # 不做整篇 SequenceMatcher（T1509 epub 数小时 → 秒级）。
+                # 另补正文旁路（O(n) 字符串比较）：正文全对、仅注释差异时
+                # 保留 diff_scope=notes_only，供下游特别验收。
+                _bm, _be, _notes_only = _body_sidecar(
+                    gen_path if isinstance(gen_path, list) else [gen_path],
+                    fmt, bpath, bkind, title=t_title, docnumber=t_docnumber,
+                    series=t_series, compare_infos=compare_infos,
+                    strip_tokens=strip_tokens, t2s=t2s,
+                    ruby_brackets=ruby_brackets, exact=False)
+                _scope_t = ("unknown" if _notes_only is None
+                            else ("notes_only" if _notes_only else "body"))
+                trials.append({
+                    "kind": bkind, "official": bpath_disp,
+                    "missing": None, "extra": None, "total": None,
+                    "ok": False, "error": None, "truncated": True,
+                    "length_diff": _ldiff,
+                    "official_files": list(bpath) if isinstance(bpath, list)
+                    else ([bpath] if isinstance(bpath, str) else []),
+                    "ctx": [], "norm_official": theirs, "norm_gen": t_ours,
+                    "ctx_loc": [], "src_cmp": src_cmp, "gen_cmp": gen_cmp,
+                    "body_missing": _bm, "body_extra": _be,
+                    "diff_scope": _scope_t})
+                continue
         m, mi, ex, ctx = diff_stats(t_ours, theirs, diff_lines)
         total = mi + ex
         # 旁路「仅正文」比对：差异是否全在注释（严格 0；分不出 → unknown）
@@ -2323,6 +2372,29 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
             st = "fail" if struct_issues else "ok"
             return {"xml": xml_fn, "fmt": fmt, "status": st, "gen": gen_path, "official": bpath_disp, "official_kind": bkind, "matched": m, "missing": mi, "extra": ex, "total": total, "ctx": ctx, "src_cmp": src_cmp, "gen_cmp": gen_cmp, "norm_gen": t_ours, "norm_official": theirs, "trials": trials, "struct_issues": struct_issues, "body_missing": _bm, "body_extra": _be, "diff_scope": _scope, "baseline_coverage": _coverage or None}
     if best is None:
+        _truncs = [t for t in trials if t.get("truncated")]
+        if _truncs:
+            # 全截断兜底：优先取「仅注释差异」（下游可特别验收），再取长度差最小；
+            # 缺/多/总保持 None（长度门不定位差异，绝不伪造 0/0）。
+            _bt = min(_truncs, key=lambda t: (
+                0 if t.get("diff_scope") == "notes_only" else
+                1 if t.get("diff_scope") == "body" else 2,
+                t.get("length_diff") or 0))
+            return {"xml": xml_fn, "fmt": fmt, "status": "fail",
+                    "gen": gen_path, "official": _bt.get("official"),
+                    "official_kind": _bt.get("kind"),
+                    "matched": 0, "missing": None, "extra": None,
+                    "total": None, "ctx": [], "truncated": True,
+                    "length_diff": _bt.get("length_diff"),
+                    "body_missing": _bt.get("body_missing"),
+                    "body_extra": _bt.get("body_extra"),
+                    "diff_scope": _bt.get("diff_scope"),
+                    "src_cmp": _bt.get("src_cmp", ""),
+                    "gen_cmp": _bt.get("gen_cmp", ""),
+                    "norm_gen": _bt.get("norm_gen"),
+                    "norm_official": _bt.get("norm_official"),
+                    "trials": trials, "struct_issues": struct_issues,
+                    "baseline_coverage": _coverage or None}
         # 所有基线都无法读取：返回 fail 记录（不抛穿；报告列 trials 内的读取失败）
         return {"xml": xml_fn, "fmt": fmt, "status": "fail", "gen": gen_path,
                 "official": None, "matched": 0, "missing": None, "extra": None,
@@ -2392,6 +2464,8 @@ def diff_scope_tag(scope, body_missing=None, body_extra=None, total=None):
     if scope == "notes_only":
         return "【仅仅注释差异】"
     if scope == "body":
+        if body_missing is None or body_extra is None:
+            return "【正文差异（未全量比对）】"
         return (f"【正文差异 缺{body_missing}/"
                 f"多{body_extra}（含正文差异）】")
     if scope == "unknown":
@@ -2493,6 +2567,8 @@ def _format_verify_record(r, diff_lines: int = 5, max_diff: int = 10):
                    "official": r.get("official"),
                    "missing": r.get("missing"), "extra": r.get("extra"),
                    "total": r.get("total"), "ok": st == "ok",
+                   "truncated": r.get("truncated"),
+                   "length_diff": r.get("length_diff"),
                    "ctx": r.get("ctx"), "ctx_loc": r.get("ctx_loc"),
                    "src_cmp": r.get("src_cmp"), "gen_cmp": r.get("gen_cmp"),
                    "norm_official": r.get("norm_official")}]
@@ -2502,6 +2578,24 @@ def _format_verify_record(r, diff_lines: int = 5, max_diff: int = 10):
             lines.append(f"  [FAIL] ({fmt}→{t.get('kind')} 读取失败：{t['error']})")
             if t.get("official"):
                 lines.append(f"  {fmt}→{t.get('kind') or '?'} 【源】{t['official']}")
+            continue
+        if t.get("truncated"):
+            # 长度门截断：只报长度差，不给缺/多拆分与差异片段（门不定位差异）；
+            # 正文旁路结论照常附上（仅注释差异可被下游特别验收）。
+            _scope = diff_scope_tag(t.get("diff_scope"),
+                                    t.get("body_missing"),
+                                    t.get("body_extra"), None)
+            lines.append(f"  [FAIL] ({fmt}→{t.get('kind')} 长度差"
+                         f"{t.get('length_diff')} >阈值{max_diff}，未全量比对)"
+                         f"{_scope}")
+            if t.get("official"):
+                lines.append(f"  {fmt}→{t.get('kind') or '?'} 【源】{t['official']}")
+                if t.get("src_cmp"):
+                    lines.append("       【源比较】行号对齐 " + t["src_cmp"])
+            if gen:
+                lines.append(f"  {fmt} 【新】{gen}")
+                if t.get("gen_cmp"):
+                    lines.append("       【新比较】行号对齐 " + t["gen_cmp"])
             continue
         mark = "[OK]" if ok else "[FAIL]"
         op = "≤" if ok else ">"

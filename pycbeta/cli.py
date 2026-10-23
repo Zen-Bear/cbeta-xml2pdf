@@ -1117,7 +1117,7 @@ def main(argv=None):
 
     # --verify：复用 pycbeta/verify.py 模块化能力，供 GUI 调用同一入口
     if args.verify:
-        from .verify import normalize as v_norm, extract_text as v_extract, diff_stats as v_diff, find_official as v_find, strip_infos as v_strip_infos, _extract_html_parts as _v_hparts, _norm_official_txt as _v_tnorm, _ann_brackets_from as _v_rb, _head_no_tokens as _v_htoks, _strip_official_no as _v_tstrip, _mark_span as _v_mark, normalize_with_lines as _v_nwl, ctx_locations as _v_loc, _display_text as _v_disp
+        from .verify import normalize as v_norm, extract_text as v_extract, diff_stats as v_diff, find_official as v_find, strip_infos as v_strip_infos, _extract_html_parts as _v_hparts, _norm_official_txt as _v_tnorm, _ann_brackets_from as _v_rb, _head_no_tokens as _v_htoks, _strip_official_no as _v_tstrip, _mark_span as _v_mark, normalize_with_lines as _v_nwl, ctx_locations as _v_loc, _display_text as _v_disp, length_gate as _v_lgate, _body_sidecar as _v_body, diff_scope_tag as _v_scope
         import datetime
         try:
             _presets_full = load_effective_presets(args.config)
@@ -1425,6 +1425,7 @@ def main(argv=None):
                     ours_e = ours
                 ok_any = False; best = None
                 detail_lines = []
+                truncs = []
                 _gen_index = _gen_locate_index(fmt, gen_paths)
                 for bkind, bpath in bases:
                     # epub→txt trial 用重组形；epub→epub trial 用正文段形；
@@ -1519,6 +1520,28 @@ def main(argv=None):
                             _raw = v_strip_infos(_raw)
                         theirs_n = _theirs_norm(_raw, bkind)
                         bpath_disp = bpath
+                    _trunc, _ldiff = _v_lgate(t_ours, theirs_n,
+                                              args.verify_max_diff)
+                    if _trunc:
+                        # 长度门：差 > 阈值 ⇒ 必然 fail，跳过整篇比对；
+                        # 正文旁路 O(n) 判「是否仅注释差异」，供下游特别验收。
+                        _bm, _be, _no = _v_body(
+                            gen_paths, fmt_raw, bpath, bkind,
+                            title=t_title, docnumber=t_docnumber,
+                            series=t_series, compare_infos=v_compare_infos,
+                            strip_tokens=_theirs_norm.toks,
+                            t2s=bool(getattr(args, "t2s", False)),
+                            ruby_brackets=_rb, exact=False)
+                        _scope_t = ("unknown" if _no is None
+                                    else ("notes_only" if _no else "body"))
+                        truncs.append((bkind, bpath_disp, _ldiff,
+                                       _scope_t, _bm, _be))
+                        detail_lines.append(
+                            f"      → {bkind} 截断: 长度差{_ldiff} >阈值"
+                            f"{args.verify_max_diff}（未全量比对）"
+                            f"（基线 {bpath_disp}）"
+                            f"{_v_scope(_scope_t, _bm, _be, None)}")
+                        continue
                     m, mi, ex, ctx = v_diff(t_ours, theirs_n,
                                                args.verify_diff_lines)
                     total = mi + ex
@@ -1585,7 +1608,35 @@ def main(argv=None):
                         detail = f"      → {bkind} 失败: 缺{mi}字(生成档缺失) / 多{ex}字(生成档多出) 合计{total} >阈值{args.verify_max_diff}（基线 {bpath_disp}）"
                         if snippet: detail += f"\n{snippet}"
                         detail_lines.append(detail)
-                if best is None: continue
+                if best is None:
+                    if not truncs:
+                        continue
+                    # 全截断兜底：优先「仅注释差异」（下游可特别验收），
+                    # 再取长度差最小；缺/多/总保持 None
+                    _bt = min(truncs, key=lambda x: (
+                        0 if x[3] == "notes_only" else
+                        1 if x[3] == "body" else 2, x[2]))
+                    grand_total += 1
+                    grand_fail += 1
+                    block_failed = True
+                    block.append(f"  [FAIL] (缺?/多? >阈值{args.verify_max_diff})"
+                                 f"{_v_scope(_bt[3], _bt[4], _bt[5], None)}")
+                    block.append(f"  {disp}→{_bt[0]} 【源】{_bt[1]}")
+                    block.append(f"  {disp} 【新】{gen_path}")
+                    block.extend(detail_lines)
+                    summ.append((fmt_raw, "fail", None, None))
+                    json_recs.append({"xml": xml_fn, "fmt": fmt_raw,
+                                      "status": "fail",
+                                      "gen": list(gen_paths),
+                                      "official": _bt[1],
+                                      "official_kind": _bt[0],
+                                      "missing": None, "extra": None,
+                                      "diff_scope": _bt[3],
+                                      "body_missing": _bt[4],
+                                      "body_extra": _bt[5],
+                                      "baseline_coverage": v_coverage or None,
+                                      "struct_issues": list(_struct_issues)})
+                    continue
                 bkind,bpath,_,best_mi,best_ex,_,best_src,best_gen,_,_,_ = best
                 if _struct_issues:
                     ok_any = False  # 结构非法一律判失败（防止文字抽取假绿）

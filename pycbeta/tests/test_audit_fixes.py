@@ -439,5 +439,167 @@ class TestRowOutcomeCancel(unittest.TestCase):
         self.assertEqual(_row_outcome(False, [], False, ["x"])[0], "失败：x")
 
 
+class TestLengthGate(unittest.TestCase):
+    def test_strictly_greater_only(self):
+        from pycbeta.verify import length_gate
+        self.assertEqual(length_gate("甲" * 10, "甲" * 20, 10), (False, 10))
+        self.assertEqual(length_gate("甲" * 10, "甲" * 21, 10), (True, 11))
+        self.assertEqual(length_gate("甲" * 10, "甲" * 10, 10), (False, 0))
+        self.assertEqual(length_gate("甲" * 10, "甲" * 11, 0), (True, 1))
+
+    def test_bad_threshold_falls_back(self):
+        from pycbeta.verify import length_gate
+        self.assertEqual(length_gate("甲" * 10, "甲" * 21, None), (True, 11))
+
+
+class TestLengthGateReport(unittest.TestCase):
+    def _record(self, trials):
+        return {"xml": "T1509.xml", "fmt": "epub", "status": "fail",
+                "gen": "T1509.epub", "official": "T1509_001.html",
+                "official_kind": "html", "missing": None, "extra": None,
+                "total": None, "trials": trials, "struct_issues": []}
+
+    def test_truncated_line_has_no_counts(self):
+        from pycbeta.verify import _format_verify_record
+        rec = self._record([{
+            "kind": "html", "official": "T1509_001.html (+99)",
+            "missing": None, "extra": None, "total": None, "ok": False,
+            "truncated": True, "length_diff": 860, "ctx": [],
+            "src_cmp": "", "gen_cmp": ""}])
+        txt = "\n".join(_format_verify_record(rec, 5, 10))
+        self.assertIn("长度差860", txt)
+        self.assertIn("未全量比对", txt)
+        self.assertNotIn("缺None", txt)
+
+    def test_all_truncated_summary(self):
+        from pycbeta.verify import (format_work_summary,
+                                    _format_verify_record)
+        rec = self._record([
+            {"kind": "html", "official": "h", "missing": None, "extra": None,
+             "total": None, "ok": False, "truncated": True,
+             "length_diff": 860},
+            {"kind": "txt_notes", "official": "t", "missing": None,
+             "extra": None, "total": None, "ok": False, "truncated": True,
+             "length_diff": 28000}])
+        txt = "\n".join(_format_verify_record(rec, 5, 10))
+        self.assertEqual(txt.count("未全量比对"), 2)
+        self.assertIn("FAIL(?/?)",
+                      format_work_summary("T1509",
+                                          [("epub", "fail", None, None)]))
+
+
+class TestVerifyOneLengthGate(unittest.TestCase):
+    """verify_one 集成：截断不调用 diff_stats、链回退、全截断兜底。"""
+
+    def _work(self):
+        from pycbeta.model import Work
+        return Work(id="T", source_file="", metadata={}, body=[],
+                    notes_by_n={}, apps=[], simplified=False)
+
+    def _run(self, gen_text, bases, max_diff=10, diff_stats=None):
+        import pycbeta.verify as V
+        d = tempfile.mkdtemp(prefix="vlen-")
+        try:
+            gen = os.path.join(d, "T.md")
+            with open(gen, "w", encoding="utf-8") as f:
+                f.write(gen_text)
+            paths = {}
+            for kind, text, ext in bases:
+                p = os.path.join(d, f"base_{kind}.{ext}")
+                with open(p, "w", encoding="utf-8") as f:
+                    f.write(text)
+                paths[kind] = [p]
+            patches = [
+                mock.patch.object(V, "P5Parser"),
+                mock.patch.object(V, "load_effective_presets",
+                                  return_value={"verify": {"auto_fetch": False}}),
+                mock.patch.object(V, "find_official",
+                                  side_effect=lambda src, stem, kind, **kw:
+                                  paths.get(kind, [])),
+            ]
+            if diff_stats is not None:
+                patches.append(mock.patch.object(V, "diff_stats",
+                                                 side_effect=diff_stats))
+            with patches[0], patches[1], patches[2]:
+                if diff_stats is not None:
+                    with patches[3]:
+                        rec = self._call(V, d, gen, max_diff)
+                else:
+                    rec = self._call(V, d, gen, max_diff)
+            return rec
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def _call(self, V, d, gen, max_diff):
+        V.P5Parser.return_value.parse.return_value = self._work()
+        return V.verify_one("x.xml", "md", d, os.path.join(d, "v"),
+                            max_diff=max_diff, gen_paths=[gen])
+
+    def test_truncated_skips_sequence_matcher(self):
+        rec = self._run("甲" * 100,
+                        [("txt_notes", "甲" * 200, "txt")],
+                        diff_stats=AssertionError("diff_stats 不应被调用"))
+        self.assertEqual(rec["status"], "fail")
+        self.assertIsNone(rec["missing"])
+        self.assertIsNone(rec["extra"])
+        self.assertIsNone(rec["total"])
+        self.assertTrue(rec["truncated"])
+        self.assertEqual(rec["length_diff"], 100)
+
+    def test_equal_threshold_still_compares(self):
+        rec = self._run("甲" * 100,
+                        [("txt_notes", "甲" * 110, "txt")], max_diff=10)
+        self.assertEqual(rec["status"], "ok")
+        self.assertFalse(rec["trials"][0].get("truncated"))
+        self.assertEqual(rec["total"], 10)
+
+    def test_chain_falls_back_after_truncation(self):
+        rec = self._run("甲" * 100,
+                        [("txt_notes", "甲" * 200, "txt"),
+                         ("html", "甲" * 100, "html")])
+        self.assertEqual(rec["status"], "ok")
+        self.assertTrue(rec["trials"][0].get("truncated"))
+        self.assertTrue(rec["trials"][1].get("ok"))
+
+    def test_all_truncated_returns_fail_with_none_counts(self):
+        rec = self._run("甲" * 100,
+                        [("txt_notes", "甲" * 200, "txt"),
+                         ("html", "甲" * 300, "html")],
+                        diff_stats=AssertionError("diff_stats 不应被调用"))
+        self.assertEqual(rec["status"], "fail")
+        self.assertIsNone(rec["missing"])
+        self.assertIsNone(rec["extra"])
+        self.assertIsNone(rec["total"])
+        self.assertTrue(rec["truncated"])
+        self.assertEqual(rec["length_diff"], 100)
+        self.assertEqual(len(rec["trials"]), 2)
+
+
+    def test_truncated_notes_only_keeps_scope(self):
+        gen = "甲" * 100 + "\n\n## 校注\n\n[^1]: " + "注" * 50
+        base = "<html><body><p>" + "甲" * 100 + "</p></body></html>"
+        rec = self._run(gen, [("html", base, "html")],
+                        diff_stats=AssertionError("diff_stats 不应被调用"))
+        self.assertEqual(rec["status"], "fail")
+        self.assertEqual(rec["diff_scope"], "notes_only")
+        self.assertEqual((rec["body_missing"], rec["body_extra"]), (0, 0))
+        self.assertIsNone(rec["missing"])
+        from pycbeta.verify import format_verify_report
+        txt = "\n".join(format_verify_report([rec], 5, 10))
+        self.assertIn("【仅仅注释差异】", txt)
+
+    def test_truncated_body_diff_marks_body(self):
+        gen = "乙" * 100 + "\n\n## 校注\n\n[^1]: " + "注" * 50
+        base = "<html><body><p>" + "甲" * 100 + "</p></body></html>"
+        rec = self._run(gen, [("html", base, "html")],
+                        diff_stats=AssertionError("diff_stats 不应被调用"))
+        self.assertEqual(rec["status"], "fail")
+        self.assertEqual(rec["diff_scope"], "body")
+        self.assertIsNone(rec["body_missing"])
+        from pycbeta.verify import format_verify_report
+        txt = "\n".join(format_verify_report([rec], 5, 10))
+        self.assertIn("【正文差异（未全量比对）】", txt)
+
+
 if __name__ == "__main__":
     unittest.main()

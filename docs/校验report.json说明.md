@@ -34,7 +34,7 @@ out/验证/X1077 准提净业（验证）/X1077_准提净业_校验报告.txt
 | 值 | 含义 | 可否复用 |
 |---|---|---|
 | `pass` | 真实通过（缺数/多余数 ≤ 阈值且结构合法） | ✅ 唯一可入库/可复用的结论 |
-| `fail` | 真实未通过（差异超阈值或结构非法），`reason` 必带缺数/多余数或结构原因 | ❌（这是"没通过"，不是"没结果"） |
+| `fail` | 真实未通过（差异超阈值或结构非法），`reason` 必带缺数/多余数或结构原因；长度门截断时 `missing/extra` 为 `null`、`reason` 为 `diff_over_threshold`（未全量比对） | ❌（这是"没通过"，不是"没结果"） |
 | `undetermined` | 无法判定：`no_baseline` / `covered:docx` / `gen_not_found` / `no_record` | ❌ 不入库 |
 | `error` | 环境/流程失败（渲染失败、异常、未知状态），`reason` 保留可读原因 | ❌ 不入库、不删旧有效记录 |
 
@@ -91,6 +91,10 @@ out/验证/X1077 准提净业（验证）/X1077_准提净业_校验报告.txt
   `null`。多记录聚合取最保守（`body` > `unknown` > `notes_only`）。**纯旁路信息，
   不影响 `verdict`/`missing`/`extra`**。`verdict=fail` 时同样输出（供下游验收档：
   差异 ≤10 且 `notes_only` 可自动接受，见 `上游-P2校验结论跨边复用提案.md` §9.3）。
+- 长度门截断（2026-10-23）：`verdict=fail`、`missing`/`extra` 为 `null`、
+  `reason=diff_over_threshold`（该 trial 未跑整篇比对，长度差已超阈值）；
+  `diff_scope` 仍按正文旁路输出（`notes_only`/`body`/`unknown`，正文旁路为
+  O(n) 判等），正文全对、仅注释差异时下游仍可特别验收。
 - 新增字段向后兼容；语义变化会升级 `schema` 或 `fingerprint_version`；未知字段请忽略。
 
 ## 4. 指纹复用契约（下游 Phase 2 用）

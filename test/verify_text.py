@@ -13,7 +13,8 @@ from pycbeta.verify import (generate_formal, extract_text, normalize, diff_stats
                             find_official, strip_infos, strip_docx_head, merge_docx,
                             _extract_html_parts, _norm_official_txt, _strip_md_marks,
                             _head_no_tokens, _strip_official_no,
-                            t2s_baseline, _ann_brackets_from, trial_pass_line)
+                            t2s_baseline, _ann_brackets_from, trial_pass_line,
+                            length_gate)
 from pycbeta.simplify import simplify_work
 from pycbeta.parser import P5Parser
 from pycbeta.theme import load_presets
@@ -235,6 +236,7 @@ def main(argv=None):
                 block_failed = True
                 continue
             ok_any = False; best = None; detail_lines = []
+            truncs = []
             stem = os.path.splitext(name)[0]
             for bkind, bpath in bases:
                 if isinstance(bpath, list):
@@ -337,6 +339,14 @@ def main(argv=None):
                         f.write(ours_disp)
                 except Exception:
                     src_cmp = gen_cmp = ""
+                _trunc, _ldiff = length_gate(ours, theirs, max_diff)
+                if _trunc:
+                    # 长度门：差 > 阈值 ⇒ 必然 fail，跳过整篇比对
+                    truncs.append((bkind, bpath_disp, _ldiff))
+                    detail_lines.append(
+                        f"      → {bkind} 截断: 长度差{_ldiff} >阈值{max_diff}"
+                        f"（未全量比对）（基线 {bpath_disp}）")
+                    continue
                 m, mi, ex, ctx = diff_stats(ours, theirs)
                 total = mi + ex
                 cur = (bkind, bpath_disp, m, mi, ex, ctx, total, src_cmp, gen_cmp)
@@ -363,7 +373,19 @@ def main(argv=None):
                     if snippet:
                         detail += f"\n{snippet}"
                     detail_lines.append(detail)
-            if best is None: continue
+            if best is None:
+                if not truncs:
+                    continue
+                # 全截断兜底：缺/多/总保持 None
+                _bt = min(truncs, key=lambda x: x[2])
+                grand_total += 1
+                grand_fail += 1
+                block_failed = True
+                block.append(f"  [FAIL] (缺?/多? >阈值{max_diff})")
+                block.append(f"  {fmt}→{_bt[0]} 【源】{_bt[1]}")
+                block.append(f"  {fmt} 【新】{gen_paths[0] if gen_paths else ''}")
+                block.extend(detail_lines)
+                continue
             bkind, bpath, _, best_mi, best_ex, _, _, src_cmp, gen_cmp = best
             grand_total += 1
             if not ok_any:
