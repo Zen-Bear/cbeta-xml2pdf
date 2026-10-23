@@ -26,6 +26,10 @@ from .parser import P5Parser
 # 0.95 = 校验基线行加 html 格式（GUI 显示/预设/自动检测/保存四处一致）+ 下载层升级到上游
 #        cbeta-fetch v0.2.0（默认校验证书、分块流式下载、原子解压）；版本号参与校验指纹
 #        `_impl_digest` ⇒ 已存指纹随本次失效（下轮全库重验）。
-__version__ = "0.95"
+# 0.96 = 审核整改收尾：校验长度门（超长文本差秒判；T1509 epub 数小时→约 9 秒，
+#        正文旁路保留「仅注释差异」）；COM 转换隔离子进程（Word/WPS 模态不冻结主进程）；
+#        产物原子写（docx/html/epub/md/txt/pdf/verify/CLI）；GUI 清理/导出后台化；
+#        取消/关窗收尾与残留临时目录清理。版本号参与校验指纹 ⇒ 已存指纹整体失效。
+__version__ = "0.96"
 
 __all__ = ["P5Parser", "GaijiDb", "__version__"]
