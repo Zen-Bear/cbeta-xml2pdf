@@ -895,6 +895,11 @@
   - 测试：`test_docx.TestHeadCbTypeDocx` +4（卷标记保卷题顶层/卷标记单独入队无书签/空非卷型仍忽略/未落地不报告）；全量 1349 OK
   - 文档：`主题与样式.md`（标题分级节补空「卷」标记口径）
   - 影响：`render_docx` 在 `_FP_IMPL_MODULES` ⇒ 指纹失效同上一条，合并一次
+- [x] **已完成 v0.96 发版**（2026-10-23 打包并发布）
+  - 提交 `62d343e`（版本号 0.95 → 0.96）＋ 标签 `v0.96` ＋ GitHub Release（附件 `CBETA-XML2PDF-v0.96-win64.zip`，140,149,326 字节，sha256 `b110ef277d2c81ea1bb5a6152b57c1e51a47733c16c3ccf2a5fc84bcc62c6155`）
+  - 打包：staging 目录 `%TEMP%\opencode\rel096\`（清洗版 presets 复用 v0.95 快照；`CBETA-XML2PDF.spec` 的 presets 路径指向 `rel096/presets`，spec 本身被 `.gitignore` 排除）；内置 `presets/config.user.json` 无本机路径，`pycbeta/data/annotations.txt` 与 HEAD 一致（24 行）
+  - 冒烟：离屏启动 12 秒存活；全量 **1410 OK（skipped=122）**
+  - 影响：版本号参与 `_impl_digest` ⇒ 已存校验指纹整体失效（首轮全库重验）
 - [x] **已完成 v0.95 发版**（2026-10-21 打包，2026-10-22 发布）
   - 提交 `ba2e4e9`（版本号 0.94 → 0.95）＋ 标签 `v0.95` ＋ GitHub Release（附件 `CBETA-XML2PDF-v0.95-win64.zip`，约 140MB）
   - 打包：staging 目录 `%TEMP%\opencode\rel095\`（`presets/` 快照 ＋ `relnotes.md` ＋ `zipit.py`）；`CBETA-XML2PDF.spec` 的 presets 路径指向 `rel095/presets`（该 spec 被 `.gitignore` 排除，不入库）
