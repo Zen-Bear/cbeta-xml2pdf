@@ -8,6 +8,7 @@ import re
 from contextlib import contextmanager
 from typing import List, Optional
 
+from .atomic import write_text
 from .model import App, E, Gaiji, Lb, Note, NoteRef, Pb, Text, Work, \
     suppressed_orig_notes
 from .annotate import active as _ann_active, split_annotated as _split_ann, track_seen as _track_seen
@@ -73,8 +74,7 @@ class MdRenderer:
         if not filename:
             filename = sanitize(f"{work.id}.md")
         fn = os.path.join(out_dir, filename)
-        with open(fn, "w", encoding="utf-8") as f:
-            f.write(text)
+        write_text(fn, text)
         return fn
 
     def _iter_all(self, nodes):

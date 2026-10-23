@@ -13,6 +13,7 @@ import sys
 import tempfile
 
 from .parser import P5Parser
+from .atomic import write_text
 from .render_html import HtmlRenderer
 from .render_pdf import PdfRenderer, docx_to_pdf, DOCX_PDF_CHAIN, pdf_source_fmt
 from .render_docx import DocxRenderer
@@ -529,15 +530,13 @@ def _write_convert_reports(xml_fn, args, w, formats):
             try:
                 sub = os.path.join(vdir, fmt)
                 os.makedirs(sub, exist_ok=True)
-                with open(os.path.join(sub, f"{name}_转换报告_{fmt}.txt"),
-                          "w", encoding="utf-8") as f:
-                    f.write(report.format_text(fmt=fmt))
+                write_text(os.path.join(sub, f"{name}_转换报告_{fmt}.txt"),
+                           report.format_text(fmt=fmt))
             except Exception as e:  # noqa: BLE001 —— 单格式失败不阻断
                 print(f"{w.id}: {fmt} 转换报告写入失败：{e}", file=sys.stderr)
         os.makedirs(vdir, exist_ok=True)
         merged = os.path.join(vdir, f"{name}_转换报告.txt")
-        with open(merged, "w", encoding="utf-8") as f:
-            f.write(report.format_text())
+        write_text(merged, report.format_text())
         msg = f"{w.id}: 转换报告 -> {merged}"
         try:
             print(msg)
@@ -1565,10 +1564,8 @@ def main(argv=None):
                         gen_cmp = os.path.join(
                             _cmp_dir,
                             f"{stem}_compare_{fmt}_{bkind}_generated.txt")
-                        with open(src_cmp, "w", encoding="utf-8") as _f:
-                            _f.write(_t_disp)
-                        with open(gen_cmp, "w", encoding="utf-8") as _f:
-                            _f.write(_o_disp)
+                        write_text(src_cmp, _t_disp)
+                        write_text(gen_cmp, _o_disp)
                     except Exception as exc:
                         src_cmp = gen_cmp = ""
                         _o_disp = _t_disp = ""
@@ -1698,8 +1695,7 @@ def main(argv=None):
             try:
                 os.makedirs(verify_dir, exist_ok=True)
                 _rpt = os.path.join(verify_dir, _rep_base + ".txt")
-                with open(_rpt, "w", encoding="utf-8") as _f:
-                    _f.write("\n".join(block) + "\n")
+                write_text(_rpt, "\n".join(block) + "\n")
                 _print_safe(f"报告已写入: {_rpt}")
             except Exception as e:
                 _print_safe(f"写入报告失败: {e}")
@@ -1719,9 +1715,8 @@ def main(argv=None):
                              juan=(args.juan_segments
                                    if _juan_status == "filtered" else None))
                 _jp = os.path.join(verify_dir, "report.json")
-                with open(_jp, "w", encoding="utf-8") as _f:
-                    json.dump(_j, _f, ensure_ascii=False, sort_keys=True,
-                              indent=1)
+                write_text(_jp, json.dumps(_j, ensure_ascii=False,
+                                           sort_keys=True, indent=1))
                 print(f"报告JSON已写入: {_jp}")
             except Exception as e:
                 print(f"写入报告JSON失败: {e}")

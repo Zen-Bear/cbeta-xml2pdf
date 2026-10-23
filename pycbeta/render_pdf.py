@@ -15,6 +15,7 @@ import threading
 from typing import List, Optional
 
 from .model import App, E, Gaiji, Note, NoteRef, Pb, Text, Work
+from .atomic import atomic_path
 from .render_html import HtmlRenderer, LINEHEAD_RE, _esc, split_juans
 from .theme import (Theme, resolve_page, bracket_pair, ensure_page_typography,
                      page_border_spec, DOUBLE_GAP_PT)
@@ -548,24 +549,29 @@ def docx_to_pdf(docx_fn: str, pdf_fn: str, chain=None, used: dict = None) -> str
     Page-bottom footnotes are preserved by the office renderer."""
     chain = tuple(chain) if chain else DOCX_PDF_CHAIN
     errors = []
-    for name in chain:
-        backend = _DOCX_BACKENDS.get(name)
-        if not backend:
-            errors.append(f"unknown backend '{name}'")
-            continue
-        try:
-            pdf = backend(docx_fn, pdf_fn)
-        except Exception as exc:  # noqa: BLE001 —— 单后端失败不阻断后续后端
-            errors.append(f"{name}: {type(exc).__name__}: {exc}")
-            continue
-        if pdf:
-            if used is not None:
-                used["backend"] = name
-            return pdf
-        errors.append(f"{name}: unavailable")
-    raise RuntimeError(
-        "docx2pdf engine needs Microsoft Word, WPS or LibreOffice installed "
-        f"(chain={list(chain)}); pywin32 required for COM. 尝试记录: {'; '.join(errors)}")
+    with atomic_path(pdf_fn) as _tmp:
+        for name in chain:
+            backend = _DOCX_BACKENDS.get(name)
+            if not backend:
+                errors.append(f"unknown backend '{name}'")
+                continue
+            try:
+                pdf = backend(docx_fn, _tmp)
+            except Exception as exc:  # noqa: BLE001 —— 单后端失败不阻断后续后端
+                errors.append(f"{name}: {type(exc).__name__}: {exc}")
+                continue
+            if pdf:
+                # 个别后端可能把结果写到自己的路径：统一搬到原子临时文件
+                if (os.path.abspath(pdf) != os.path.abspath(_tmp)
+                        and os.path.isfile(pdf)):
+                    os.replace(pdf, _tmp)
+                if used is not None:
+                    used["backend"] = name
+                return os.path.abspath(pdf_fn)
+            errors.append(f"{name}: unavailable")
+        raise RuntimeError(
+            "docx2pdf engine needs Microsoft Word, WPS or LibreOffice installed "
+            f"(chain={list(chain)}); pywin32 required for COM. 尝试记录: {'; '.join(errors)}")
 
 
 def _hex_to_rgb(h: str):
@@ -941,25 +947,26 @@ a, a:visited {{ color: #000 !important; }}
                     engine: Optional[str] = None) -> str:
         engine = engine or self.engine
         self.last_engine = engine
-        if engine == "prince":
-            self._prince_to_pdf(html_fn, pdf_fn, landscape)
-        elif engine == "weasyprint":
-            self._weasyprint_to_pdf(html_fn, pdf_fn)
-        elif engine == "chromium":
-            self._chromium_to_pdf(html_fn, pdf_fn, landscape, scale=self.zoom)
-        else:
-            # 其它引擎名 → 尝试 config.json engines.external 注册的外部命令行引擎
-            r = _pdf_via_external(engine, html_fn, pdf_fn)
-            if not r:
-                raise RuntimeError(
-                    f"unknown pdf engine '{engine}' "
-                    "(built-in: chromium/prince/weasyprint; "
-                    "external engines register in config.json engines.external)")
-        if self.page_border:
-            _draw_page_borders(pdf_fn, self.border_inner_pt,
-                               self.border_inner_hex, self.border_style)
-        if self.bookmarks and not self.split and getattr(self, "_juan_headers", None):
-            _add_pdf_bookmarks(pdf_fn, self._juan_headers)
+        with atomic_path(pdf_fn) as _tmp:
+            if engine == "prince":
+                self._prince_to_pdf(html_fn, _tmp, landscape)
+            elif engine == "weasyprint":
+                self._weasyprint_to_pdf(html_fn, _tmp)
+            elif engine == "chromium":
+                self._chromium_to_pdf(html_fn, _tmp, landscape, scale=self.zoom)
+            else:
+                # 其它引擎名 → 尝试 config.json engines.external 注册的外部命令行引擎
+                r = _pdf_via_external(engine, html_fn, _tmp)
+                if not r:
+                    raise RuntimeError(
+                        f"unknown pdf engine '{engine}' "
+                        "(built-in: chromium/prince/weasyprint; "
+                        "external engines register in config.json engines.external)")
+            if self.page_border:
+                _draw_page_borders(_tmp, self.border_inner_pt,
+                                   self.border_inner_hex, self.border_style)
+            if self.bookmarks and not self.split and getattr(self, "_juan_headers", None):
+                _add_pdf_bookmarks(_tmp, self._juan_headers)
         return os.path.abspath(pdf_fn)
 
     def convert_with_chain(self, html_fn: str, pdf_fn: str,

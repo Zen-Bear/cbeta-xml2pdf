@@ -830,5 +830,60 @@ class TestComConvertIsolation(unittest.TestCase):
         self.assertFalse(any(c[0] == "taskkill" for c in calls))
 
 
+class TestAtomicWrites(unittest.TestCase):
+    def test_write_bytes_replaces(self):
+        from pycbeta.atomic import write_bytes
+        d = tempfile.mkdtemp(prefix="atomic-")
+        try:
+            p = os.path.join(d, "a.bin")
+            with open(p, "wb") as f:
+                f.write(b"old")
+            write_bytes(p, b"new")
+            with open(p, "rb") as f:
+                self.assertEqual(f.read(), b"new")
+            self.assertEqual(
+                [n for n in os.listdir(d) if n.startswith(".tmp-")], [])
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_atomic_path_failure_keeps_old(self):
+        from pycbeta.atomic import atomic_path
+        d = tempfile.mkdtemp(prefix="atomic-")
+        try:
+            p = os.path.join(d, "a.pdf")
+            with open(p, "wb") as f:
+                f.write(b"old")
+            with self.assertRaises(RuntimeError):
+                with atomic_path(p) as tmp:
+                    with open(tmp, "wb") as f:
+                        f.write(b"partial")
+                    raise RuntimeError("boom")
+            with open(p, "rb") as f:
+                self.assertEqual(f.read(), b"old")
+            self.assertEqual(
+                [n for n in os.listdir(d) if n.startswith(".tmp-")], [])
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_docx_to_pdf_failure_keeps_old(self):
+        from pycbeta import render_pdf as R
+        d = tempfile.mkdtemp(prefix="atomic-")
+        try:
+            p = os.path.join(d, "a.pdf")
+            with open(p, "wb") as f:
+                f.write(b"old")
+
+            def bad(_docx, _pdf):
+                raise RuntimeError("boom")
+
+            with mock.patch.dict(R._DOCX_BACKENDS, {"bad": bad}):
+                with self.assertRaises(RuntimeError):
+                    R.docx_to_pdf("x.docx", p, chain=["bad"])
+            with open(p, "rb") as f:
+                self.assertEqual(f.read(), b"old")
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -983,7 +983,14 @@
   - 中危三：COM 转换改隔离子进程（`pycbeta/com_helper.py` + `render_pdf._com_convert_isolated`，300 秒超时；超时按 PID/进程名终止本次新建的 Word/WPS 实例，再杀子进程树；输出临时文件 + `os.replace`）；WPS 实测 1.0 秒成功；单测 5 项 `TestComConvertIsolation`
   - 回归：全量 **1407 OK（skipped=122）**
   - 指纹：改 `theme.py`/`verify.py`/`render_pdf.py` ⇒ 校验指纹整体失效（全库重验仍待安排）
-  - 未做：产物原子写（逐渲染器改造）；全库重验（运营）；中危十 GUI 手测
+  - 未做：全库重验（运营）；中危十/导出 GUI 手测；等长分段比对（搁置）
+- [x] **已完成 产物原子写（2026-10-23）**
+  - `atomic.py` 新增 `write_bytes` / `atomic_path`（同目录临时文件 + `os.replace`；失败清理、旧文件保持完整）
+  - docx/epub 改 `write_bytes`；html/md/txt 改 `write_text`；verify 的 compare/merged、CLI 的 compare/报告/合册全部原子
+  - PDF：`html_to_pdf`（chromium/prince/weasyprint/外部引擎 + 页码边框/书签）与 `docx_to_pdf`（Word/WPS/LibreOffice/外部）整链先写临时 PDF 再替换
+  - 测试：`TestAtomicWrites` 3 项；全量 **1410 OK（skipped=122）**；WPS 真实 docx→PDF 1.5 秒、无临时残留
+  - 指纹：改 `render_docx`/`render_epub`/`render_html`/`render_md`/`render_txt`/`render_pdf`/`verify` ⇒ 校验指纹整体失效（全库重验仍待）
+  - 限制：多文件 HTML 只能逐文件原子，崩溃时可能新旧混合；整目录原子需临时目录换名，未做
 - [x] **已完成 高危一** HTML/EPUB 属性引号未转义（可复现；2026-10-22 修复）
   - 位置（2026-10-22 补全清单，此前只列 5 处）：`render_html.py:52-53`（`_esc`＝`html.escape(s, quote=False)`，不转义 `"`）。属性上下文：`:255`、`:366`、`:527-528`、`:535`/`:538`/`:539`、`:630`、`:647`、`:663`、`:667`、`:700`、`:702`（`lg` 的 `cls`，补漏）、`:710`（`lg` 的 `text-indent`，补漏且原为完全未转义）、`:796`、`:802`、`:840`、`:893`、`:941-942`、`:945`、`:950`、`:956`/`:958`；`render_epub.py:22`（`sax.escape` 同样不转义引号；现用途全在文本节点，无属性位）
   - 实证：构造 `style='color:red" onmouseover="alert(1)'` 渲染出 `<p class="" style="color:red" onmouseover="alert(1)">`（属性被撑破）；`type='x" class="evil'` 出重复 `class` 属性
@@ -1028,18 +1035,18 @@
   - 修复（2026-10-22）：`DataUpdateDialog` 与 `SourceDialog` 增加 `closeEvent`——更新运行中阻止关窗并在状态行提示（**不用模态框**，避免测试/脚本卡死）；`css_editor.closeEvent` 的 `wait(2000)` 超时改为阻止关闭并提示
   - 代价：不触及 `_FP_IMPL_MODULES` ⇒ 不影响校验指纹
   - 验收：单测 `test_audit_fixes.TestGuiLifecycleGuards`（三处 closeEvent 存在）；手工复演 X 关窗
-- [x] **已完成 中危一** 配置与预设写盘非原子（2026-10-22 修复；产物类剩余）
+- [x] **已完成 中危一** 配置与预设写盘非原子（2026-10-22 修复；2026-10-23 产物原子写补齐）
   - 位置（2026-10-22 补全清单；无 `os.replace` 的直写点）：`gui/panel.py` `open(path, "w")` 共 8 处——`:278-280`（`save_current` 写 `presets/config.user.json`）、`:329-331`（`save_config_preset`）、`:357-359`（`set_config_preset_theme`）、`:415-418`/`:431-435`/`:531-534`（`mkstemp` 临时件、调用方删，可接受）、`:2556-2558`（`clear_xml_dir` 写预设）、`:3230-3232`（`SourceDialog.accept` 有预设分支）；间接经 `save_current`：`:2560`/`:3237`。`gui/css_editor.py:259-260`、`:1896-1897`。`theme.py:1021-1046`（run.json 直写，`:1031` 失败时 `.bad` 改名）。产物类同样非原子：`verify.py:2072-2077`/`:2251-2259`（compare 文本对）、`:1003-1013`（merged docx）、`render_docx.py:1238`/`:1308`、`render_epub.py:103`、`render_md.py:75`、`render_txt.py:81`、`merge.py:228`（合册 XML）、`render_pdf.py:604`/`:635`（HTML 交付物）、`render_pdf.py:281-283`（先 `os.remove` 后 `os.rename`，崩溃窗口丢旧文件）
   - 影响：写一半崩溃或磁盘满 ⇒ 半截 JSON/CSS/产物；GUI 配置损坏起不来；验证产物残卷可能被下轮当输入误读
   - 修复（2026-10-22）：新增 `pycbeta/atomic.py`（同目录临时文件＋`os.replace`），上述配置/预设/run.json 写盘点全部改用；`render_pdf.py:281-283` 改 `os.replace`；单测 `test_audit_fixes.TestAtomicWrite`（内容往返、覆盖、失败清理临时文件）
-  - 剩余：各格式产物文件与 verify 比对文件的原子写（docx/html/epub/md/txt/pdf/compare/merged），归后续批次（与中危二一并）
+  - 剩余：无（2026-10-23 已补齐：docx/html/epub/md/txt/pdf 产物 + verify compare/merged + CLI 报告/合册；见「产物原子写」条）
   - 代价：改 `verify`/`theme` ⇒ 校验指纹整体失效（`theme` 本批已改）
-- [ ] **待做 中危二** 取消转换留下半成品产物
+- [x] **已完成 中危二** 取消转换留下半成品产物（2026-10-22 取消收尾；2026-10-23 原子写/临时清理）
   - 位置：`gui/__main__.py:274-280`（`cancel()` → `self._proc.terminate()`，Windows 为硬杀）；`Popen` 无 `timeout`（`:767-770`，引擎挂死则该行永久卡住只能手动取消）；无 `closeEvent`（全文件检索 0 命中）——转换中直接关窗 ⇒ worker 线程与桥子进程孤儿化继续写盘
   - 硬杀后残留清单（2026-10-22 补）：输出目录 `cli.py:339`（pdf 目标名）、`:399`（html 中转）、`:412`/`:415`（html 目标）、`:355-356`/`:404-406`（引擎标签改名）、`:366-367`/`:371`（docx 副本）；临时目录 `cli.py:346`（`xml2pdf-pdfdocx-`，硬杀后 finally 不执行）；验证子产物 `cli.py:1517-1520`/`:1619-1620`/`:1640-1642`；GUI 行内落盘点取消后仍执行：`gui/__main__.py:477-478`（合并转换报告）、`:504-505`（行验证报告）、`:540-543`（report.json）；`verify_one`（`:439-455`）与 `_resolve`（`:620-672`）无取消检查点；取消行终态记「失败：…」而非「已取消」（`:551-553`）
   - 影响：正在写的 docx/html/epub 留在输出目录，且看起来是完整文件；外部引擎与 COM 进程成孤儿
   - 已修部分（2026-10-22）：新增 `_kill_process_tree`（Windows `taskkill /T /F`，失败回退 `terminate`）替换硬杀；`MainWindow.closeEvent` 转换中先取消并 `wait(10000)`，未收尾则阻止关窗；取消时跳过校验（`if ok and verify_on and not self._cancel`）；取消行终态改「已取消」；单测 `test_audit_fixes.TestKillProcessTree`/`TestRowOutcomeCancel`
-  - 剩余：`Popen` 超时（故意不做固定上限，长书合法耗时长）、产物原子写（归中危一剩余）；硬杀残留已加启动清理（>24h 的 `xml2pdf-*`，见 2026-10-23 收尾批）
+  - 剩余：无（`Popen` 固定超时故意不做，长书合法耗时长；硬杀残留已加 24h 启动清理；产物原子写已补齐）
 - [x] **已完成 中危三** PDF 外部转换超时与降级缺口（2026-10-22 超时/降级；2026-10-23 COM 隔离）
   - 位置（2026-10-22 补全）：`render_pdf.py:276-277`（soffice 无 `timeout`）、`:833`（prince 无 `timeout`，原记录漏列）、`:361`（docbuilder 180 秒）、`:331`（外部引擎 120 秒，但 `:330` `int(cfg.get("timeoutSeconds"))` 无兜底，配置坏值直接 ValueError 抛穿）；COM 区 `:50`/`:126-229`（`_COM_LOCK` 持锁期间无看门狗，Word/WPS 弹出模态即全进程冻结）；`:401-411`（`docx_to_pdf` 后端循环无逐后端 `try`，soffice `check=True` 的 `CalledProcessError` 与外部引擎超时越过「逐后端降级」设计直接中断全链）
   - 影响：soffice/prince 挂起时该行任务永久卡住；单个后端抛错则整链中断而非降级到下一个后端

@@ -3,6 +3,8 @@
 import difflib, glob, hashlib, html as _html, json, os, re, sys, zipfile
 from typing import List, Dict, Optional
 
+from .atomic import atomic_path, write_text
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 if ROOT not in sys.path:
@@ -1002,15 +1004,16 @@ def merge_docx(paths: List[str], out_path: str) -> str:
         except KeyError:
             pass
         os.makedirs(os.path.dirname(out_path), exist_ok=True)
-        with zipfile.ZipFile(out_path, "w", zipfile.ZIP_DEFLATED) as zo:
-            for n in z0.namelist():
-                if n == "word/document.xml":
-                    zo.writestr(n, merged_doc)
-                elif n == "word/footnotes.xml":
-                    if merged_fn:
-                        zo.writestr(n, merged_fn)
-                else:
-                    zo.writestr(n, z0.read(n))
+        with atomic_path(out_path) as _tmp:
+            with zipfile.ZipFile(_tmp, "w", zipfile.ZIP_DEFLATED) as zo:
+                for n in z0.namelist():
+                    if n == "word/document.xml":
+                        zo.writestr(n, merged_doc)
+                    elif n == "word/footnotes.xml":
+                        if merged_fn:
+                            zo.writestr(n, merged_fn)
+                    else:
+                        zo.writestr(n, z0.read(n))
     return out_path
 
 def diff_stats(ours: str, theirs: str, max_ctx: int = 5):
@@ -2103,10 +2106,8 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
             os.makedirs(outdir, exist_ok=True)
             src_cmp = os.path.join(outdir, f"{stem}_compare_xml_official.txt")
             gen_cmp = os.path.join(outdir, f"{stem}_compare_txt_generated.txt")
-            with open(src_cmp, "w", encoding="utf-8") as f:
-                f.write(theirs_disp)
-            with open(gen_cmp, "w", encoding="utf-8") as f:
-                f.write(ours_disp)
+            write_text(src_cmp, theirs_disp)
+            write_text(gen_cmp, ours_disp)
         except Exception:
             src_cmp = gen_cmp = ""
         _phase("比对")
@@ -2308,10 +2309,8 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
             os.makedirs(outdir, exist_ok=True)
             src_cmp = os.path.join(outdir, f"{stem}_compare_{bkind}_official.txt")
             gen_cmp = os.path.join(outdir, f"{stem}_compare_{fmt}_{bkind}_generated.txt")
-            with open(src_cmp, "w", encoding="utf-8") as f:
-                f.write(theirs_disp)
-            with open(gen_cmp, "w", encoding="utf-8") as f:
-                f.write(t_disp)
+            write_text(src_cmp, theirs_disp)
+            write_text(gen_cmp, t_disp)
         except Exception:
             src_cmp = gen_cmp = ""
         _phase("比对")

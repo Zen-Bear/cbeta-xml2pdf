@@ -14,6 +14,7 @@ import xml.sax.saxutils as sax
 from typing import List, Optional
 
 from .filename import sanitize
+from .atomic import write_bytes
 from .model import Work
 from .annotate import active as _ann_active
 from .render_html import HtmlRenderer, CSS
@@ -101,8 +102,7 @@ class EpubRenderer:
             if not filename:
                 filename = sanitize(f"{work.id}.epub")
             fn = os.path.join(out_dir, filename)
-            with open(fn, "wb") as f:
-                f.write(data)
+            write_bytes(fn, data)
             return fn
         finally:
             # 中间 HTML 目录随包生成后清理（成功/失败都清，避免污染输出/校验目录）

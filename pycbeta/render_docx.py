@@ -23,6 +23,7 @@ from .theme import (Theme, resolve_page, _hex6, strip_head_no, bracket_pair,
 from .fonts import preferred_family
 from .render_html import split_juans
 from .filename import apply_template, sanitize
+from .atomic import write_bytes
 from .report import report
 from .annotate import active as _ann_active, split_annotated as _split_ann, parse_rt_size as _parse_rt_size, split_eq_reading as _split_eq, track_seen as _track_seen, page_repeat as _page_repeat
 
@@ -1245,8 +1246,7 @@ class DocxRenderer:
         if not filename:
             filename = sanitize(f"{work.id}.docx")
         fn = os.path.join(out_dir, filename)
-        with open(fn, "wb") as f:
-            f.write(doc)
+        write_bytes(fn, doc)
         return fn
 
     def _reset_state(self, work: Work) -> None:

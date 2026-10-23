@@ -7,6 +7,7 @@ import unicodedata
 from contextlib import contextmanager
 from typing import List, Optional
 
+from .atomic import write_text
 from .gaiji import GaijiDb
 from .annotate import active as _ann_active, split_annotated as _split_ann, rt_css_rule as _rt_css, track_seen as _track_seen, page_repeat as _page_repeat
 from .report import report
@@ -250,8 +251,7 @@ class HtmlRenderer:
                     + self.juan_suffix
                 fn = f"{base}.html" if len(juans) == 1 \
                     else f"{base}_{juan_no:03d}.html"
-            with open(os.path.join(out_dir, fn), "w", encoding="utf-8") as f:
-                f.write(html_out)
+            write_text(os.path.join(out_dir, fn), html_out)
             written.append(fn)
         return written
 
