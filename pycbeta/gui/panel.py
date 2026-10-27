@@ -2617,7 +2617,12 @@ class SourceDialog(QDialog):
         # 保存/测试口径不变（path_edits 键齐全）
         self.path_edits = {}
         for key, label in SOURCE_LABELS:
-            edit = QLineEdit(str(src.get(key, "")))
+            val = str(src.get(key, ""))
+            if key == "cbeta_ebook" and not val.strip():
+                # 出厂留空：GUI 直接显示 exe 旁默认目录并自动创建
+                from pycbeta.paths import default_cbeta_ebook
+                val = default_cbeta_ebook(create=True)
+            edit = QLineEdit(val)
             edit.setReadOnly(True)  # 只能浏览选择，不可手输（与注音词表行一致）
             edit.setToolTip("只读；点「浏览…」修改")
             self.path_edits[key] = edit
@@ -3255,16 +3260,26 @@ class SourceDialog(QDialog):
         xml_dir = values["source"].get("xml_dir", "")
         if not values["source"].get("cbeta_ebook", ""):
             box = QMessageBox(self)
-            box.setIcon(QMessageBox.Warning)
-            box.setWindowTitle("电子书输出目录未配置")
-            box.setText("电子书输出目录（source.cbeta_ebook）是必填项，"
-                        "清空后将无法按編號转换。")
-            ok_btn = box.addButton("确定保存", QMessageBox.AcceptRole)
+            box.setIcon(QMessageBox.Information)
+            box.setWindowTitle("电子书输出目录为空")
+            box.setText("source.cbeta_ebook 为空时将使用 exe 旁默认 "
+                        "cbeta_ebook/（自动创建）。要改到其他位置请点「浏览…」。")
+            ok_btn = box.addButton("使用默认保存", QMessageBox.AcceptRole)
             box.addButton("取消", QMessageBox.RejectRole)
             box.setDefaultButton(ok_btn)
             box.exec()
             if box.clickedButton() is not ok_btn:
                 return
+        try:
+            from pycbeta.paths import default_cbeta_ebook
+            _eb = values["source"].get("cbeta_ebook", "").strip()
+            if _eb and os.path.normcase(os.path.abspath(_eb)) == \
+                    os.path.normcase(os.path.abspath(
+                        default_cbeta_ebook(create=False))):
+                # 默认目录不写死绝对路径：移动 exe 后仍指向新位置
+                values["source"]["cbeta_ebook"] = ""
+        except (OSError, ValueError):
+            pass
         if xml_dir:
             from pycbeta.fetch import inspect_xml_source
             info = inspect_xml_source(xml_dir)

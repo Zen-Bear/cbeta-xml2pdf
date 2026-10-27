@@ -30,6 +30,8 @@ from .parser import P5Parser
 #        正文旁路保留「仅注释差异」）；COM 转换隔离子进程（Word/WPS 模态不冻结主进程）；
 #        产物原子写（docx/html/epub/md/txt/pdf/verify/CLI）；GUI 清理/导出后台化；
 #        取消/关窗收尾与残留临时目录清理。版本号参与校验指纹 ⇒ 已存指纹整体失效。
-__version__ = "0.96"
+# 0.96.1 = 默认电子书工作目录改为 exe 旁 `cbeta_ebook/`，首次启动自动创建；
+#          GUI 预填、保存默认目录时写空值（移动 exe 后仍生效）；校验/CLI/GUI 全链统一。
+__version__ = "0.96.1"
 
 __all__ = ["P5Parser", "GaijiDb", "__version__"]

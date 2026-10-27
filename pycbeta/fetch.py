@@ -74,22 +74,18 @@ DEFAULT_DOWNLOADS = {
     "figures": "https://raw.githubusercontent.com/cbeta-git/CBR2X-figures/master/{canon}/{file}",
 }
 
-_EBOOK_HINT = ("电子书输出目录未配置：在 presets/config.user.json 的 "
-               "source.cbeta_ebook 填写（GUI 数据源窗口可视编辑），"
-               "或 --cbeta-ebook 指定")
 _SAME_HINT = ("本地 XML 候选源与电子书输出目录不能相同（source.xml_dir == "
-               "source.cbeta_ebook）：候选源只读，输出目录写入")
+              "source.cbeta_ebook）：候选源只读，输出目录写入")
 
 
 def resolve_source(presets=None, xml_dir=None, cbeta_ebook=None):
-    """source 解析（显式参数 > presets source > 空即报错）。
-    cbeta_ebook 必须显式有值（出厂留空）；xml_dir 可选（缺省即无本地候选源）。
-    两者不得相同（候选源只读，工作根写入）；"" 视同未配。"""
+    """source 解析（显式参数 > presets source > exe 旁默认 `cbeta_ebook/`）。
+    cbeta_ebook 缺省时自动创建在 exe 旁；xml_dir 可选（缺省即无本地候选源）。
+    两者不得相同（候选源只读，工作根写入）。"""
+    from .paths import resolve_cbeta_ebook
     cfg = (presets.get("source") or {}) if isinstance(presets, dict) else {}
     xml_dir = (xml_dir or cfg.get("xml_dir") or "").strip()
-    cbeta_ebook = (cbeta_ebook or cfg.get("cbeta_ebook") or "").strip()
-    if not cbeta_ebook:
-        raise ValueError(_EBOOK_HINT)
+    cbeta_ebook = resolve_cbeta_ebook(presets, cbeta_ebook, create=True)
     if xml_dir and os.path.normcase(os.path.abspath(xml_dir)) == \
             os.path.normcase(os.path.abspath(cbeta_ebook)):
         raise ValueError(_SAME_HINT)

@@ -35,6 +35,9 @@ run.json
 # 测试数据根：本机 CBETA 电子书库路径存这里（不入库，避免机器路径进仓库）
 pycbeta/tests/.data_root
 
+# 绿色版/源码运行默认数据目录（exe 旁 cbeta_ebook，运行期生成）
+/cbeta_ebook/
+
 # 系统
 .DS_Store
 Thumbs.db

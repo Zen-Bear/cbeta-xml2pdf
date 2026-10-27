@@ -895,6 +895,12 @@
   - 测试：`test_docx.TestHeadCbTypeDocx` +4（卷标记保卷题顶层/卷标记单独入队无书签/空非卷型仍忽略/未落地不报告）；全量 1349 OK
   - 文档：`主题与样式.md`（标题分级节补空「卷」标记口径）
   - 影响：`render_docx` 在 `_FP_IMPL_MODULES` ⇒ 指纹失效同上一条，合并一次
+- [x] **已完成 默认 cbeta_ebook 改为 exe 旁并自动创建（2026-10-27）**
+  - 新增 `pycbeta/paths.py`：`app_root()`（冻结包=exe 所在目录；源码=仓库根）、`default_cbeta_ebook()`、`resolve_cbeta_ebook()`
+  - `fetch.resolve_source`、`verify` 的 auto_fetch/图目录、`cli.resolve_verify_ebook`、GUI `SourceDialog` 统一使用；空值自动创建 `<exe 旁>/cbeta_ebook`
+  - GUI 打开时预填默认目录；保存时若仍是默认目录则写空值（不写死绝对路径，移动 exe 后仍生效）；清空时提示将使用默认目录
+  - 测试：`test_fetch`/`test_cli` 默认回退更新，新增 `TestDefaultCbetaEbook`；全量 **1410 OK（skipped=122）**
+  - 注意：v0.96 已发布包不含本改动；需重打包（v0.96.1）
 - [x] **已完成 v0.96 发版**（2026-10-23 打包并发布）
   - 提交 `62d343e`（版本号 0.95 → 0.96）＋ 标签 `v0.96` ＋ GitHub Release（附件 `CBETA-XML2PDF-v0.96-win64.zip`，140,149,326 字节，sha256 `b110ef277d2c81ea1bb5a6152b57c1e51a47733c16c3ccf2a5fc84bcc62c6155`）
   - 打包：staging 目录 `%TEMP%\opencode\rel096\`（清洗版 presets 复用 v0.95 快照；`CBETA-XML2PDF.spec` 的 presets 路径指向 `rel096/presets`，spec 本身被 `.gitignore` 排除）；内置 `presets/config.user.json` 无本机路径，`pycbeta/data/annotations.txt` 与 HEAD 一致（24 行）

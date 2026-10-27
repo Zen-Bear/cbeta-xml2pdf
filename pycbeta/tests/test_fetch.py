@@ -22,13 +22,20 @@ def _presets(xml_dir="", cbeta_ebook="", **extra):
 
 
 class TestResolveSource(unittest.TestCase):
-    def test_ebook_required_with_guidance(self):
-        for presets in (None, {}, {"source": {}},
-                        {"source": {"xml_dir": "", "cbeta_ebook": ""}}):
-            with self.assertRaises(ValueError) as ctx:
-                resolve_source(presets)
-            self.assertIn("config.user.json", str(ctx.exception))
-            self.assertIn("cbeta_ebook", str(ctx.exception))
+    def test_ebook_defaults_to_app_side(self):
+        import shutil
+        d = tempfile.mkdtemp()
+        try:
+            with mock.patch("pycbeta.paths.app_root", return_value=d):
+                for presets in (None, {}, {"source": {}},
+                                {"source": {"xml_dir": "",
+                                            "cbeta_ebook": ""}}):
+                    xml, ebook = resolve_source(presets)
+                    self.assertEqual(ebook,
+                                     os.path.join(d, "cbeta_ebook"))
+                    self.assertTrue(os.path.isdir(ebook))
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
 
     def test_xml_dir_optional(self):
         self.assertEqual(resolve_source(_presets(cbeta_ebook="X:\\ebook")),
@@ -530,10 +537,6 @@ class TestMaterialize(unittest.TestCase):
 
 
 class TestFetchWork(unittest.TestCase):
-    def test_ebook_required(self):
-        with self.assertRaises(ValueError):
-            fetch_work("T0349", ["xml"], _presets(xml_dir="X:\\a"))
-
     def test_fetch_only_needs_ebook(self):
         with mock.patch("pycbeta.fetch.catalog_lookup", return_value=[]):
             res = fetch_work("T0349", ["xml"], _presets(cbeta_ebook="X:\\b"))

@@ -1928,7 +1928,8 @@ def generate_formal(xml_fn: str, work, fmt: str, outdir: str, config_path: Optio
     # 图片搜索目录（与生产一致；文本比对不受图片影响，仅保证生成档一致）
     try:
         from .figures import work_figure_dirs
-        _ebook = ((presets or {}).get("source") or {}).get("cbeta_ebook")
+        from .paths import resolve_cbeta_ebook
+        _ebook = resolve_cbeta_ebook(presets, create=False)
         _fig_dirs = work_figure_dirs(_ebook, work.id, xml_fn)
     except Exception:
         _fig_dirs = []
@@ -2164,9 +2165,9 @@ def verify_one(xml_fn: str, fmt: str, source: str, out_root: str, max_diff: int 
             from .fetch import complete_baselines, ensure_baselines
             presets = load_effective_presets(config_path)
             need = need_for_base(base_kind)
-            # 材料化模型：基线落 cbeta_ebook work 目录（缺省回退 source）
-            ebook = ((presets.get("source") or {}).get("cbeta_ebook") or "").strip() \
-                or source
+            # 材料化模型：基线落 cbeta_ebook work 目录（缺省 exe 旁默认目录）
+            from .paths import resolve_cbeta_ebook
+            ebook = resolve_cbeta_ebook(presets, create=True)
             if base_kind not in official:
                 # 首选基线缺失：按需下载（docx/odt 非 T/X 等 404 静默跳过）
                 ensure_baselines(work.id, need, presets, ebook,

@@ -181,7 +181,7 @@ class XmlOptions:
 面板的对话框包装：`exec() -> Optional[XmlOptions]`（Accept→选项；Cancel→None），`[确定][取消]`。
 
 ### 3.3 `SourceDialog` / `DataUpdateDialog`（数据源窗口）
-- `SourceDialog`：路径行 `xml_dir` + `cbeta_ebook`（均只读+浏览；后者清空确定时弹必填警告）；`catalog` 钉死内置（tab3 的佛典目录映射表行即其位置与更新状态）。
+- `SourceDialog`：路径行 `xml_dir` + `cbeta_ebook`（均只读+浏览；`cbeta_ebook` 空时显示 exe 旁默认目录并自动创建，清空时提示将使用默认目录）；`catalog` 钉死内置（tab3 的佛典目录映射表行即其位置与更新状态）。
 - tab0「输入输出」：`cbeta_ebook`（官方下载保存平展目录）+ 输出目录（仅本次运行，不存预设）+ 校验目录（`source.verify_root` 字段，空/清空时字段内灰字「跟随输出：<生效路径>」，生效值与配置合一）＋「空间占用」只读行（占用文本；刷新/打开目录/删除校验产物…按钮）+ `title_t2s`。
 - 批量表状态列：长报错只显前半，tooltip 给全文（定宽折行）＋「Ctrl+C 可拷贝」提示；批量表 Ctrl+C 快捷键复制选中格全文（之前注释写了但未实现）。
 - tab1「校验基线」：各格式基线链展示（`md/docx/html/txt/epub` 行，值为 `verify.bases` 与出厂默认合并后的生效链）+ **可改比较顺序**（逗号分隔 kind：`html/txt_notes/docx/epub/odt`；未知忽略，空=该格式恢复默认；`pdf` 无官方基线不列）+ 「恢复默认」按钮（只填表）。确定时**只存与出厂默认不同的格式**到 `verify.bases`（全等默认则去掉该键；其它 `verify` 键不动）。获得基线方法见行下灰字（缺首选自动下载/`{fmt}/` 落盘/2026r2 首个非空根胜出/自产排除），详见校验说明书 §2。

@@ -1518,6 +1518,12 @@ def main(argv=None):
         cleanup_stale_temp_dirs()
     except Exception:  # noqa: BLE001 —— 清理失败不阻断启动
         pass
+    # 首次启动即创建默认电子书工作目录（exe 旁 cbeta_ebook/）
+    try:
+        from pycbeta.paths import default_cbeta_ebook
+        default_cbeta_ebook(create=True)
+    except Exception:  # noqa: BLE001 —— 只读目录等场景不阻断启动
+        pass
     app = QApplication.instance() or QApplication([sys.argv[0]] + _rest)
     from pycbeta.gui.css_editor import ensure_tooltip_style
     ensure_tooltip_style()  # 黑 tooltip 可见（应用级一次）

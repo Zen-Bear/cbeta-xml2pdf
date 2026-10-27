@@ -479,15 +479,16 @@ def resolve_output(xml_fn, fmt, args, work, _used=None):
 
 
 def resolve_verify_ebook(args, presets, src):
-    """校验基线下载目录：显式 --cbeta-ebook > presets source.cbeta_ebook > src。
+    """校验基线下载目录：显式 --cbeta-ebook > presets source.cbeta_ebook
+    > exe 旁默认 `cbeta_ebook/`（自动创建）。
 
     与 resolve_source 同语义。修 split-brain：显式值与 preset 值不一致时
     （如下游 publish），基线必须落在发现目录一侧，否则下完也找不到。"""
     explicit = (getattr(args, "cbeta_ebook", None) or "").strip()
     if explicit:
         return explicit
-    cfg = (presets.get("source") or {}) if isinstance(presets, dict) else {}
-    return (cfg.get("cbeta_ebook") or "").strip() or src
+    from .paths import resolve_cbeta_ebook
+    return resolve_cbeta_ebook(presets, create=True)
 
 
 def _cli_verify_custom(args):

@@ -9,7 +9,7 @@ DOCX/PDF 输出支持字体方案、打印模式、书签、黑白输出等出�
 
 ## 安装（绿色版，推荐）
 
-1. 到 [Releases](https://github.com/Zen-Bear/cbeta-xml2pdf/releases) 下载 `CBETA-XML2PDF-v0.9-win64.zip`（约 130MB，PySide6 所致）。
+1. 到 [Releases](https://github.com/Zen-Bear/cbeta-xml2pdf/releases) 下载 `CBETA-XML2PDF-v0.96-win64.zip`（约 134MB，PySide6 所致）。
 2. 解压到**可写目录**（如 `D:\CBETA-XML2PDF`）；`CBETA-XML2PDF.exe` 与 `_internal/` 需在一起，不可拆分。
 3. 双击 `CBETA-XML2PDF.exe` 即开图形界面（免装 Python）。
 
@@ -18,18 +18,19 @@ DOCX/PDF 输出支持字体方案、打印模式、书签、黑白输出等出�
   出厂与标准预设均未填引擎路径：LibreOffice 非默认路径（如 `C:\Apps\...` 且不在 PATH）
   会报未安装——需**另存**一个自用预设后手填 `engines.paths.libreoffice`（GUI 不直接改此键），或把路径加进 PATH。
 - **命令行**：同一 exe 也兼 CLI：`CBETA-XML2PDF.exe -i <編號/目录/xml> -f <格式>`（`--help` 可查）。
-- **配置（首次必做）**：出厂＋标准预设已内置（`config.user.json` v0.5 起入库，机器路径已清洗），
-  但**电子书输出目录 `source.cbeta_ebook` 必填**——在「数据源」窗口设一次（清空时弹必填警告）；
-  不设则任何转换都报「未配置」。本地 XML 候选源 / 官方基线库 / 输出目录可选（输出缺省 `cwd/out`），
-  详见「数据源与官方书库」。无 `run.json` 时按全出厂跑；GUI「保存」写 exe 旁 `presets/`（便携场景正常）。
+- **配置（首次基本免设）**：出厂＋标准预设已内置（`config.user.json` v0.5 起入库，机器路径已清洗）。
+  电子书输出目录 `source.cbeta_ebook` 缺省为 **exe 旁 `cbeta_ebook/`**，首次打开自动创建；
+  要换到其他位置，在「数据源」窗口选一次（清空时提示将使用 exe 旁默认目录）。本地 XML 候选源 / 官方基线库 /
+  输出目录可选（输出缺省 `cwd/out`），详见「数据源与官方书库」。无 `run.json` 时按全出厂跑；
+  GUI「保存」写 exe 旁 `presets/`（便携场景正常）。
 - **已知局限**：解压到 Program Files 等只读位置时，保存预设弹"保存失败"警告（`panel._on_save`
   已接住，不崩溃）；要持久化配置请解压到可写目录。
 
 ## GUI 快速上手
 
 双击 `CBETA-XML2PDF.exe`，或源码环境 `python -m pycbeta.gui`——**不带参数即启动**。
-首次转换前需在「数据源」窗口设一次**电子书输出目录**（`source.cbeta_ebook`，**必填**；
-空则每行报「未配置」）；其余路径可选。
+电子书输出目录 `source.cbeta_ebook` 默认已指向 **exe 旁 `cbeta_ebook/`**（自动创建），
+不改也能直接转换；要换目录再到「数据源」窗口设置。其余路径可选。
 
 1. 输入：填「佛典编号列表」（如 `T0349, X1116`，可带卷范围 `T0349:2-3`）或选「目录/文件」。
 2. 勾选输出格式、页面等（默认即可；各卡 tooltip 有说明）。
@@ -49,7 +50,7 @@ DOCX/PDF 输出支持字体方案、打印模式、书签、黑白输出等出�
   批量表五列（经号/经名/来源/状态/文件）**只读、可选中拷贝**；「来源」＝该部 XML 的取得方式
   （`本地XML`＝工作根已有 / `本地拷贝`＝从本地候选源拷入 / `合册合成`＝碎片按册合并 /
   `已下载`＝从官方下载）；文件列单击打开产物（勾选「转换后校验」时末尾附验证总报告 `{stem}_verify_report.txt`）；开始/取消 + 总进度。数据源窗口「更新XML」可把已下载 work 的 XML（及可选已有电子书）刷新到最新。
-- 数据源窗口：路径输入框一律只读（只能点「浏览…」修改；电子书库清空确定时弹必填警告）；
+- 数据源窗口：路径输入框一律只读（只能点「浏览…」修改；电子书库清空时提示将使用 exe 旁默认目录）；
   佛典目录钉死程序内 `cbeta/data/sutra_mapping.txt`（出厂 `presets/config.factory.json` 为仓库相对路径；
   旧预设里的绝对路径会被忽略），随「更新官方数据」刷新。
   「更新官方数据」先弹对话框列出更新源（缺字库/梵字库/补充字型/佛典目录映射表/手动项），
@@ -317,8 +318,8 @@ Word/WPS 走 COM 导出（需 pywin32），LibreOffice 走命令行。
 
 ## 数据源与官方书库（可选，推荐）
 
-- **电子书输出目录**（`source.cbeta_ebook`，**必填**）：唯一可写工作根；XML 与官方电子书平展落
-  `{id} {书名}/`。GUI 数据源窗口设一次。
+- **电子书输出目录**（`source.cbeta_ebook`，默认 exe 旁 `cbeta_ebook/`，自动创建）：唯一可写工作根；
+  XML 与官方电子书平展落 `{id} {书名}/`。GUI 数据源窗口可改。
 - **本地 XML 候选源**（`source.xml_dir`，可选）：本地 `cbeta-org/xml-p5` 全仓库副本（发布版 P5），
   只读；有则免下载 XML。
 - **官方书库**（`source.baselines.*` / `baselines_root`，可选，**做逐字校验强烈推荐**）：

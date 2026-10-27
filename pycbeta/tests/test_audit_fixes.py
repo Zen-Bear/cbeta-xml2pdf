@@ -885,5 +885,20 @@ class TestAtomicWrites(unittest.TestCase):
             shutil.rmtree(d, ignore_errors=True)
 
 
+class TestDefaultCbetaEbook(unittest.TestCase):
+    def test_frozen_uses_exe_directory_and_creates(self):
+        import pycbeta.paths as P
+        d = tempfile.mkdtemp(prefix="approot-")
+        try:
+            with mock.patch.object(P.sys, "frozen", True, create=True), \
+                    mock.patch.object(P.sys, "executable",
+                                      os.path.join(d, "CBETA-XML2PDF.exe")):
+                p = P.default_cbeta_ebook(create=True)
+            self.assertEqual(p, os.path.join(d, "cbeta_ebook"))
+            self.assertTrue(os.path.isdir(p))
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+
 if __name__ == "__main__":
     unittest.main()

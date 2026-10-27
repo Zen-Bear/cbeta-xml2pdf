@@ -710,7 +710,7 @@ class TestShowNotesFlag(unittest.TestCase):
 
 
 class TestResolveVerifyEbook(unittest.TestCase):
-    """校验基线下载目录：显式 --cbeta-ebook > presets > src（防 split-brain）。"""
+    """校验基线下载目录：显式 --cbeta-ebook > presets > exe 旁默认（防 split-brain）。"""
 
     def test_explicit_wins(self):
         from types import SimpleNamespace
@@ -728,12 +728,23 @@ class TestResolveVerifyEbook(unittest.TestCase):
             resolve_verify_ebook(args, {"source": {"cbeta_ebook": "P"}}, "S"),
             "P")
 
-    def test_src_last_resort(self):
+    def test_default_last_resort(self):
+        import shutil
+        import tempfile
         from types import SimpleNamespace
+        from unittest import mock
         from pycbeta.cli import resolve_verify_ebook
-        args = SimpleNamespace(cbeta_ebook="")
-        self.assertEqual(resolve_verify_ebook(args, {}, "S"), "S")
-        self.assertEqual(resolve_verify_ebook(args, None, "S"), "S")
+        d = tempfile.mkdtemp()
+        try:
+            with mock.patch("pycbeta.paths.app_root", return_value=d):
+                args = SimpleNamespace(cbeta_ebook="")
+                expected = os.path.join(d, "cbeta_ebook")
+                self.assertEqual(
+                    resolve_verify_ebook(args, {}, "S"), expected)
+                self.assertEqual(
+                    resolve_verify_ebook(args, None, "S"), expected)
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
 
     def test_verify_fetch_uses_explicit_ebook(self):
         # 主链：--verify 缺基线时 ensure_baselines 落显式目录（publish 场景）

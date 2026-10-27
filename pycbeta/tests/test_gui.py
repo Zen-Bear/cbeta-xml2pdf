@@ -2999,7 +2999,8 @@ class TestSourceDialog(unittest.TestCase):
                 box = m_box.return_value
                 ok_btn, cancel_btn = mock.Mock(), mock.Mock()
                 box.addButton.side_effect = (
-                    lambda text, role: ok_btn if "确定" in text else cancel_btn)
+                    lambda text, role: ok_btn
+                    if ("确定" in text or "使用默认" in text) else cancel_btn)
                 box.clickedButton.return_value = cancel_btn
                 dlg.accept()
                 m_save.assert_not_called()
