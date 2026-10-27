@@ -900,7 +900,12 @@
   - `fetch.resolve_source`、`verify` 的 auto_fetch/图目录、`cli.resolve_verify_ebook`、GUI `SourceDialog` 统一使用；空值自动创建 `<exe 旁>/cbeta_ebook`
   - GUI 打开时预填默认目录；保存时若仍是默认目录则写空值（不写死绝对路径，移动 exe 后仍生效）；清空时提示将使用默认目录
   - 测试：`test_fetch`/`test_cli` 默认回退更新，新增 `TestDefaultCbetaEbook`；全量 **1410 OK（skipped=122）**
-  - 注意：v0.96 已发布包不含本改动；需重打包（v0.96.1）
+  - 已随 v0.96.1 发布（见下条）
+- [x] **已完成 v0.96.1 发版**（2026-10-27 打包并发布）
+  - 提交 `d7f3f9f`（版本号 0.96 → 0.96.1）＋ 标签 `v0.96.1` ＋ GitHub Release（附件 `CBETA-XML2PDF-v0.96.1-win64.zip`，140,147,799 字节，sha256 `5226c0463aa56af4a298005c12f5bf03dabd4b2c259db3f56b9b9157dc35487a`）
+  - 打包：staging `%TEMP%\opencode\rel0961\`（清洗 presets；`CBETA-XML2PDF.spec` presets 路径指向 rel0961/presets）；内置 presets 无本机路径，annotations 与 HEAD 一致
+  - 冒烟：离屏启动 12 秒存活；启动前 exe 旁无 `cbeta_ebook/`，启动后自动生成；全量 **1410 OK（skipped=122）**
+  - 影响：版本号参与 `_impl_digest` ⇒ 已存校验指纹整体失效（首轮全库重验）
 - [x] **已完成 v0.96 发版**（2026-10-23 打包并发布）
   - 提交 `62d343e`（版本号 0.95 → 0.96）＋ 标签 `v0.96` ＋ GitHub Release（附件 `CBETA-XML2PDF-v0.96-win64.zip`，140,149,326 字节，sha256 `b110ef277d2c81ea1bb5a6152b57c1e51a47733c16c3ccf2a5fc84bcc62c6155`）
   - 打包：staging 目录 `%TEMP%\opencode\rel096\`（清洗版 presets 复用 v0.95 快照；`CBETA-XML2PDF.spec` 的 presets 路径指向 `rel096/presets`，spec 本身被 `.gitignore` 排除）；内置 `presets/config.user.json` 无本机路径，`pycbeta/data/annotations.txt` 与 HEAD 一致（24 行）
